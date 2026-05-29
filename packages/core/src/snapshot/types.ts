@@ -3,6 +3,7 @@ import type { LightDefinition } from "../lights/types";
 import type { MaterialState } from "../materials/types";
 import type { AuthoredProblemState } from "../problems/types";
 import type { JsonPrimitive, JsonValue } from "./json";
+import type { ASSET_KINDS } from "./primitives";
 
 export const SNAPSHOT_VERSION = 2;
 export const LEGACY_SNAPSHOT_VERSION = 1;
@@ -22,7 +23,7 @@ export interface AssetReference {
   metadata?: Record<string, JsonValue>;
 }
 
-export type AssetKind = "glb" | "texture" | "hdr" | "image";
+export type AssetKind = (typeof ASSET_KINDS)[number];
 
 export interface SceneObject {
   id: string;

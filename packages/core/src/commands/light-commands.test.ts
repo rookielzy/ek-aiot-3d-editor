@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AssetRegistry } from "../assets/registry";
 import { EditorStore } from "../editor/store";
 import { CommandHistory } from "../history/history";
+import { restoreSnapshot, serializeSnapshot } from "../editor/serialization";
 import { CommandDispatcher } from "./dispatcher";
 
 describe("light commands", () => {
@@ -33,8 +34,9 @@ describe("light commands", () => {
     expect(store.getSnapshot().lights["light-a"].kind).toBe("ambient");
   });
 
-  it("serializes directional light transform and target intent", () => {
-    const dispatcher = new CommandDispatcher(new EditorStore(), new CommandHistory(), new AssetRegistry());
+  it("preserves directional light transform and target intent through serialization", () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
 
     const result = dispatcher.dispatch({
       type: "add-light",
@@ -49,7 +51,9 @@ describe("light commands", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(result.snapshot.lights.sun).toMatchObject({
+    const restored = restoreSnapshot(serializeSnapshot(store.getSnapshot()));
+
+    expect(restored.lights.sun).toMatchObject({
       kind: "directional",
       transform: {
         position: [1, 2, 3],
@@ -80,6 +84,26 @@ describe("light commands", () => {
     expect(result.error).toContain("intensity");
     expect(result.error).toContain("angle");
     expect(store.getSnapshot()).toBe(before);
+  });
+
+  it.each([
+    ["invalid kind", { id: "bad-kind", kind: "area" }],
+    ["non-finite transform", { id: "bad-transform", kind: "point", transform: { position: [0, Number.NaN, 0] } }]
+  ])("rejects %s without mutating state", (_label, light) => {
+    const store = new EditorStore();
+    const history = new CommandHistory();
+    const dispatcher = new CommandDispatcher(store, history, new AssetRegistry());
+    const before = store.getSnapshot();
+    const undoCount = history.state.undoCount;
+
+    const result = dispatcher.dispatch({
+      type: "add-light",
+      light: light as never
+    });
+
+    expect(result.ok).toBe(false);
+    expect(store.getSnapshot()).toBe(before);
+    expect(history.state.undoCount).toBe(undoCount);
   });
 
   it("updates and removes lights through command history", () => {

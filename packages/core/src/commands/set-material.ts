@@ -6,8 +6,16 @@ import type { SetMaterialCommand } from "./types";
 export function applySetMaterial(snapshot: SceneSnapshot, command: SetMaterialCommand): SceneSnapshot {
   assertMaterialTargetExists(snapshot, command.target);
 
-  const assignmentId = command.assignmentId ?? createMaterialAssignmentId(command.target);
+  const expectedAssignmentId = createMaterialAssignmentId(command.target);
+  if (command.assignmentId && command.assignmentId !== expectedAssignmentId) {
+    throw new Error(`Material assignment ${command.assignmentId} does not match target ${expectedAssignmentId}.`);
+  }
+
+  const assignmentId = expectedAssignmentId;
   const existingAssignment = snapshot.materials.assignments[assignmentId];
+  if (existingAssignment && !sameTarget(existingAssignment.target, command.target)) {
+    throw new Error(`Material assignment ${assignmentId} target cannot be changed.`);
+  }
   const materialId = command.materialId ?? existingAssignment?.materialId ?? `material:${assignmentId}`;
   const existingMaterial = snapshot.materials.definitions[materialId];
   const override = mergeMaterialOverride(existingMaterial?.override ?? {}, command.material);
@@ -42,6 +50,13 @@ function assertMaterialTargetExists(snapshot: SceneSnapshot, target: MaterialAss
   if (!snapshot.objects[target.objectId]) {
     throw new Error(`Material target object ${target.objectId} does not exist.`);
   }
+}
+
+function sameTarget(left: MaterialAssignmentTarget, right: MaterialAssignmentTarget): boolean {
+  if (left.kind !== right.kind || left.objectId !== right.objectId) {
+    return false;
+  }
+  return left.kind === "object" || left.slotId === (right as typeof left).slotId;
 }
 
 function mergeMaterialOverride(

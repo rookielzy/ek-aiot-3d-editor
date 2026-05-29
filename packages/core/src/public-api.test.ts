@@ -9,7 +9,16 @@ import {
   type LightDefinition,
   type Problem,
   type SceneEnvironment,
-  type SetMaterialCommand
+  type SetMaterialCommand,
+  type AddLightCommand,
+  type AuthoredProblemState,
+  type MaterialState,
+  type ProblemTarget,
+  type RegisterAssetCommand,
+  type RemoveLightCommand,
+  type SetEnvironmentCommand,
+  type TextureSlot,
+  type UpdateLightCommand
 } from "./index";
 
 describe("core public API", () => {
@@ -60,8 +69,26 @@ describe("core public API", () => {
       message: "Missing",
       recoverability: "user-action"
     };
+    const registerAsset: RegisterAssetCommand = { type: "register-asset", asset: { id: "texture-a", kind: "texture" } };
+    const setEnvironment: SetEnvironmentCommand = { type: "set-environment", environment: { background: { mode: "solid", color: "#ffffff" } } };
+    const addLight: AddLightCommand = { type: "add-light", light: { kind: "ambient" } };
+    const updateLight: UpdateLightCommand = { type: "update-light", lightId: "light-a", patch: { intensity: 2 } };
+    const removeLight: RemoveLightCommand = { type: "remove-light", lightId: "light-a" };
+    const textureSlot: TextureSlot = { assetId: "texture-a", colorSpace: "srgb" };
+    const materialState: MaterialState = { definitions: {}, assignments: {} };
+    const authoredProblems: AuthoredProblemState = { acknowledged: {} };
+    const target: ProblemTarget = { kind: "environment", assetId: "hdr-a" };
 
     expect(command.type).toBe("set-material");
+    expect(registerAsset.asset.kind).toBe("texture");
+    expect(setEnvironment.environment.background?.mode).toBe("solid");
+    expect(addLight.light.kind).toBe("ambient");
+    expect(updateLight.patch.intensity).toBe(2);
+    expect(removeLight.lightId).toBe("light-a");
+    expect(textureSlot.assetId).toBe("texture-a");
+    expect(materialState.assignments).toEqual({});
+    expect(authoredProblems.acknowledged).toEqual({});
+    expect(target.kind).toBe("environment");
     expect(environment.mode).toBe("none");
     expect(light.kind).toBe("ambient");
     expect(problem.target).toEqual({ kind: "object", objectId: "object-a" });

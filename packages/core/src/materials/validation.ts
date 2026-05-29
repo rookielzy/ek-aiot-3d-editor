@@ -1,5 +1,6 @@
 import type { AssetReference } from "../assets/types";
 import { isJsonCompatible, isPlainRecord } from "../snapshot/json";
+import { isColorString, isFiniteNumber, isFiniteRange, isVector } from "../snapshot/primitives";
 import type {
   MaterialAssignment,
   MaterialAssignmentTarget,
@@ -222,7 +223,7 @@ function validateOptionalColor(value: unknown, label: string, errors: string[]):
   if (value === undefined) {
     return;
   }
-  if (typeof value !== "string" || !/^(#[0-9a-fA-F]{6}|rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\))$/.test(value)) {
+  if (!isColorString(value)) {
     errors.push(`${label} must be a #rrggbb or rgb(r, g, b) color string.`);
   }
 }
@@ -231,7 +232,7 @@ function validateOptionalRange(value: unknown, label: string, min: number, max: 
   if (value === undefined) {
     return;
   }
-  if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) {
+  if (!isFiniteRange(value, min, max)) {
     errors.push(`${label} must be a finite number between ${min} and ${max}.`);
   }
 }
@@ -240,7 +241,7 @@ function validateOptionalFiniteNumber(value: unknown, label: string, errors: str
   if (value === undefined) {
     return;
   }
-  if (typeof value !== "number" || !Number.isFinite(value)) {
+  if (!isFiniteNumber(value)) {
     errors.push(`${label} must be a finite number.`);
   }
 }
@@ -258,7 +259,7 @@ function validateOptionalVector2(value: unknown, label: string, errors: string[]
   if (value === undefined) {
     return;
   }
-  if (!Array.isArray(value) || value.length !== 2 || value.some((entry) => typeof entry !== "number" || !Number.isFinite(entry))) {
+  if (!isVector(value, 2)) {
     errors.push(`${label} must contain two finite numbers.`);
   }
 }

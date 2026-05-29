@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AssetRegistry } from "../assets/registry";
 import { EditorStore } from "../editor/store";
 import { CommandHistory } from "../history/history";
+import type { MaterialPatch } from "../materials/types";
 import { CommandDispatcher } from "./dispatcher";
 
 describe("set material command", () => {
@@ -65,9 +66,11 @@ describe("set material command", () => {
 
   it("rejects invalid ranges and unknown texture assets without mutating state", () => {
     const store = new EditorStore();
-    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const history = new CommandHistory();
+    const dispatcher = new CommandDispatcher(store, history, new AssetRegistry());
     dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
     const before = store.getSnapshot();
+    const undoCount = history.state.undoCount;
 
     const result = dispatcher.dispatch({
       type: "set-material",
@@ -83,6 +86,82 @@ describe("set material command", () => {
     expect(result.ok).toBe(false);
     expect(result.error).toContain("roughness");
     expect(result.error).toContain("texture slot map");
+    expect(store.getSnapshot()).toBe(before);
+    expect(history.state.undoCount).toBe(undoCount);
+  });
+
+  it.each([
+    ["invalid color", { color: "white" }],
+    ["metalness below range", { metalness: -0.1 }],
+    ["opacity above range", { opacity: 1.1 }],
+    ["invalid side", { side: "both" }],
+    ["invalid color space", { textures: { map: { assetId: "texture-a", colorSpace: "display-p3" } } }],
+    ["invalid wrap mode", { textures: { map: { assetId: "texture-a", wrapS: "tile" } } }],
+    ["invalid filter", { textures: { map: { assetId: "texture-a", minFilter: "mipmap" } } }],
+    ["invalid uv set", { textures: { map: { assetId: "texture-a", uvSet: -1 } } }],
+    ["invalid texture transform", { textures: { map: { assetId: "texture-a", transform: { repeat: [1, Number.NaN] } } } }]
+  ])("rejects %s without recording history", (_label, material) => {
+    const store = new EditorStore();
+    const history = new CommandHistory();
+    const dispatcher = new CommandDispatcher(store, history, new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "register-asset", asset: { id: "texture-a", kind: "texture" } });
+    const before = store.getSnapshot();
+    const undoCount = history.state.undoCount;
+
+    const result = dispatcher.dispatch({
+      type: "set-material",
+      target: { kind: "object", objectId: "object-a" },
+      material: material as MaterialPatch
+    });
+
+    expect(result.ok).toBe(false);
+    expect(store.getSnapshot()).toBe(before);
+    expect(history.state.undoCount).toBe(undoCount);
+  });
+
+  it("rejects unsupported texture slots and GLB texture assets without recording history", () => {
+    const store = new EditorStore();
+    const history = new CommandHistory();
+    const dispatcher = new CommandDispatcher(store, history, new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    const before = store.getSnapshot();
+    const undoCount = history.state.undoCount;
+
+    const result = dispatcher.dispatch({
+      type: "set-material",
+      target: { kind: "object", objectId: "object-a" },
+      material: {
+        textures: {
+          map: { assetId: "asset-a" },
+          unsupportedSlot: { assetId: "asset-a" }
+        } as MaterialPatch["textures"]
+      }
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("unsupportedSlot");
+    expect(result.error).toContain("texture or image asset");
+    expect(store.getSnapshot()).toBe(before);
+    expect(history.state.undoCount).toBe(undoCount);
+  });
+
+  it("rejects custom assignment IDs that do not match their target", () => {
+    const store = new EditorStore();
+    const history = new CommandHistory();
+    const dispatcher = new CommandDispatcher(store, history, new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    const before = store.getSnapshot();
+
+    const result = dispatcher.dispatch({
+      type: "set-material",
+      assignmentId: "object:other",
+      target: { kind: "object", objectId: "object-a" },
+      material: { color: "#ffffff" }
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("does not match target");
     expect(store.getSnapshot()).toBe(before);
   });
 

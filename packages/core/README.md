@@ -22,7 +22,7 @@ All durable edits enter through commands so undo/redo remains framework-neutral:
 
 ## Problems
 
-Validation, resolver, and runtime diagnostics use a structured problem contract with severity, source, target, asset references, recoverability, and display metadata. Resolver/runtime problems are derived by default and are not written into snapshots unless a future explicit recovery command does so.
+Resolver and runtime diagnostics use a structured problem contract with severity, source, target, asset references, recoverability, and display metadata. Snapshot validation and command failures currently return controlled string errors. Derived resolver/runtime problems are not written into snapshots unless a future explicit recovery command does so.
 
 ## Deferred Runtime and UX Work
 

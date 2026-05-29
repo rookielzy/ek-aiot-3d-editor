@@ -128,6 +128,30 @@ describe("set environment command", () => {
     expect(wrongKind.error).toContain("Environment asset kind is unsupported");
   });
 
+  it.each([
+    ["invalid environment mode", { mode: "sky" }],
+    ["invalid background mode", { background: { mode: "gradient" } }],
+    ["invalid solid color", { background: { mode: "solid", color: "black" } }],
+    ["negative intensity", { background: { mode: "solid", color: "#111111", intensity: -1 } }],
+    ["blur above range", { background: { mode: "hdr", assetId: "missing", blur: 2 } }],
+    ["non-finite rotation", { environment: { intensity: 1, rotation: { x: 0, y: Number.POSITIVE_INFINITY, z: 0 } } }]
+  ])("rejects %s without recording history", (_label, environment) => {
+    const store = new EditorStore();
+    const history = new CommandHistory();
+    const dispatcher = new CommandDispatcher(store, history, new AssetRegistry());
+    const before = store.getSnapshot();
+    const undoCount = history.state.undoCount;
+
+    const result = dispatcher.dispatch({
+      type: "set-environment",
+      environment: environment as never
+    });
+
+    expect(result.ok).toBe(false);
+    expect(store.getSnapshot()).toBe(before);
+    expect(history.state.undoCount).toBe(undoCount);
+  });
+
   it("undoes and redoes environment edits", () => {
     const store = new EditorStore();
     const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());

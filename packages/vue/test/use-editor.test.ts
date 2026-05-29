@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createLegacyProofLoopSnapshot } from "../../core/test/fixtures/legacy-proof-loop";
 import { useEditor } from "../src/composables/use-editor";
 
 describe("useEditor", () => {
@@ -25,5 +26,13 @@ describe("useEditor", () => {
     expect(second.snapshot.value.objects["object-a"].asset.id).toBe("asset-a");
     first.dispose();
     second.dispose();
+  });
+
+  it("initializes legacy serialized snapshots through core migration", () => {
+    const { snapshot, dispose } = useEditor({ snapshot: createLegacyProofLoopSnapshot() });
+
+    expect(snapshot.value.version).toBe(2);
+    expect(snapshot.value.objects["object-a"].asset.id).toBe("asset-a");
+    dispose();
   });
 });

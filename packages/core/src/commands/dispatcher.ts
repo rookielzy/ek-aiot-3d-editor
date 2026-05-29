@@ -24,6 +24,7 @@ export class CommandDispatcher {
 
   dispatch(command: Command): CommandResult {
     const before = this.store.getSnapshot();
+    const beforeAssets = new Map(this.assets.entries());
 
     try {
       const applied = this.apply(before, command);
@@ -39,6 +40,7 @@ export class CommandDispatcher {
 
       return { ok: true, snapshot: this.store.getSnapshot() };
     } catch (error) {
+      this.assets.replaceAll(beforeAssets);
       return {
         ok: false,
         snapshot: before,

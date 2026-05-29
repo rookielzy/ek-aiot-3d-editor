@@ -28,4 +28,11 @@ describe("asset registry", () => {
     expect(() => registry.register({ id: "bad", kind: "video" as unknown as never })).toThrow("Unsupported asset kind");
     expect(registry.get("bad")).toBeUndefined();
   });
+
+  it("rejects non-string labels without registering them", () => {
+    const registry = new AssetRegistry();
+
+    expect(() => registry.register({ id: "bad-label", label: 123 as unknown as string })).toThrow("Asset label");
+    expect(registry.get("bad-label")).toBeUndefined();
+  });
 });

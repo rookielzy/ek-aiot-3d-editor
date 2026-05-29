@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createEmptySnapshot, createTransform } from "../snapshot/defaults";
-import type { LegacySceneSnapshot, SceneSnapshot } from "../snapshot/types";
+import type { SceneSnapshot } from "../snapshot/types";
+import { validateSerializedSceneSnapshot } from "../snapshot/migrations";
+import { createLegacyProofLoopSnapshot } from "../../test/fixtures/legacy-proof-loop";
+import { validateSceneSnapshot } from "../snapshot/validation";
 import { restoreSnapshot, serializeSnapshot } from "./serialization";
 
 describe("snapshot serialization", () => {
@@ -46,40 +49,7 @@ describe("snapshot serialization", () => {
   });
 
   it("migrates version 1 proof-loop snapshots to the current schema", () => {
-    const legacy: LegacySceneSnapshot = {
-      version: 1,
-      scene: {
-        id: "scene-a",
-        name: "Legacy scene"
-      },
-      assets: {
-        "asset-a": {
-          id: "asset-a",
-          kind: "glb",
-          label: "Box"
-        }
-      },
-      objects: {
-        "object-a": {
-          id: "object-a",
-          name: "Box",
-          kind: "glb",
-          parentId: null,
-          children: [],
-          asset: {
-            id: "asset-a",
-            kind: "glb",
-            label: "Box"
-          },
-          transform: createTransform({ position: [4, 5, 6] })
-        }
-      },
-      rootObjectIds: ["object-a"],
-      selection: {
-        objectId: "object-a"
-      }
-    };
-
+    const legacy = createLegacyProofLoopSnapshot();
     const restored = restoreSnapshot(legacy);
 
     expect(restored.version).toBe(2);
@@ -90,5 +60,12 @@ describe("snapshot serialization", () => {
     expect(restored.environment.mode).toBe("none");
     expect(restored.lights).toEqual({});
     expect(restored.problems).toEqual({ acknowledged: {} });
+  });
+
+  it("validates serialized version 1 snapshots through the migration path", () => {
+    const legacy = createLegacyProofLoopSnapshot();
+
+    expect(validateSceneSnapshot(legacy).ok).toBe(false);
+    expect(validateSerializedSceneSnapshot(legacy)).toEqual({ ok: true, errors: [] });
   });
 });

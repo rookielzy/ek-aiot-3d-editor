@@ -53,7 +53,17 @@ export class SceneProjector {
 
   async projectObject(object: SceneObject, snapshot: SceneSnapshot): Promise<Object3D> {
     let runtimeObject = this.objects.get(object.id);
-    if (!runtimeObject) {
+    if (runtimeObject?.userData.problem) {
+      const replacement = await this.createRuntimeObject(object);
+      this.objects.set(object.id, replacement);
+      if (runtimeObject.parent) {
+        runtimeObject.parent.add(replacement);
+      } else {
+        this.scene.add(replacement);
+      }
+      disposeObjectTree(runtimeObject);
+      runtimeObject = replacement;
+    } else if (!runtimeObject) {
       runtimeObject = await this.createRuntimeObject(object);
       this.objects.set(object.id, runtimeObject);
       this.scene.add(runtimeObject);
@@ -116,6 +126,7 @@ export class SceneProjector {
         id: `asset-load-failed:${object.asset.id}:${object.id}`,
         severity: "error",
         code: "asset-load-failed",
+        objectId: object.id,
         assetId: object.asset.id,
         source: "runtime",
         target: { kind: "object", objectId: object.id },

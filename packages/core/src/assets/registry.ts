@@ -1,9 +1,8 @@
 import { createId } from "../snapshot/defaults";
-import type { AssetKind, AssetReference } from "../snapshot/types";
+import { isSupportedAssetKind } from "../snapshot/primitives";
+import type { AssetReference } from "../snapshot/types";
 import { isJsonCompatible } from "../snapshot/validation";
 import type { AssetInput, RegisteredAsset } from "./types";
-
-const SUPPORTED_ASSET_KINDS = new Set<AssetKind>(["glb", "texture", "hdr", "image"]);
 
 export class AssetRegistry {
   #assets = new Map<string, RegisteredAsset>();
@@ -13,6 +12,9 @@ export class AssetRegistry {
     const kind = input.kind ?? "glb";
     if (!isSupportedAssetKind(kind)) {
       throw new Error(`Unsupported asset kind: ${String(kind)}.`);
+    }
+    if ("label" in input && input.label !== undefined && typeof input.label !== "string") {
+      throw new Error("Asset label must be a string.");
     }
 
     const reference: AssetReference = {
@@ -38,6 +40,14 @@ export class AssetRegistry {
     return this.#assets.get(assetId);
   }
 
+  entries(): IterableIterator<[string, RegisteredAsset]> {
+    return this.#assets.entries();
+  }
+
+  replaceAll(assets: Iterable<[string, RegisteredAsset]>): void {
+    this.#assets = new Map(assets);
+  }
+
   remove(assetId: string): void {
     this.#assets.delete(assetId);
   }
@@ -49,8 +59,4 @@ export class AssetRegistry {
   get size(): number {
     return this.#assets.size;
   }
-}
-
-export function isSupportedAssetKind(kind: unknown): kind is AssetKind {
-  return typeof kind === "string" && SUPPORTED_ASSET_KINDS.has(kind as AssetKind);
 }

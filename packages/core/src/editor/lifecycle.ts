@@ -20,7 +20,7 @@ export class CoreEditor implements Editor {
   #disposed = false;
 
   constructor(options: EditorOptions = {}) {
-    this.store = new EditorStore(options.snapshot);
+    this.store = new EditorStore(options.snapshot ? restoreSnapshot(options.snapshot) : undefined);
     this.dispatcher = new CommandDispatcher(this.store, this.history, this.assets);
   }
 

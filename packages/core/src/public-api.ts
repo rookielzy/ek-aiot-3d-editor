@@ -54,6 +54,6 @@ export type { AssetKind, JsonPrimitive, JsonValue, LegacySceneSnapshot, SceneObj
 
 export { createEditor } from "./editor/create-editor";
 export { createEmptySnapshot, createTransform } from "./snapshot/defaults";
-export { migrateSerializedSnapshot } from "./snapshot/migrations";
+export { migrateSerializedSnapshot, validateSerializedSceneSnapshot } from "./snapshot/migrations";
 export { isJsonCompatible, validateSceneSnapshot } from "./snapshot/validation";
 export { normalizeTransform } from "./snapshot/transforms";

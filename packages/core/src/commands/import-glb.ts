@@ -20,6 +20,7 @@ export function applyImportGlb(snapshot: SceneSnapshot, command: ImportGlbComman
     throw new Error(`Parent object ${parentId} does not exist.`);
   }
 
+  const transform = cloneTransform(normalizeTransform(command.transform));
   const asset = assets.register(command.asset);
   const object: SceneObject = {
     id: objectId,
@@ -28,7 +29,7 @@ export function applyImportGlb(snapshot: SceneSnapshot, command: ImportGlbComman
     parentId,
     children: [],
     asset,
-    transform: cloneTransform(normalizeTransform(command.transform))
+    transform
   };
 
   const objects: SceneSnapshot["objects"] = {

@@ -3,6 +3,7 @@ import { validateLights } from "../lights/validation";
 import { validateMaterialState } from "../materials/validation";
 import { validateAuthoredProblemState } from "../problems/validation";
 import { isJsonCompatible as isJsonValueCompatible, isPlainRecord, type JsonValue } from "./json";
+import { isSupportedAssetKind, isVector } from "./primitives";
 import { SNAPSHOT_VERSION, type AssetReference, type SceneObject, type SceneSnapshot } from "./types";
 
 export interface ValidationResult {
@@ -95,8 +96,11 @@ function validateAsset(id: string, asset: unknown, errors: string[]): void {
   if (asset.id !== id) {
     errors.push(`Asset ${id} must use a matching id field.`);
   }
-  if (asset.kind !== "glb" && asset.kind !== "texture" && asset.kind !== "hdr" && asset.kind !== "image") {
+  if (!isSupportedAssetKind(asset.kind)) {
     errors.push(`Asset ${id} kind is unsupported.`);
+  }
+  if ("label" in asset && asset.label !== undefined && typeof asset.label !== "string") {
+    errors.push(`Asset ${id} label must be a string.`);
   }
   if ("metadata" in asset && !isJsonCompatible(asset.metadata)) {
     errors.push(`Asset ${id} metadata must be JSON-compatible.`);
@@ -165,12 +169,8 @@ function validateObjectReferences(objects: unknown, assets: Record<string, Asset
 function isTransform(value: unknown): boolean {
   return (
     isPlainRecord(value) &&
-    isVector(value.position) &&
-    isVector(value.rotation) &&
-    isVector(value.scale)
+    isVector(value.position, 3) &&
+    isVector(value.rotation, 3) &&
+    isVector(value.scale, 3)
   );
-}
-
-function isVector(value: unknown): boolean {
-  return Array.isArray(value) && value.length === 3 && value.every((entry) => typeof entry === "number" && Number.isFinite(entry));
 }

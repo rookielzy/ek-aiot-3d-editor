@@ -3,7 +3,7 @@ import { createEmptyMaterialState } from "../materials/defaults";
 import { createEmptyAuthoredProblemState } from "../problems/defaults";
 import { immutableClone } from "./immutability";
 import { SNAPSHOT_VERSION, type LegacySceneSnapshot, type SceneSnapshot, type SerializedSceneSnapshot } from "./types";
-import { assertValidSceneSnapshot } from "./validation";
+import { assertValidSceneSnapshot, type ValidationResult } from "./validation";
 
 export function migrateSerializedSnapshot(serialized: SerializedSceneSnapshot): SceneSnapshot {
   if (serialized.version === SNAPSHOT_VERSION) {
@@ -30,4 +30,13 @@ export function migrateV1Snapshot(serialized: LegacySceneSnapshot): SceneSnapsho
     lights: {},
     problems: createEmptyAuthoredProblemState()
   };
+}
+
+export function validateSerializedSceneSnapshot(value: unknown): ValidationResult {
+  try {
+    migrateSerializedSnapshot(value as SerializedSceneSnapshot);
+    return { ok: true, errors: [] };
+  } catch (error) {
+    return { ok: false, errors: [error instanceof Error ? error.message : String(error)] };
+  }
 }

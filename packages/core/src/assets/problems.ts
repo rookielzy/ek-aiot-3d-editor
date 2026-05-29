@@ -7,6 +7,7 @@ export function createMissingAssetProblem(assetId: string, objectId?: string): P
     id: `asset-unresolved:${assetId}:${objectId ?? "scene"}`,
     severity: "warning",
     code: "asset-unresolved",
+    ...(objectId ? { objectId } : {}),
     assetId,
     source: "asset-resolver",
     target: objectId ? { kind: "object", objectId } : { kind: "asset", assetId },

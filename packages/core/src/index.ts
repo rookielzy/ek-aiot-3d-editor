@@ -72,5 +72,6 @@ export {
   isJsonCompatible,
   migrateSerializedSnapshot,
   normalizeTransform,
+  validateSerializedSceneSnapshot,
   validateSceneSnapshot
 } from "./public-api";

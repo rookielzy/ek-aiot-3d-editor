@@ -1,4 +1,5 @@
 import { isJsonCompatible, isPlainRecord } from "../snapshot/json";
+import { isColorString, isFiniteRange, isVector } from "../snapshot/primitives";
 import type { LightDefinition } from "./types";
 
 const LIGHT_KINDS = new Set(["ambient", "directional", "hemisphere", "point", "spot"]);
@@ -74,19 +75,19 @@ function validateTransform(value: unknown, label: string, errors: string[]): voi
 }
 
 function validateVector3(value: unknown, label: string, errors: string[]): void {
-  if (!Array.isArray(value) || value.length !== 3 || value.some((entry) => typeof entry !== "number" || !Number.isFinite(entry))) {
+  if (!isVector(value, 3)) {
     errors.push(`${label} must contain three finite numbers.`);
   }
 }
 
 function validateColor(value: unknown, label: string, errors: string[]): void {
-  if (typeof value !== "string" || !/^(#[0-9a-fA-F]{6}|rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\))$/.test(value)) {
+  if (!isColorString(value)) {
     errors.push(`${label} must be a #rrggbb or rgb(r, g, b) color string.`);
   }
 }
 
 function validateRange(value: unknown, label: string, min: number, max: number, errors: string[]): void {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) {
+  if (!isFiniteRange(value, min, max)) {
     errors.push(`${label} must be a finite number between ${min} and ${max}.`);
   }
 }

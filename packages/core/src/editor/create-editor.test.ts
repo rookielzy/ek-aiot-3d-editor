@@ -1,4 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import { Group } from "three";
+import { AssetResolverBridge } from "../assets/resolver";
+import type { RendererLike } from "../runtime/editor-runtime";
+import { createLegacyProofLoopSnapshot } from "../../test/fixtures/legacy-proof-loop";
 import { createEditor } from "./create-editor";
 
 describe("createEditor", () => {
@@ -28,4 +32,36 @@ describe("createEditor", () => {
     expect(restored.getSnapshot().objects["object-a"].transform.position).toEqual([1, 2, 3]);
     expect(restored.getSnapshot().selection.objectId).toBe("object-a");
   });
+
+  it("accepts legacy serialized snapshots at construction and keeps command/history/runtime behavior working", async () => {
+    const editor = createEditor({ snapshot: createLegacyProofLoopSnapshot() });
+    const runtime = editor.mountRuntime({
+      container: document.createElement("div"),
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Group() },
+      rendererFactory: fakeRenderer
+    });
+
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+    editor.dispatch({ type: "set-transform", objectId: "object-a", transform: { position: [9, 0, 0] } });
+    editor.undo();
+    editor.redo();
+    const restored = createEditor({ snapshot: editor.serialize() });
+    await runtime.project();
+
+    expect(editor.getSnapshot().version).toBe(2);
+    expect(editor.getSnapshot().materials).toEqual({ definitions: {}, assignments: {} });
+    expect(editor.getSnapshot().objects["object-a"].transform.position).toEqual([9, 0, 0]);
+    expect(restored.getSnapshot().objects["object-a"].asset.id).toBe("asset-a");
+    expect(runtime.getObject("object-a")).toBeTruthy();
+  });
 });
+
+function fakeRenderer(container: HTMLElement): RendererLike {
+  return {
+    domElement: container.ownerDocument.createElement("canvas"),
+    setSize() {},
+    render() {},
+    dispose() {}
+  };
+}

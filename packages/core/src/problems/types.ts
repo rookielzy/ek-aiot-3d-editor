@@ -28,6 +28,7 @@ export interface Problem {
   source: ProblemSource;
   target: ProblemTarget;
   message: string;
+  objectId?: string;
   assetId?: string;
   recoverability: ProblemRecoverability;
   display?: ProblemDisplay;

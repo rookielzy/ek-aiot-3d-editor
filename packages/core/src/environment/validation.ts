@@ -1,5 +1,6 @@
 import type { AssetReference } from "../assets/types";
 import { isJsonCompatible, isPlainRecord } from "../snapshot/json";
+import { isColorString, isFiniteNumber, isFiniteRange } from "../snapshot/primitives";
 import type { SceneEnvironment } from "./types";
 
 const ENVIRONMENT_MODES = new Set(["none", "solid", "texture", "hdr"]);
@@ -117,7 +118,7 @@ function validateRotation(value: unknown, label: string, errors: string[]): void
   }
 
   for (const axis of ["x", "y", "z"] as const) {
-    if (typeof value[axis] !== "number" || !Number.isFinite(value[axis])) {
+    if (!isFiniteNumber(value[axis])) {
       errors.push(`${label}.${axis} must be a finite number.`);
     }
   }
@@ -127,13 +128,13 @@ function validateOptionalColor(value: unknown, label: string, errors: string[]):
   if (value === undefined) {
     return;
   }
-  if (typeof value !== "string" || !/^(#[0-9a-fA-F]{6}|rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\))$/.test(value)) {
+  if (!isColorString(value)) {
     errors.push(`${label} must be a #rrggbb or rgb(r, g, b) color string.`);
   }
 }
 
 function validateRange(value: unknown, label: string, min: number, max: number, errors: string[]): void {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) {
+  if (!isFiniteRange(value, min, max)) {
     errors.push(`${label} must be a finite number between ${min} and ${max}.`);
   }
 }
