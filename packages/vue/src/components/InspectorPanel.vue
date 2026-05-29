@@ -1,28 +1,17 @@
 <template>
-  <aside class="ek-inspector" aria-label="Scene inspector">
-    <TransformInspector :editor="rawEditor" :snapshot="currentSnapshot" :section="inspector.transform" />
-    <MaterialInspector :editor="rawEditor" :snapshot="currentSnapshot" :section="inspector.material" />
-    <EnvironmentInspector :editor="rawEditor" :snapshot="currentSnapshot" :section="inspector.environment" />
-    <LightInspector
-      :editor="rawEditor"
-      :snapshot="currentSnapshot"
-      :section="inspector.lights"
-      @update:active-light-id="activeLightId = $event"
-    />
-    <ProblemsPanel :section="inspector.problems" />
-  </aside>
+  <InspectorView
+    :editor="rawEditor"
+    :snapshot="currentSnapshot"
+    :inspector="inspector"
+    @update:active-light-id="activeLightId = $event"
+  />
 </template>
 
 <script setup lang="ts">
 import { toRaw, toRef } from "vue";
 import type { Editor, SceneSnapshot } from "@ek-aiot/3d-editor-core";
 import { useInspector } from "../composables/use-inspector";
-import "./inspector.css";
-import TransformInspector from "./TransformInspector.vue";
-import MaterialInspector from "./MaterialInspector.vue";
-import EnvironmentInspector from "./EnvironmentInspector.vue";
-import LightInspector from "./LightInspector.vue";
-import ProblemsPanel from "./ProblemsPanel.vue";
+import InspectorView from "./InspectorView.vue";
 
 const props = defineProps<{
   editor: Editor;

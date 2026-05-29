@@ -10,29 +10,38 @@ body {
   background: #edf1f5;
 }
 
-.workbench {
-  display: grid;
-  grid-template-rows: minmax(18rem, 1fr) auto;
+.ek-workbench {
   width: 100vw;
-  min-height: 100vh;
-  color: #182230;
+  height: 100vh;
 }
 
-.viewport-shell {
+.proof-summary {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.proof-summary div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
   min-width: 0;
-  min-height: 18rem;
-  background: #111820;
 }
 
-.viewport {
-  width: 100%;
-  height: 100%;
+.proof-summary dt {
+  color: #657287;
 }
 
-@media (min-width: 768px) {
-  .workbench {
-    grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem);
-    grid-template-rows: minmax(0, 1fr);
-    height: 100vh;
-  }
+.proof-summary dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.proof-overlay {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid rgb(255 255 255 / 35%);
+  border-radius: 0.375rem;
+  background: rgb(17 24 32 / 78%);
+  color: #ffffff;
+  font-size: 0.78rem;
 }

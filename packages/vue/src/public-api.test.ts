@@ -2,14 +2,16 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { EditorViewport, InspectorPanel, useEditor, useInspector } from "./index";
+import { EditorViewport, EditorWorkbench, InspectorPanel, useEditor, useInspector, useWorkbench } from "./index";
 
 describe("vue public API", () => {
   it("exports only the thin Vue adapter surface", () => {
     expect(EditorViewport).toBeTruthy();
+    expect(EditorWorkbench).toBeTruthy();
     expect(InspectorPanel).toBeTruthy();
     expect(useEditor).toEqual(expect.any(Function));
     expect(useInspector).toEqual(expect.any(Function));
+    expect(useWorkbench).toEqual(expect.any(Function));
   });
 
   it("declares Vue as peer dependency and core as workspace dependency", () => {
