@@ -12,6 +12,7 @@ import {
   type InspectorCommandResult,
   type LightDefinition,
   type Problem,
+  PROJECT_PACKAGE_VERSION,
   type SceneEnvironment,
   type SetMaterialCommand,
   type AddLightCommand,
@@ -53,6 +54,7 @@ describe("core public API", () => {
 
     expect(Object.keys(packageJson.exports)).toEqual(["."]);
     expect(packageJson.dependencies).toHaveProperty("three");
+    expect(packageJson.dependencies).toHaveProperty("fflate");
     expect(packageJson.peerDependencies ?? {}).not.toHaveProperty("vue");
     expect(packageJson.peerDependencies ?? {}).not.toHaveProperty("react");
   });
@@ -100,6 +102,7 @@ describe("core public API", () => {
     const removeLight: RemoveLightCommand = { type: "remove-light", lightId: "light-a" };
     const textureSlot: TextureSlot = { assetId: "texture-a", colorSpace: "srgb" };
     const texturePatch: MaterialTexturePatch = { map: null };
+    const packageVersion = PROJECT_PACKAGE_VERSION;
     const materialState: MaterialState = { definitions: {}, assignments: {} };
     const authoredProblems: AuthoredProblemState = { acknowledged: {} };
     const target: ProblemTarget = { kind: "environment", assetId: "hdr-a" };
@@ -119,6 +122,7 @@ describe("core public API", () => {
     expect(removeLight.lightId).toBe("light-a");
     expect(textureSlot.assetId).toBe("texture-a");
     expect(texturePatch.map).toBeNull();
+    expect(packageVersion).toBe(1);
     expect(materialState.assignments).toEqual({});
     expect(authoredProblems.acknowledged).toEqual({});
     expect(target.kind).toBe("environment");

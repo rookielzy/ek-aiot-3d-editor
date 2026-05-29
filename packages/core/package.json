@@ -11,13 +11,17 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --root ../.. packages/core"
   },
   "dependencies": {
+    "fflate": "^0.8.3",
     "three": "^0.184.0"
   }
 }

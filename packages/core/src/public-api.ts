@@ -76,6 +76,22 @@ export type {
   ProblemTarget
 } from "./problems/types";
 export type {
+  ProjectAssetManifestRecord,
+  ProjectAssetSourceInput,
+  ProjectCompleteness,
+  ProjectExportOptions,
+  ProjectExportResult,
+  ProjectImportOptions,
+  ProjectImportResult,
+  ProjectPackage,
+  ProjectPackageLimits,
+  ProjectPackageManifest,
+  ProjectPackageVersion,
+  ProjectProblem,
+  ReplaceAssetInput,
+  ReplaceAssetResult
+} from "./project/project-api";
+export type {
   EditorRuntime,
   EditorRuntimeOptions,
   RendererLike,
@@ -85,6 +101,13 @@ export type {
 export type { AssetKind, JsonPrimitive, JsonValue, LegacySceneSnapshot, SceneObject, SceneSnapshot, SerializedSceneSnapshot, Transform } from "./snapshot/types";
 
 export { createEditor } from "./editor/create-editor";
+export {
+  DEFAULT_PROJECT_PACKAGE_LIMITS,
+  PROJECT_ASSET_DIR,
+  PROJECT_MANIFEST_PATH,
+  PROJECT_PACKAGE_VERSION,
+  PROJECT_SCENE_PATH
+} from "./project/project-api";
 export {
   buildAddLightCommand,
   buildRemoveLightCommand,

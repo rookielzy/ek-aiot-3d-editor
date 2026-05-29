@@ -156,6 +156,38 @@ describe("Vue EditorWorkbench", () => {
     wrapper.unmount();
   });
 
+  it("routes problem-panel replacement files through the core project API", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    const replaceAsset = vi.spyOn(editor, "replaceAsset");
+    const wrapper = mount(EditorWorkbench, {
+      props: {
+        editor,
+        resolver: new AssetResolverBridge(() => null),
+        rendererFactory: fakeRenderer
+      }
+    });
+
+    await editor.getRuntime()?.project();
+    await nextTick();
+
+    const file = new File([new Uint8Array([1, 2, 3])], "box.glb", { type: "model/gltf-binary" });
+    const input = wrapper.find(".ek-inspector-file-action input").element as HTMLInputElement;
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [file]
+    });
+    await wrapper.find(".ek-inspector-file-action input").trigger("change");
+
+    expect(replaceAsset).toHaveBeenCalledWith({
+      assetId: "asset-a",
+      source: file,
+      label: "box.glb",
+      mimeType: "model/gltf-binary"
+    });
+    wrapper.unmount();
+  });
+
   it("does not dispose a host-owned editor on unmount", () => {
     const editor = markRaw(createEditor());
     const wrapper = mount(EditorWorkbench, { props: { editor, rendererFactory: fakeRenderer } });
@@ -196,6 +228,7 @@ describe("Vue EditorWorkbench", () => {
 
     expect(workbench.editor).toBe(editor);
     expect(workbench.ownsEditor).toBe(false);
+    expect(workbench.exportProject().ok).toBe(true);
 
     wrapper.unmount();
     expect(editor.disposed).toBe(false);

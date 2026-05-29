@@ -68,6 +68,18 @@ describe("editor lifecycle", () => {
     expect(editor.getRuntime()).toBe(second);
     expect(runtimes).toEqual([null, first, null, second]);
   });
+
+  it("clears project payloads when restoring a plain snapshot", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a", source: new Uint8Array([1]) } });
+    expect(editor.exportProject().ok).toBe(true);
+
+    editor.restore(editor.serialize());
+
+    expect(editor.exportProject().ok).toBe(false);
+    expect(editor.exportProject().problems).toMatchObject([{ code: "project-export-payload-missing" }]);
+  });
+
 });
 
 function createFakeRenderer(container: HTMLElement): RendererLike {

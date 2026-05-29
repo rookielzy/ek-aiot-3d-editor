@@ -23,6 +23,8 @@ Thin Vue adapter over `@ek-aiot/3d-editor-core`.
 </template>
 ```
 
-Scoped slots receive the core editor, current snapshot, inspector model, runtime problems, active light state, and a dispatch helper. Runtime options such as `resolver`, loader, and renderer factory are passed through to core runtime mounting; Vue shell code does not resolve assets or serialize runtime problems.
+Scoped slots receive the core editor, current snapshot, inspector model, runtime problems, active light state, project import/export helpers, asset replacement, and a dispatch helper. Runtime options such as `resolver`, loader, and renderer factory are passed through to core runtime mounting; Vue shell code does not resolve assets or serialize runtime problems.
 
-The workbench and inspector do not implement hierarchy selection, asset replacement, texture upload, persisted layouts, schema-driven inspector plugins, or material texture runtime projection.
+Problem panels expose file replacement for recoverable asset problems and pass the selected `File` to `editor.replaceAsset()` for the same asset ID. The Vue layer does not store files in snapshots and does not implement its own asset resolver, package validator, or runtime cleanup.
+
+The workbench and inspector do not implement hierarchy selection, full asset libraries, texture upload queues, persisted layouts, schema-driven inspector plugins, or material texture runtime projection.

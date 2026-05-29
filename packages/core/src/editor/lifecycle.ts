@@ -4,6 +4,13 @@ import type { AssetInput } from "../assets/types";
 import { CommandDispatcher } from "../commands/dispatcher";
 import type { Command, CommandResult } from "../commands/types";
 import { CommandHistory, type HistoryState } from "../history/history";
+import { defaultArchiveAdapter } from "../project/archive-adapter";
+import { ProjectAssetStore } from "../project/asset-store";
+import { exportProjectPackage } from "../project/export-project";
+import { importProjectAssets } from "../project/import-project";
+import { replaceProjectAsset } from "../project/replace-asset";
+import type { ProjectAssetSourceInput } from "../project/project-api";
+import type { ProjectExportOptions, ProjectExportResult, ProjectImportOptions, ProjectImportResult, ReplaceAssetInput, ReplaceAssetResult } from "../project/project-api";
 import { ThreeEditorRuntime, type EditorRuntime } from "../runtime/editor-runtime";
 import type { SceneSnapshot, SerializedSceneSnapshot } from "../snapshot/types";
 import { restoreSnapshot, serializeSnapshot } from "./serialization";
@@ -12,12 +19,13 @@ import type { Editor, EditorOptions, MountRuntimeOptions, RuntimeSubscriber, Sna
 
 export class CoreEditor implements Editor {
   readonly assets = new AssetRegistry();
+  readonly projectAssets = new ProjectAssetStore();
   readonly history = new CommandHistory();
   readonly store: EditorStore;
   readonly dispatcher: CommandDispatcher;
   #runtime: EditorRuntime | null = null;
   #runtimeSubscribers = new Set<RuntimeSubscriber>();
-  #resolver = new AssetResolverBridge();
+  #resolver = new AssetResolverBridge(undefined, this.projectAssets);
   #disposed = false;
 
   constructor(options: EditorOptions = {}) {
@@ -34,7 +42,11 @@ export class CoreEditor implements Editor {
   }
 
   dispatch(command: Command): CommandResult {
-    return this.dispatcher.dispatch(command);
+    const result = this.dispatcher.dispatch(command);
+    if (result.ok) {
+      this.#registerCommandProjectAsset(command, result.snapshot);
+    }
+    return result;
   }
 
   undo(): CommandResult {
@@ -56,11 +68,55 @@ export class CoreEditor implements Editor {
   restore(snapshot: SerializedSceneSnapshot): SceneSnapshot {
     const restored = restoreSnapshot(snapshot);
     this.history.clear();
+    this.projectAssets.clear();
     return this.store.replaceSnapshot(restored);
   }
 
   registerAsset(asset: AssetInput) {
-    return this.assets.register(asset);
+    const reference = this.assets.register(asset);
+    const source = asset.source;
+    if (isProjectAssetSource(source)) {
+      this.projectAssets.register({ asset: reference, source });
+    }
+    return reference;
+  }
+
+  importProject(packageBytes: Uint8Array, options: ProjectImportOptions = {}): ProjectImportResult {
+    this.#assertActive();
+    const previousAssets = [...this.projectAssets.entries()].map(([, asset]) => asset);
+    const result = importProjectAssets(packageBytes, this.projectAssets, {
+      ...options,
+      archive: defaultArchiveAdapter
+    });
+    if (!result.ok) {
+      this.projectAssets.replaceAll(previousAssets);
+      return {
+        ...result,
+        snapshot: this.store.getSnapshot()
+      };
+    }
+
+    this.history.clear();
+    const snapshot = this.store.replaceSnapshot(result.snapshot);
+    void this.#runtime?.project(snapshot);
+    return {
+      ...result,
+      snapshot
+    };
+  }
+
+  exportProject(options: ProjectExportOptions = {}): ProjectExportResult {
+    this.#assertActive();
+    return exportProjectPackage(this.store.getSnapshot(), this.projectAssets, defaultArchiveAdapter, options);
+  }
+
+  async replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult> {
+    this.#assertActive();
+    const result = await replaceProjectAsset(this.store.getSnapshot(), this.projectAssets, input);
+    if (result.ok) {
+      void this.#runtime?.project(this.store.getSnapshot());
+    }
+    return result;
   }
 
   subscribeRuntime(subscriber: RuntimeSubscriber): () => void {
@@ -81,6 +137,7 @@ export class CoreEditor implements Editor {
       this.#notifyRuntimeSubscribers();
     }
     this.#resolver = options.resolver ?? this.#resolver;
+    this.#resolver.setProjectAssets(this.projectAssets);
     this.#runtime = new ThreeEditorRuntime({
       ...options,
       store: this.store,
@@ -106,6 +163,7 @@ export class CoreEditor implements Editor {
     this.#notifyRuntimeSubscribers();
     this.#runtimeSubscribers.clear();
     this.assets.clear();
+    this.projectAssets.clear();
     this.store.dispose();
   }
 
@@ -125,4 +183,25 @@ export class CoreEditor implements Editor {
       subscriber(runtime);
     }
   }
+
+  #registerCommandProjectAsset(command: Command, snapshot: SceneSnapshot): void {
+    if ((command.type !== "import-glb" && command.type !== "register-asset") || !isProjectAssetSource(command.asset.source)) {
+      return;
+    }
+    const assetId = command.asset.id;
+    const reference = assetId ? snapshot.assets[assetId] : [...Object.values(snapshot.assets)].at(-1);
+    if (!reference) {
+      return;
+    }
+    this.projectAssets.register({
+      asset: reference,
+      source: command.asset.source,
+      ...(command.asset.label ? { label: command.asset.label } : {}),
+      ...(command.asset.metadata ? { metadata: command.asset.metadata } : {})
+    });
+  }
+}
+
+function isProjectAssetSource(source: AssetInput["source"]): source is ProjectAssetSourceInput {
+  return source !== undefined && source !== null;
 }

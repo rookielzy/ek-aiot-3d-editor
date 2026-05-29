@@ -117,6 +117,35 @@ describe("React EditorWorkbench", () => {
     expect(JSON.stringify(editor.serialize())).not.toContain("asset-unresolved");
   });
 
+  it("routes problem-panel replacement files through the core project API", async () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    const replaceAsset = vi.spyOn(editor, "replaceAsset");
+
+    render(
+      <EditorWorkbench
+        editor={editor}
+        resolver={new AssetResolverBridge(() => null)}
+        rendererFactory={fakeRenderer}
+      />
+    );
+
+    await act(async () => {
+      await editor.getRuntime()?.project();
+    });
+
+    const input = document.querySelector(".ek-inspector-file-action input") as HTMLInputElement;
+    const file = new File([new Uint8Array([1, 2, 3])], "box.glb", { type: "model/gltf-binary" });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    expect(replaceAsset).toHaveBeenCalledWith({
+      assetId: "asset-a",
+      source: file,
+      label: "box.glb",
+      mimeType: "model/gltf-binary"
+    });
+  });
+
   it("does not dispose a host-owned editor on unmount", () => {
     const editor = createEditor();
     const { unmount } = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
@@ -200,6 +229,7 @@ describe("React EditorWorkbench", () => {
 
     expect(result().editor).toBe(editor);
     expect(result().ownsEditor).toBe(false);
+    expect(result().exportProject().ok).toBe(true);
 
     unmount();
     expect(editor.disposed).toBe(false);

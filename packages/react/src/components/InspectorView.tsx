@@ -11,17 +11,18 @@ export interface InspectorViewProps {
   snapshot: SceneSnapshot;
   inspector: InspectorModel;
   setActiveLightId(value: string | null): void;
+  onReplaceAsset?(assetId: string, file: File): void | Promise<void>;
   className?: string;
 }
 
-export function InspectorView({ editor, snapshot, inspector, setActiveLightId, className }: InspectorViewProps) {
+export function InspectorView({ editor, snapshot, inspector, setActiveLightId, onReplaceAsset, className }: InspectorViewProps) {
   return (
     <aside className={className ? `ek-inspector ${className}` : "ek-inspector"} aria-label="Scene inspector">
       <TransformInspector editor={editor} snapshot={snapshot} section={inspector.transform} />
       <MaterialInspector editor={editor} snapshot={snapshot} section={inspector.material} />
       <EnvironmentInspector editor={editor} snapshot={snapshot} section={inspector.environment} />
       <LightInspector editor={editor} snapshot={snapshot} section={inspector.lights} onActiveLightIdChange={setActiveLightId} />
-      <ProblemsPanel section={inspector.problems} />
+      <ProblemsPanel section={inspector.problems} onReplaceAsset={onReplaceAsset} />
     </aside>
   );
 }

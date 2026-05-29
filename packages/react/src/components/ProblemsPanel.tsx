@@ -2,9 +2,10 @@ import type { ProblemInspectorSection } from "@ek-aiot/3d-editor-core";
 
 export interface ProblemsPanelProps {
   section: ProblemInspectorSection;
+  onReplaceAsset?(assetId: string, file: File): void | Promise<void>;
 }
 
-export function ProblemsPanel({ section }: ProblemsPanelProps) {
+export function ProblemsPanel({ section, onReplaceAsset }: ProblemsPanelProps) {
   return (
     <section className="ek-inspector-section">
       <header className="ek-inspector-section__header">
@@ -23,6 +24,21 @@ export function ProblemsPanel({ section }: ProblemsPanelProps) {
                 {problem.assetId ? ` · ${problem.assetId}` : ""}
                 {problem.actionLabel ? ` · ${problem.actionLabel}` : ""}
               </small>
+              {problem.assetId && problem.recoverability === "user-action" && onReplaceAsset ? (
+                <label className="ek-inspector-file-action">
+                  <span>{problem.actionLabel ?? "Replace asset"}</span>
+                  <input
+                    type="file"
+                    onChange={(event) => {
+                      const file = event.currentTarget.files?.[0];
+                      event.currentTarget.value = "";
+                      if (file) {
+                        void onReplaceAsset(problem.assetId!, file);
+                      }
+                    }}
+                  />
+                </label>
+              ) : null}
             </li>
           ))}
         </ul>

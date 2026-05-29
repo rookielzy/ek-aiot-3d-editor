@@ -80,6 +80,9 @@ export function EditorWorkbench({
         snapshot={workbench.snapshot}
         inspector={workbench.inspector}
         setActiveLightId={workbench.setActiveLightId}
+        onReplaceAsset={(assetId, file) => {
+          void workbench.replaceAsset({ assetId, source: file, label: file.name, mimeType: file.type });
+        }}
         className={inspectorClassName}
       />
       {status ? <footer className="ek-workbench__status">{status(workbench)}</footer> : null}

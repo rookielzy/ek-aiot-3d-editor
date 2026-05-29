@@ -8,6 +8,12 @@ import {
   type EditorOptions,
   type InspectorModel,
   type Problem,
+  type ProjectExportOptions,
+  type ProjectExportResult,
+  type ProjectImportOptions,
+  type ProjectImportResult,
+  type ReplaceAssetInput,
+  type ReplaceAssetResult,
   type SceneSnapshot
 } from "@ek-aiot/3d-editor-core";
 
@@ -24,6 +30,9 @@ export interface WorkbenchContext {
   setActiveLightId(value: string | null): void;
   refreshProblems(): void;
   dispatch(command: Command): ReturnType<Editor["dispatch"]>;
+  importProject(packageBytes: Uint8Array, options?: ProjectImportOptions): ProjectImportResult;
+  exportProject(options?: ProjectExportOptions): ProjectExportResult;
+  replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
 }
 
 export interface UseWorkbenchResult {
@@ -37,6 +46,9 @@ export interface UseWorkbenchResult {
   setActiveLightId(value: string | null): void;
   refreshProblems(): void;
   dispatch(command: Command): ReturnType<Editor["dispatch"]>;
+  importProject(packageBytes: Uint8Array, options?: ProjectImportOptions): ProjectImportResult;
+  exportProject(options?: ProjectExportOptions): ProjectExportResult;
+  replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
   dispose(): void;
 }
 
@@ -112,6 +124,18 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     return currentEditor.value.dispatch(command);
   }
 
+  function importProject(packageBytes: Uint8Array, projectOptions?: ProjectImportOptions): ProjectImportResult {
+    return currentEditor.value.importProject(packageBytes, projectOptions);
+  }
+
+  function exportProject(projectOptions?: ProjectExportOptions): ProjectExportResult {
+    return currentEditor.value.exportProject(projectOptions);
+  }
+
+  function replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult> {
+    return currentEditor.value.replaceAsset(input);
+  }
+
   function dispose(): void {
     if (disposed) {
       return;
@@ -141,7 +165,10 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     activeLightId: activeLightId.value,
     setActiveLightId,
     refreshProblems: subscribeRuntimeProblems,
-    dispatch
+    dispatch,
+    importProject,
+    exportProject,
+    replaceAsset
   }));
 
   return {
@@ -159,6 +186,9 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     setActiveLightId,
     refreshProblems: subscribeRuntimeProblems,
     dispatch,
+    importProject,
+    exportProject,
+    replaceAsset,
     dispose
   };
 }

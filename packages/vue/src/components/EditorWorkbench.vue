@@ -27,6 +27,7 @@
       :inspector="currentInspector"
       :class="inspectorClassName"
       @update:active-light-id="workbench.setActiveLightId"
+      @replace-asset="replaceAsset"
     />
 
     <footer v-if="$slots.status" class="ek-workbench__status">
@@ -63,4 +64,8 @@ const context = computed(() => workbench.context.value);
 const currentSnapshot = computed(() => workbench.snapshot.value);
 const currentInspector = computed(() => workbench.inspector.value);
 const rootClassName = computed(() => props.class ? `ek-workbench ${props.class}` : "ek-workbench");
+
+function replaceAsset(assetId: string, file: File): void {
+  void workbench.replaceAsset({ assetId, source: file, label: file.name, mimeType: file.type });
+}
 </script>

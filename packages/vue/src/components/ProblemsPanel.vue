@@ -14,6 +14,10 @@
           <template v-if="problem.assetId"> · {{ problem.assetId }}</template>
           <template v-if="problem.actionLabel"> · {{ problem.actionLabel }}</template>
         </small>
+        <label v-if="problem.assetId && problem.recoverability === 'user-action'" class="ek-inspector-file-action">
+          <span>{{ problem.actionLabel ?? "Replace asset" }}</span>
+          <input type="file" @change="onReplacementFile(problem.assetId, $event)" />
+        </label>
       </li>
     </ul>
   </section>
@@ -25,4 +29,17 @@ import type { ProblemInspectorSection } from "@ek-aiot/3d-editor-core";
 defineProps<{
   section: ProblemInspectorSection;
 }>();
+
+const emit = defineEmits<{
+  replaceAsset: [assetId: string, file: File];
+}>();
+
+function onReplacementFile(assetId: string, event: Event): void {
+  const input = event.currentTarget as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (file) {
+    emit("replaceAsset", assetId, file);
+  }
+}
 </script>
