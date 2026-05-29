@@ -1,0 +1,15 @@
+{
+  "name": "@ek-aiot/react-proof-loop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@ek-aiot/3d-editor-core": "workspace:*",
+    "@ek-aiot/3d-editor-react": "workspace:*",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  }
+}

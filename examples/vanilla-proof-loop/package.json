@@ -1,0 +1,12 @@
+{
+  "name": "@ek-aiot/vanilla-proof-loop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@ek-aiot/3d-editor-core": "workspace:*"
+  }
+}
