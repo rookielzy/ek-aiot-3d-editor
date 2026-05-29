@@ -1,4 +1,4 @@
-import { PerspectiveCamera, Scene, WebGLRenderer, type Object3D } from "three";
+import { PerspectiveCamera, Scene, WebGLRenderer, type Object3D, type WebGLRenderer as ThreeWebGLRenderer } from "three";
 import { AssetResolverBridge } from "../assets/resolver";
 import type { Problem } from "../assets/problems";
 import type { CommandDispatcher } from "../commands/dispatcher";
@@ -6,8 +6,11 @@ import type { CommandResult } from "../commands/types";
 import type { EditorStore } from "../editor/store";
 import type { SceneSnapshot } from "../snapshot/types";
 import type { GltfLoaderAdapter } from "./gltf-loader-adapter";
+import type { RuntimePmremAdapter } from "./pmrem-adapter";
+import { ThreePmremAdapter } from "./pmrem-adapter";
 import { SceneProjector } from "./scene-projector";
 import { ObjectPicker } from "./picking";
+import type { RuntimeTextureLoaderAdapter } from "./texture-loader-adapter";
 
 export interface RendererLike {
   domElement: HTMLElement;
@@ -17,6 +20,7 @@ export interface RendererLike {
 }
 
 export type RendererFactory = (container: HTMLElement) => RendererLike;
+export type PmremFactory = (renderer: RendererLike) => RuntimePmremAdapter;
 
 export interface EditorRuntimeOptions {
   container: HTMLElement;
@@ -25,6 +29,12 @@ export interface EditorRuntimeOptions {
   resolver?: AssetResolverBridge;
   loader?: GltfLoaderAdapter;
   rendererFactory?: RendererFactory;
+}
+
+interface ThreeEditorRuntimeOptions extends EditorRuntimeOptions {
+  textureLoader?: RuntimeTextureLoaderAdapter;
+  hdrLoader?: RuntimeTextureLoaderAdapter;
+  pmremFactory?: PmremFactory;
 }
 
 export interface EditorRuntime {
@@ -46,15 +56,19 @@ export class ThreeEditorRuntime implements EditorRuntime {
   #renderer: RendererLike;
   #unsubscribe: (() => void) | null = null;
   #disposed = false;
+  #projectGeneration = 0;
 
-  constructor(options: EditorRuntimeOptions) {
+  constructor(options: ThreeEditorRuntimeOptions) {
     this.#container = options.container;
     this.#store = options.store;
     this.#renderer = (options.rendererFactory ?? createDefaultRenderer)(options.container);
     this.projector = new SceneProjector({
       scene: this.scene,
       resolver: options.resolver,
-      loader: options.loader
+      loader: options.loader,
+      textureLoader: options.textureLoader,
+      hdrLoader: options.hdrLoader,
+      pmrem: options.pmremFactory?.(this.#renderer) ?? createPmremAdapter(this.#renderer)
     });
     this.picker = new ObjectPicker(this.camera, this.projector.objects, options.dispatcher);
     this.camera.position.set(0, 2, 5);
@@ -69,7 +83,11 @@ export class ThreeEditorRuntime implements EditorRuntime {
 
   async project(snapshot: SceneSnapshot = this.#store.getSnapshot()): Promise<void> {
     this.#assertActive();
+    const generation = this.#beginProject();
     await this.projector.project(snapshot);
+    if (this.#disposed || generation !== this.#projectGeneration) {
+      return;
+    }
     this.#renderer.render(this.scene, this.camera);
   }
 
@@ -100,6 +118,7 @@ export class ThreeEditorRuntime implements EditorRuntime {
     }
 
     this.#disposed = true;
+    this.#projectGeneration += 1;
     this.#unsubscribe?.();
     this.#unsubscribe = null;
     this.projector.dispose();
@@ -115,6 +134,11 @@ export class ThreeEditorRuntime implements EditorRuntime {
     if (this.#disposed) {
       throw new Error("Editor runtime has been disposed.");
     }
+  }
+
+  #beginProject(): number {
+    this.#projectGeneration += 1;
+    return this.#projectGeneration;
   }
 }
 
@@ -134,4 +158,12 @@ export function createDefaultRenderer(container: HTMLElement): RendererLike {
       dispose() {}
     };
   }
+}
+
+function createPmremAdapter(renderer: RendererLike): RuntimePmremAdapter | undefined {
+  return isThreeWebGLRenderer(renderer) ? new ThreePmremAdapter(renderer) : undefined;
+}
+
+function isThreeWebGLRenderer(renderer: RendererLike): renderer is ThreeWebGLRenderer & RendererLike {
+  return "getRenderTarget" in renderer && "xr" in renderer;
 }

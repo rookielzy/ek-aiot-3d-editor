@@ -10,6 +10,7 @@ export async function runVanillaProofLoop(container: HTMLElement) {
   });
 
   editor.dispatch({ type: "import-glb", objectId: "box", asset: { id: "simple-box", label: "Simple box" } });
+  editor.dispatch({ type: "add-light", light: { id: "fill", kind: "ambient", intensity: 0.6 } });
   runtime.pickObject("box");
   editor.dispatch({ type: "set-transform", objectId: "box", transform: { position: [1, 0, 0] } });
 

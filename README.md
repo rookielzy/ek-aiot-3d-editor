@@ -26,6 +26,8 @@ The proof loop remains intentionally narrow:
 
 Durable editor state lives only in the versioned scene snapshot. Three.js objects, framework component state, `File`, `Blob`, object URLs, loaded textures, PMREM outputs, and resolver outputs are runtime inputs, not serializable state.
 
+The core Three.js runtime now consumes the environment and light parts of that snapshot. Solid backgrounds, texture/HDR backgrounds, HDR or image-based scene environment lighting, PMREM output when backed by the default WebGL renderer, and ambient/hemisphere/directional/point/spot lights are projected from durable asset references and light definitions. Resolver, loader, and PMREM failures are exposed as runtime problems instead of being written back into the snapshot.
+
 ## Current Non-Goals
 
-Full inspector panels, HDR/PMREM rendering quality, skybox polish, texture disposal policy, shadows, helper gizmos, project archive format, decoder configuration, multi-select, data binding, event orchestration, and release automation are deferred until the schema contract is consumed by follow-up runtime and shell work.
+Full inspector panels, material texture projection onto GLB meshes, shadows, helper gizmos, project archive format, decoder configuration, multi-select, data binding, event orchestration, and release automation are deferred until the schema contract is consumed by follow-up runtime and shell work.

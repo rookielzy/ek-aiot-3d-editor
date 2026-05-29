@@ -2,7 +2,7 @@ import type { Object3D } from "three";
 import type { CommandDispatcher } from "../../commands/dispatcher";
 import type { CommandResult } from "../../commands/types";
 import type { Transform } from "../../snapshot/types";
-import { applyTransform, readTransform } from "../scene-projector";
+import { applyTransform, readTransform } from "../transform";
 import type { TransformMode } from "./transform-mode";
 
 export interface TransformTransactionOptions {

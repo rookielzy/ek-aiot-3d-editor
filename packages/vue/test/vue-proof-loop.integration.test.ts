@@ -29,7 +29,7 @@ describe("Vue proof-loop parity", () => {
     const vue = useEditor({ editor: markRaw(createEditor({ snapshot: core.serialize() })) });
     const runtime = vue.editor.mountRuntime({
       container: document.createElement("div"),
-      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      resolver: new AssetResolverBridge((asset) => asset.kind === "glb" ? { uri: "/box.glb" } : null),
       loader: { load: async () => new Group() },
       rendererFactory: fakeRenderer
     });
@@ -41,6 +41,10 @@ describe("Vue proof-loop parity", () => {
     expect(vue.snapshot.value.environment.environment.assetId).toBe("hdr-a");
     expect(vue.snapshot.value.lights["light-a"].intensity).toBe(2);
     expect(runtime.getObject("object-a")).toBeTruthy();
+    expect(runtime.getProblems()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "environment-asset-unresolved", assetId: "hdr-a", metadata: { role: "background" } }),
+      expect.objectContaining({ code: "environment-asset-unresolved", assetId: "hdr-a", metadata: { role: "environment" } })
+    ]));
     vue.dispose();
   });
 });
