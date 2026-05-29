@@ -1,0 +1,28 @@
+{
+  "name": "ek-aiot-3d-editor",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "build": "pnpm -r --filter './packages/*' build",
+    "test": "vitest run",
+    "test:browser": "vitest run --config vitest.browser.config.ts",
+    "typecheck": "pnpm --filter @ek-aiot/3d-editor-core build && pnpm -r --filter './packages/*' typecheck"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^25.9.1",
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3",
+    "@types/three": "^0.184.1",
+    "@vitejs/plugin-react": "^6.0.2",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vue/test-utils": "^2.4.10",
+    "jsdom": "^29.1.1",
+    "three": "^0.184.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.14",
+    "vitest": "^4.1.7"
+  }
+}
