@@ -60,4 +60,34 @@ describe("import GLB command", () => {
     expect(registry.get("asset-b")).toBeUndefined();
     expect(registry.get("asset-c")).toBeUndefined();
   });
+
+  it("rejects non-GLB assets before registering import input", () => {
+    const registry = new AssetRegistry();
+    const dispatcher = new CommandDispatcher(new EditorStore(), new CommandHistory(), registry);
+
+    const result = dispatcher.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: { id: "texture-a", kind: "texture" }
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("GLB asset");
+    expect(registry.get("texture-a")).toBeUndefined();
+  });
+
+  it("does not register assets when transform normalization fails", () => {
+    const registry = new AssetRegistry();
+    const dispatcher = new CommandDispatcher(new EditorStore(), new CommandHistory(), registry);
+
+    const result = dispatcher.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: { id: "asset-a" },
+      transform: { position: [0, Number.NaN, 0] }
+    });
+
+    expect(result.ok).toBe(false);
+    expect(registry.get("asset-a")).toBeUndefined();
+  });
 });

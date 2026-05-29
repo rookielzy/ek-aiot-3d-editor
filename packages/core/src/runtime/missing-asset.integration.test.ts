@@ -17,7 +17,8 @@ describe("missing asset integration", () => {
 
     expect(editor.getSnapshot().objects["object-a"].asset.id).toBe("asset-a");
     expect(runtime.getObject("object-a")?.userData.problem).toBe(true);
-    expect(runtime.getProblems()).toMatchObject([{ code: "asset-unresolved", objectId: "object-a" }]);
+    expect(runtime.getProblems()).toMatchObject([{ code: "asset-unresolved", target: { kind: "object", objectId: "object-a" } }]);
+    expect(editor.serialize().problems.acknowledged).toEqual({});
   });
 });
 

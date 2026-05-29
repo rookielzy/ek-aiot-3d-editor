@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createEmptySnapshot, createTransform } from "../snapshot/defaults";
 import type { SceneSnapshot } from "../snapshot/types";
+import { validateSerializedSceneSnapshot } from "../snapshot/migrations";
+import { createLegacyProofLoopSnapshot } from "../../test/fixtures/legacy-proof-loop";
+import { validateSceneSnapshot } from "../snapshot/validation";
 import { restoreSnapshot, serializeSnapshot } from "./serialization";
 
 describe("snapshot serialization", () => {
@@ -43,5 +46,26 @@ describe("snapshot serialization", () => {
 
     expect(Object.isFrozen(restored)).toBe(true);
     expect(Object.isFrozen(restored.scene)).toBe(true);
+  });
+
+  it("migrates version 1 proof-loop snapshots to the current schema", () => {
+    const legacy = createLegacyProofLoopSnapshot();
+    const restored = restoreSnapshot(legacy);
+
+    expect(restored.version).toBe(2);
+    expect(restored.scene).toEqual(legacy.scene);
+    expect(restored.objects["object-a"].transform.position).toEqual([4, 5, 6]);
+    expect(restored.selection.objectId).toBe("object-a");
+    expect(restored.materials).toEqual({ definitions: {}, assignments: {} });
+    expect(restored.environment.mode).toBe("none");
+    expect(restored.lights).toEqual({});
+    expect(restored.problems).toEqual({ acknowledged: {} });
+  });
+
+  it("validates serialized version 1 snapshots through the migration path", () => {
+    const legacy = createLegacyProofLoopSnapshot();
+
+    expect(validateSceneSnapshot(legacy).ok).toBe(false);
+    expect(validateSerializedSceneSnapshot(legacy)).toEqual({ ok: true, errors: [] });
   });
 });

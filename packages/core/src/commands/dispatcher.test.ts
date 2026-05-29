@@ -37,4 +37,21 @@ describe("command dispatcher", () => {
     expect(result.ok).toBe(false);
     expect(store.getSnapshot()).toBe(before);
   });
+
+  it("rolls back asset registry changes when command validation fails after registration", () => {
+    const registry = new AssetRegistry();
+    const dispatcher = new CommandDispatcher(new EditorStore(), new CommandHistory(), registry);
+
+    const result = dispatcher.dispatch({
+      type: "register-asset",
+      asset: {
+        id: "asset-a",
+        kind: "texture",
+        metadata: { bad: () => undefined }
+      }
+    });
+
+    expect(result.ok).toBe(false);
+    expect(registry.get("asset-a")).toBeUndefined();
+  });
 });

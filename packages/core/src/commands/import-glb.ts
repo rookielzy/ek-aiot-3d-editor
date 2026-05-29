@@ -8,6 +8,10 @@ export function applyImportGlb(snapshot: SceneSnapshot, command: ImportGlbComman
   const objectId = command.objectId ?? createId("object");
   const parentId = command.parentId ?? null;
 
+  if (command.asset.kind && command.asset.kind !== "glb") {
+    throw new Error("import-glb requires a GLB asset.");
+  }
+
   if (snapshot.objects[objectId]) {
     throw new Error(`Object ${objectId} already exists.`);
   }
@@ -16,6 +20,7 @@ export function applyImportGlb(snapshot: SceneSnapshot, command: ImportGlbComman
     throw new Error(`Parent object ${parentId} does not exist.`);
   }
 
+  const transform = cloneTransform(normalizeTransform(command.transform));
   const asset = assets.register(command.asset);
   const object: SceneObject = {
     id: objectId,
@@ -24,7 +29,7 @@ export function applyImportGlb(snapshot: SceneSnapshot, command: ImportGlbComman
     parentId,
     children: [],
     asset,
-    transform: cloneTransform(normalizeTransform(command.transform))
+    transform
   };
 
   const objects: SceneSnapshot["objects"] = {

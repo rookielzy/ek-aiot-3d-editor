@@ -1,3 +1,6 @@
+import { createDefaultEnvironment } from "../environment/defaults";
+import { createEmptyMaterialState } from "../materials/defaults";
+import { createEmptyAuthoredProblemState } from "../problems/defaults";
 import { SNAPSHOT_VERSION, type SceneSnapshot, type Transform } from "./types";
 
 let nextId = 0;
@@ -27,7 +30,11 @@ export function createEmptySnapshot(sceneId = createId("scene")): SceneSnapshot 
     selection: {
       objectId: null
     },
-    assets: {}
+    assets: {},
+    materials: createEmptyMaterialState(),
+    environment: createDefaultEnvironment(),
+    lights: {},
+    problems: createEmptyAuthoredProblemState()
   };
 
   return Object.freeze(snapshot);

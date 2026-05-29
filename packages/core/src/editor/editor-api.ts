@@ -7,7 +7,7 @@ import type { SceneSnapshot, SerializedSceneSnapshot } from "../snapshot/types";
 export type SnapshotSubscriber = (snapshot: SceneSnapshot) => void;
 
 export interface EditorOptions {
-  snapshot?: SceneSnapshot;
+  snapshot?: SerializedSceneSnapshot;
 }
 
 export interface MountRuntimeOptions extends Omit<EditorRuntimeOptions, "store" | "dispatcher"> {}

@@ -20,7 +20,8 @@ describe("asset resolver bridge", () => {
     await expect(bridge.problemForMissing({ id: "asset-a", kind: "glb" }, "object-a")).resolves.toMatchObject({
       code: "asset-unresolved",
       assetId: "asset-a",
-      objectId: "object-a"
+      target: { kind: "object", objectId: "object-a" },
+      recoverability: "user-action"
     });
   });
 });

@@ -1,4 +1,4 @@
-import type { AssetReference, JsonValue } from "../snapshot/types";
+import type { AssetKind, AssetReference, JsonValue } from "../snapshot/types";
 
 export type { AssetReference };
 
@@ -17,7 +17,7 @@ export type AssetResolver = (asset: AssetReference) => Promise<ResolvedAsset | n
 
 export interface AssetInput {
   id?: string;
-  kind?: "glb";
+  kind?: AssetKind;
   label?: string;
   source?: unknown;
   metadata?: Record<string, JsonValue>;

@@ -2,7 +2,14 @@
 
 Experimental `0.x` workspace for a snapshot-first 3D editor contract.
 
-The first proof loop is intentionally narrow:
+The core contract now stores a versioned scene snapshot. Version 2 keeps the first proof loop intact and adds durable authoring data for:
+
+- object-level `MeshStandardMaterial` overrides and texture-slot asset references
+- scene background/environment intent, including image and HDR asset references
+- editable light definitions for ambient, directional, hemisphere, point, and spot lights
+- richer framework-neutral problem metadata for validation, resolver, and runtime diagnostics
+
+The proof loop remains intentionally narrow:
 
 - import a GLB through a stable asset reference
 - select the imported object
@@ -17,8 +24,8 @@ The first proof loop is intentionally narrow:
 - `@ek-aiot/3d-editor-vue`: Vue lifecycle adapter and viewport component
 - `@ek-aiot/3d-editor-react`: React external-store hook and viewport component
 
-Durable editor state lives only in the versioned scene snapshot. Three.js objects, framework component state, `File`, `Blob`, object URLs, and resolver outputs are runtime inputs, not serializable state.
+Durable editor state lives only in the versioned scene snapshot. Three.js objects, framework component state, `File`, `Blob`, object URLs, loaded textures, PMREM outputs, and resolver outputs are runtime inputs, not serializable state.
 
 ## Current Non-Goals
 
-Material editing, HDR/environment controls, full workbench UI, project archive format, decoder configuration, multi-select, data binding, event orchestration, and release automation are deferred until this core proof loop is stable.
+Full inspector panels, HDR/PMREM rendering quality, skybox polish, texture disposal policy, shadows, helper gizmos, project archive format, decoder configuration, multi-select, data binding, event orchestration, and release automation are deferred until the schema contract is consumed by follow-up runtime and shell work.

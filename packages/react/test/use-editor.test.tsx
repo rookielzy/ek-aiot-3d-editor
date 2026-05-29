@@ -1,6 +1,7 @@
 import { renderHook, act } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { createEditor } from "@ek-aiot/3d-editor-core";
+import { createLegacyProofLoopSnapshot } from "../../core/test/fixtures/legacy-proof-loop";
 import { useEditor, useEditorSnapshot } from "../src/hooks/use-editor";
 
 describe("React editor hooks", () => {
@@ -22,5 +23,12 @@ describe("React editor hooks", () => {
     rerender();
 
     expect(result.current).toBe(editor);
+  });
+
+  it("initializes legacy serialized snapshots through core migration", () => {
+    const { result } = renderHook(() => useEditor({ snapshot: createLegacyProofLoopSnapshot() }));
+
+    expect(result.current.getSnapshot().version).toBe(2);
+    expect(result.current.getSnapshot().objects["object-a"].asset.id).toBe("asset-a");
   });
 });

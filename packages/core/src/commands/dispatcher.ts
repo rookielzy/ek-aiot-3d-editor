@@ -4,9 +4,15 @@ import type { CommandHistory } from "../history/history";
 import { immutableClone } from "../snapshot/immutability";
 import type { SceneSnapshot } from "../snapshot/types";
 import { assertValidSceneSnapshot } from "../snapshot/validation";
+import { applyAddLight } from "./add-light";
 import { applyImportGlb } from "./import-glb";
+import { applyRegisterAsset } from "./register-asset";
+import { applyRemoveLight } from "./remove-light";
 import { applySelectObject } from "./select-object";
+import { applySetEnvironment } from "./set-environment";
+import { applySetMaterial } from "./set-material";
 import { applySetTransform } from "./set-transform";
+import { applyUpdateLight } from "./update-light";
 import type { Command, CommandResult } from "./types";
 
 export class CommandDispatcher {
@@ -18,6 +24,7 @@ export class CommandDispatcher {
 
   dispatch(command: Command): CommandResult {
     const before = this.store.getSnapshot();
+    const beforeAssets = new Map(this.assets.entries());
 
     try {
       const applied = this.apply(before, command);
@@ -33,6 +40,7 @@ export class CommandDispatcher {
 
       return { ok: true, snapshot: this.store.getSnapshot() };
     } catch (error) {
+      this.assets.replaceAll(beforeAssets);
       return {
         ok: false,
         snapshot: before,
@@ -69,10 +77,22 @@ export class CommandDispatcher {
     switch (command.type) {
       case "import-glb":
         return applyImportGlb(snapshot, command, this.assets);
+      case "register-asset":
+        return applyRegisterAsset(snapshot, command, this.assets);
       case "select-object":
         return applySelectObject(snapshot, command);
       case "set-transform":
         return applySetTransform(snapshot, command);
+      case "set-material":
+        return applySetMaterial(snapshot, command);
+      case "set-environment":
+        return applySetEnvironment(snapshot, command);
+      case "add-light":
+        return applyAddLight(snapshot, command);
+      case "update-light":
+        return applyUpdateLight(snapshot, command);
+      case "remove-light":
+        return applyRemoveLight(snapshot, command);
       default:
         return assertNever(command);
     }
