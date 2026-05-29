@@ -1,10 +1,11 @@
-import { Group } from "three";
-import { describe, expect, it } from "vitest";
+import { AmbientLight, Group, Texture } from "three";
+import { describe, expect, it, vi } from "vitest";
 import { AssetResolverBridge } from "../assets/resolver";
 import { AssetRegistry } from "../assets/registry";
 import { CommandDispatcher } from "../commands/dispatcher";
 import { EditorStore } from "../editor/store";
 import { CommandHistory } from "../history/history";
+import type { RuntimePmremAdapter } from "./pmrem-adapter";
 import { SceneProjector } from "./scene-projector";
 
 describe("scene projector", () => {
@@ -70,6 +71,29 @@ describe("scene projector", () => {
     expect(store.getSnapshot().problems.acknowledged).toEqual({});
   });
 
+  it("exposes structured runtime problems when GLB resolution throws", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => { throw new Error("resolver down"); })
+    });
+
+    await projector.project(store.getSnapshot());
+
+    expect(projector.objects.get("object-a")?.userData.problem).toBe(true);
+    expect(projector.problems).toMatchObject([{
+      code: "asset-resolve-failed",
+      source: "runtime",
+      target: { kind: "object", objectId: "object-a" },
+      objectId: "object-a",
+      assetId: "asset-a",
+      recoverability: "user-action",
+      display: { title: "Asset failed to resolve" }
+    }]);
+    expect(store.getSnapshot().problems.acknowledged).toEqual({});
+  });
+
   it("tolerates expanded schema records while projecting GLB objects", async () => {
     const store = new EditorStore();
     const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
@@ -86,5 +110,109 @@ describe("scene projector", () => {
     expect(projector.objects.get("object-a")).toBeInstanceOf(Group);
     expect(store.getSnapshot().lights["light-a"]).toBeTruthy();
     expect(store.getSnapshot().environment.background.color).toBe("#101010");
+  });
+
+  it("projects GLB objects, HDR environments, lights, and combined runtime problems from one snapshot", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "register-asset", asset: { id: "hdr-a", kind: "hdr" } });
+    dispatcher.dispatch({
+      type: "set-environment",
+      environment: {
+        mode: "hdr",
+        environment: { assetId: "hdr-a", intensity: 2, rotation: { x: 0, y: 1, z: 0 } },
+        background: { mode: "none" }
+      }
+    });
+    dispatcher.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient", intensity: 0.5 } });
+    const pmremTexture = new Texture();
+    const pmrem: RuntimePmremAdapter = {
+      fromEquirectangular: vi.fn(() => ({ texture: pmremTexture, dispose() {} })),
+      dispose() {}
+    };
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge((asset) => asset.id === "asset-a" ? { uri: "/box.glb" } : null),
+      loader: { load: async () => new Group() },
+      hdrLoader: { load: async () => new Texture() },
+      pmrem
+    });
+
+    await projector.project(store.getSnapshot());
+
+    expect(projector.objects.get("object-a")).toBeInstanceOf(Group);
+    expect(projector.scene.environment).toBeNull();
+    expect(projector.getLight("light-a")).toBeInstanceOf(AmbientLight);
+    expect(projector.problems).toMatchObject([{ code: "environment-asset-unresolved", assetId: "hdr-a" }]);
+  });
+
+  it("keeps object projection working when environment assets resolve", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "register-asset", asset: { id: "hdr-a", kind: "hdr" } });
+    dispatcher.dispatch({
+      type: "set-environment",
+      environment: {
+        mode: "hdr",
+        environment: { assetId: "hdr-a", intensity: 2, rotation: { x: 0, y: 1, z: 0 } },
+        background: { mode: "none" }
+      }
+    });
+    const rawTexture = new Texture();
+    const pmremTexture = new Texture();
+    const pmrem: RuntimePmremAdapter = {
+      fromEquirectangular: vi.fn(() => ({ texture: pmremTexture, dispose() {} })),
+      dispose() {}
+    };
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge((asset) => ({ uri: asset.id === "asset-a" ? "/box.glb" : "/studio.hdr" })),
+      loader: { load: async () => new Group() },
+      hdrLoader: { load: vi.fn(async () => rawTexture) },
+      pmrem
+    });
+
+    await projector.project(store.getSnapshot());
+
+    expect(projector.objects.get("object-a")).toBeInstanceOf(Group);
+    expect(projector.scene.environment).toBe(pmremTexture);
+    expect(projector.scene.environmentIntensity).toBe(2);
+    expect(projector.problems).toEqual([]);
+  });
+
+  it("does not let an older projection restore removed lights after a newer snapshot wins", async () => {
+    let resolveSlowLoad: (texture: Texture) => void = () => {};
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "register-asset", asset: { id: "texture-a", kind: "texture" } });
+    dispatcher.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
+    dispatcher.dispatch({
+      type: "set-environment",
+      environment: {
+        mode: "none",
+        background: { mode: "texture", assetId: "texture-a" },
+        environment: { intensity: 1, rotation: { x: 0, y: 0, z: 0 } }
+      }
+    });
+    const oldSnapshot = store.getSnapshot();
+    dispatcher.dispatch({ type: "remove-light", lightId: "light-a" });
+    const newSnapshot = store.getSnapshot();
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/sky.jpg" })),
+      textureLoader: {
+        load: vi
+          .fn()
+          .mockImplementationOnce(() => new Promise<Texture>((resolve) => { resolveSlowLoad = resolve; }))
+          .mockResolvedValueOnce(new Texture())
+      }
+    });
+    const oldProjection = projector.project(oldSnapshot);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    await projector.project(newSnapshot);
+    resolveSlowLoad(new Texture());
+    await oldProjection;
+
+    expect(projector.getLight("light-a")).toBeUndefined();
   });
 });

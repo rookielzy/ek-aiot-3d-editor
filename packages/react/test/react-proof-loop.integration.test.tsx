@@ -32,7 +32,7 @@ describe("React proof-loop parity", () => {
     render(
       <EditorViewport
         editor={restored}
-        resolver={new AssetResolverBridge(() => ({ uri: "/box.glb" }))}
+        resolver={new AssetResolverBridge((asset) => asset.kind === "glb" ? { uri: "/box.glb" } : null)}
         loader={{ load: async () => new Group() }}
         rendererFactory={fakeRenderer}
       />
@@ -44,6 +44,10 @@ describe("React proof-loop parity", () => {
     expect(restored.getSnapshot().environment.environment.assetId).toBe("hdr-a");
     expect(restored.getSnapshot().lights["light-a"].intensity).toBe(2);
     expect(restored.getRuntime()?.getObject("object-a")).toBeTruthy();
+    expect(restored.getRuntime()?.getProblems()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "environment-asset-unresolved", assetId: "hdr-a", metadata: { role: "background" } }),
+      expect.objectContaining({ code: "environment-asset-unresolved", assetId: "hdr-a", metadata: { role: "environment" } })
+    ]));
   });
 });
 

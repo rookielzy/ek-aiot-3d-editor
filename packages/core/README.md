@@ -10,6 +10,8 @@ Snapshots are portable JSON-compatible records. Version 2 stores GLB scene objec
 
 Runtime values are never saved. Hosts may register GLB, texture, HDR, or image assets with runtime `source` values, but snapshots only keep stable asset references.
 
+When mounted, the core runtime projects GLB objects, scene background/environment intent, and durable light definitions into Three.js. Texture and HDR environment assets are resolved through the same `AssetResolverBridge` boundary as GLB assets. HDR/equirectangular environment lighting is converted to runtime-only PMREM output, and stale textures, render targets, light objects, and light target objects are disposed through the runtime lifecycle.
+
 ## Commands
 
 All durable edits enter through commands so undo/redo remains framework-neutral:
@@ -26,4 +28,4 @@ Resolver and runtime diagnostics use a structured problem contract with severity
 
 ## Deferred Runtime and UX Work
 
-The schema is intentionally ahead of the visual editor surface. Full HDR/PMREM rendering, skybox polish, texture lifecycle policy, shadow controls, light helpers, material inspectors, environment panels, and project archive workflows are follow-up work.
+The schema is intentionally ahead of the visual editor surface. Full material texture projection onto imported GLB meshes, shadow controls, light helpers, material inspectors, environment panels, project archive workflows, and advanced decoder configuration are follow-up work.

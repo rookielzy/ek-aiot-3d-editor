@@ -45,6 +45,17 @@ describe("core public API", () => {
     expect(packageJson.peerDependencies ?? {}).not.toHaveProperty("react");
   });
 
+  it("does not re-export internal runtime projectors or resource seams", async () => {
+    const publicApi = await import("./index");
+
+    expect(publicApi).not.toHaveProperty("EnvironmentProjector");
+    expect(publicApi).not.toHaveProperty("EnvironmentResourceManager");
+    expect(publicApi).not.toHaveProperty("LightProjector");
+    expect(publicApi).not.toHaveProperty("ThreeTextureLoaderAdapter");
+    expect(publicApi).not.toHaveProperty("ThreeHdrTextureLoaderAdapter");
+    expect(publicApi).not.toHaveProperty("ThreePmremAdapter");
+  });
+
   it("exports expanded schema and command contracts from the package root", () => {
     const command: SetMaterialCommand = {
       type: "set-material",
