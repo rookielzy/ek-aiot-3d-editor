@@ -22,10 +22,16 @@ All durable edits enter through commands so undo/redo remains framework-neutral:
 - `set-environment` stores background/environment intent without PMREM or loaded textures.
 - `add-light`, `update-light`, and `remove-light` store durable light authoring data.
 
+## Inspector Helpers
+
+Core exports a framework-neutral inspector contract through `buildInspectorModel()` and command builders for transform, material, environment, and light fields. The model is pure JSON-compatible data derived from a snapshot plus optional runtime problems. Framework packages render it and dispatch the returned commands; they do not mutate snapshots, Three.js objects, or runtime resources directly.
+
+The inspector helpers cover selected-object transforms, selected-object `MeshStandardMaterial` overrides, texture-slot asset references, scene environment/background fields, light list/add/update/remove behavior, and runtime/authored problem display metadata.
+
 ## Problems
 
-Resolver and runtime diagnostics use a structured problem contract with severity, source, target, asset references, recoverability, and display metadata. Snapshot validation and command failures currently return controlled string errors. Derived resolver/runtime problems are not written into snapshots unless a future explicit recovery command does so.
+Resolver and runtime diagnostics use a structured problem contract with severity, source, target, asset references, recoverability, and display metadata. Runtime problems are observable through `EditorRuntime.subscribeProblems()` and can be shown by inspector panels. Snapshot validation and command failures currently return controlled string errors. Derived resolver/runtime problems are not written into snapshots unless a future explicit recovery command does so.
 
 ## Deferred Runtime and UX Work
 
-The schema is intentionally ahead of the visual editor surface. Full material texture projection onto imported GLB meshes, shadow controls, light helpers, material inspectors, environment panels, project archive workflows, and advanced decoder configuration are follow-up work.
+Material texture projection onto imported GLB meshes, per-submesh material slot discovery, shadow controls, light helper gizmos, project archive workflows, asset replacement persistence, and advanced decoder configuration remain follow-up work.

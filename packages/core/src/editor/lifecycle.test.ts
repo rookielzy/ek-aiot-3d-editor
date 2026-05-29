@@ -26,4 +26,26 @@ describe("editor lifecycle", () => {
     expect(rendererDispose).toHaveBeenCalledTimes(1);
     expect(editor.disposed).toBe(true);
   });
+
+  it("notifies runtime subscribers when runtime mounts and editor disposes", () => {
+    const editor = createEditor();
+    const runtimes: Array<ReturnType<typeof editor.getRuntime>> = [];
+    const unsubscribe = editor.subscribeRuntime((runtime) => {
+      runtimes.push(runtime);
+    });
+    const runtime = editor.mountRuntime({
+      container: document.createElement("div"),
+      rendererFactory: (container): RendererLike => ({
+        domElement: container.ownerDocument.createElement("canvas"),
+        setSize() {},
+        render() {},
+        dispose() {}
+      })
+    });
+
+    unsubscribe();
+    editor.dispose();
+
+    expect(runtimes).toEqual([null, runtime]);
+  });
 });

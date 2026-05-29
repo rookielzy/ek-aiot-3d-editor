@@ -39,6 +39,8 @@ export interface MeshStandardMaterialOverride {
   metadata?: Record<string, JsonValue>;
 }
 
+export type MaterialTexturePatch = Partial<Record<TextureSlotName, TextureSlot | null>>;
+
 export interface MaterialDefinition {
   id: string;
   name: string;
@@ -63,4 +65,6 @@ export interface MaterialState {
   assignments: Record<string, MaterialAssignment>;
 }
 
-export type MaterialPatch = Partial<MeshStandardMaterialOverride>;
+export type MaterialPatch = Omit<Partial<MeshStandardMaterialOverride>, "textures"> & {
+  textures?: MaterialTexturePatch;
+};

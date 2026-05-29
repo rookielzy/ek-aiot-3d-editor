@@ -8,7 +8,7 @@ import { ThreeEditorRuntime, type EditorRuntime } from "../runtime/editor-runtim
 import type { SceneSnapshot, SerializedSceneSnapshot } from "../snapshot/types";
 import { restoreSnapshot, serializeSnapshot } from "./serialization";
 import { EditorStore } from "./store";
-import type { Editor, EditorOptions, MountRuntimeOptions, SnapshotSubscriber } from "./editor-api";
+import type { Editor, EditorOptions, MountRuntimeOptions, RuntimeSubscriber, SnapshotSubscriber } from "./editor-api";
 
 export class CoreEditor implements Editor {
   readonly assets = new AssetRegistry();
@@ -16,6 +16,7 @@ export class CoreEditor implements Editor {
   readonly store: EditorStore;
   readonly dispatcher: CommandDispatcher;
   #runtime: EditorRuntime | null = null;
+  #runtimeSubscribers = new Set<RuntimeSubscriber>();
   #resolver = new AssetResolverBridge();
   #disposed = false;
 
@@ -62,6 +63,16 @@ export class CoreEditor implements Editor {
     return this.assets.register(asset);
   }
 
+  subscribeRuntime(subscriber: RuntimeSubscriber): () => void {
+    this.#assertActive();
+    this.#runtimeSubscribers.add(subscriber);
+    subscriber(this.#runtime);
+
+    return () => {
+      this.#runtimeSubscribers.delete(subscriber);
+    };
+  }
+
   mountRuntime(options: MountRuntimeOptions): EditorRuntime {
     this.#assertActive();
     this.#runtime?.dispose();
@@ -72,6 +83,7 @@ export class CoreEditor implements Editor {
       dispatcher: this.dispatcher,
       resolver: this.#resolver
     });
+    this.#notifyRuntimeSubscribers();
     return this.#runtime;
   }
 
@@ -87,6 +99,8 @@ export class CoreEditor implements Editor {
     this.#disposed = true;
     this.#runtime?.dispose();
     this.#runtime = null;
+    this.#notifyRuntimeSubscribers();
+    this.#runtimeSubscribers.clear();
     this.assets.clear();
     this.store.dispose();
   }
@@ -98,6 +112,12 @@ export class CoreEditor implements Editor {
   #assertActive(): void {
     if (this.#disposed) {
       throw new Error("Editor has been disposed.");
+    }
+  }
+
+  #notifyRuntimeSubscribers(): void {
+    for (const subscriber of [...this.#runtimeSubscribers]) {
+      subscriber(this.#runtime);
     }
   }
 }

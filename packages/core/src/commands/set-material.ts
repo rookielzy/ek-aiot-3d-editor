@@ -1,5 +1,5 @@
 import { createMaterialAssignmentId, createMaterialDefinition } from "../materials/defaults";
-import type { MaterialAssignmentTarget, MeshStandardMaterialOverride } from "../materials/types";
+import type { MaterialAssignmentTarget, MaterialPatch, MaterialTexturePatch, MeshStandardMaterialOverride, TextureSlot, TextureSlotName } from "../materials/types";
 import type { SceneSnapshot } from "../snapshot/types";
 import type { SetMaterialCommand } from "./types";
 
@@ -61,16 +61,27 @@ function sameTarget(left: MaterialAssignmentTarget, right: MaterialAssignmentTar
 
 function mergeMaterialOverride(
   current: MeshStandardMaterialOverride,
-  patch: Partial<MeshStandardMaterialOverride>
+  patch: MaterialPatch
 ): MeshStandardMaterialOverride {
+  const { textures, ...rest } = patch;
   return {
     ...current,
-    ...patch,
-    textures: patch.textures
-      ? {
-          ...current.textures,
-          ...patch.textures
-        }
-      : current.textures ?? {}
+    ...rest,
+    textures: textures ? mergeTextureSlots(current.textures, textures) : current.textures ?? {}
   };
+}
+
+function mergeTextureSlots(
+  current: Partial<Record<TextureSlotName, TextureSlot>> | undefined,
+  patch: MaterialTexturePatch
+): Partial<Record<TextureSlotName, TextureSlot>> {
+  const next = { ...(current ?? {}) };
+  for (const [slotName, slot] of Object.entries(patch) as [TextureSlotName, TextureSlot | null][]) {
+    if (slot === null) {
+      delete next[slotName];
+    } else {
+      next[slotName] = slot;
+    }
+  }
+  return next;
 }

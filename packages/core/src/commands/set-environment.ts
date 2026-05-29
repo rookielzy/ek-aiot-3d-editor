@@ -7,14 +7,15 @@ export function applySetEnvironment(snapshot: SceneSnapshot, command: SetEnviron
   const base = snapshot.environment ?? createDefaultEnvironment();
   const patch = command.environment;
   const mode = patch.mode ?? base.mode;
-  const background = {
+  const { rotation: backgroundRotationPatch, ...backgroundPatch } = patch.background ?? {};
+  const background: SceneEnvironment["background"] = {
     ...base.background,
-    ...patch.background
+    ...backgroundPatch
   };
-  if (patch.background?.rotation) {
+  if (backgroundRotationPatch) {
     background.rotation = {
       ...(base.background.rotation ?? { x: 0, y: 0, z: 0 }),
-      ...patch.background.rotation
+      ...backgroundRotationPatch
     };
   }
 

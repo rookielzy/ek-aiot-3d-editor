@@ -28,6 +28,8 @@ Durable editor state lives only in the versioned scene snapshot. Three.js object
 
 The core Three.js runtime now consumes the environment and light parts of that snapshot. Solid backgrounds, texture/HDR backgrounds, HDR or image-based scene environment lighting, PMREM output when backed by the default WebGL renderer, and ambient/hemisphere/directional/point/spot lights are projected from durable asset references and light definitions. Resolver, loader, and PMREM failures are exposed as runtime problems instead of being written back into the snapshot.
 
+Vue and React packages now include a shared inspector surface over the core contract. The inspector can edit selected-object transforms and material overrides, scene environment/background settings, and ambient/hemisphere/directional/point/spot lights through core commands. It also displays runtime/authored problem metadata without serializing transient runtime failures.
+
 ## Current Non-Goals
 
-Full inspector panels, material texture projection onto GLB meshes, shadows, helper gizmos, project archive format, decoder configuration, multi-select, data binding, event orchestration, and release automation are deferred until the schema contract is consumed by follow-up runtime and shell work.
+Hierarchy panels, durable light selection, material texture projection onto GLB meshes, shadows, helper gizmos, asset replacement/project archive flows, decoder configuration, multi-select, data binding, event orchestration, and release automation are deferred follow-up work.

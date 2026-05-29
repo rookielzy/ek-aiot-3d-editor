@@ -5,7 +5,7 @@ import { AssetRegistry } from "../assets/registry";
 import { CommandDispatcher } from "../commands/dispatcher";
 import { EditorStore } from "../editor/store";
 import { CommandHistory } from "../history/history";
-import { ThreeEditorRuntime, type RendererLike } from "./editor-runtime";
+import { ThreeEditorRuntime, type RendererLike, type RuntimeProblemSnapshot } from "./editor-runtime";
 
 describe("editor runtime", () => {
   it("projects resolvable GLB objects and updates transform from snapshot changes", async () => {
@@ -101,6 +101,32 @@ describe("editor runtime", () => {
     expect(runtime.projector.getLight("light-a")).toBeInstanceOf(AmbientLight);
     expect(runtime.getObject("object-a")).toBeInstanceOf(Group);
     runtime.dispose();
+  });
+
+  it("publishes versioned runtime problem snapshots after projection and stops on disposal", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const runtime = new ThreeEditorRuntime({
+      container: document.createElement("div"),
+      store,
+      dispatcher,
+      resolver: new AssetResolverBridge(() => null),
+      rendererFactory: createFakeRenderer
+    });
+    const snapshots: RuntimeProblemSnapshot[] = [];
+    const unsubscribe = runtime.subscribeProblems((snapshot) => {
+      snapshots.push(snapshot);
+    });
+
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    await runtime.project();
+
+    expect(snapshots.at(-1)?.version).toBeGreaterThan(0);
+    expect(snapshots.at(-1)?.problems).toMatchObject([{ code: "asset-unresolved", assetId: "asset-a" }]);
+
+    unsubscribe();
+    runtime.dispose();
+    expect(() => runtime.subscribeProblems(() => {})).toThrow("disposed");
   });
 
   it("does not render when disposed while projection is in flight", async () => {

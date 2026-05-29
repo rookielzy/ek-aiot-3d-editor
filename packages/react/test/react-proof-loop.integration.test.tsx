@@ -4,12 +4,14 @@ import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { AssetResolverBridge, createEditor, type RendererLike } from "@ek-aiot/3d-editor-core";
 import { EditorViewport } from "../src/components/EditorViewport";
+import { InspectorPanel } from "../src/components/InspectorPanel";
 
 describe("React proof-loop parity", () => {
   it("renders a restored core snapshot without React-local editor behavior", async () => {
     const editor = createEditor();
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
     editor.dispatch({ type: "register-asset", asset: { id: "texture-a", kind: "texture" } });
+    editor.registerAsset({ id: "hdr-a", kind: "hdr" });
     editor.dispatch({ type: "register-asset", asset: { id: "hdr-a", kind: "hdr" } });
     editor.dispatch({
       type: "set-material",
@@ -48,6 +50,25 @@ describe("React proof-loop parity", () => {
       expect.objectContaining({ code: "environment-asset-unresolved", assetId: "hdr-a", metadata: { role: "background" } }),
       expect.objectContaining({ code: "environment-asset-unresolved", assetId: "hdr-a", metadata: { role: "environment" } })
     ]));
+  });
+
+  it("renders the proof-loop inspector beside the viewport", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+    editor.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
+
+    const { getByText } = render(
+      <main>
+        <EditorViewport editor={editor} rendererFactory={fakeRenderer} />
+        <InspectorPanel editor={editor} />
+      </main>
+    );
+
+    expect(getByText("Transform")).toBeTruthy();
+    expect(getByText("Material")).toBeTruthy();
+    expect(getByText("Environment")).toBeTruthy();
+    expect(getByText("Lights")).toBeTruthy();
   });
 });
 

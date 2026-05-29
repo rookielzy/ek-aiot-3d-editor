@@ -51,11 +51,15 @@ export interface SetMaterialCommand {
 
 export interface SetEnvironmentCommand {
   type: "set-environment";
-  environment: Partial<SceneEnvironment> & {
-    background?: Partial<SceneEnvironment["background"]>;
-    environment?: Partial<SceneEnvironment["environment"]> & {
+  environment: SceneEnvironmentPatch;
+}
+
+export interface SceneEnvironmentPatch extends Partial<Omit<SceneEnvironment, "background" | "environment">> {
+  background?: Partial<Omit<SceneEnvironment["background"], "rotation">> & {
+    rotation?: Partial<NonNullable<SceneEnvironment["background"]["rotation"]>>;
+  };
+  environment?: Partial<Omit<SceneEnvironment["environment"], "rotation">> & {
       rotation?: Partial<SceneEnvironment["environment"]["rotation"]>;
-    };
   };
 }
 

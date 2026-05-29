@@ -8,14 +8,39 @@ export type {
   RegisterAssetCommand,
   RemoveLightCommand,
   SelectObjectCommand,
+  SceneEnvironmentPatch,
   SetEnvironmentCommand,
   SetMaterialCommand,
   SetTransformCommand,
   UpdateLightCommand
 } from "./commands/types";
-export type { Editor, EditorOptions, MountRuntimeOptions, SnapshotSubscriber } from "./editor/editor-api";
+export type { Editor, EditorOptions, MountRuntimeOptions, RuntimeSubscriber, SnapshotSubscriber } from "./editor/editor-api";
 export type { BackgroundMode, EnvironmentMode, EnvironmentRotation, SceneEnvironment } from "./environment/types";
 export type { HistoryState } from "./history/history";
+export type {
+  AssetOption,
+  BuildInspectorModelOptions,
+  EnvironmentFieldId,
+  InspectorCommandProblem,
+  InspectorCommandResult,
+  InspectorFieldDescriptor,
+  InspectorFieldKind,
+  InspectorFieldOption,
+  InspectorModel,
+  InspectorProblemItem,
+  InspectorSection,
+  InspectorSectionId,
+  InspectorSelectionModel,
+  LightFieldId,
+  LightInspectorSection,
+  LightListItem,
+  MaterialFieldId,
+  MaterialInspectorSection,
+  ProblemInspectorSection,
+  TransformAxis,
+  TransformFieldId,
+  TransformVectorName
+} from "./inspector/types";
 export type {
   AmbientLightDefinition,
   DirectionalLightDefinition,
@@ -32,6 +57,7 @@ export type {
   MaterialPatch,
   MaterialSide,
   MaterialState,
+  MaterialTexturePatch,
   MeshStandardMaterialOverride,
   TextureColorSpace,
   TextureFilterMode,
@@ -49,10 +75,45 @@ export type {
   ProblemSource,
   ProblemTarget
 } from "./problems/types";
-export type { EditorRuntime, EditorRuntimeOptions, RendererLike } from "./runtime/editor-runtime";
+export type {
+  EditorRuntime,
+  EditorRuntimeOptions,
+  RendererLike,
+  RuntimeProblemSnapshot,
+  RuntimeProblemSubscriber
+} from "./runtime/editor-runtime";
 export type { AssetKind, JsonPrimitive, JsonValue, LegacySceneSnapshot, SceneObject, SceneSnapshot, SerializedSceneSnapshot, Transform } from "./snapshot/types";
 
 export { createEditor } from "./editor/create-editor";
+export {
+  buildAddLightCommand,
+  buildRemoveLightCommand,
+  buildSetEnvironmentCommand,
+  buildSetMaterialCommand,
+  buildSetTransformCommand,
+  buildUpdateLightCommand,
+  getNextActiveLightId,
+  resolveActiveLightId
+} from "./inspector/commands";
+export {
+  buildInspectorModel,
+  getInspectorSelection
+} from "./inspector/selection";
+export {
+  buildEnvironmentSection
+} from "./inspector/environment";
+export {
+  buildLightSection
+} from "./inspector/lights";
+export {
+  buildMaterialSection
+} from "./inspector/material";
+export {
+  buildProblemSection
+} from "./inspector/problems";
+export {
+  buildTransformSection
+} from "./inspector/transform";
 export { createEmptySnapshot, createTransform } from "./snapshot/defaults";
 export { migrateSerializedSnapshot, validateSerializedSceneSnapshot } from "./snapshot/migrations";
 export { isJsonCompatible, validateSceneSnapshot } from "./snapshot/validation";

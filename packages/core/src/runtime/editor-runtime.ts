@@ -11,6 +11,7 @@ import { ThreePmremAdapter } from "./pmrem-adapter";
 import { SceneProjector } from "./scene-projector";
 import { ObjectPicker } from "./picking";
 import type { RuntimeTextureLoaderAdapter } from "./texture-loader-adapter";
+import type { Unsubscribe } from "../editor/subscription";
 
 export interface RendererLike {
   domElement: HTMLElement;
@@ -42,9 +43,17 @@ export interface EditorRuntime {
   pickObject(objectId: string | null): CommandResult;
   getObject(objectId: string): Object3D | undefined;
   getProblems(): Problem[];
+  subscribeProblems(subscriber: RuntimeProblemSubscriber): Unsubscribe;
   dispose(): void;
   readonly disposed: boolean;
 }
+
+export interface RuntimeProblemSnapshot {
+  version: number;
+  problems: Problem[];
+}
+
+export type RuntimeProblemSubscriber = (snapshot: RuntimeProblemSnapshot) => void;
 
 export class ThreeEditorRuntime implements EditorRuntime {
   readonly scene = new Scene();
@@ -55,6 +64,8 @@ export class ThreeEditorRuntime implements EditorRuntime {
   #store: EditorStore;
   #renderer: RendererLike;
   #unsubscribe: (() => void) | null = null;
+  #problemSubscribers = new Set<RuntimeProblemSubscriber>();
+  #problemVersion = 0;
   #disposed = false;
   #projectGeneration = 0;
 
@@ -89,6 +100,7 @@ export class ThreeEditorRuntime implements EditorRuntime {
       return;
     }
     this.#renderer.render(this.scene, this.camera);
+    this.#publishProblems();
   }
 
   pickObject(objectId: string | null): CommandResult {
@@ -102,6 +114,16 @@ export class ThreeEditorRuntime implements EditorRuntime {
 
   getProblems(): Problem[] {
     return this.projector.problems;
+  }
+
+  subscribeProblems(subscriber: RuntimeProblemSubscriber): Unsubscribe {
+    this.#assertActive();
+    this.#problemSubscribers.add(subscriber);
+    subscriber({ version: this.#problemVersion, problems: this.getProblems() });
+
+    return () => {
+      this.#problemSubscribers.delete(subscriber);
+    };
   }
 
   resize(): void {
@@ -124,6 +146,7 @@ export class ThreeEditorRuntime implements EditorRuntime {
     this.projector.dispose();
     this.#renderer.dispose();
     this.#renderer.domElement.remove();
+    this.#problemSubscribers.clear();
   }
 
   get disposed(): boolean {
@@ -139,6 +162,14 @@ export class ThreeEditorRuntime implements EditorRuntime {
   #beginProject(): number {
     this.#projectGeneration += 1;
     return this.#projectGeneration;
+  }
+
+  #publishProblems(): void {
+    this.#problemVersion += 1;
+    const snapshot = { version: this.#problemVersion, problems: this.getProblems() };
+    for (const subscriber of [...this.#problemSubscribers]) {
+      subscriber(snapshot);
+    }
   }
 }
 

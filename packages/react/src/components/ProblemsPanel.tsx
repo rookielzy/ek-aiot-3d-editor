@@ -1,0 +1,32 @@
+import type { ProblemInspectorSection } from "@ek-aiot/3d-editor-core";
+
+export interface ProblemsPanelProps {
+  section: ProblemInspectorSection;
+}
+
+export function ProblemsPanel({ section }: ProblemsPanelProps) {
+  return (
+    <section className="ek-inspector-section">
+      <header className="ek-inspector-section__header">
+        <h2>Problems</h2>
+        <span className="ek-inspector-count">{section.problems.length}</span>
+      </header>
+      {section.problems.length === 0 ? <p className="ek-inspector-empty">No runtime problems.</p> : null}
+      {section.problems.length ? (
+        <ul className="ek-inspector-problems">
+          {section.problems.map((problem) => (
+            <li key={problem.id} data-severity={problem.severity}>
+              <strong>{problem.title}</strong>
+              <span>{problem.detail}</span>
+              <small>
+                {problem.severity} · {problem.source}
+                {problem.assetId ? ` · ${problem.assetId}` : ""}
+                {problem.actionLabel ? ` · ${problem.actionLabel}` : ""}
+              </small>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
