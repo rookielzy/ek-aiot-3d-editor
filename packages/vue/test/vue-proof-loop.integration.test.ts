@@ -1,7 +1,9 @@
 import { Group } from "three";
 import { describe, expect, it } from "vitest";
 import { markRaw } from "vue";
+import { mount } from "@vue/test-utils";
 import { createEditor, AssetResolverBridge, type RendererLike } from "@ek-aiot/3d-editor-core";
+import InspectorPanel from "../src/components/InspectorPanel.vue";
 import { useEditor } from "../src/composables/use-editor";
 
 describe("Vue proof-loop parity", () => {
@@ -9,6 +11,7 @@ describe("Vue proof-loop parity", () => {
     const core = createEditor();
     core.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
     core.dispatch({ type: "register-asset", asset: { id: "texture-a", kind: "texture" } });
+    core.registerAsset({ id: "hdr-a", kind: "hdr" });
     core.dispatch({ type: "register-asset", asset: { id: "hdr-a", kind: "hdr" } });
     core.dispatch({
       type: "set-material",
@@ -46,6 +49,21 @@ describe("Vue proof-loop parity", () => {
       expect.objectContaining({ code: "environment-asset-unresolved", assetId: "hdr-a", metadata: { role: "environment" } })
     ]));
     vue.dispose();
+  });
+
+  it("renders the proof-loop inspector beside the viewport", () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+    editor.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
+
+    const wrapper = mount(InspectorPanel, { props: { editor } });
+
+    expect(wrapper.text()).toContain("Transform");
+    expect(wrapper.text()).toContain("Material");
+    expect(wrapper.text()).toContain("Environment");
+    expect(wrapper.text()).toContain("Lights");
+    wrapper.unmount();
   });
 });
 

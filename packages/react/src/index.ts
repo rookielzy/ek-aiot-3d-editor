@@ -1,4 +1,18 @@
 export { EditorViewport } from "./components/EditorViewport";
+export { InspectorPanel } from "./components/InspectorPanel";
+export { TransformInspector } from "./components/TransformInspector";
+export { MaterialInspector } from "./components/MaterialInspector";
+export { EnvironmentInspector } from "./components/EnvironmentInspector";
+export { LightInspector } from "./components/LightInspector";
+export { ProblemsPanel } from "./components/ProblemsPanel";
 export { useEditor, useEditorSnapshot } from "./hooks/use-editor";
+export { useInspector } from "./hooks/use-inspector";
 export type { EditorViewportProps } from "./components/EditorViewport";
+export type { InspectorPanelProps } from "./components/InspectorPanel";
+export type { TransformInspectorProps } from "./components/TransformInspector";
+export type { MaterialInspectorProps } from "./components/MaterialInspector";
+export type { EnvironmentInspectorProps } from "./components/EnvironmentInspector";
+export type { LightInspectorProps } from "./components/LightInspector";
+export type { ProblemsPanelProps } from "./components/ProblemsPanel";
 export type { UseEditorOptions } from "./hooks/use-editor";
+export type { UseInspectorOptions, UseInspectorResult } from "./hooks/use-inspector";

@@ -64,6 +64,26 @@ describe("set material command", () => {
     expect(JSON.stringify(result.snapshot)).not.toContain("runtime");
   });
 
+  it("clears texture slots through explicit null patches", () => {
+    const dispatcher = new CommandDispatcher(new EditorStore(), new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "register-asset", asset: { id: "texture-a", kind: "texture" } });
+    dispatcher.dispatch({
+      type: "set-material",
+      target: { kind: "object", objectId: "object-a" },
+      material: { textures: { map: { assetId: "texture-a" } } }
+    });
+
+    const result = dispatcher.dispatch({
+      type: "set-material",
+      target: { kind: "object", objectId: "object-a" },
+      material: { textures: { map: null } }
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.snapshot.materials.definitions["material:object:object-a"].override.textures?.map).toBeUndefined();
+  });
+
   it("rejects invalid ranges and unknown texture assets without mutating state", () => {
     const store = new EditorStore();
     const history = new CommandHistory();

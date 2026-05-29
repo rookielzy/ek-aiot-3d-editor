@@ -5,6 +5,7 @@ import type { EditorRuntime, EditorRuntimeOptions } from "../runtime/editor-runt
 import type { SceneSnapshot, SerializedSceneSnapshot } from "../snapshot/types";
 
 export type SnapshotSubscriber = (snapshot: SceneSnapshot) => void;
+export type RuntimeSubscriber = (runtime: EditorRuntime | null) => void;
 
 export interface EditorOptions {
   snapshot?: SerializedSceneSnapshot;
@@ -22,6 +23,7 @@ export interface Editor {
   serialize(): SerializedSceneSnapshot;
   restore(snapshot: SerializedSceneSnapshot): SceneSnapshot;
   registerAsset(asset: Parameters<import("../assets/registry").AssetRegistry["register"]>[0]): AssetReference;
+  subscribeRuntime(subscriber: RuntimeSubscriber): () => void;
   mountRuntime(options: MountRuntimeOptions): EditorRuntime;
   getRuntime(): EditorRuntime | null;
   dispose(): void;
