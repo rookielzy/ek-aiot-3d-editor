@@ -12,6 +12,20 @@ Runtime values are never saved. Hosts may register GLB, texture, HDR, or image a
 
 When mounted, the core runtime projects GLB objects, scene background/environment intent, and durable light definitions into Three.js. Texture and HDR environment assets are resolved through the same `AssetResolverBridge` boundary as GLB assets. With the default Three.js `WebGLRenderer`, HDR/equirectangular environment lighting is converted to runtime-only PMREM output; custom `RendererLike` test renderers use the raw resolved texture unless they are backed by a real Three.js WebGL renderer. Stale textures, render targets, light objects, and light target objects are disposed through the runtime lifecycle.
 
+## Project Packages
+
+Use `editor.serialize()` when you only need the JSON scene snapshot. Use `editor.exportProject()` when the user needs a portable local project file that includes the snapshot plus available binary asset payloads.
+
+The experimental `.ek3d` project package is a ZIP container with:
+
+- `project.json`: versioned package manifest, completeness flag, and asset records
+- `scene.json`: the normal serialized `SceneSnapshot`
+- `assets/*`: GLB, texture, HDR, or image payload bytes referenced by asset ID
+
+Import validates archive shape, entry paths, manifest records, scene snapshot, payload references, and size limits before replacing editor state. Export fails by default when a referenced payload is unavailable; callers can opt into `partial: true`, which marks the manifest as partial and reports structured package problems.
+
+`editor.replaceAsset({ assetId, source })` replaces the transient payload for an existing asset ID. Scene objects, materials, environment fields, and authored problem state keep their durable references. Mounted runtimes retry projection through the project-aware resolver; successful recovery removes derived runtime problems without writing resolver output, `File`, `Blob`, object URLs, loaded textures, or PMREM output into the snapshot.
+
 ## Commands
 
 All durable edits enter through commands so undo/redo remains framework-neutral:
@@ -32,8 +46,8 @@ Framework workbench shells are composition adapters over this core contract. The
 
 ## Problems
 
-Resolver and runtime diagnostics use a structured problem contract with severity, source, target, asset references, recoverability, and display metadata. Runtime problems are observable through `EditorRuntime.subscribeProblems()` and can be shown by inspector panels. Snapshot validation and command failures currently return controlled string errors. Derived resolver/runtime problems are not written into snapshots unless a future explicit recovery command does so.
+Resolver, runtime, and project package diagnostics use a structured problem contract with severity, source, target, asset references, recoverability, and display metadata. Runtime problems are observable through `EditorRuntime.subscribeProblems()` and can be shown by inspector panels. Snapshot validation and command failures currently return controlled string errors. Derived resolver/runtime problems are not written into snapshots unless a future explicit recovery command does so.
 
 ## Deferred Runtime and UX Work
 
-Material texture projection onto imported GLB meshes, per-submesh material slot discovery, shadow controls, light helper gizmos, project archive workflows, asset replacement persistence, and advanced decoder configuration remain follow-up work.
+Material texture projection onto imported GLB meshes, per-submesh material slot discovery, shadow controls, light helper gizmos, cloud asset libraries, marketplace metadata, durable upload queues, and advanced decoder configuration remain follow-up work.

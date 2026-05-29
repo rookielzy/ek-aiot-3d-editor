@@ -164,6 +164,29 @@
   border-left-color: #d92d20;
 }
 
+.ek-inspector-file-action {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 2rem;
+  margin-top: 0.35rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #c5d0de;
+  border-radius: 0.375rem;
+  color: var(--ek-panel-text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ek-inspector-file-action input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 @media (min-width: 768px) {
   .ek-inspector {
     width: min(24rem, 34vw);

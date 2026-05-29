@@ -17,6 +17,7 @@ The proof loop remains intentionally narrow:
 - undo and redo that transform
 - serialize a portable JSON snapshot
 - restore the snapshot into an equivalent core/runtime scene
+- export/import an experimental `.ek3d` project package when binary payloads should travel with the snapshot
 
 ## Packages
 
@@ -26,12 +27,14 @@ The proof loop remains intentionally narrow:
 
 Durable editor state lives only in the versioned scene snapshot. Three.js objects, framework component state, `File`, `Blob`, object URLs, loaded textures, PMREM outputs, and resolver outputs are runtime inputs, not serializable state.
 
+Portable local projects use a separate `.ek3d` package surface. A package contains `project.json`, `scene.json`, and `assets/*` payload entries. Core validates package manifests and archive paths, registers packaged payloads into a transient project asset store, and lets recoverable problem UI replace a missing payload by stable asset ID. JSON snapshots remain binary-free.
+
 The core Three.js runtime now consumes the environment and light parts of that snapshot. Solid backgrounds, texture/HDR backgrounds, HDR or image-based scene environment lighting, PMREM output when backed by the default WebGL renderer, and ambient/hemisphere/directional/point/spot lights are projected from durable asset references and light definitions. Resolver, loader, and PMREM failures are exposed as runtime problems instead of being written back into the snapshot.
 
 Vue and React packages now include a shared inspector surface over the core contract. The inspector can edit selected-object transforms and material overrides, scene environment/background settings, and ambient/hemisphere/directional/point/spot lights through core commands. It also displays runtime/authored problem metadata without serializing transient runtime failures.
 
-The framework packages also expose `EditorWorkbench` and `useWorkbench()` convenience surfaces. They compose the existing viewport, inspector, snapshot subscription, runtime problem observation, and command dispatch into a compact editor shell. React customization uses render props; Vue customization uses scoped slots. These shell extension regions receive the core editor, current snapshot, inspector model, runtime problems, and dispatch helper, but they do not expose private runtime projectors or create a core plugin API.
+The framework packages also expose `EditorWorkbench` and `useWorkbench()` convenience surfaces. They compose the existing viewport, inspector, snapshot subscription, runtime problem observation, project import/export, asset replacement, and command dispatch into a compact editor shell. React customization uses render props; Vue customization uses scoped slots. These shell extension regions receive the core editor, current snapshot, inspector model, runtime problems, and dispatch helper, but they do not expose private runtime projectors or create a core plugin API.
 
 ## Current Non-Goals
 
-Hierarchy panels, durable light selection, full toolbar systems, dockable or persisted layouts, schema-driven inspector plugins, material texture projection onto GLB meshes, shadows, helper gizmos, asset replacement/project archive flows, decoder configuration, multi-select, data binding, event orchestration, and release automation are deferred follow-up work.
+Hierarchy panels, durable light selection, full toolbar systems, dockable or persisted layouts, schema-driven inspector plugins, material texture projection onto GLB meshes, shadows, helper gizmos, cloud asset libraries, marketplace metadata, decoder configuration, multi-select, data binding, event orchestration, and release automation are deferred follow-up work.

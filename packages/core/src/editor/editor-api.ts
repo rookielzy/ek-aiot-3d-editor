@@ -1,6 +1,7 @@
 import type { AssetReference } from "../assets/types";
 import type { Command, CommandResult } from "../commands/types";
 import type { HistoryState } from "../history/history";
+import type { ProjectExportOptions, ProjectExportResult, ProjectImportOptions, ProjectImportResult, ReplaceAssetInput, ReplaceAssetResult } from "../project/project-api";
 import type { EditorRuntime, EditorRuntimeOptions } from "../runtime/editor-runtime";
 import type { SceneSnapshot, SerializedSceneSnapshot } from "../snapshot/types";
 
@@ -23,6 +24,9 @@ export interface Editor {
   serialize(): SerializedSceneSnapshot;
   restore(snapshot: SerializedSceneSnapshot): SceneSnapshot;
   registerAsset(asset: Parameters<import("../assets/registry").AssetRegistry["register"]>[0]): AssetReference;
+  importProject(packageBytes: Uint8Array, options?: ProjectImportOptions): ProjectImportResult;
+  exportProject(options?: ProjectExportOptions): ProjectExportResult;
+  replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
   subscribeRuntime(subscriber: RuntimeSubscriber): () => void;
   mountRuntime(options: MountRuntimeOptions): EditorRuntime;
   getRuntime(): EditorRuntime | null;

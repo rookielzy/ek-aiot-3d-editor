@@ -9,7 +9,7 @@
       :section="inspector.lights"
       @update:active-light-id="$emit('update:activeLightId', $event)"
     />
-    <ProblemsPanel :section="inspector.problems" />
+    <ProblemsPanel :section="inspector.problems" @replace-asset="onReplaceAsset" />
   </aside>
 </template>
 
@@ -29,9 +29,14 @@ const props = defineProps<{
   inspector: InspectorModel;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   "update:activeLightId": [value: string | null];
+  replaceAsset: [assetId: string, file: File];
 }>();
 
 const rawEditor = toRaw(props.editor);
+
+function onReplaceAsset(assetId: string, file: File): void {
+  emit("replaceAsset", assetId, file);
+}
 </script>

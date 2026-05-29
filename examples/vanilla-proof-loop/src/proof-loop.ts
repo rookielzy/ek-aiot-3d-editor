@@ -15,8 +15,12 @@ export async function runVanillaProofLoop(container: HTMLElement) {
   editor.dispatch({ type: "set-transform", objectId: "box", transform: { position: [1, 0, 0] } });
 
   const saved = editor.serialize();
+  const exportedProject = editor.exportProject({ partial: true });
   const restored = createEditor();
   restored.restore(saved);
+  if (exportedProject.packageBytes instanceof Uint8Array) {
+    restored.importProject(exportedProject.packageBytes);
+  }
 
-  return { editor, runtime, saved, restored };
+  return { editor, runtime, saved, exportedProject, restored };
 }

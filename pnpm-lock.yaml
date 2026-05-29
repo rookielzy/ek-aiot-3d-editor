@@ -89,6 +89,9 @@ importers:
 
   packages/core:
     dependencies:
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       three:
         specifier: ^0.184.0
         version: 0.184.0

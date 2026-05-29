@@ -5,6 +5,12 @@ import {
   type EditorOptions,
   type InspectorModel,
   type Problem,
+  type ProjectExportOptions,
+  type ProjectExportResult,
+  type ProjectImportOptions,
+  type ProjectImportResult,
+  type ReplaceAssetInput,
+  type ReplaceAssetResult,
   type SceneSnapshot
 } from "@ek-aiot/3d-editor-core";
 import { useEditor } from "./use-editor";
@@ -23,6 +29,9 @@ export interface WorkbenchContext {
   setActiveLightId(value: string | null): void;
   refreshProblems(): void;
   dispatch(command: Command): ReturnType<Editor["dispatch"]>;
+  importProject(packageBytes: Uint8Array, options?: ProjectImportOptions): ProjectImportResult;
+  exportProject(options?: ProjectExportOptions): ProjectExportResult;
+  replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
 }
 
 export interface UseWorkbenchResult extends WorkbenchContext {
@@ -35,6 +44,10 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   const inspector = useInspector({ editor });
   const ownsEditor = !options.editor;
   const dispatch = useCallback((command: Command) => editor.dispatch(command), [editor]);
+  const importProject = useCallback((packageBytes: Uint8Array, projectOptions?: ProjectImportOptions) =>
+    editor.importProject(packageBytes, projectOptions), [editor]);
+  const exportProject = useCallback((projectOptions?: ProjectExportOptions) => editor.exportProject(projectOptions), [editor]);
+  const replaceAsset = useCallback((input: ReplaceAssetInput) => editor.replaceAsset(input), [editor]);
   const dispose = useCallback(() => {
     if (ownsEditor) {
       editor.dispose();
@@ -50,6 +63,9 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     setActiveLightId: inspector.setActiveLightId,
     refreshProblems: inspector.refreshProblems,
     dispatch,
+    importProject,
+    exportProject,
+    replaceAsset,
     ownsEditor,
     dispose
   };

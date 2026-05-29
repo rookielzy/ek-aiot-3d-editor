@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BoxGeometry, Mesh, MeshBasicMaterial } from "three";
 import { AssetResolverBridge, type EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench, useEditor } from "@ek-aiot/3d-editor-react";
@@ -14,6 +14,7 @@ const demoLoader: EditorRuntimeOptions["loader"] = {
 export function App() {
   const editor = useEditor();
   const resolver = useMemo(() => new AssetResolverBridge((asset) => asset.kind === "glb" ? { uri: `/assets/${asset.id}.glb` } : null), []);
+  const [status, setStatus] = useState("Project controls ready");
 
   useEffect(() => {
     if (editor.getSnapshot().objects.box) {
@@ -57,6 +58,29 @@ export function App() {
           >
             Save / restore
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              const result = workbenchEditor.exportProject({ partial: true });
+              setStatus(result.packageBytes ? "Exported .ek3d project package" : result.problems[0]?.message ?? "Export failed");
+            }}
+          >
+            Export project
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const result = workbenchEditor.exportProject({ partial: true });
+              if (!(result.packageBytes instanceof Uint8Array)) {
+                setStatus("Project contains async browser file payloads");
+                return;
+              }
+              const imported = workbenchEditor.importProject(result.packageBytes);
+              setStatus(imported.ok ? "Imported .ek3d project package" : imported.problems[0]?.message ?? "Import failed");
+            }}
+          >
+            Reopen package
+          </button>
         </>
       )}
       sidePanel={({ snapshot, inspector }) => (
@@ -76,7 +100,7 @@ export function App() {
       )}
       status={({ snapshot, runtimeProblems }) => (
         <span>
-          Snapshot v{snapshot.version} · {runtimeProblems.length} runtime problems
+          Snapshot v{snapshot.version} · {runtimeProblems.length} runtime problems · {status}
         </span>
       )}
     />
