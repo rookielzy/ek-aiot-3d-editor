@@ -90,6 +90,10 @@ export class ProjectAssetStore {
     if (stored.uri) {
       return toResolvedAsset(stored, stored.uri);
     }
+    const existingUri = this.#objectUrls.get(asset.id);
+    if (existingUri) {
+      return toResolvedAsset(stored, existingUri);
+    }
     const blobSource = stored.blob ?? (stored.bytes ? new Blob([toBlobArrayBuffer(stored.bytes)], stored.mimeType ? { type: stored.mimeType } : undefined) : undefined);
     if (!blobSource) {
       return null;

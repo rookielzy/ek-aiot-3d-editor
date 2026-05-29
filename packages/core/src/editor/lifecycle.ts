@@ -44,7 +44,11 @@ export class CoreEditor implements Editor {
   dispatch(command: Command): CommandResult {
     const result = this.dispatcher.dispatch(command);
     if (result.ok) {
-      this.#registerCommandProjectAsset(command, result.snapshot);
+      try {
+        this.#registerCommandProjectAsset(command, result.snapshot);
+      } catch {
+        // Transient payload registration must not change durable command results.
+      }
     }
     return result;
   }

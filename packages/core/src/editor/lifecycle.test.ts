@@ -80,6 +80,21 @@ describe("editor lifecycle", () => {
     expect(editor.exportProject().problems).toMatchObject([{ code: "project-export-payload-missing" }]);
   });
 
+  it("keeps durable command results when transient payload registration fails", () => {
+    const editor = createEditor();
+    const result = editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: {
+        id: "asset-a",
+        source: { metadata: { bad: Number.NaN }, bytes: new Uint8Array([1]) }
+      }
+    });
+
+    expect(result.ok).toBe(true);
+    expect(editor.getSnapshot().objects["object-a"].asset.id).toBe("asset-a");
+    expect(editor.exportProject().ok).toBe(false);
+  });
 });
 
 function createFakeRenderer(container: HTMLElement): RendererLike {

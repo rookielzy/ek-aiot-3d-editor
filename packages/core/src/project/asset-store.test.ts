@@ -38,6 +38,22 @@ describe("project asset store", () => {
     expect(revoke).toHaveBeenCalledWith("blob:2");
   });
 
+  it("reuses an object url until the asset is replaced or cleared", async () => {
+    const revoke = vi.fn();
+    const createObjectUrl = vi.fn(() => "blob:asset-a");
+    const store = new ProjectAssetStore({
+      createObjectUrl,
+      revokeObjectUrl: revoke
+    });
+
+    await store.register({ asset: { id: "asset-a", kind: "glb" }, source: new Uint8Array([1]) });
+
+    expect(store.resolve({ id: "asset-a", kind: "glb" })?.uri).toBe("blob:asset-a");
+    expect(store.resolve({ id: "asset-a", kind: "glb" })?.uri).toBe("blob:asset-a");
+    expect(createObjectUrl).toHaveBeenCalledTimes(1);
+    expect(revoke).not.toHaveBeenCalled();
+  });
+
   it("does not resolve payloads for mismatched asset kinds", async () => {
     const store = new ProjectAssetStore({ createObjectUrl: () => "blob:asset-a" });
     await store.register({ asset: { id: "asset-a", kind: "glb" }, source: new Uint8Array([1]) });
