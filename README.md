@@ -21,8 +21,8 @@ The proof loop remains intentionally narrow:
 ## Packages
 
 - `@ek-aiot/3d-editor-core`: durable scene snapshot, commands/history, asset references, Three.js runtime projection, lifecycle API
-- `@ek-aiot/3d-editor-vue`: Vue lifecycle adapter and viewport component
-- `@ek-aiot/3d-editor-react`: React external-store hook and viewport component
+- `@ek-aiot/3d-editor-vue`: Vue lifecycle adapter, primitive viewport/inspector components, and a scoped-slot workbench shell
+- `@ek-aiot/3d-editor-react`: React external-store hook, primitive viewport/inspector components, and a render-prop workbench shell
 
 Durable editor state lives only in the versioned scene snapshot. Three.js objects, framework component state, `File`, `Blob`, object URLs, loaded textures, PMREM outputs, and resolver outputs are runtime inputs, not serializable state.
 
@@ -30,6 +30,8 @@ The core Three.js runtime now consumes the environment and light parts of that s
 
 Vue and React packages now include a shared inspector surface over the core contract. The inspector can edit selected-object transforms and material overrides, scene environment/background settings, and ambient/hemisphere/directional/point/spot lights through core commands. It also displays runtime/authored problem metadata without serializing transient runtime failures.
 
+The framework packages also expose `EditorWorkbench` and `useWorkbench()` convenience surfaces. They compose the existing viewport, inspector, snapshot subscription, runtime problem observation, and command dispatch into a compact editor shell. React customization uses render props; Vue customization uses scoped slots. These shell extension regions receive the core editor, current snapshot, inspector model, runtime problems, and dispatch helper, but they do not expose private runtime projectors or create a core plugin API.
+
 ## Current Non-Goals
 
-Hierarchy panels, durable light selection, material texture projection onto GLB meshes, shadows, helper gizmos, asset replacement/project archive flows, decoder configuration, multi-select, data binding, event orchestration, and release automation are deferred follow-up work.
+Hierarchy panels, durable light selection, full toolbar systems, dockable or persisted layouts, schema-driven inspector plugins, material texture projection onto GLB meshes, shadows, helper gizmos, asset replacement/project archive flows, decoder configuration, multi-select, data binding, event orchestration, and release automation are deferred follow-up work.

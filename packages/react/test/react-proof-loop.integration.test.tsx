@@ -1,10 +1,9 @@
 import React from "react";
 import { Group } from "three";
-import { render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { AssetResolverBridge, createEditor, type RendererLike } from "@ek-aiot/3d-editor-core";
-import { EditorViewport } from "../src/components/EditorViewport";
-import { InspectorPanel } from "../src/components/InspectorPanel";
+import { EditorWorkbench } from "../src/components/EditorWorkbench";
 
 describe("React proof-loop parity", () => {
   it("renders a restored core snapshot without React-local editor behavior", async () => {
@@ -32,11 +31,12 @@ describe("React proof-loop parity", () => {
     const restored = createEditor({ snapshot: editor.serialize() });
 
     render(
-      <EditorViewport
+      <EditorWorkbench
         editor={restored}
         resolver={new AssetResolverBridge((asset) => asset.kind === "glb" ? { uri: "/box.glb" } : null)}
         loader={{ load: async () => new Group() }}
         rendererFactory={fakeRenderer}
+        status={({ runtimeProblems }) => <span>Runtime problems {runtimeProblems.length}</span>}
       />
     );
     await restored.getRuntime()?.project();
@@ -50,25 +50,52 @@ describe("React proof-loop parity", () => {
       expect.objectContaining({ code: "environment-asset-unresolved", assetId: "hdr-a", metadata: { role: "background" } }),
       expect.objectContaining({ code: "environment-asset-unresolved", assetId: "hdr-a", metadata: { role: "environment" } })
     ]));
+    expect(await screen.findByText("Runtime problems 2")).toBeTruthy();
+    expect(JSON.stringify(restored.serialize())).not.toContain("environment-asset-unresolved");
   });
 
-  it("renders the proof-loop inspector beside the viewport", () => {
+  it("renders workbench regions beside the inspector and commits through core commands", () => {
     const editor = createEditor();
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
     editor.dispatch({ type: "select-object", objectId: "object-a" });
     editor.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
 
-    const { getByText } = render(
-      <main>
-        <EditorViewport editor={editor} rendererFactory={fakeRenderer} />
-        <InspectorPanel editor={editor} />
-      </main>
+    render(
+      <EditorWorkbench
+        editor={editor}
+        rendererFactory={fakeRenderer}
+        toolbar={({ dispatch, editor: workbenchEditor }) => (
+          <>
+            <button onClick={() => dispatch({ type: "set-transform", objectId: "object-a", transform: { position: [4, 0, 0] } })}>
+              Move object
+            </button>
+            <button
+              onClick={() => {
+                const saved = workbenchEditor.serialize();
+                workbenchEditor.dispatch({ type: "set-transform", objectId: "object-a", transform: { position: [8, 0, 0] } });
+                workbenchEditor.restore(saved);
+              }}
+            >
+              Save restore
+            </button>
+          </>
+        )}
+        sidePanel={({ snapshot, inspector }) => <span>{inspector.selection.objectId}:{Object.keys(snapshot.objects).length}</span>}
+        viewportOverlay={({ runtimeProblems }) => <span>{runtimeProblems.length} runtime problems</span>}
+      />
     );
 
-    expect(getByText("Transform")).toBeTruthy();
-    expect(getByText("Material")).toBeTruthy();
-    expect(getByText("Environment")).toBeTruthy();
-    expect(getByText("Lights")).toBeTruthy();
+    expect(screen.getByText("object-a:1")).toBeTruthy();
+    expect(screen.getByText("Transform")).toBeTruthy();
+    expect(screen.getByText("Material")).toBeTruthy();
+    expect(screen.getByText("Environment")).toBeTruthy();
+    expect(screen.getByText("Lights")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Move object"));
+    expect(editor.getSnapshot().objects["object-a"].transform.position).toEqual([4, 0, 0]);
+
+    fireEvent.click(screen.getByText("Save restore"));
+    expect(editor.getSnapshot().objects["object-a"].transform.position).toEqual([4, 0, 0]);
   });
 });
 

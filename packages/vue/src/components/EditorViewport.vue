@@ -25,14 +25,14 @@ function mountRuntime() {
   const editor = toRaw(props.editor);
   runtime = editor.mountRuntime({
     container: container.value,
-    resolver: props.resolver,
-    loader: props.loader,
-    rendererFactory: props.rendererFactory
+    resolver: props.resolver ? toRaw(props.resolver) : undefined,
+    loader: props.loader ? toRaw(props.loader) : undefined,
+    rendererFactory: props.rendererFactory ? toRaw(props.rendererFactory) : undefined
   });
 }
 
 onMounted(mountRuntime);
-watch(() => props.editor, mountRuntime);
+watch(() => [props.editor, props.resolver, props.loader, props.rendererFactory], mountRuntime);
 
 onBeforeUnmount(() => {
   runtime?.dispose();

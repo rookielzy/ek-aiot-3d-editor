@@ -1,4 +1,5 @@
 export { default as EditorViewport } from "./components/EditorViewport.vue";
+export { default as EditorWorkbench } from "./components/EditorWorkbench.vue";
 export { default as InspectorPanel } from "./components/InspectorPanel.vue";
 export { default as TransformInspector } from "./components/TransformInspector.vue";
 export { default as MaterialInspector } from "./components/MaterialInspector.vue";
@@ -9,3 +10,5 @@ export { useEditor } from "./composables/use-editor";
 export type { UseEditorOptions, UseEditorResult } from "./composables/use-editor";
 export { useInspector } from "./composables/use-inspector";
 export type { UseInspectorOptions, UseInspectorResult } from "./composables/use-inspector";
+export { useWorkbench } from "./composables/use-workbench";
+export type { UseWorkbenchOptions, UseWorkbenchResult, WorkbenchContext } from "./composables/use-workbench";

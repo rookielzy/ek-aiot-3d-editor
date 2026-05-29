@@ -1,0 +1,141 @@
+.ek-workbench {
+  --ek-workbench-bg: #edf1f5;
+  --ek-workbench-viewport-bg: #111820;
+  --ek-workbench-border: #d8dee8;
+  --ek-workbench-panel-bg: #f8fafc;
+  --ek-workbench-text: #182230;
+  --ek-workbench-muted: #657287;
+  --ek-workbench-accent: #146eb4;
+  display: grid;
+  grid-template-areas:
+    "toolbar"
+    "viewport"
+    "side"
+    "inspector"
+    "status";
+  grid-template-rows: auto minmax(18rem, 1fr) auto auto auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  overflow: hidden;
+  background: var(--ek-workbench-bg);
+  color: var(--ek-workbench-text);
+  font: 0.875rem/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.ek-workbench *,
+.ek-workbench *::before,
+.ek-workbench *::after {
+  box-sizing: border-box;
+}
+
+.ek-workbench__toolbar,
+.ek-workbench__side-panel,
+.ek-workbench__status {
+  min-width: 0;
+  background: var(--ek-workbench-panel-bg);
+}
+
+.ek-workbench__toolbar,
+.ek-workbench__status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 3rem;
+  padding: 0.5rem 0.75rem;
+  border-block: 1px solid var(--ek-workbench-border);
+}
+
+.ek-workbench__toolbar {
+  grid-area: toolbar;
+  border-top: 0;
+}
+
+.ek-workbench__status {
+  grid-area: status;
+  color: var(--ek-workbench-muted);
+  font-size: 0.78rem;
+}
+
+.ek-workbench__side-panel {
+  grid-area: side;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--ek-workbench-border);
+}
+
+.ek-workbench__viewport-shell {
+  position: relative;
+  grid-area: viewport;
+  min-width: 0;
+  min-height: 18rem;
+  overflow: hidden;
+  background: var(--ek-workbench-viewport-bg);
+}
+
+.ek-workbench__viewport {
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+}
+
+.ek-workbench__overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  padding: 0.75rem;
+  pointer-events: none;
+}
+
+.ek-workbench__overlay > * {
+  pointer-events: auto;
+}
+
+.ek-workbench > .ek-inspector {
+  grid-area: inspector;
+  width: 100%;
+  border-left: 0;
+}
+
+.ek-workbench button {
+  min-height: 2.25rem;
+  border: 1px solid #c5cedb;
+  border-radius: 0.375rem;
+  background: #ffffff;
+  color: var(--ek-workbench-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ek-workbench button:focus-visible {
+  outline: 2px solid var(--ek-workbench-accent);
+  outline-offset: 2px;
+}
+
+@media (min-width: 768px) {
+  .ek-workbench {
+    grid-template-areas:
+      "toolbar toolbar toolbar"
+      "viewport side inspector"
+      "status status status";
+    grid-template-columns: minmax(0, 1fr) minmax(14rem, 18rem) minmax(20rem, 24rem);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    min-height: 100vh;
+  }
+
+  .ek-workbench__viewport-shell {
+    min-height: 0;
+  }
+
+  .ek-workbench__side-panel {
+    overflow: auto;
+    border-right: 1px solid var(--ek-workbench-border);
+    border-bottom: 0;
+  }
+
+  .ek-workbench > .ek-inspector {
+    max-height: none;
+    border-left: 1px solid var(--ek-workbench-border);
+  }
+}

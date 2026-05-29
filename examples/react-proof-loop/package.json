@@ -10,6 +10,7 @@
     "@ek-aiot/3d-editor-core": "workspace:*",
     "@ek-aiot/3d-editor-react": "workspace:*",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "three": "^0.184.0"
   }
 }

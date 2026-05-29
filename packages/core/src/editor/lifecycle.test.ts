@@ -48,4 +48,33 @@ describe("editor lifecycle", () => {
 
     expect(runtimes).toEqual([null, runtime]);
   });
+
+  it("exposes disposed runtimes as null when remounting", () => {
+    const editor = createEditor();
+    const runtimes: Array<ReturnType<typeof editor.getRuntime>> = [];
+    editor.subscribeRuntime((runtime) => {
+      runtimes.push(runtime);
+    });
+    const first = editor.mountRuntime({
+      container: document.createElement("div"),
+      rendererFactory: createFakeRenderer
+    });
+    const second = editor.mountRuntime({
+      container: document.createElement("div"),
+      rendererFactory: createFakeRenderer
+    });
+
+    expect(first.disposed).toBe(true);
+    expect(editor.getRuntime()).toBe(second);
+    expect(runtimes).toEqual([null, first, null, second]);
+  });
 });
+
+function createFakeRenderer(container: HTMLElement): RendererLike {
+  return {
+    domElement: container.ownerDocument.createElement("canvas"),
+    setSize() {},
+    render() {},
+    dispose() {}
+  };
+}

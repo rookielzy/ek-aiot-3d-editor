@@ -66,7 +66,7 @@ export class CoreEditor implements Editor {
   subscribeRuntime(subscriber: RuntimeSubscriber): () => void {
     this.#assertActive();
     this.#runtimeSubscribers.add(subscriber);
-    subscriber(this.#runtime);
+    subscriber(this.getRuntime());
 
     return () => {
       this.#runtimeSubscribers.delete(subscriber);
@@ -75,7 +75,11 @@ export class CoreEditor implements Editor {
 
   mountRuntime(options: MountRuntimeOptions): EditorRuntime {
     this.#assertActive();
-    this.#runtime?.dispose();
+    if (this.#runtime) {
+      this.#runtime.dispose();
+      this.#runtime = null;
+      this.#notifyRuntimeSubscribers();
+    }
     this.#resolver = options.resolver ?? this.#resolver;
     this.#runtime = new ThreeEditorRuntime({
       ...options,
@@ -88,7 +92,7 @@ export class CoreEditor implements Editor {
   }
 
   getRuntime(): EditorRuntime | null {
-    return this.#runtime;
+    return this.#runtime?.disposed ? null : this.#runtime;
   }
 
   dispose(): void {
@@ -116,8 +120,9 @@ export class CoreEditor implements Editor {
   }
 
   #notifyRuntimeSubscribers(): void {
+    const runtime = this.getRuntime();
     for (const subscriber of [...this.#runtimeSubscribers]) {
-      subscriber(this.#runtime);
+      subscriber(runtime);
     }
   }
 }

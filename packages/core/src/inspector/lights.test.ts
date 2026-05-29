@@ -16,6 +16,19 @@ describe("light inspector commands", () => {
     expect(directional.fields.map((field) => field.id)).toContain("target.x");
   });
 
+  it("normalizes rgb light colors for browser color inputs", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "add-light", light: { id: "ambient-a", kind: "ambient" } });
+    editor.dispatch({ type: "add-light", light: { id: "hemi-a", kind: "hemisphere" } });
+
+    const ambient = buildLightSection(editor.getSnapshot(), "ambient-a");
+    const hemisphere = buildLightSection(editor.getSnapshot(), "hemi-a");
+
+    expect(ambient.fields.find((field) => field.id === "color")?.value).toBe("#ffffff");
+    expect(hemisphere.fields.find((field) => field.id === "groundColor")?.value).toBe("#404040");
+    expect(editor.getSnapshot().lights["ambient-a"].color).toBe("rgb(255, 255, 255)");
+  });
+
   it("updates active light fields without changing object selection", () => {
     const editor = createEditor();
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
