@@ -26,7 +26,7 @@ export function colorField(id: string, label: string, value = "#ffffff", disable
     id,
     label,
     kind: "color",
-    value,
+    value: normalizeColorInputValue(value),
     disabled
   };
 }
@@ -134,4 +134,22 @@ export function parseBoolean(value: unknown): boolean {
     return value;
   }
   return value === "true" || value === "on" || value === "1";
+}
+
+function normalizeColorInputValue(value: string): string {
+  if (/^#[0-9a-f]{6}$/i.test(value)) {
+    return value;
+  }
+
+  const rgb = value.match(/^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i);
+  if (!rgb) {
+    return value;
+  }
+
+  const channels = rgb.slice(1).map((channel) => Number(channel));
+  if (channels.some((channel) => !Number.isInteger(channel) || channel < 0 || channel > 255)) {
+    return value;
+  }
+
+  return `#${channels.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 }

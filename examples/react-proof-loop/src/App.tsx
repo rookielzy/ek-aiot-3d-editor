@@ -1,6 +1,15 @@
 import { useEffect, useMemo } from "react";
-import { AssetResolverBridge } from "@ek-aiot/3d-editor-core";
+import { BoxGeometry, Mesh, MeshBasicMaterial } from "three";
+import { AssetResolverBridge, type EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench, useEditor } from "@ek-aiot/3d-editor-react";
+
+const demoLoader: EditorRuntimeOptions["loader"] = {
+  async load() {
+    const mesh = new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial({ color: "#3b82f6" }));
+    mesh.name = "Simple box";
+    return mesh;
+  }
+};
 
 export function App() {
   const editor = useEditor();
@@ -29,6 +38,7 @@ export function App() {
     <EditorWorkbench
       editor={editor}
       resolver={resolver}
+      loader={demoLoader}
       toolbar={({ dispatch, editor: workbenchEditor }) => (
         <>
           <button

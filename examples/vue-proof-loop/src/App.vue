@@ -1,5 +1,5 @@
 <template>
-  <EditorWorkbench :editor="editor" :resolver="resolver">
+  <EditorWorkbench :editor="editor" :resolver="resolver" :loader="demoLoader">
     <template #toolbar="{ dispatch, editor: workbenchEditor }">
       <button
         type="button"
@@ -36,11 +36,19 @@
 </template>
 
 <script setup lang="ts">
-import { AssetResolverBridge, type Editor } from "@ek-aiot/3d-editor-core";
+import { BoxGeometry, Mesh, MeshBasicMaterial } from "three";
+import { AssetResolverBridge, type Editor, type EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench, useEditor } from "@ek-aiot/3d-editor-vue";
 
 const { editor } = useEditor();
 const resolver = new AssetResolverBridge((asset) => asset.kind === "glb" ? { uri: `/assets/${asset.id}.glb` } : null);
+const demoLoader: EditorRuntimeOptions["loader"] = {
+  async load() {
+    const mesh = new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial({ color: "#3b82f6" }));
+    mesh.name = "Simple box";
+    return mesh;
+  }
+};
 
 if (!editor.getSnapshot().objects.box) {
   editor.dispatch({ type: "import-glb", objectId: "box", asset: { id: "simple-box", label: "Simple box" } });

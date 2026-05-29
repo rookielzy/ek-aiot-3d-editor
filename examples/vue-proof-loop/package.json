@@ -9,6 +9,7 @@
   "dependencies": {
     "@ek-aiot/3d-editor-core": "workspace:*",
     "@ek-aiot/3d-editor-vue": "workspace:*",
+    "three": "^0.184.0",
     "vue": "^3.5.35"
   }
 }
