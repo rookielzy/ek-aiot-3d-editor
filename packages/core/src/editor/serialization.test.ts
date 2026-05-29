@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createEmptySnapshot, createTransform } from "../snapshot/defaults";
-import type { SceneSnapshot } from "../snapshot/types";
+import type { LegacySceneSnapshot, SceneSnapshot } from "../snapshot/types";
 import { restoreSnapshot, serializeSnapshot } from "./serialization";
 
 describe("snapshot serialization", () => {
@@ -43,5 +43,52 @@ describe("snapshot serialization", () => {
 
     expect(Object.isFrozen(restored)).toBe(true);
     expect(Object.isFrozen(restored.scene)).toBe(true);
+  });
+
+  it("migrates version 1 proof-loop snapshots to the current schema", () => {
+    const legacy: LegacySceneSnapshot = {
+      version: 1,
+      scene: {
+        id: "scene-a",
+        name: "Legacy scene"
+      },
+      assets: {
+        "asset-a": {
+          id: "asset-a",
+          kind: "glb",
+          label: "Box"
+        }
+      },
+      objects: {
+        "object-a": {
+          id: "object-a",
+          name: "Box",
+          kind: "glb",
+          parentId: null,
+          children: [],
+          asset: {
+            id: "asset-a",
+            kind: "glb",
+            label: "Box"
+          },
+          transform: createTransform({ position: [4, 5, 6] })
+        }
+      },
+      rootObjectIds: ["object-a"],
+      selection: {
+        objectId: "object-a"
+      }
+    };
+
+    const restored = restoreSnapshot(legacy);
+
+    expect(restored.version).toBe(2);
+    expect(restored.scene).toEqual(legacy.scene);
+    expect(restored.objects["object-a"].transform.position).toEqual([4, 5, 6]);
+    expect(restored.selection.objectId).toBe("object-a");
+    expect(restored.materials).toEqual({ definitions: {}, assignments: {} });
+    expect(restored.environment.mode).toBe("none");
+    expect(restored.lights).toEqual({});
+    expect(restored.problems).toEqual({ acknowledged: {} });
   });
 });

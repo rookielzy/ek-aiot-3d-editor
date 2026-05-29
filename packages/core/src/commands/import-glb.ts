@@ -8,6 +8,10 @@ export function applyImportGlb(snapshot: SceneSnapshot, command: ImportGlbComman
   const objectId = command.objectId ?? createId("object");
   const parentId = command.parentId ?? null;
 
+  if (command.asset.kind && command.asset.kind !== "glb") {
+    throw new Error("import-glb requires a GLB asset.");
+  }
+
   if (snapshot.objects[objectId]) {
     throw new Error(`Object ${objectId} already exists.`);
   }

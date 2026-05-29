@@ -116,9 +116,14 @@ export class SceneProjector {
         id: `asset-load-failed:${object.asset.id}:${object.id}`,
         severity: "error",
         code: "asset-load-failed",
-        objectId: object.id,
         assetId: object.asset.id,
-        message: error instanceof Error ? error.message : String(error)
+        source: "runtime",
+        target: { kind: "object", objectId: object.id },
+        recoverability: "user-action",
+        message: error instanceof Error ? error.message : String(error),
+        display: {
+          title: "Asset failed to load"
+        }
       });
       return createProblemPlaceholder(object.id);
     }

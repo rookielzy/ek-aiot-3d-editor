@@ -21,4 +21,11 @@ describe("asset registry", () => {
     });
     expect(registry.get("asset-a")?.source).toBe(fileLike);
   });
+
+  it("rejects unsupported asset kinds without registering them", () => {
+    const registry = new AssetRegistry();
+
+    expect(() => registry.register({ id: "bad", kind: "video" as unknown as never })).toThrow("Unsupported asset kind");
+    expect(registry.get("bad")).toBeUndefined();
+  });
 });

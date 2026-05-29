@@ -1,4 +1,9 @@
-import { SNAPSHOT_VERSION, type JsonValue, type SceneObject, type SceneSnapshot } from "./types";
+import { validateSceneEnvironment } from "../environment/validation";
+import { validateLights } from "../lights/validation";
+import { validateMaterialState } from "../materials/validation";
+import { validateAuthoredProblemState } from "../problems/validation";
+import { isJsonCompatible as isJsonValueCompatible, isPlainRecord, type JsonValue } from "./json";
+import { SNAPSHOT_VERSION, type AssetReference, type SceneObject, type SceneSnapshot } from "./types";
 
 export interface ValidationResult {
   ok: boolean;
@@ -30,31 +35,35 @@ export function validateSceneSnapshot(value: unknown): ValidationResult {
 
   if (!Array.isArray(value.rootObjectIds) || value.rootObjectIds.some((id) => typeof id !== "string")) {
     errors.push("Snapshot rootObjectIds must be an array of object IDs.");
+  } else if (isPlainRecord(value.objects)) {
+    for (const rootObjectId of value.rootObjectIds) {
+      if (!value.objects[rootObjectId]) {
+        errors.push(`Root object ${rootObjectId} must exist in objects.`);
+      }
+    }
   }
 
   if (!isPlainRecord(value.selection) || !(typeof value.selection.objectId === "string" || value.selection.objectId === null)) {
     errors.push("Snapshot selection must include an objectId string or null.");
+  } else if (value.selection.objectId !== null && isPlainRecord(value.objects) && !value.objects[value.selection.objectId]) {
+    errors.push(`Selected object ${value.selection.objectId} must exist in objects.`);
   }
 
   if (!isPlainRecord(value.assets)) {
     errors.push("Snapshot assets must be a plain object map.");
   } else {
     for (const [id, asset] of Object.entries(value.assets)) {
-      if (!isPlainRecord(asset)) {
-        errors.push(`Asset ${id} must be a plain object.`);
-        continue;
-      }
-      if (asset.id !== id) {
-        errors.push(`Asset ${id} must use a matching id field.`);
-      }
-      if (asset.kind !== "glb") {
-        errors.push(`Asset ${id} must be a GLB asset.`);
-      }
-      if ("metadata" in asset && !isJsonCompatible(asset.metadata)) {
-        errors.push(`Asset ${id} metadata must be JSON-compatible.`);
-      }
+      validateAsset(id, asset, errors);
     }
   }
+
+  const objectIds = isPlainRecord(value.objects) ? new Set(Object.keys(value.objects)) : new Set<string>();
+  const assets = isPlainRecord(value.assets) ? value.assets as Record<string, AssetReference> : {};
+  validateObjectReferences(value.objects, assets, errors);
+  validateMaterialState(value.materials, { objectIds, assets }, errors);
+  validateSceneEnvironment(value.environment, assets, errors);
+  validateLights(value.lights, errors);
+  validateAuthoredProblemState(value.problems, errors);
 
   if ("metadata" in value && !isJsonCompatible(value.metadata)) {
     errors.push("Snapshot metadata must be JSON-compatible.");
@@ -75,38 +84,23 @@ export function assertValidSceneSnapshot(value: unknown): asserts value is Scene
 }
 
 export function isJsonCompatible(value: unknown, seen = new WeakSet<object>()): value is JsonValue {
-  if (value === null) {
-    return true;
-  }
+  return isJsonValueCompatible(value, seen);
+}
 
-  if (typeof value === "string" || typeof value === "boolean") {
-    return true;
+function validateAsset(id: string, asset: unknown, errors: string[]): void {
+  if (!isPlainRecord(asset)) {
+    errors.push(`Asset ${id} must be a plain object.`);
+    return;
   }
-
-  if (typeof value === "number") {
-    return Number.isFinite(value);
+  if (asset.id !== id) {
+    errors.push(`Asset ${id} must use a matching id field.`);
   }
-
-  if (typeof value !== "object") {
-    return false;
+  if (asset.kind !== "glb" && asset.kind !== "texture" && asset.kind !== "hdr" && asset.kind !== "image") {
+    errors.push(`Asset ${id} kind is unsupported.`);
   }
-
-  if (seen.has(value)) {
-    return false;
+  if ("metadata" in asset && !isJsonCompatible(asset.metadata)) {
+    errors.push(`Asset ${id} metadata must be JSON-compatible.`);
   }
-  seen.add(value);
-
-  let compatible: boolean;
-  if (Array.isArray(value)) {
-    compatible = value.every((entry) => isJsonCompatible(entry, seen));
-  } else if (!isPlainRecord(value)) {
-    compatible = false;
-  } else {
-    compatible = Object.entries(value).every(([key, entry]) => typeof key === "string" && isJsonCompatible(entry, seen));
-  }
-
-  seen.delete(value);
-  return compatible;
 }
 
 function validateObject(id: string, object: unknown, errors: string[]): void {
@@ -143,6 +137,31 @@ function validateObject(id: string, object: unknown, errors: string[]): void {
   }
 }
 
+function validateObjectReferences(objects: unknown, assets: Record<string, AssetReference>, errors: string[]): void {
+  if (!isPlainRecord(objects)) {
+    return;
+  }
+
+  for (const [id, object] of Object.entries(objects)) {
+    if (!isPlainRecord(object)) {
+      continue;
+    }
+    if (typeof object.parentId === "string" && !objects[object.parentId]) {
+      errors.push(`Object ${id} parent ${object.parentId} must exist.`);
+    }
+    if (Array.isArray(object.children)) {
+      for (const childId of object.children) {
+        if (typeof childId === "string" && !objects[childId]) {
+          errors.push(`Object ${id} child ${childId} must exist.`);
+        }
+      }
+    }
+    if (isPlainRecord(object.asset) && typeof object.asset.id === "string" && !assets[object.asset.id]) {
+      errors.push(`Object ${id} asset ${object.asset.id} must exist in assets.`);
+    }
+  }
+}
+
 function isTransform(value: unknown): boolean {
   return (
     isPlainRecord(value) &&
@@ -154,13 +173,4 @@ function isTransform(value: unknown): boolean {
 
 function isVector(value: unknown): boolean {
   return Array.isArray(value) && value.length === 3 && value.every((entry) => typeof entry === "number" && Number.isFinite(entry));
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  if (value === null || typeof value !== "object") {
-    return false;
-  }
-
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
 }

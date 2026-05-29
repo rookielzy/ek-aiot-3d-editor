@@ -1,4 +1,5 @@
 import { immutableClone } from "../snapshot/immutability";
+import { migrateSerializedSnapshot } from "../snapshot/migrations";
 import type { SceneSnapshot, SerializedSceneSnapshot } from "../snapshot/types";
 import { assertValidSceneSnapshot } from "../snapshot/validation";
 
@@ -8,6 +9,5 @@ export function serializeSnapshot(snapshot: SceneSnapshot): SerializedSceneSnaps
 }
 
 export function restoreSnapshot(serialized: SerializedSceneSnapshot): SceneSnapshot {
-  assertValidSceneSnapshot(serialized);
-  return immutableClone(serialized);
+  return migrateSerializedSnapshot(serialized);
 }
