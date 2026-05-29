@@ -118,12 +118,14 @@ describe("Vue EditorWorkbench", () => {
     });
 
     expect(wrapper.text()).toContain("first-object:first-object");
-    expect(first.getRuntime()).toBeTruthy();
+    const firstRuntime = first.getRuntime();
+    expect(firstRuntime).toBeTruthy();
 
     await wrapper.setProps({ editor: second });
     await nextTick();
 
-    expect(first.getRuntime()?.disposed).toBe(true);
+    expect(firstRuntime?.disposed).toBe(true);
+    expect(first.getRuntime()).toBeNull();
     expect(wrapper.text()).toContain("second-object:second-object");
     expect(wrapper.text()).not.toContain("first-object:first-object");
 
