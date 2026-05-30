@@ -2,6 +2,8 @@
 
 Experimental `0.x` workspace for a snapshot-first 3D editor contract.
 
+Detailed Chinese project documentation starts at [docs/README.md](docs/README.md).
+
 The core contract now stores a versioned scene snapshot. Version 2 keeps the first proof loop intact and adds durable authoring data for:
 
 - object-level `MeshStandardMaterial` overrides and texture-slot asset references
