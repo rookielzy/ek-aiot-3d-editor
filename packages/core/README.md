@@ -2,6 +2,8 @@
 
 Core owns the editor contract: scene snapshots, commands, history, asset references, runtime projection, serialization, restore, and disposal.
 
+This package is experimental `0.x`. It is suitable for validating the current snapshot-first contract, but it does not promise 1.0 API stability, Le5le-style low-code features, cloud asset libraries, marketplace behavior, data binding, or hosted runtime publishing. Release process details live in the repository release guide.
+
 Use `createEditor()` to create a framework-neutral editor, dispatch commands, subscribe to snapshots, mount a runtime into a DOM container, and serialize or restore state.
 
 ## Snapshot Contract
