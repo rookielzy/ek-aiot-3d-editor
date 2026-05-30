@@ -25,6 +25,8 @@ The proof loop remains intentionally narrow:
 - `@ek-aiot/3d-editor-vue`: Vue lifecycle adapter, primitive viewport/inspector components, and a scoped-slot workbench shell
 - `@ek-aiot/3d-editor-react`: React external-store hook, primitive viewport/inspector components, and a render-prop workbench shell
 
+The packages are prepared for public npm publication as experimental `0.x` packages. Versioning and changelogs use Changesets, and publishable artifacts are verified from packed npm tarballs before publishing. See [docs/release.md](docs/release.md) for the release workflow, trusted publishing setup, token fallback, and first-release checklist.
+
 Durable editor state lives only in the versioned scene snapshot. Three.js objects, framework component state, `File`, `Blob`, object URLs, loaded textures, PMREM outputs, and resolver outputs are runtime inputs, not serializable state.
 
 Portable local projects use a separate `.ek3d` package surface. A package contains `project.json`, `scene.json`, and `assets/*` payload entries. Core validates package manifests and archive paths, registers packaged payloads into a transient project asset store, and lets recoverable problem UI replace a missing payload by stable asset ID. JSON snapshots remain binary-free.
@@ -35,6 +37,13 @@ Vue and React packages now include a shared inspector surface over the core cont
 
 The framework packages also expose `EditorWorkbench` and `useWorkbench()` convenience surfaces. They compose the existing viewport, inspector, snapshot subscription, runtime problem observation, project import/export, asset replacement, and command dispatch into a compact editor shell. React customization uses render props; Vue customization uses scoped slots. These shell extension regions receive the core editor, current snapshot, inspector model, runtime problems, and dispatch helper, but they do not expose private runtime projectors or create a core plugin API.
 
+## Release Commands
+
+- `pnpm changeset`: record package-facing release intent.
+- `pnpm release:version`: apply Changesets version and changelog updates for a release PR.
+- `pnpm release:verify`: build, typecheck, test, browser-test, pack all publishable packages, and verify consumer root imports from tarballs.
+- `pnpm release:publish`: run release verification and publish through Changesets from CI.
+
 ## Current Non-Goals
 
-Hierarchy panels, durable light selection, full toolbar systems, dockable or persisted layouts, schema-driven inspector plugins, material texture projection onto GLB meshes, shadows, helper gizmos, cloud asset libraries, marketplace metadata, decoder configuration, multi-select, data binding, event orchestration, and release automation are deferred follow-up work.
+Hierarchy panels, durable light selection, full toolbar systems, dockable or persisted layouts, schema-driven inspector plugins, material texture projection onto GLB meshes, shadows, helper gizmos, cloud asset libraries, marketplace metadata, decoder configuration, multi-select, data binding, event orchestration, stable non-`0.x` API guarantees, and hosted runtime publishing are deferred follow-up work.

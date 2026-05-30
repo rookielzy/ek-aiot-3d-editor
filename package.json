@@ -4,13 +4,29 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@9.15.9",
+  "description": "Experimental snapshot-first 3D editor package workspace.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rookielzy/ek-aiot-3d-editor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rookielzy/ek-aiot-3d-editor/issues"
+  },
+  "homepage": "https://github.com/rookielzy/ek-aiot-3d-editor#readme",
   "scripts": {
     "build": "pnpm -r --filter './packages/*' build",
+    "changeset": "changeset",
+    "release:publish": "pnpm release:verify && changeset publish",
+    "release:status": "changeset status --verbose",
+    "release:verify": "pnpm build && pnpm typecheck && pnpm test && pnpm test:browser && node scripts/verify-release.mjs",
+    "release:version": "changeset version",
     "test": "vitest run",
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "typecheck": "pnpm --filter @ek-aiot/3d-editor-core build && pnpm -r --filter './packages/*' typecheck"
   },
   "devDependencies": {
+    "@changesets/cli": "2.31.0",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^25.9.1",
     "@types/react": "^19.2.15",

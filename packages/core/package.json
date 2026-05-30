@@ -1,6 +1,7 @@
 {
   "name": "@ek-aiot/3d-editor-core",
   "version": "0.2.0",
+  "description": "Framework-neutral snapshot, command, project, and Three.js runtime contract for the EK AIoT 3D editor.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -13,14 +14,36 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
+  "license": "MIT",
+  "keywords": [
+    "3d",
+    "editor",
+    "threejs",
+    "snapshot",
+    "aiot"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rookielzy/ek-aiot-3d-editor.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/rookielzy/ek-aiot-3d-editor/issues"
+  },
+  "homepage": "https://github.com/rookielzy/ek-aiot-3d-editor#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "rm -rf dist ../../node_modules/.cache/ek-aiot/core.tsbuildinfo && tsc -p tsconfig.json --emitDeclarationOnly --tsBuildInfoFile ../../node_modules/.cache/ek-aiot/core.tsbuildinfo && vite build --emptyOutDir false",
+    "typecheck": "tsc -p tsconfig.json --noEmit --tsBuildInfoFile ../../node_modules/.cache/ek-aiot/core-typecheck.tsbuildinfo",
     "test": "vitest run --root ../.. packages/core"
   },
   "dependencies": {
+    "@types/three": "^0.184.1",
     "fflate": "^0.8.3",
     "three": "^0.184.0"
   }

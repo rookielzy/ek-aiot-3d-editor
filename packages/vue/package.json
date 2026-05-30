@@ -1,24 +1,53 @@
 {
   "name": "@ek-aiot/3d-editor-vue",
   "version": "0.2.0",
+  "description": "Vue composables, viewport, inspector, and workbench shell for the EK AIoT 3D editor core.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "style": "./dist/index.css",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "sideEffects": [
+    "./dist/index.css"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "3d",
+    "editor",
+    "vue",
+    "threejs",
+    "aiot"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rookielzy/ek-aiot-3d-editor.git",
+    "directory": "packages/vue"
+  },
+  "bugs": {
+    "url": "https://github.com/rookielzy/ek-aiot-3d-editor/issues"
+  },
+  "homepage": "https://github.com/rookielzy/ek-aiot-3d-editor#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "build": "vue-tsc -p tsconfig.json && vite build",
-    "typecheck": "pnpm --filter @ek-aiot/3d-editor-core build && vue-tsc -p tsconfig.json --noEmit",
+    "build": "rm -rf dist ../../node_modules/.cache/ek-aiot/vue.tsbuildinfo && vue-tsc -p tsconfig.json --declaration --emitDeclarationOnly --tsBuildInfoFile ../../node_modules/.cache/ek-aiot/vue.tsbuildinfo && vite build --emptyOutDir false && node ../../scripts/clean-dts-css-imports.mjs dist",
+    "typecheck": "vue-tsc -p tsconfig.json --noEmit",
     "test": "vitest run --root ../.. packages/vue"
   },
   "dependencies": {
-    "@ek-aiot/3d-editor-core": "workspace:*"
+    "@ek-aiot/3d-editor-core": "workspace:^0.2.0"
   },
   "peerDependencies": {
     "vue": "^3.5.0"

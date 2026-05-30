@@ -47,12 +47,22 @@ describe("core public API", () => {
   it("keeps internal runtime modules out of package exports", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const packageJson = JSON.parse(readFileSync(resolve(here, "../package.json"), "utf8")) as {
+      description?: string;
       exports: Record<string, unknown>;
       dependencies?: Record<string, string>;
       peerDependencies?: Record<string, string>;
+      files?: string[];
+      license?: string;
+      publishConfig?: { access?: string };
+      repository?: { directory?: string; url?: string };
     };
 
     expect(Object.keys(packageJson.exports)).toEqual(["."]);
+    expect(packageJson.description).toContain("Framework-neutral");
+    expect(packageJson.files).toEqual(expect.arrayContaining(["dist", "README.md", "CHANGELOG.md"]));
+    expect(packageJson.license).toBe("MIT");
+    expect(packageJson.publishConfig?.access).toBe("public");
+    expect(packageJson.repository?.directory).toBe("packages/core");
     expect(packageJson.dependencies).toHaveProperty("three");
     expect(packageJson.dependencies).toHaveProperty("fflate");
     expect(packageJson.peerDependencies ?? {}).not.toHaveProperty("vue");
