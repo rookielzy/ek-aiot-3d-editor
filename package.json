@@ -17,12 +17,16 @@
   "scripts": {
     "build": "pnpm -r --filter './packages/*' build",
     "changeset": "changeset",
+    "dev:demo:react": "pnpm --filter @ek-aiot/react-proof-loop dev",
+    "dev:demo:vue": "pnpm --filter @ek-aiot/vue-proof-loop dev",
     "release:publish": "pnpm release:verify && changeset publish",
     "release:status": "changeset status --verbose",
     "release:verify": "pnpm build && pnpm typecheck && pnpm test && pnpm test:browser && node scripts/verify-release.mjs",
     "release:version": "changeset version",
     "test": "vitest run",
     "test:browser": "vitest run --config vitest.browser.config.ts",
+    "test:demo:react": "vitest run packages/react/test/react-proof-loop.integration.test.tsx",
+    "test:demo:vue": "vitest run packages/vue/test/vue-proof-loop.integration.test.ts",
     "typecheck": "pnpm --filter @ek-aiot/3d-editor-core build && pnpm -r --filter './packages/*' typecheck"
   },
   "devDependencies": {
