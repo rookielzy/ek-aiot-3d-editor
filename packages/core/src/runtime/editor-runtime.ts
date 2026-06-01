@@ -3,6 +3,7 @@ import { AssetResolverBridge } from "../assets/resolver";
 import type { Problem } from "../assets/problems";
 import type { CommandDispatcher } from "../commands/dispatcher";
 import type { CommandResult } from "../commands/types";
+import type { SelectionMode } from "../selection/selection";
 import type { EditorStore } from "../editor/store";
 import type { SceneSnapshot } from "../snapshot/types";
 import type { GltfLoaderAdapter } from "./gltf-loader-adapter";
@@ -40,7 +41,7 @@ interface ThreeEditorRuntimeOptions extends EditorRuntimeOptions {
 
 export interface EditorRuntime {
   project(snapshot?: SceneSnapshot): Promise<void>;
-  pickObject(objectId: string | null): CommandResult;
+  pickObject(objectId: string | null, mode?: SelectionMode): CommandResult;
   getObject(objectId: string): Object3D | undefined;
   getProblems(): Problem[];
   subscribeProblems(subscriber: RuntimeProblemSubscriber): Unsubscribe;
@@ -103,9 +104,9 @@ export class ThreeEditorRuntime implements EditorRuntime {
     this.#publishProblems();
   }
 
-  pickObject(objectId: string | null): CommandResult {
+  pickObject(objectId: string | null, mode: SelectionMode = "replace"): CommandResult {
     this.#assertActive();
-    return this.picker.selectObject(objectId);
+    return this.picker.selectObject(objectId, mode);
   }
 
   getObject(objectId: string): Object3D | undefined {

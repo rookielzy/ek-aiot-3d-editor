@@ -62,6 +62,37 @@ describe("Vue EditorWorkbench", () => {
     wrapper.unmount();
   });
 
+  it("exposes advanced operations and routes shortcuts outside editable controls", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "import-glb", objectId: "object-b", asset: { id: "asset-b" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer },
+      slots: {
+        toolbar: ({ operations, selectionCount, snap }) => [
+          h("button", { onClick: () => operations.duplicate() }, "Duplicate"),
+          h("span", `Selected ${selectionCount}`),
+          h("span", `Translate snap ${snap.translate ?? "off"}`),
+          h("input", { "aria-label": "Toolbar input" })
+        ]
+      }
+    });
+
+    expect(wrapper.text()).toContain("Selected 1");
+    await wrapper.trigger("keydown", { key: "d", ctrlKey: true });
+    expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(3);
+
+    await wrapper.find("input").trigger("keydown", { key: "a", ctrlKey: true });
+    expect(editor.getSnapshot().selection.objectIds).not.toEqual(["object-a", "object-b"]);
+
+    await wrapper.trigger("keydown", { key: "w", ctrlKey: true, altKey: true });
+    await nextTick();
+    expect(wrapper.text()).toContain("Translate snap 0.5");
+
+    wrapper.unmount();
+  });
+
   it("shares active light state between slot context and the built-in inspector", async () => {
     const editor = markRaw(createEditor());
     editor.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
@@ -195,7 +226,7 @@ describe("Vue EditorWorkbench", () => {
     wrapper.unmount();
 
     expect(editor.disposed).toBe(false);
-    expect(editor.getSnapshot().version).toBe(2);
+    expect(editor.getSnapshot().version).toBe(3);
   });
 
   it("disposes a shell-created editor on unmount", () => {

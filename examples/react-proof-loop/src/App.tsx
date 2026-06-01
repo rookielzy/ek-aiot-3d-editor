@@ -40,7 +40,7 @@ export function App() {
       editor={editor}
       resolver={resolver}
       loader={demoLoader}
-      toolbar={({ dispatch, editor: workbenchEditor }) => (
+      toolbar={({ dispatch, editor: workbenchEditor, operations }) => (
         <>
           <button
             type="button"
@@ -81,9 +81,33 @@ export function App() {
           >
             Reopen package
           </button>
+          <button type="button" onClick={() => operations.copy()}>
+            Copy
+          </button>
+          <button type="button" onClick={() => operations.paste()}>
+            Paste
+          </button>
+          <button type="button" onClick={() => operations.duplicate()}>
+            Duplicate
+          </button>
+          <button type="button" onClick={() => operations.delete()}>
+            Delete
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              dispatch({ type: "select-objects", mode: "all" });
+              operations.group();
+            }}
+          >
+            Group all
+          </button>
+          <button type="button" onClick={() => operations.ungroup()}>
+            Ungroup
+          </button>
         </>
       )}
-      sidePanel={({ snapshot, inspector }) => (
+      sidePanel={({ snapshot, inspector, selectionCount }) => (
         <dl className="proof-summary">
           <div>
             <dt>Objects</dt>
@@ -91,7 +115,7 @@ export function App() {
           </div>
           <div>
             <dt>Selection</dt>
-            <dd>{inspector.selection.objectId ?? "None"}</dd>
+            <dd>{inspector.selection.objectId ?? "None"} ({selectionCount})</dd>
           </div>
         </dl>
       )}

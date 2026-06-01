@@ -60,6 +60,40 @@ describe("React EditorWorkbench", () => {
     expect((screen.getByLabelText("Position X") as HTMLInputElement).value).toBe("2");
   });
 
+  it("exposes advanced operation state and routes shortcuts outside editable controls", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "import-glb", objectId: "object-b", asset: { id: "asset-b" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+
+    const { container } = render(
+      <EditorWorkbench
+        editor={editor}
+        rendererFactory={fakeRenderer}
+        toolbar={({ operations, selectionCount, snap }) => (
+          <>
+            <button onClick={() => operations.duplicate()}>Duplicate</button>
+            <span>Selected {selectionCount}</span>
+            <span>Translate snap {snap.translate ?? "off"}</span>
+            <input aria-label="Toolbar input" />
+          </>
+        )}
+      />
+    );
+    const root = container.querySelector(".ek-workbench") as HTMLElement;
+
+    expect(screen.getByText("Selected 1")).toBeTruthy();
+    fireEvent.keyDown(root, { key: "d", ctrlKey: true });
+    expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(3);
+
+    const input = screen.getByLabelText("Toolbar input");
+    fireEvent.keyDown(input, { key: "a", ctrlKey: true });
+    expect(editor.getSnapshot().selection.objectIds).not.toEqual(["object-a", "object-b"]);
+
+    fireEvent.keyDown(root, { key: "w", ctrlKey: true, altKey: true });
+    expect(screen.getByText("Translate snap 0.5")).toBeTruthy();
+  });
+
   it("shares active light state between render context and the built-in inspector", () => {
     const editor = createEditor();
     editor.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
@@ -153,7 +187,7 @@ describe("React EditorWorkbench", () => {
     unmount();
 
     expect(editor.disposed).toBe(false);
-    expect(editor.getSnapshot().version).toBe(2);
+    expect(editor.getSnapshot().version).toBe(3);
   });
 
   it("disposes a shell-created editor when the workbench unmounts", async () => {

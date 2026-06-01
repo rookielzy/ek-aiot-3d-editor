@@ -54,4 +54,79 @@ describe("command dispatcher", () => {
     expect(result.ok).toBe(false);
     expect(registry.get("asset-a")).toBeUndefined();
   });
+
+  it("dispatches batch commands as one notification and one undo history entry", () => {
+    const store = new EditorStore();
+    const history = new CommandHistory();
+    const dispatcher = new CommandDispatcher(store, history, new AssetRegistry());
+    const listener = vi.fn();
+
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-b", asset: { id: "asset-b" } });
+    listener.mockClear();
+    store.subscribe(listener);
+
+    const result = dispatcher.dispatch({
+      type: "batch",
+      label: "Move objects",
+      commands: [
+        { type: "set-transform", objectId: "object-a", transform: { position: [1, 0, 0] } },
+        { type: "set-transform", objectId: "object-b", transform: { position: [2, 0, 0] } }
+      ]
+    });
+
+    expect(result.ok).toBe(true);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(history.state.undoCount).toBe(3);
+    expect(result.snapshot.objects["object-a"].transform.position).toEqual([1, 0, 0]);
+    expect(result.snapshot.objects["object-b"].transform.position).toEqual([2, 0, 0]);
+
+    dispatcher.undo();
+
+    expect(store.getSnapshot().objects["object-a"].transform.position).toEqual([0, 0, 0]);
+    expect(store.getSnapshot().objects["object-b"].transform.position).toEqual([0, 0, 0]);
+  });
+
+  it("rolls back a failed batch without publishing partial state", () => {
+    const registry = new AssetRegistry();
+    const store = new EditorStore();
+    const history = new CommandHistory();
+    const dispatcher = new CommandDispatcher(store, history, registry);
+    const before = store.getSnapshot();
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    const result = dispatcher.dispatch({
+      type: "batch",
+      commands: [
+        { type: "register-asset", asset: { id: "asset-a", kind: "texture" } },
+        { type: "set-transform", objectId: "missing", transform: { position: [1, 0, 0] } }
+      ]
+    });
+
+    expect(result.ok).toBe(false);
+    expect(store.getSnapshot()).toBe(before);
+    expect(history.state).toEqual({ undoCount: 0, redoCount: 0 });
+    expect(registry.get("asset-a")).toBeUndefined();
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("does not record unchanged batches", () => {
+    const store = new EditorStore();
+    const history = new CommandHistory();
+    const dispatcher = new CommandDispatcher(store, history, new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    const beforeHistory = history.state;
+
+    const result = dispatcher.dispatch({
+      type: "batch",
+      commands: [
+        { type: "set-transform", objectId: "object-a", transform: { position: [0, 0, 0] } },
+        { type: "select-object", objectId: null }
+      ]
+    });
+
+    expect(result.ok).toBe(true);
+    expect(history.state).toEqual(beforeHistory);
+  });
 });

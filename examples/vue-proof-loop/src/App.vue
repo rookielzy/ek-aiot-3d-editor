@@ -1,6 +1,6 @@
 <template>
   <EditorWorkbench :editor="editor" :resolver="resolver" :loader="demoLoader">
-    <template #toolbar="{ dispatch, editor: workbenchEditor }">
+    <template #toolbar="{ dispatch, editor: workbenchEditor, operations }">
       <button
         type="button"
         @click="dispatch({ type: 'set-transform', objectId: 'box', transform: { position: [1.5, 0, 0] } })"
@@ -16,9 +16,33 @@
       <button type="button" @click="reopenProject(workbenchEditor)">
         Reopen package
       </button>
+      <button type="button" @click="operations.copy()">
+        Copy
+      </button>
+      <button type="button" @click="operations.paste()">
+        Paste
+      </button>
+      <button type="button" @click="operations.duplicate()">
+        Duplicate
+      </button>
+      <button type="button" @click="operations.delete()">
+        Delete
+      </button>
+      <button
+        type="button"
+        @click="() => {
+          dispatch({ type: 'select-objects', mode: 'all' });
+          operations.group();
+        }"
+      >
+        Group all
+      </button>
+      <button type="button" @click="operations.ungroup()">
+        Ungroup
+      </button>
     </template>
 
-    <template #sidePanel="{ snapshot, inspector }">
+    <template #sidePanel="{ snapshot, inspector, selectionCount }">
       <dl class="proof-summary">
         <div>
           <dt>Objects</dt>
@@ -26,7 +50,7 @@
         </div>
         <div>
           <dt>Selection</dt>
-          <dd>{{ inspector.selection.objectId ?? "None" }}</dd>
+          <dd>{{ inspector.selection.objectId ?? "None" }} ({{ selectionCount }})</dd>
         </div>
       </dl>
     </template>

@@ -97,6 +97,8 @@ export type LightFieldId =
 
 export interface InspectorSelectionModel {
   objectId: string | null;
+  objectIds: string[];
+  count: number;
   object: SceneObject | null;
 }
 

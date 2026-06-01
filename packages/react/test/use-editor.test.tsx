@@ -28,7 +28,7 @@ describe("React editor hooks", () => {
   it("initializes legacy serialized snapshots through core migration", () => {
     const { result } = renderHook(() => useEditor({ snapshot: createLegacyProofLoopSnapshot() }));
 
-    expect(result.current.getSnapshot().version).toBe(2);
+    expect(result.current.getSnapshot().version).toBe(3);
     expect(result.current.getSnapshot().objects["object-a"].asset.id).toBe("asset-a");
   });
 });

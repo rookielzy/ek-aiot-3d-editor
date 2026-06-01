@@ -34,7 +34,8 @@ describe("snapshot serialization", () => {
       },
       rootObjectIds: ["object-a"],
       selection: {
-        objectId: "object-a"
+        objectId: "object-a",
+        objectIds: ["object-a"]
       }
     };
 
@@ -52,14 +53,45 @@ describe("snapshot serialization", () => {
     const legacy = createLegacyProofLoopSnapshot();
     const restored = restoreSnapshot(legacy);
 
-    expect(restored.version).toBe(2);
+    expect(restored.version).toBe(3);
     expect(restored.scene).toEqual(legacy.scene);
     expect(restored.objects["object-a"].transform.position).toEqual([4, 5, 6]);
     expect(restored.selection.objectId).toBe("object-a");
+    expect(restored.selection.objectIds).toEqual(["object-a"]);
     expect(restored.materials).toEqual({ definitions: {}, assignments: {} });
     expect(restored.environment.mode).toBe("none");
     expect(restored.lights).toEqual({});
     expect(restored.problems).toEqual({ acknowledged: {} });
+  });
+
+  it("migrates version 2 snapshots to ordered multi-selection", () => {
+    const version2 = {
+      ...createEmptySnapshot("scene-a"),
+      version: 2,
+      assets: {
+        "asset-a": { id: "asset-a", kind: "glb" }
+      },
+      objects: {
+        "object-a": {
+          id: "object-a",
+          name: "Box",
+          kind: "glb",
+          parentId: null,
+          children: [],
+          asset: { id: "asset-a", kind: "glb" },
+          transform: createTransform()
+        }
+      },
+      rootObjectIds: ["object-a"],
+      selection: {
+        objectId: "object-a"
+      }
+    } as const;
+
+    const restored = restoreSnapshot(version2);
+
+    expect(restored.version).toBe(3);
+    expect(restored.selection).toEqual({ objectId: "object-a", objectIds: ["object-a"] });
   });
 
   it("validates serialized version 1 snapshots through the migration path", () => {

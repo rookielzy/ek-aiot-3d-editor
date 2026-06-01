@@ -15,15 +15,34 @@
 7. runtime 重新投影等价场景。
 8. 可选导出/导入 `.ek3d` 项目包。
 
-## 对象选择
+## 对象选择与多选
 
-Core runtime 提供 `pickObject(objectId)`，内部 dispatch：
+Core runtime 提供 `pickObject(objectId, mode)`，默认内部 dispatch：
 
 ```ts
 { type: "select-object", objectId }
 ```
 
-Raycaster picking 能从 client point 解析候选对象，但当前公开 viewport 组件还没有提供完整鼠标点击选择 UI。示例中主要通过命令或 runtime API 触发选择。
+`mode` 也可使用 `toggle`、`add`、`remove`、`clear`、`all`，对应 `select-objects` 命令。Snapshot 中 `selection.objectId` 是 primary selection，`selection.objectIds` 是有序多选集合。Inspector 继续编辑 primary object，同时暴露 selection count 给 workbench。
+
+Raycaster picking 能从 client point 解析候选对象；当前公开 viewport 组件仍不提供完整鼠标点击/框选 UI，示例中主要通过命令、runtime API 或快捷键触发选择。
+
+## 高级对象操作
+
+Core 已提供 framework-neutral operation helper：
+
+- `editor.operations.copy()`
+- `editor.operations.paste()`
+- `editor.operations.duplicate()`
+- `editor.operations.delete()`
+- `editor.operations.group()`
+- `editor.operations.ungroup()`
+- `editor.operations.selectAll()`
+- `editor.operations.clearSelection()`
+
+这些操作都通过 core command 和 history 执行。复制 payload 是 transient JSON editor data，不包含 browser/system clipboard 数据、`File`、`Blob`、object URL、Three.js 对象、resolver 结果或二进制资产 payload。粘贴/复制会生成新对象 ID，共享 asset reference，并隔离复制对象的 material assignment。
+
+分组是第一版 hierarchy grouping：以 primary selected object 作为 group root，把其他 selected top-level roots 挂到其下；取消分组把 primary object 的 children 移回上一层。当前没有新增 empty group node 类型，也没有层级面板。
 
 ## Transform 编辑
 
@@ -47,7 +66,7 @@ editor.dispatch({
 
 Runtime 内部有 transaction 结构：
 
-- `start(objectId, mode)`
+- `start(objectId, mode, { objectIds, snap })`
 - `preview(transform)`
 - `commit()`
 - `cancel()`
@@ -59,6 +78,8 @@ Runtime 内部有 transaction 结构：
 - `scale`
 
 设计目标是一段拖拽最终只产生一个 undoable command，而不是每次 pointer move 都写 history。
+
+多对象 transaction 会把多个 `set-transform` 子命令合成一个 `batch` command。`snap` 支持 translation、rotation、scale increment helper；吸附结果进入 durable transform，吸附设置本身仍是 editor/session state。
 
 ## Inspector 编辑
 
@@ -127,6 +148,12 @@ Workbench context 暴露：
 
 这些 API 处理 `.ek3d` 项目包和缺失资产恢复。二进制 payload 不进入 Snapshot。
 
+## 快捷键
+
+Core 提供 `resolveEditorShortcut()` 和 `executeEditorAction()`。React/Vue workbench 在根元素安装 keydown handler，并忽略 `input`、`textarea`、`select`、`contenteditable` 和 `role="textbox"` 目标。
+
+默认动作包括 undo/redo、copy/paste、duplicate、delete、group/ungroup、select all、clear selection、transform mode intent 和 snap toggle intent。Transform mode/snap toggle 是 action intent，视觉 gizmo 和持久化快捷键配置仍属后续工作。
+
 ## 当前未实现的常见编辑器交互
 
 以下能力不要在文档或产品承诺中描述为已完成：
@@ -134,12 +161,11 @@ Workbench context 暴露：
 - 鼠标点击选择的完整 viewport UI。
 - OrbitControls / pan / zoom toolbar。
 - TransformControls 可视 gizmo。
-- 多选。
 - 框选。
 - 层级面板。
-- 删除、复制、粘贴、组合。
-- 网格吸附和对齐辅助线。
-- 快捷键系统。
+- 系统剪贴板集成和外部 paste 格式。
+- 网格渲染、对齐辅助线和可视 snap 控件。
+- 持久化快捷键配置和命令面板 UI。
 - 持久化布局。
 - 数据绑定和运行态 dashboard。
 - Agent 编辑。

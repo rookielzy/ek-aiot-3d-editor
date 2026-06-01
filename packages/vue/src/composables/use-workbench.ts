@@ -3,6 +3,7 @@ import {
   buildInspectorModel,
   createEditor,
   resolveActiveLightId,
+  type AdvancedEditorOperations,
   type Command,
   type Editor,
   type EditorOptions,
@@ -14,7 +15,8 @@ import {
   type ProjectImportResult,
   type ReplaceAssetInput,
   type ReplaceAssetResult,
-  type SceneSnapshot
+  type SceneSnapshot,
+  type SnapSettings
 } from "@ek-aiot/3d-editor-core";
 
 export interface UseWorkbenchOptions extends EditorOptions {
@@ -27,6 +29,9 @@ export interface WorkbenchContext {
   inspector: InspectorModel;
   runtimeProblems: Problem[];
   activeLightId: string | null;
+  operations: AdvancedEditorOperations;
+  selectionCount: number;
+  snap: SnapSettings;
   setActiveLightId(value: string | null): void;
   refreshProblems(): void;
   dispatch(command: Command): ReturnType<Editor["dispatch"]>;
@@ -58,11 +63,13 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   const currentEditor = shallowRef<Editor>(markRaw(initialEditor));
   const ownsCurrentEditor = ref(editorOption ? !editorOption.value : !options.editor);
   const snapshot = shallowRef(currentEditor.value.getSnapshot());
+  const snap = shallowRef<SnapSettings>(currentEditor.value.snap.get());
   const activeLightId = ref<string | null>(resolveActiveLightId(snapshot.value, null));
   const runtimeProblems = shallowRef<Problem[]>(currentEditor.value.getRuntime()?.getProblems() ?? []);
   let unsubscribeSnapshot: (() => void) | null = null;
   let unsubscribeRuntime: (() => void) | null = null;
   let unsubscribeProblems: (() => void) | null = null;
+  let unsubscribeSnap: (() => void) | null = null;
   let disposed = false;
 
   function subscribeEditor(nextEditor: Editor): void {
@@ -75,6 +82,9 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     activeLightId.value = resolveActiveLightId(snapshot.value, activeLightId.value);
     unsubscribeRuntime = nextEditor.subscribeRuntime(() => {
       subscribeRuntimeProblems();
+    });
+    unsubscribeSnap = nextEditor.subscribeSnap((nextSnap) => {
+      snap.value = nextSnap;
     });
     subscribeRuntimeProblems();
   }
@@ -96,6 +106,8 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     unsubscribeRuntime = null;
     unsubscribeProblems?.();
     unsubscribeProblems = null;
+    unsubscribeSnap?.();
+    unsubscribeSnap = null;
   }
 
   subscribeEditor(currentEditor.value);
@@ -163,6 +175,9 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     inspector: inspector.value,
     runtimeProblems: runtimeProblems.value,
     activeLightId: activeLightId.value,
+    operations: currentEditor.value.operations,
+    selectionCount: inspector.value.selection.count,
+    snap: snap.value,
     setActiveLightId,
     refreshProblems: subscribeRuntimeProblems,
     dispatch,

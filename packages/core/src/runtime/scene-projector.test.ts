@@ -23,6 +23,25 @@ describe("scene projector", () => {
     expect(projector.objects.get("object-a")).toBeInstanceOf(Group);
   });
 
+  it("marks selected and primary selected objects as derived runtime state", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-b", asset: { id: "asset-b" } });
+    dispatcher.dispatch({ type: "select-objects", mode: "replace", objectIds: ["object-a", "object-b"], primaryObjectId: "object-b" });
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Group() }
+    });
+
+    await projector.project(store.getSnapshot());
+
+    expect(projector.objects.get("object-a")?.userData.selected).toBe(true);
+    expect(projector.objects.get("object-a")?.userData.primarySelected).toBe(false);
+    expect(projector.objects.get("object-b")?.userData.selected).toBe(true);
+    expect(projector.objects.get("object-b")?.userData.primarySelected).toBe(true);
+  });
+
   it("renders placeholders and preserves object mapping for missing assets", async () => {
     const store = new EditorStore();
     const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());

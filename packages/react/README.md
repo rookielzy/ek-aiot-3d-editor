@@ -34,8 +34,10 @@ function Workbench() {
 }
 ```
 
-Render-prop regions receive the core editor, current snapshot, inspector model, runtime problems, active light state, project import/export helpers, asset replacement, and a dispatch helper. Runtime options such as `resolver`, loader, and renderer factory are passed through to core runtime mounting; React shell code does not resolve assets or serialize runtime problems.
+Render-prop regions receive the core editor, current snapshot, inspector model, runtime problems, active light state, advanced operation helpers, selection count, project import/export helpers, asset replacement, and a dispatch helper. Runtime options such as `resolver`, loader, and renderer factory are passed through to core runtime mounting; React shell code does not resolve assets or serialize runtime problems.
+
+`EditorWorkbench` installs shared shortcut handling on the workbench root and ignores editable controls. Copy, paste, duplicate, delete, group, ungroup, select all, and clear selection route through core `editor.operations`, so React does not duplicate object hierarchy or clipboard semantics.
 
 Problem panels expose file replacement for recoverable asset problems and pass the selected `File` to `editor.replaceAsset()` for the same asset ID. The React layer does not store files in snapshots and does not implement its own asset resolver, package validator, or runtime cleanup.
 
-The workbench and inspector do not implement hierarchy selection, full asset libraries, texture upload queues, persisted layouts, schema-driven inspector plugins, or material texture runtime projection.
+The workbench and inspector do not implement a hierarchy panel, box selection, full asset libraries, texture upload queues, persisted layouts, schema-driven inspector plugins, or material texture runtime projection.

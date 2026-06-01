@@ -2,21 +2,33 @@ export { AssetResolverBridge } from "./assets/resolver";
 export type { AssetInput, AssetReference, AssetResolver, RegisteredAsset, ResolvedAsset } from "./assets/types";
 export type {
   AddLightCommand,
+  BatchCommand,
   Command,
   CommandResult,
+  DeleteObjectsCommand,
+  DuplicateObjectsCommand,
+  GroupObjectsCommand,
   ImportGlbCommand,
+  PasteObjectsCommand,
   RegisterAssetCommand,
+  ReparentObjectCommand,
   RemoveLightCommand,
   SelectObjectCommand,
+  SelectObjectsCommand,
   SceneEnvironmentPatch,
   SetEnvironmentCommand,
   SetMaterialCommand,
   SetTransformCommand,
+  UngroupObjectsCommand,
   UpdateLightCommand
 } from "./commands/types";
 export type { Editor, EditorOptions, MountRuntimeOptions, RuntimeSubscriber, SnapshotSubscriber } from "./editor/editor-api";
+export type { AdvancedEditorOperations, EditorClipboard } from "./editor/operations";
+export type { SnapChannel, SnapSubscriber } from "./editor/snap-state";
+export type { EditorClipboardPayload } from "./clipboard/types";
 export type { BackgroundMode, EnvironmentMode, EnvironmentRotation, SceneEnvironment } from "./environment/types";
 export type { HistoryState } from "./history/history";
+export type { SelectionMode, SelectionState } from "./selection/selection";
 export type {
   AssetOption,
   BuildInspectorModelOptions,
@@ -98,9 +110,13 @@ export type {
   RuntimeProblemSnapshot,
   RuntimeProblemSubscriber
 } from "./runtime/editor-runtime";
+export type { SnapSettings } from "./runtime/transform/snap";
+export type { EditorAction, ShortcutInput, ShortcutResolution } from "./shortcuts/types";
 export type { AssetKind, JsonPrimitive, JsonValue, LegacySceneSnapshot, SceneObject, SceneSnapshot, SerializedSceneSnapshot, Transform } from "./snapshot/types";
 
 export { createEditor } from "./editor/create-editor";
+export { createAdvancedEditorOperations, createMemoryClipboard } from "./editor/operations";
+export { createClipboardPayload } from "./clipboard/create-clipboard";
 export {
   DEFAULT_PROJECT_PACKAGE_LIMITS,
   PROJECT_ASSET_DIR,
@@ -138,6 +154,10 @@ export {
   buildTransformSection
 } from "./inspector/transform";
 export { createEmptySnapshot, createTransform } from "./snapshot/defaults";
+export { getSelectedObjectIds, getTopLevelSelectedObjectIds } from "./selection/selection";
 export { migrateSerializedSnapshot, validateSerializedSceneSnapshot } from "./snapshot/migrations";
 export { isJsonCompatible, validateSceneSnapshot } from "./snapshot/validation";
 export { normalizeTransform } from "./snapshot/transforms";
+export { snapNumber, snapTransform, snapVector } from "./runtime/transform/snap";
+export { executeEditorAction } from "./shortcuts/actions";
+export { isEditableTarget, resolveEditorShortcut } from "./shortcuts/resolve-shortcut";

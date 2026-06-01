@@ -1,19 +1,27 @@
 import type { SceneSnapshot } from "../snapshot/types";
-import type { SelectObjectCommand } from "./types";
+import { normalizeSelection, selectionEquals } from "../selection/selection";
+import type { SelectObjectCommand, SelectObjectsCommand } from "./types";
 
 export function applySelectObject(snapshot: SceneSnapshot, command: SelectObjectCommand): SceneSnapshot {
-  if (command.objectId !== null && !snapshot.objects[command.objectId]) {
-    throw new Error(`Object ${command.objectId} does not exist.`);
-  }
-
-  if (snapshot.selection.objectId === command.objectId) {
+  const selection = normalizeSelection(snapshot, { mode: "replace", objectId: command.objectId });
+  if (selectionEquals(snapshot.selection, selection)) {
     return snapshot;
   }
 
   return {
     ...snapshot,
-    selection: {
-      objectId: command.objectId
-    }
+    selection
+  };
+}
+
+export function applySelectObjects(snapshot: SceneSnapshot, command: SelectObjectsCommand): SceneSnapshot {
+  const selection = normalizeSelection(snapshot, command);
+  if (selectionEquals(snapshot.selection, selection)) {
+    return snapshot;
+  }
+
+  return {
+    ...snapshot,
+    selection
   };
 }

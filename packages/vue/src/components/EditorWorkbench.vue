@@ -1,5 +1,5 @@
 <template>
-  <main :class="rootClassName">
+  <main ref="root" :class="rootClassName" tabindex="0">
     <div v-if="$slots.toolbar" class="ek-workbench__toolbar">
       <slot name="toolbar" v-bind="context" />
     </div>
@@ -37,8 +37,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, toRef } from "vue";
-import type { AssetResolverBridge, Editor, EditorOptions, EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
+import { computed, onBeforeUnmount, onMounted, ref, toRef } from "vue";
+import {
+  executeEditorAction,
+  resolveEditorShortcut,
+  type AssetResolverBridge,
+  type Editor,
+  type EditorOptions,
+  type EditorRuntimeOptions
+} from "@ek-aiot/3d-editor-core";
 import { useWorkbench } from "../composables/use-workbench";
 import EditorViewport from "./EditorViewport.vue";
 import InspectorView from "./InspectorView.vue";
@@ -64,8 +71,36 @@ const context = computed(() => workbench.context.value);
 const currentSnapshot = computed(() => workbench.snapshot.value);
 const currentInspector = computed(() => workbench.inspector.value);
 const rootClassName = computed(() => props.class ? `ek-workbench ${props.class}` : "ek-workbench");
+const root = ref<HTMLElement | null>(null);
 
 function replaceAsset(assetId: string, file: File): void {
   void workbench.replaceAsset({ assetId, source: file, label: file.name, mimeType: file.type });
 }
+
+function onKeyDown(event: KeyboardEvent): void {
+  const resolution = resolveEditorShortcut({
+    key: event.key,
+    code: event.code,
+    ctrlKey: event.ctrlKey,
+    metaKey: event.metaKey,
+    shiftKey: event.shiftKey,
+    altKey: event.altKey,
+    target: event.target
+  });
+  if (!resolution.handled || !resolution.action) {
+    return;
+  }
+  if (resolution.preventDefault) {
+    event.preventDefault();
+  }
+  executeEditorAction(workbench.editor, resolution.action);
+}
+
+onMounted(() => {
+  root.value?.addEventListener("keydown", onKeyDown);
+});
+
+onBeforeUnmount(() => {
+  root.value?.removeEventListener("keydown", onKeyDown);
+});
 </script>

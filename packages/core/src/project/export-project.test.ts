@@ -43,4 +43,27 @@ describe("project export", () => {
     expect(result.packageBytes).toBeInstanceOf(Uint8Array);
     expect(result.manifest?.completeness).toBe("partial");
   });
+
+  it("exports payloads registered by import commands inside a batch", () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "batch",
+      commands: [
+        {
+          type: "import-glb",
+          objectId: "object-a",
+          asset: { id: "asset-a", label: "Box", source: new Uint8Array([1, 2, 3]) }
+        }
+      ]
+    });
+
+    const result = editor.exportProject();
+
+    expect(result.ok).toBe(true);
+    expect(result.manifest?.assets["asset-a"]).toMatchObject({
+      id: "asset-a",
+      payloadPath: "assets/asset-a.glb",
+      byteSize: 3
+    });
+  });
 });

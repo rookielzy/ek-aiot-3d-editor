@@ -28,7 +28,8 @@ export function createEmptySnapshot(sceneId = createId("scene")): SceneSnapshot 
     objects: {},
     rootObjectIds: [],
     selection: {
-      objectId: null
+      objectId: null,
+      objectIds: []
     },
     assets: {},
     materials: createEmptyMaterialState(),
