@@ -19,4 +19,12 @@ describe("Vue package build config", () => {
     expect(css).toContain(".ek-workbench");
     expect(css).not.toContain("body");
   });
+
+  it("contains inspector overflow so panel scrolling does not extend the page", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(resolve(here, "../src/components/inspector.css"), "utf8");
+
+    expect(css).toContain("overflow: auto;");
+    expect(css).toContain("contain: paint;");
+  });
 });
