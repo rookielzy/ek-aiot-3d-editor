@@ -44,11 +44,7 @@ export function validateSceneSnapshot(value: unknown): ValidationResult {
     }
   }
 
-  if (!isPlainRecord(value.selection) || !(typeof value.selection.objectId === "string" || value.selection.objectId === null)) {
-    errors.push("Snapshot selection must include an objectId string or null.");
-  } else if (value.selection.objectId !== null && isPlainRecord(value.objects) && !value.objects[value.selection.objectId]) {
-    errors.push(`Selected object ${value.selection.objectId} must exist in objects.`);
-  }
+  validateSelection(value.selection, value.objects, errors);
 
   if (!isPlainRecord(value.assets)) {
     errors.push("Snapshot assets must be a plain object map.");
@@ -75,6 +71,44 @@ export function validateSceneSnapshot(value: unknown): ValidationResult {
   }
 
   return { ok: errors.length === 0, errors };
+}
+
+function validateSelection(selection: unknown, objects: unknown, errors: string[]): void {
+  if (!isPlainRecord(selection) || !(typeof selection.objectId === "string" || selection.objectId === null)) {
+    errors.push("Snapshot selection must include an objectId string or null.");
+    return;
+  }
+
+  if (!Array.isArray(selection.objectIds) || selection.objectIds.some((id) => typeof id !== "string")) {
+    errors.push("Snapshot selection objectIds must be an array of object IDs.");
+    return;
+  }
+
+  const objectIds = new Set<string>();
+  for (const objectId of selection.objectIds) {
+    if (objectIds.has(objectId)) {
+      errors.push(`Selected object ${objectId} must not be duplicated.`);
+    }
+    objectIds.add(objectId);
+  }
+
+  if (selection.objectId !== null && !objectIds.has(selection.objectId)) {
+    errors.push(`Primary selected object ${selection.objectId} must be included in selection objectIds.`);
+  }
+
+  if (!isPlainRecord(objects)) {
+    return;
+  }
+
+  if (selection.objectId !== null && !objects[selection.objectId]) {
+    errors.push(`Selected object ${selection.objectId} must exist in objects.`);
+  }
+
+  for (const objectId of objectIds) {
+    if (!objects[objectId]) {
+      errors.push(`Selected object ${objectId} must exist in objects.`);
+    }
+  }
 }
 
 export function assertValidSceneSnapshot(value: unknown): asserts value is SceneSnapshot {

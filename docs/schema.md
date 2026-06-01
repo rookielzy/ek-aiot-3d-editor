@@ -4,16 +4,17 @@ Scene Snapshot 是本项目的 durable editor state。它必须是 JSON-compatib
 
 当前版本：
 
-- `SceneSnapshot.version = 2`
+- `SceneSnapshot.version = 3`
+- `PreviousSceneSnapshot.version = 2`
 - `LegacySceneSnapshot.version = 1`
 
-Version 1 proof-loop snapshot 会通过 migration 规范化为当前 schema。
+Version 1/2 snapshot 会通过 migration 规范化为当前 schema。
 
 ## 顶层结构
 
 ```ts
 interface SceneSnapshot {
-  version: 2;
+  version: 3;
   scene: {
     id: string;
     name: string;
@@ -22,6 +23,7 @@ interface SceneSnapshot {
   rootObjectIds: string[];
   selection: {
     objectId: string | null;
+    objectIds: string[];
   };
   assets: Record<string, AssetReference>;
   materials: MaterialState;
@@ -111,10 +113,15 @@ interface SceneObject {
 ```ts
 selection: {
   objectId: string | null;
+  objectIds: string[];
 }
 ```
 
-Selection 是 durable state，因此可以序列化/恢复。校验要求非空 `objectId` 必须存在于 `objects` 中。
+Selection 是 durable state，因此可以序列化/恢复。`objectId` 是 primary selection，用于保持 inspector 和旧单选流程兼容；`objectIds` 是有序多选集合。校验要求：
+
+- `objectId` 要么为 `null`，要么存在于 `objects` 中。
+- 非空 `objectId` 必须包含在 `objectIds` 中。
+- `objectIds` 中所有对象都必须存在且不能重复。
 
 ## Materials
 
@@ -178,9 +185,17 @@ Snapshot 中的 `problems` 是 authored problem state。resolver、loader、PMRE
 
 ```ts
 type Command =
+  | BatchCommand
   | ImportGlbCommand
   | RegisterAssetCommand
   | SelectObjectCommand
+  | SelectObjectsCommand
+  | DeleteObjectsCommand
+  | PasteObjectsCommand
+  | DuplicateObjectsCommand
+  | GroupObjectsCommand
+  | UngroupObjectsCommand
+  | ReparentObjectCommand
   | SetTransformCommand
   | SetMaterialCommand
   | SetEnvironmentCommand
@@ -211,7 +226,7 @@ editor.dispatch({
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "scene": {
     "id": "scene",
     "name": "Untitled scene"
@@ -237,7 +252,8 @@ editor.dispatch({
   },
   "rootObjectIds": ["box"],
   "selection": {
-    "objectId": "box"
+    "objectId": "box",
+    "objectIds": ["box"]
   },
   "assets": {
     "simple-box": {

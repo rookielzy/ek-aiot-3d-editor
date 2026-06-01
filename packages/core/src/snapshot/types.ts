@@ -5,7 +5,8 @@ import type { AuthoredProblemState } from "../problems/types";
 import type { JsonPrimitive, JsonValue } from "./json";
 import type { ASSET_KINDS } from "./primitives";
 
-export const SNAPSHOT_VERSION = 2;
+export const SNAPSHOT_VERSION = 3;
+export const PREVIOUS_SNAPSHOT_VERSION = 2;
 export const LEGACY_SNAPSHOT_VERSION = 1;
 
 export type { JsonPrimitive, JsonValue };
@@ -38,6 +39,26 @@ export interface SceneObject {
 
 export interface SceneSnapshot {
   version: typeof SNAPSHOT_VERSION;
+  scene: {
+    id: string;
+    name: string;
+  };
+  objects: Record<string, SceneObject>;
+  rootObjectIds: string[];
+  selection: {
+    objectId: string | null;
+    objectIds: string[];
+  };
+  assets: Record<string, AssetReference>;
+  materials: MaterialState;
+  environment: SceneEnvironment;
+  lights: Record<string, LightDefinition>;
+  problems: AuthoredProblemState;
+  metadata?: Record<string, JsonValue>;
+}
+
+export interface PreviousSceneSnapshot {
+  version: typeof PREVIOUS_SNAPSHOT_VERSION;
   scene: {
     id: string;
     name: string;
@@ -88,4 +109,4 @@ export interface LegacySceneSnapshot {
   metadata?: Record<string, JsonValue>;
 }
 
-export type SerializedSceneSnapshot = SceneSnapshot | LegacySceneSnapshot;
+export type SerializedSceneSnapshot = SceneSnapshot | PreviousSceneSnapshot | LegacySceneSnapshot;

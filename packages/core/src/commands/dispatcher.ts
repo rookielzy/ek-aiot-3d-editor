@@ -5,15 +5,21 @@ import { immutableClone } from "../snapshot/immutability";
 import type { SceneSnapshot } from "../snapshot/types";
 import { assertValidSceneSnapshot } from "../snapshot/validation";
 import { applyAddLight } from "./add-light";
+import { applyDeleteObjects } from "./delete-objects";
+import { applyDuplicateObjects } from "./duplicate-objects";
+import { applyGroupObjects } from "./group-objects";
 import { applyImportGlb } from "./import-glb";
+import { applyPasteObjects } from "./paste-objects";
 import { applyRegisterAsset } from "./register-asset";
 import { applyRemoveLight } from "./remove-light";
-import { applySelectObject } from "./select-object";
+import { applyReparentObject } from "./reparent-object";
+import { applySelectObject, applySelectObjects } from "./select-object";
 import { applySetEnvironment } from "./set-environment";
 import { applySetMaterial } from "./set-material";
 import { applySetTransform } from "./set-transform";
+import { applyUngroupObjects } from "./ungroup-objects";
 import { applyUpdateLight } from "./update-light";
-import type { Command, CommandResult } from "./types";
+import type { Command, CommandResult, SingleCommand } from "./types";
 
 export class CommandDispatcher {
   constructor(
@@ -74,6 +80,25 @@ export class CommandDispatcher {
   }
 
   private apply(snapshot: SceneSnapshot, command: Command): SceneSnapshot {
+    if (command.type === "batch") {
+      return this.applyBatch(snapshot, command.commands);
+    }
+
+    return this.applySingle(snapshot, command);
+  }
+
+  private applyBatch(snapshot: SceneSnapshot, commands: Command[]): SceneSnapshot {
+    let next = snapshot;
+    for (const command of commands) {
+      if (command.type === "batch") {
+        throw new Error("Nested batch commands are not supported.");
+      }
+      next = this.applySingle(next, command);
+    }
+    return next;
+  }
+
+  private applySingle(snapshot: SceneSnapshot, command: SingleCommand): SceneSnapshot {
     switch (command.type) {
       case "import-glb":
         return applyImportGlb(snapshot, command, this.assets);
@@ -81,6 +106,20 @@ export class CommandDispatcher {
         return applyRegisterAsset(snapshot, command, this.assets);
       case "select-object":
         return applySelectObject(snapshot, command);
+      case "select-objects":
+        return applySelectObjects(snapshot, command);
+      case "delete-objects":
+        return applyDeleteObjects(snapshot, command);
+      case "paste-objects":
+        return applyPasteObjects(snapshot, command);
+      case "duplicate-objects":
+        return applyDuplicateObjects(snapshot, command);
+      case "group-objects":
+        return applyGroupObjects(snapshot, command);
+      case "ungroup-objects":
+        return applyUngroupObjects(snapshot, command);
+      case "reparent-object":
+        return applyReparentObject(snapshot, command);
       case "set-transform":
         return applySetTransform(snapshot, command);
       case "set-material":

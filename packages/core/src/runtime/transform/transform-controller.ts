@@ -2,6 +2,7 @@ import type { CommandDispatcher } from "../../commands/dispatcher";
 import type { CommandResult } from "../../commands/types";
 import type { Transform } from "../../snapshot/types";
 import type { ThreeObjectMap } from "../three-object-map";
+import type { SnapSettings } from "./snap";
 import { TransformTransaction } from "./transform-transaction";
 import type { TransformMode } from "./transform-mode";
 
@@ -15,18 +16,28 @@ export class TransformController {
     this.#dispatcher = dispatcher;
   }
 
-  start(objectId: string, mode: TransformMode = "translate"): TransformTransaction {
+  start(objectId: string, mode: TransformMode = "translate", options: { objectIds?: string[]; snap?: SnapSettings } = {}): TransformTransaction {
     this.cancel();
     const object = this.#objects.get(objectId);
     if (!object) {
       throw new Error(`Object ${objectId} is not projected.`);
     }
+    const objectIds = options.objectIds?.length ? options.objectIds : [objectId];
+    const targets = objectIds.map((targetObjectId) => {
+      const targetObject = this.#objects.get(targetObjectId);
+      if (!targetObject) {
+        throw new Error(`Object ${targetObjectId} is not projected.`);
+      }
+      return { objectId: targetObjectId, object: targetObject };
+    });
 
     this.#transaction = new TransformTransaction({
       objectId,
       object,
+      targets,
       dispatcher: this.#dispatcher,
-      mode
+      mode,
+      snap: options.snap
     });
 
     return this.#transaction;

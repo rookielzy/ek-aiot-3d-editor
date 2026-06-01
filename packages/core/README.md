@@ -8,7 +8,7 @@ Use `createEditor()` to create a framework-neutral editor, dispatch commands, su
 
 ## Snapshot Contract
 
-Snapshots are portable JSON-compatible records. Version 2 stores GLB scene objects plus durable schema namespaces for material overrides, environment/background intent, lights, and authored problem metadata. Version 1 proof-loop snapshots restore through the migration path and are normalized into the current schema.
+Snapshots are portable JSON-compatible records. Version 3 stores GLB scene objects, ordered multi-object selection with a primary object, and durable schema namespaces for material overrides, environment/background intent, lights, and authored problem metadata. Version 1/2 snapshots restore through the migration path and are normalized into the current schema.
 
 Runtime values are never saved. Hosts may register GLB, texture, HDR, or image assets with runtime `source` values, but snapshots only keep stable asset references.
 
@@ -32,17 +32,21 @@ Import validates archive shape, entry paths, manifest records, scene snapshot, p
 
 All durable edits enter through commands so undo/redo remains framework-neutral:
 
-- `import-glb`, `select-object`, and `set-transform` preserve the first proof loop.
+- `import-glb`, `select-object`, `select-objects`, and `set-transform` preserve the first proof loop and add ordered multi-selection.
+- `batch` records composite operations as one undoable history entry.
 - `register-asset` records stable GLB, texture, HDR, or image asset references.
+- `delete-objects`, `paste-objects`, `duplicate-objects`, `group-objects`, and `ungroup-objects` own advanced static-scene editing semantics.
 - `set-material` stores a small `MeshStandardMaterial` override subset with texture-slot references.
 - `set-environment` stores background/environment intent without PMREM or loaded textures.
 - `add-light`, `update-light`, and `remove-light` store durable light authoring data.
+
+`editor.operations` exposes core-backed helpers for copy, paste, duplicate, delete, group, ungroup, select all, and clear selection. Clipboard payloads are transient JSON editor data; they do not contain browser clipboard state, files, blobs, object URLs, loaded Three.js objects, resolver output, or project payload bytes.
 
 ## Inspector Helpers
 
 Core exports a framework-neutral inspector contract through `buildInspectorModel()` and command builders for transform, material, environment, and light fields. The model is pure JSON-compatible data derived from a snapshot plus optional runtime problems. Framework packages render it and dispatch the returned commands; they do not mutate snapshots, Three.js objects, or runtime resources directly.
 
-The inspector helpers cover selected-object transforms, selected-object `MeshStandardMaterial` overrides, texture-slot asset references, scene environment/background fields, light list/add/update/remove behavior, and runtime/authored problem display metadata.
+The inspector helpers cover primary selected-object transforms, primary selected-object `MeshStandardMaterial` overrides, ordered selection metadata, texture-slot asset references, scene environment/background fields, light list/add/update/remove behavior, and runtime/authored problem display metadata.
 
 Framework workbench shells are composition adapters over this core contract. They may arrange the viewport, inspector, runtime problem display, and framework-native extension regions, but durable behavior remains in core commands, snapshots, serialization, restore, and runtime projection.
 

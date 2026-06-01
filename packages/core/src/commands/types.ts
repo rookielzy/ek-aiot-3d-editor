@@ -2,12 +2,24 @@ import type { AssetInput } from "../assets/types";
 import type { SceneEnvironment } from "../environment/types";
 import type { LightDefinition, LightKind } from "../lights/types";
 import type { MaterialAssignmentTarget, MaterialPatch } from "../materials/types";
+import type { EditorClipboardPayload } from "../clipboard/types";
 import type { SceneSnapshot, Transform } from "../snapshot/types";
 
 export type Command =
+  | BatchCommand
+  | SingleCommand;
+
+export type SingleCommand =
   | ImportGlbCommand
   | RegisterAssetCommand
   | SelectObjectCommand
+  | SelectObjectsCommand
+  | DeleteObjectsCommand
+  | PasteObjectsCommand
+  | DuplicateObjectsCommand
+  | GroupObjectsCommand
+  | UngroupObjectsCommand
+  | ReparentObjectCommand
   | SetTransformCommand
   | SetMaterialCommand
   | SetEnvironmentCommand
@@ -29,10 +41,53 @@ export interface SelectObjectCommand {
   objectId: string | null;
 }
 
+export interface SelectObjectsCommand {
+  type: "select-objects";
+  mode: "replace" | "add" | "remove" | "toggle" | "clear" | "all";
+  objectId?: string | null;
+  objectIds?: string[];
+  primaryObjectId?: string | null;
+}
+
 export interface SetTransformCommand {
   type: "set-transform";
   objectId: string;
   transform: Partial<Transform>;
+}
+
+export interface DeleteObjectsCommand {
+  type: "delete-objects";
+  objectIds?: string[];
+}
+
+export interface PasteObjectsCommand {
+  type: "paste-objects";
+  payload: EditorClipboardPayload;
+  objectIdMap?: Record<string, string>;
+}
+
+export interface DuplicateObjectsCommand {
+  type: "duplicate-objects";
+  objectIds?: string[];
+  objectIdMap?: Record<string, string>;
+}
+
+export interface GroupObjectsCommand {
+  type: "group-objects";
+  objectIds?: string[];
+  primaryObjectId?: string;
+}
+
+export interface UngroupObjectsCommand {
+  type: "ungroup-objects";
+  objectId?: string;
+}
+
+export interface ReparentObjectCommand {
+  type: "reparent-object";
+  objectId: string;
+  parentId: string | null;
+  transform?: Transform;
 }
 
 export interface RegisterAssetCommand {
@@ -77,6 +132,12 @@ export interface UpdateLightCommand {
 export interface RemoveLightCommand {
   type: "remove-light";
   lightId: string;
+}
+
+export interface BatchCommand {
+  type: "batch";
+  label?: string;
+  commands: Command[];
 }
 
 export type UndoableCommand = Command;

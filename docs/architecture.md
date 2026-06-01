@@ -142,6 +142,9 @@ Workbench context 包含：
 - `inspector`
 - `runtimeProblems`
 - `activeLightId`
+- `operations`
+- `selectionCount`
+- `snap`
 - `setActiveLightId()`
 - `refreshProblems()`
 - `dispatch()`
@@ -150,6 +153,8 @@ Workbench context 包含：
 - `replaceAsset()`
 
 Workbench 不形成插件系统，也不暴露私有 runtime projector。
+
+高级操作通过 core 的 `editor.operations` 暴露，React/Vue 只负责把 toolbar、slot/render-prop、keydown shortcut intent 路由到这些 helper。复制/粘贴、删除、组合、取消组合、select all、clear selection 都保持 command/history 语义一致，不在 shell 中重写对象层级或 material cleanup。
 
 ## 生命周期
 

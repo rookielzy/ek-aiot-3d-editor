@@ -138,7 +138,8 @@ export class SceneProjector {
     runtimeObject.userData = {
       ...runtimeObject.userData,
       sceneObjectId: object.id,
-      selected: snapshot.selection.objectId === object.id
+      selected: snapshot.selection.objectIds.includes(object.id),
+      primarySelected: snapshot.selection.objectId === object.id
     };
 
     for (const childId of object.children) {

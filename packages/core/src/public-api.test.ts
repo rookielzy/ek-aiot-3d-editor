@@ -4,10 +4,21 @@ import { dirname, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   createEditor,
+  createAdvancedEditorOperations,
+  createClipboardPayload,
   createEmptySnapshot,
   buildInspectorModel,
   buildSetTransformCommand,
+  resolveEditorShortcut,
+  snapNumber,
   validateSceneSnapshot,
+  type AdvancedEditorOperations,
+  type BatchCommand,
+  type DeleteObjectsCommand,
+  type DuplicateObjectsCommand,
+  type EditorAction,
+  type EditorClipboardPayload,
+  type GroupObjectsCommand,
   type InspectorModel,
   type InspectorCommandResult,
   type LightDefinition,
@@ -27,7 +38,9 @@ import {
   type RegisterAssetCommand,
   type RemoveLightCommand,
   type SceneEnvironmentPatch,
+  type SelectObjectsCommand,
   type SetEnvironmentCommand,
+  type SnapSettings,
   type TextureSlot,
   type TransformAxis,
   type TransformVectorName,
@@ -110,6 +123,13 @@ describe("core public API", () => {
     const addLight: AddLightCommand = { type: "add-light", light: { kind: "ambient" } };
     const updateLight: UpdateLightCommand = { type: "update-light", lightId: "light-a", patch: { intensity: 2 } };
     const removeLight: RemoveLightCommand = { type: "remove-light", lightId: "light-a" };
+    const batch: BatchCommand = { type: "batch", commands: [removeLight] };
+    const selectObjects: SelectObjectsCommand = { type: "select-objects", mode: "clear" };
+    const deleteObjects: DeleteObjectsCommand = { type: "delete-objects" };
+    const duplicateObjects: DuplicateObjectsCommand = { type: "duplicate-objects" };
+    const groupObjects: GroupObjectsCommand = { type: "group-objects" };
+    const action: EditorAction = "copy";
+    const snap: SnapSettings = { translate: 0.5 };
     const textureSlot: TextureSlot = { assetId: "texture-a", colorSpace: "srgb" };
     const texturePatch: MaterialTexturePatch = { map: null };
     const packageVersion = PROJECT_PACKAGE_VERSION;
@@ -130,6 +150,13 @@ describe("core public API", () => {
     expect(addLight.light.kind).toBe("ambient");
     expect(updateLight.patch.intensity).toBe(2);
     expect(removeLight.lightId).toBe("light-a");
+    expect(batch.commands).toHaveLength(1);
+    expect(selectObjects.mode).toBe("clear");
+    expect(deleteObjects.type).toBe("delete-objects");
+    expect(duplicateObjects.type).toBe("duplicate-objects");
+    expect(groupObjects.type).toBe("group-objects");
+    expect(action).toBe("copy");
+    expect(snap.translate).toBe(0.5);
     expect(textureSlot.assetId).toBe("texture-a");
     expect(texturePatch.map).toBeNull();
     expect(packageVersion).toBe(1);
@@ -153,5 +180,18 @@ describe("core public API", () => {
 
     expect(inspector.environment.enabled).toBe(true);
     expect(command.ok).toBe(false);
+  });
+
+  it("exports advanced operation, clipboard, shortcut, and snap helpers", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+    const operations: AdvancedEditorOperations = createAdvancedEditorOperations(editor);
+    const payload: EditorClipboardPayload | null = operations.copy();
+
+    expect(payload?.rootObjectIds).toEqual(["object-a"]);
+    expect(createClipboardPayload(editor.getSnapshot()).rootObjectIds).toEqual(["object-a"]);
+    expect(resolveEditorShortcut({ key: "c", ctrlKey: true }).action).toBe("copy");
+    expect(snapNumber(0.74, 0.5)).toBe(0.5);
   });
 });

@@ -1,4 +1,5 @@
 import type { Problem } from "../problems/types";
+import { getSelectedObjectIds } from "../selection/selection";
 import type { SceneSnapshot } from "../snapshot/types";
 import { buildEnvironmentSection } from "./environment";
 import { buildLightSection } from "./lights";
@@ -9,8 +10,11 @@ import type { BuildInspectorModelOptions, InspectorModel, InspectorSelectionMode
 
 export function getInspectorSelection(snapshot: SceneSnapshot): InspectorSelectionModel {
   const objectId = snapshot.selection.objectId;
+  const objectIds = getSelectedObjectIds(snapshot);
   return {
     objectId,
+    objectIds,
+    count: objectIds.length,
     object: objectId ? snapshot.objects[objectId] ?? null : null
   };
 }

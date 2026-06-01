@@ -52,4 +52,87 @@ describe("transform transaction", () => {
     expect(store.getSnapshot().objects["object-a"].transform.position).toEqual([0, 0, 0]);
     expect(store.getSnapshot().objects["object-a"].transform.scale).toEqual([2, 2, 2]);
   });
+
+  it("commits multi-object transforms as one batch and cancels all previewed objects", () => {
+    const store = new EditorStore();
+    const history = new CommandHistory();
+    const dispatcher = new CommandDispatcher(store, history, new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-b", asset: { id: "asset-b" } });
+    const objectA = new Object3D();
+    const objectB = new Object3D();
+    objectB.position.set(2, 0, 0);
+    const transaction = new TransformTransaction({
+      objectId: "object-a",
+      object: objectA,
+      targets: [
+        { objectId: "object-a", object: objectA },
+        { objectId: "object-b", object: objectB }
+      ],
+      dispatcher,
+      snap: { translate: 0.5 }
+    });
+    const undoBeforeCommit = history.state.undoCount;
+
+    transaction.preview({ position: [1.24, 0, 0] }, "object-a");
+    transaction.preview({ position: [2.26, 0, 0] }, "object-b");
+    const result = transaction.commit();
+
+    expect(result?.ok).toBe(true);
+    expect(store.getSnapshot().objects["object-a"].transform.position).toEqual([1, 0, 0]);
+    expect(store.getSnapshot().objects["object-b"].transform.position).toEqual([2.5, 0, 0]);
+    expect(history.state.undoCount).toBe(undoBeforeCommit + 1);
+
+    dispatcher.undo();
+    expect(store.getSnapshot().objects["object-a"].transform.position).toEqual([0, 0, 0]);
+    expect(store.getSnapshot().objects["object-b"].transform.position).toEqual([0, 0, 0]);
+  });
+
+  it("only snaps fields included in the preview patch", () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    const object = new Object3D();
+    object.rotation.set(0.13, 0, 0);
+    object.scale.set(1.13, 1, 1);
+    const transaction = new TransformTransaction({
+      objectId: "object-a",
+      object,
+      dispatcher,
+      snap: { translate: 0.5, rotate: 0.5, scale: 0.5 }
+    });
+
+    transaction.preview({ position: [1.24, 0, 0] });
+    expect(object.rotation.toArray().slice(0, 3)).toEqual([0.13, 0, 0]);
+    expect(object.scale.toArray()).toEqual([1.13, 1, 1]);
+    transaction.commit();
+
+    expect(store.getSnapshot().objects["object-a"].transform.position).toEqual([1, 0, 0]);
+    expect(store.getSnapshot().objects["object-a"].transform.rotation).toEqual([0, 0, 0]);
+    expect(store.getSnapshot().objects["object-a"].transform.scale).toEqual([1, 1, 1]);
+  });
+
+  it("cancels all objects in a multi-object preview", () => {
+    const dispatcher = new CommandDispatcher(new EditorStore(), new CommandHistory(), new AssetRegistry());
+    const objectA = new Object3D();
+    const objectB = new Object3D();
+    objectA.position.set(1, 0, 0);
+    objectB.position.set(2, 0, 0);
+    const transaction = new TransformTransaction({
+      objectId: "object-a",
+      object: objectA,
+      targets: [
+        { objectId: "object-a", object: objectA },
+        { objectId: "object-b", object: objectB }
+      ],
+      dispatcher
+    });
+
+    transaction.preview({ position: [10, 0, 0] }, "object-a");
+    transaction.preview({ position: [20, 0, 0] }, "object-b");
+    transaction.cancel();
+
+    expect(objectA.position.toArray()).toEqual([1, 0, 0]);
+    expect(objectB.position.toArray()).toEqual([2, 0, 0]);
+  });
 });

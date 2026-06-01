@@ -1,5 +1,7 @@
 import type { AssetReference } from "../assets/types";
 import type { Command, CommandResult } from "../commands/types";
+import type { AdvancedEditorOperations, EditorClipboard } from "./operations";
+import type { EditorSnapState, SnapSubscriber } from "./snap-state";
 import type { HistoryState } from "../history/history";
 import type { ProjectExportOptions, ProjectExportResult, ProjectImportOptions, ProjectImportResult, ReplaceAssetInput, ReplaceAssetResult } from "../project/project-api";
 import type { EditorRuntime, EditorRuntimeOptions } from "../runtime/editor-runtime";
@@ -18,6 +20,10 @@ export interface Editor {
   getSnapshot(): SceneSnapshot;
   subscribe(subscriber: SnapshotSubscriber): () => void;
   dispatch(command: Command): CommandResult;
+  readonly operations: AdvancedEditorOperations;
+  readonly clipboard: EditorClipboard;
+  readonly snap: EditorSnapState;
+  subscribeSnap(subscriber: SnapSubscriber): () => void;
   undo(): CommandResult;
   redo(): CommandResult;
   getHistoryState(): HistoryState;

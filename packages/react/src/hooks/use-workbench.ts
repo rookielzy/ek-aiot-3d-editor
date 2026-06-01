@@ -1,8 +1,9 @@
-import { useCallback } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import {
   type Command,
   type Editor,
   type EditorOptions,
+  type AdvancedEditorOperations,
   type InspectorModel,
   type Problem,
   type ProjectExportOptions,
@@ -11,7 +12,8 @@ import {
   type ProjectImportResult,
   type ReplaceAssetInput,
   type ReplaceAssetResult,
-  type SceneSnapshot
+  type SceneSnapshot,
+  type SnapSettings
 } from "@ek-aiot/3d-editor-core";
 import { useEditor } from "./use-editor";
 import { useInspector } from "./use-inspector";
@@ -26,6 +28,9 @@ export interface WorkbenchContext {
   inspector: InspectorModel;
   runtimeProblems: Problem[];
   activeLightId: string | null;
+  operations: AdvancedEditorOperations;
+  selectionCount: number;
+  snap: SnapSettings;
   setActiveLightId(value: string | null): void;
   refreshProblems(): void;
   dispatch(command: Command): ReturnType<Editor["dispatch"]>;
@@ -41,6 +46,11 @@ export interface UseWorkbenchResult extends WorkbenchContext {
 
 export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchResult {
   const editor = useEditor(options);
+  const snap = useSyncExternalStore(
+    (listener) => editor.subscribeSnap(listener),
+    () => editor.snap.get(),
+    () => editor.snap.get()
+  );
   const inspector = useInspector({ editor });
   const ownsEditor = !options.editor;
   const dispatch = useCallback((command: Command) => editor.dispatch(command), [editor]);
@@ -60,6 +70,9 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     inspector: inspector.inspector,
     runtimeProblems: inspector.runtimeProblems,
     activeLightId: inspector.activeLightId,
+    operations: editor.operations,
+    selectionCount: inspector.inspector.selection.count,
+    snap,
     setActiveLightId: inspector.setActiveLightId,
     refreshProblems: inspector.refreshProblems,
     dispatch,
