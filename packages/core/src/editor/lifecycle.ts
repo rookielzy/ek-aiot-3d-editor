@@ -13,6 +13,8 @@ import type { ProjectAssetSourceInput } from "../project/project-api";
 import type { ProjectExportOptions, ProjectExportResult, ProjectImportOptions, ProjectImportResult, ReplaceAssetInput, ReplaceAssetResult } from "../project/project-api";
 import { ThreeEditorRuntime, type EditorRuntime } from "../runtime/editor-runtime";
 import type { SceneSnapshot, SerializedSceneSnapshot } from "../snapshot/types";
+import { createAdvancedEditorOperations, createMemoryClipboard, type AdvancedEditorOperations, type EditorClipboard } from "./operations";
+import { EditorSnapState, type SnapSubscriber } from "./snap-state";
 import { restoreSnapshot, serializeSnapshot } from "./serialization";
 import { EditorStore } from "./store";
 import type { Editor, EditorOptions, MountRuntimeOptions, RuntimeSubscriber, SnapshotSubscriber } from "./editor-api";
@@ -23,6 +25,9 @@ export class CoreEditor implements Editor {
   readonly history = new CommandHistory();
   readonly store: EditorStore;
   readonly dispatcher: CommandDispatcher;
+  readonly clipboard: EditorClipboard = createMemoryClipboard();
+  readonly operations: AdvancedEditorOperations;
+  readonly snap = new EditorSnapState();
   #runtime: EditorRuntime | null = null;
   #runtimeSubscribers = new Set<RuntimeSubscriber>();
   #resolver = new AssetResolverBridge(undefined, this.projectAssets);
@@ -31,6 +36,7 @@ export class CoreEditor implements Editor {
   constructor(options: EditorOptions = {}) {
     this.store = new EditorStore(options.snapshot ? restoreSnapshot(options.snapshot) : undefined);
     this.dispatcher = new CommandDispatcher(this.store, this.history, this.assets);
+    this.operations = createAdvancedEditorOperations(this, this.clipboard);
   }
 
   getSnapshot(): SceneSnapshot {
@@ -39,6 +45,11 @@ export class CoreEditor implements Editor {
 
   subscribe(subscriber: SnapshotSubscriber): () => void {
     return this.store.subscribe(subscriber);
+  }
+
+  subscribeSnap(subscriber: SnapSubscriber): () => void {
+    this.#assertActive();
+    return this.snap.subscribe(subscriber);
   }
 
   dispatch(command: Command): CommandResult {
@@ -73,6 +84,8 @@ export class CoreEditor implements Editor {
     const restored = restoreSnapshot(snapshot);
     this.history.clear();
     this.projectAssets.clear();
+    this.clipboard.clear();
+    this.snap.set({});
     return this.store.replaceSnapshot(restored);
   }
 
@@ -168,6 +181,8 @@ export class CoreEditor implements Editor {
     this.#runtimeSubscribers.clear();
     this.assets.clear();
     this.projectAssets.clear();
+    this.clipboard.clear();
+    this.snap.clear();
     this.store.dispose();
   }
 
@@ -189,6 +204,13 @@ export class CoreEditor implements Editor {
   }
 
   #registerCommandProjectAsset(command: Command, snapshot: SceneSnapshot): void {
+    if (command.type === "batch") {
+      for (const childCommand of command.commands) {
+        this.#registerCommandProjectAsset(childCommand, snapshot);
+      }
+      return;
+    }
+
     if ((command.type !== "import-glb" && command.type !== "register-asset") || !isProjectAssetSource(command.asset.source)) {
       return;
     }
