@@ -13,6 +13,7 @@
   max-height: 100%;
   padding: 0.75rem;
   overflow: auto;
+  contain: paint;
   background: var(--ek-panel-bg);
   border-left: 1px solid var(--ek-panel-border);
   color: var(--ek-panel-text);
