@@ -34,7 +34,11 @@ export class ObjectPicker {
 
     this.#pointer.x = ((clientX - rect.left) / width) * 2 - 1;
     this.#pointer.y = -((clientY - rect.top) / height) * 2 + 1;
+    this.camera.updateMatrixWorld();
     this.#raycaster.setFromCamera(this.#pointer, this.camera);
+    for (const candidate of candidates) {
+      candidate.updateWorldMatrix(true, true);
+    }
 
     const hit = this.#raycaster.intersectObjects(candidates, true)[0];
     const objectId = hit ? this.objects.getId(hit.object) ?? null : null;

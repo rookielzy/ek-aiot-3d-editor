@@ -1,4 +1,4 @@
-import { AmbientLight, Group, Texture } from "three";
+import { AmbientLight, BoxGeometry, Group, Mesh, MeshBasicMaterial, Texture, Vector3 } from "three";
 import { describe, expect, it, vi } from "vitest";
 import { AssetResolverBridge } from "../assets/resolver";
 import { AssetRegistry } from "../assets/registry";
@@ -6,6 +6,7 @@ import { CommandDispatcher } from "../commands/dispatcher";
 import { EditorStore } from "../editor/store";
 import { CommandHistory } from "../history/history";
 import { ThreeEditorRuntime, type RendererLike, type RuntimeProblemSnapshot } from "./editor-runtime";
+import type { ViewportCameraControls } from "./viewport-controls";
 
 describe("editor runtime", () => {
   it("projects resolvable GLB objects and updates transform from snapshot changes", async () => {
@@ -29,6 +30,138 @@ describe("editor runtime", () => {
     runtime.dispose();
   });
 
+  it("keeps existing render-on-projection and disposal behavior when interactions are disabled", async () => {
+    const frames = createFrameScheduler();
+    const renderer = createFakeRenderer(document.createElement("div"));
+    const container = document.createElement("div");
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Group() },
+      rendererFactory: () => renderer,
+      scheduleFrame: frames.schedule,
+      cancelFrame: frames.cancel
+    });
+
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    await runtime.project();
+    frames.flush();
+
+    expect(renderer.render).toHaveBeenCalledTimes(1);
+    expect(renderer.domElement.parentElement).toBe(container);
+
+    runtime.dispose();
+
+    expect(renderer.dispose).toHaveBeenCalledTimes(1);
+    expect(renderer.domElement.parentElement).toBeNull();
+  });
+
+  it("renders once when camera controls invalidate the viewport without mutating snapshots", async () => {
+    const frames = createFrameScheduler();
+    const controls = createFakeControls();
+    const renderer = createFakeRenderer(document.createElement("div"));
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const runtime = new ThreeEditorRuntime({
+      container: document.createElement("div"),
+      store,
+      dispatcher,
+      interactions: { camera: true },
+      rendererFactory: () => renderer,
+      cameraControlsFactory: () => controls,
+      scheduleFrame: frames.schedule,
+      cancelFrame: frames.cancel
+    });
+    await runtime.project();
+    frames.flush();
+    const serialized = store.getSnapshot();
+
+    controls.emit("change");
+    controls.emit("change");
+    frames.flush();
+
+    expect(renderer.render).toHaveBeenCalledTimes(2);
+    expect(store.getSnapshot()).toBe(serialized);
+    runtime.dispose();
+  });
+
+  it("observes container resize and invalidates exactly once per resize callback", () => {
+    let resizeCallback: ResizeObserverCallback = () => {};
+    const frames = createFrameScheduler();
+    const container = document.createElement("div");
+    Object.defineProperty(container, "clientWidth", { configurable: true, value: 320 });
+    Object.defineProperty(container, "clientHeight", { configurable: true, value: 160 });
+    const renderer = createFakeRenderer(container);
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store: new EditorStore(),
+      dispatcher: new CommandDispatcher(new EditorStore(), new CommandHistory(), new AssetRegistry()),
+      interactions: { resize: true },
+      rendererFactory: () => renderer,
+      resizeObserverFactory: (callback) => {
+        resizeCallback = callback;
+        return {
+          observe: vi.fn(),
+          disconnect: vi.fn()
+        };
+      },
+      scheduleFrame: frames.schedule,
+      cancelFrame: frames.cancel
+    });
+
+    Object.defineProperty(container, "clientWidth", { configurable: true, value: 640 });
+    Object.defineProperty(container, "clientHeight", { configurable: true, value: 320 });
+    resizeCallback([], {} as ResizeObserver);
+    frames.flush();
+
+    expect(renderer.setSize).toHaveBeenLastCalledWith(640, 320);
+    expect(runtime.camera.aspect).toBe(2);
+    expect(renderer.render).toHaveBeenCalledTimes(1);
+    runtime.dispose();
+  });
+
+  it("frames selected/all objects and resets camera without serializing camera state", async () => {
+    const frames = createFrameScheduler();
+    const controls = createFakeControls();
+    const renderer = createFakeRenderer(document.createElement("div"));
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const runtime = new ThreeEditorRuntime({
+      container: document.createElement("div"),
+      store,
+      dispatcher,
+      interactions: { camera: true },
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()) },
+      rendererFactory: () => renderer,
+      cameraControlsFactory: () => controls,
+      scheduleFrame: frames.schedule,
+      cancelFrame: frames.cancel
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" }, transform: { position: [4, 0, 0] } });
+    dispatcher.dispatch({ type: "select-object", objectId: "object-a" });
+    await runtime.project();
+    frames.flush();
+    const serialized = JSON.stringify(store.getSnapshot());
+
+    expect(runtime.frameSelected()).toBe(true);
+    frames.flush();
+    expect(controls.target.x).toBeCloseTo(4);
+
+    expect(runtime.frameAll()).toBe(true);
+    frames.flush();
+    runtime.resetCamera();
+    frames.flush();
+
+    expect(controls.target.toArray()).toEqual([0, 0, 0]);
+    expect(JSON.stringify(store.getSnapshot())).toBe(serialized);
+    runtime.dispose();
+  });
+
   it("dispatches selection commands from picking instead of mutating snapshots directly", async () => {
     const store = new EditorStore();
     const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
@@ -48,6 +181,158 @@ describe("editor runtime", () => {
 
     expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-object", objectId: "object-a" });
     expect(store.getSnapshot().selection.objectId).toBe("object-a");
+    runtime.dispose();
+  });
+
+  it("selects from pointer hits through command dispatch in replace mode", async () => {
+    const container = document.createElement("div");
+    Object.defineProperty(container, "clientWidth", { configurable: true, value: 200 });
+    Object.defineProperty(container, "clientHeight", { configurable: true, value: 200 });
+    container.getBoundingClientRect = () => ({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 200,
+      width: 200,
+      height: 200,
+      toJSON() {}
+    });
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const dispatchSpy = vi.spyOn(dispatcher, "dispatch");
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()) },
+      rendererFactory: createFakeRenderer
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" }, transform: { position: [-2, 0, 0] } });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-b", asset: { id: "asset-b" }, transform: { position: [0, 0, 0] } });
+    await runtime.project();
+
+    const result = runtime.selectFromPointer({ clientX: 100, clientY: 100 });
+
+    expect(result.ok).toBe(true);
+    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-object", objectId: "object-b" });
+    expect(store.getSnapshot().selection.objectId).toBe("object-b");
+    runtime.dispose();
+  });
+
+  it("maps pointer modifiers to select-objects toggle commands without direct runtime mutation", async () => {
+    const container = document.createElement("div");
+    Object.defineProperty(container, "clientWidth", { configurable: true, value: 200 });
+    Object.defineProperty(container, "clientHeight", { configurable: true, value: 200 });
+    container.getBoundingClientRect = () => ({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 200,
+      width: 200,
+      height: 200,
+      toJSON() {}
+    });
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const dispatchSpy = vi.spyOn(dispatcher, "dispatch");
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()) },
+      rendererFactory: createFakeRenderer
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "select-object", objectId: "object-a" });
+    await runtime.project();
+
+    const result = runtime.selectFromPointer({
+      clientX: 100,
+      clientY: 100,
+      modifiers: { ctrlKey: true }
+    });
+
+    expect(result.ok).toBe(true);
+    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-objects", mode: "toggle", objectId: "object-a" });
+    expect(store.getSnapshot().selection.objectId).toBeNull();
+    runtime.dispose();
+  });
+
+  it("routes enabled DOM pointer clicks through runtime picking with modifier selection", async () => {
+    const container = document.createElement("div");
+    Object.defineProperty(container, "clientWidth", { configurable: true, value: 200 });
+    Object.defineProperty(container, "clientHeight", { configurable: true, value: 200 });
+    container.getBoundingClientRect = () => ({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 200,
+      width: 200,
+      height: 200,
+      toJSON() {}
+    });
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const dispatchSpy = vi.spyOn(dispatcher, "dispatch");
+    const renderer = createFakeRenderer(container);
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      interactions: { pointerSelection: true },
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()) },
+      rendererFactory: () => renderer
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    await runtime.project();
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerdown", { clientX: 100, clientY: 100, button: 0, ctrlKey: true }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerup", { clientX: 100, clientY: 100, button: 0, ctrlKey: true }));
+
+    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-objects", mode: "toggle", objectId: "object-a" });
+    expect(store.getSnapshot().selection.objectId).toBe("object-a");
+    runtime.dispose();
+  });
+
+  it("keeps selection helpers transient and out of serialized snapshots", async () => {
+    const frames = createFrameScheduler();
+    const renderer = createFakeRenderer(document.createElement("div"));
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const runtime = new ThreeEditorRuntime({
+      container: document.createElement("div"),
+      store,
+      dispatcher,
+      interactions: { selectionVisuals: true },
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()) },
+      rendererFactory: () => renderer,
+      scheduleFrame: frames.schedule,
+      cancelFrame: frames.cancel
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "select-object", objectId: "object-a" });
+    await runtime.project();
+    frames.flush();
+
+    const helper = runtime.scene.children.find((object) => object.userData.selectionHelper);
+
+    expect(helper?.userData).toMatchObject({
+      runtimeOnly: true,
+      selectionHelper: true,
+      sceneObjectId: "object-a"
+    });
+    expect(JSON.stringify(store.getSnapshot())).not.toContain("selectionHelper");
+    expect(runtime.getObject("object-a")?.userData.primarySelected).toBe(true);
     runtime.dispose();
   });
 
@@ -154,17 +439,94 @@ describe("editor runtime", () => {
 
     expect(renderer.render).not.toHaveBeenCalled();
   });
+
+  it("does not render or mutate helpers after disposal with pending invalidation work", async () => {
+    const frames = createFrameScheduler();
+    const renderer = createFakeRenderer(document.createElement("div"));
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const runtime = new ThreeEditorRuntime({
+      container: document.createElement("div"),
+      store,
+      dispatcher,
+      interactions: { selectionVisuals: true },
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()) },
+      rendererFactory: () => renderer,
+      scheduleFrame: frames.schedule,
+      cancelFrame: frames.cancel
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "select-object", objectId: "object-a" });
+    await runtime.project();
+
+    runtime.dispose();
+    frames.flush();
+
+    expect(renderer.render).not.toHaveBeenCalled();
+    expect(runtime.scene.children.some((object) => object.userData.selectionHelper)).toBe(false);
+  });
 });
 
 function createFakeRenderer(container: HTMLElement): RendererLike {
   const canvas = container.ownerDocument.createElement("canvas");
   return {
     domElement: canvas,
-    setSize(width, height) {
+    setSize: vi.fn((width, height) => {
       canvas.width = width;
       canvas.height = height;
-    },
+    }),
     render: vi.fn(),
     dispose: vi.fn()
+  };
+}
+
+function createFrameScheduler() {
+  let nextHandle = 1;
+  const callbacks = new Map<number, FrameRequestCallback>();
+  return {
+    schedule: vi.fn((callback: FrameRequestCallback) => {
+      const handle = nextHandle;
+      nextHandle += 1;
+      callbacks.set(handle, callback);
+      return handle;
+    }),
+    cancel: vi.fn((handle: number) => {
+      callbacks.delete(handle);
+    }),
+    flush() {
+      const pending = [...callbacks.entries()];
+      callbacks.clear();
+      for (const [, callback] of pending) {
+        callback(0);
+      }
+    }
+  };
+}
+
+function createFakeControls(): ViewportCameraControls & { emit(type: "change"): void } {
+  const listeners = new Set<() => void>();
+  return {
+    enabled: true,
+    target: new Vector3(),
+    addEventListener: vi.fn((type: "change", listener: () => void) => {
+      if (type === "change") {
+        listeners.add(listener);
+      }
+    }),
+    removeEventListener: vi.fn((type: "change", listener: () => void) => {
+      if (type === "change") {
+        listeners.delete(listener);
+      }
+    }),
+    update: vi.fn(() => true),
+    reset: vi.fn(),
+    saveState: vi.fn(),
+    dispose: vi.fn(),
+    emit() {
+      for (const listener of [...listeners]) {
+        listener();
+      }
+    }
   };
 }

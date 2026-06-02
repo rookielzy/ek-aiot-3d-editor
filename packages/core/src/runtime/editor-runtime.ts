@@ -13,6 +13,19 @@ import { SceneProjector } from "./scene-projector";
 import { ObjectPicker } from "./picking";
 import type { RuntimeTextureLoaderAdapter } from "./texture-loader-adapter";
 import type { Unsubscribe } from "../editor/subscription";
+import { RuntimeSelectionVisuals } from "./selection-visuals";
+import {
+  createOrbitViewportCameraControls,
+  frameCameraToObjects,
+  normalizeRuntimeInteractionOptions,
+  resetCameraView,
+  resolvePointerSelectionMode,
+  type RuntimeCameraFrameOptions,
+  type RuntimeInteractionOptions,
+  type RuntimePointerSelectionInput,
+  type ViewportCameraControls,
+  type ViewportCameraControlsFactory
+} from "./viewport-controls";
 
 export interface RendererLike {
   domElement: HTMLElement;
@@ -23,6 +36,8 @@ export interface RendererLike {
 
 export type RendererFactory = (container: HTMLElement) => RendererLike;
 export type PmremFactory = (renderer: RendererLike) => RuntimePmremAdapter;
+export type RuntimeAnimationFrameScheduler = (callback: FrameRequestCallback) => number;
+export type RuntimeAnimationFrameCancel = (handle: number) => void;
 
 export interface EditorRuntimeOptions {
   container: HTMLElement;
@@ -31,20 +46,31 @@ export interface EditorRuntimeOptions {
   resolver?: AssetResolverBridge;
   loader?: GltfLoaderAdapter;
   rendererFactory?: RendererFactory;
+  interactions?: boolean | RuntimeInteractionOptions;
 }
 
 interface ThreeEditorRuntimeOptions extends EditorRuntimeOptions {
   textureLoader?: RuntimeTextureLoaderAdapter;
   hdrLoader?: RuntimeTextureLoaderAdapter;
   pmremFactory?: PmremFactory;
+  cameraControlsFactory?: ViewportCameraControlsFactory;
+  resizeObserverFactory?: ResizeObserverFactory;
+  scheduleFrame?: RuntimeAnimationFrameScheduler;
+  cancelFrame?: RuntimeAnimationFrameCancel;
 }
 
 export interface EditorRuntime {
   project(snapshot?: SceneSnapshot): Promise<void>;
   pickObject(objectId: string | null, mode?: SelectionMode): CommandResult;
+  selectFromPointer(input: RuntimePointerSelectionInput): CommandResult;
   getObject(objectId: string): Object3D | undefined;
   getProblems(): Problem[];
   subscribeProblems(subscriber: RuntimeProblemSubscriber): Unsubscribe;
+  invalidateRender(): void;
+  resize(): void;
+  resetCamera(): void;
+  frameSelected(options?: RuntimeCameraFrameOptions): boolean;
+  frameAll(options?: RuntimeCameraFrameOptions): boolean;
   dispose(): void;
   readonly disposed: boolean;
 }
@@ -55,6 +81,7 @@ export interface RuntimeProblemSnapshot {
 }
 
 export type RuntimeProblemSubscriber = (snapshot: RuntimeProblemSnapshot) => void;
+export type ResizeObserverFactory = (callback: ResizeObserverCallback) => Pick<ResizeObserver, "observe" | "disconnect">;
 
 export class ThreeEditorRuntime implements EditorRuntime {
   readonly scene = new Scene();
@@ -64,16 +91,58 @@ export class ThreeEditorRuntime implements EditorRuntime {
   #container: HTMLElement;
   #store: EditorStore;
   #renderer: RendererLike;
+  #interactions = normalizeRuntimeInteractionOptions(false);
+  #controls: ViewportCameraControls | null = null;
+  #selectionVisuals: RuntimeSelectionVisuals | null = null;
+  #resizeObserver: Pick<ResizeObserver, "observe" | "disconnect"> | null = null;
+  #scheduleFrame: RuntimeAnimationFrameScheduler;
+  #cancelFrame: RuntimeAnimationFrameCancel;
+  #pendingFrame: number | null = null;
   #unsubscribe: (() => void) | null = null;
   #problemSubscribers = new Set<RuntimeProblemSubscriber>();
   #problemVersion = 0;
   #disposed = false;
   #projectGeneration = 0;
+  #pointerStart: { clientX: number; clientY: number; button: number } | null = null;
+  #handleControlsChange = () => {
+    this.invalidateRender();
+  };
+  #handlePointerDown = (event: PointerEvent) => {
+    if (!this.#interactions.pointerSelection || event.button !== this.#interactions.pointerSelection.button) {
+      return;
+    }
+    this.#pointerStart = {
+      clientX: event.clientX,
+      clientY: event.clientY,
+      button: event.button
+    };
+  };
+  #handlePointerUp = (event: PointerEvent) => {
+    const options = this.#interactions.pointerSelection;
+    const pointerStart = this.#pointerStart;
+    this.#pointerStart = null;
+    if (!options || !pointerStart || event.button !== pointerStart.button) {
+      return;
+    }
+    const distance = Math.hypot(event.clientX - pointerStart.clientX, event.clientY - pointerStart.clientY);
+    if (distance > options.clickTolerance) {
+      return;
+    }
+    this.selectFromPointer({
+      clientX: event.clientX,
+      clientY: event.clientY,
+      modifiers: event,
+      mode: resolvePointerSelectionMode(event, options.defaultMode)
+    });
+  };
 
   constructor(options: ThreeEditorRuntimeOptions) {
     this.#container = options.container;
     this.#store = options.store;
     this.#renderer = (options.rendererFactory ?? createDefaultRenderer)(options.container);
+    this.#scheduleFrame = options.scheduleFrame ?? defaultScheduleFrame;
+    this.#cancelFrame = options.cancelFrame ?? defaultCancelFrame;
+    this.#interactions = normalizeRuntimeInteractionOptions(options.interactions);
     this.projector = new SceneProjector({
       scene: this.scene,
       resolver: options.resolver,
@@ -84,9 +153,11 @@ export class ThreeEditorRuntime implements EditorRuntime {
     });
     this.picker = new ObjectPicker(this.camera, this.projector.objects, options.dispatcher);
     this.camera.position.set(0, 2, 5);
+    this.camera.lookAt(0, 0, 0);
 
     this.#container.appendChild(this.#renderer.domElement);
-    this.resize();
+    this.#resizeToContainer(false);
+    this.#mountInteractions(options);
     this.#unsubscribe = this.#store.subscribe((snapshot) => {
       void this.project(snapshot);
     });
@@ -100,13 +171,25 @@ export class ThreeEditorRuntime implements EditorRuntime {
     if (this.#disposed || generation !== this.#projectGeneration) {
       return;
     }
-    this.#renderer.render(this.scene, this.camera);
+    this.#selectionVisuals?.sync();
+    this.invalidateRender();
     this.#publishProblems();
   }
 
   pickObject(objectId: string | null, mode: SelectionMode = "replace"): CommandResult {
     this.#assertActive();
     return this.picker.selectObject(objectId, mode);
+  }
+
+  selectFromPointer(input: RuntimePointerSelectionInput): CommandResult {
+    this.#assertActive();
+    const pointerSelection = this.#interactions.pointerSelection;
+    const defaultMode = pointerSelection ? pointerSelection.defaultMode : undefined;
+    const mode = input.mode ?? resolvePointerSelectionMode(input.modifiers, defaultMode);
+    const candidates = [...this.projector.objects.entries()]
+      .map(([, object]) => object)
+      .filter((object) => !object.userData.problem);
+    return this.picker.pickFromClientPoint(this.#container, input.clientX, input.clientY, candidates, mode);
   }
 
   getObject(objectId: string): Object3D | undefined {
@@ -128,11 +211,62 @@ export class ThreeEditorRuntime implements EditorRuntime {
   }
 
   resize(): void {
+    this.#assertActive();
+    this.#resizeToContainer(true);
+  }
+
+  #resizeToContainer(invalidate: boolean): void {
     const width = this.#container.clientWidth || 1;
     const height = this.#container.clientHeight || 1;
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.#renderer.setSize(width, height);
+    if (invalidate) {
+      this.invalidateRender();
+    }
+  }
+
+  invalidateRender(): void {
+    if (this.#disposed || this.#pendingFrame !== null) {
+      return;
+    }
+
+    this.#pendingFrame = this.#scheduleFrame(() => {
+      this.#pendingFrame = null;
+      if (this.#disposed) {
+        return;
+      }
+      this.#controls?.update();
+      this.#renderer.render(this.scene, this.camera);
+    });
+  }
+
+  resetCamera(): void {
+    this.#assertActive();
+    resetCameraView(this.camera, this.#controls ?? undefined);
+    this.invalidateRender();
+  }
+
+  frameSelected(options?: RuntimeCameraFrameOptions): boolean {
+    this.#assertActive();
+    const snapshot = this.#store.getSnapshot();
+    const selected = snapshot.selection.objectIds.length > 0
+      ? snapshot.selection.objectIds
+      : snapshot.selection.objectId ? [snapshot.selection.objectId] : [];
+    const framed = frameCameraToObjects(this.camera, selected.map((objectId) => this.getObject(objectId)).filter(isObject3D), this.#controls ?? undefined, options);
+    if (framed) {
+      this.invalidateRender();
+    }
+    return framed;
+  }
+
+  frameAll(options?: RuntimeCameraFrameOptions): boolean {
+    this.#assertActive();
+    const framed = frameCameraToObjects(this.camera, [...this.projector.objects.entries()].map(([, object]) => object), this.#controls ?? undefined, options);
+    if (framed) {
+      this.invalidateRender();
+    }
+    return framed;
   }
 
   dispose(): void {
@@ -142,6 +276,11 @@ export class ThreeEditorRuntime implements EditorRuntime {
 
     this.#disposed = true;
     this.#projectGeneration += 1;
+    if (this.#pendingFrame !== null) {
+      this.#cancelFrame(this.#pendingFrame);
+      this.#pendingFrame = null;
+    }
+    this.#unmountInteractions();
     this.#unsubscribe?.();
     this.#unsubscribe = null;
     this.projector.dispose();
@@ -172,6 +311,52 @@ export class ThreeEditorRuntime implements EditorRuntime {
       subscriber(snapshot);
     }
   }
+
+  #mountInteractions(options: ThreeEditorRuntimeOptions): void {
+    if (this.#interactions.camera) {
+      const controlsFactory = options.cameraControlsFactory ?? createOrbitViewportCameraControls;
+      this.#controls = controlsFactory({
+        camera: this.camera,
+        domElement: this.#renderer.domElement,
+        options: this.#interactions.camera
+      });
+      this.#controls.addEventListener("change", this.#handleControlsChange);
+    }
+
+    if (this.#interactions.selectionVisuals) {
+      this.#selectionVisuals = new RuntimeSelectionVisuals(this.scene, this.projector.objects, this.#interactions.selectionVisuals);
+    }
+
+    if (this.#interactions.pointerSelection) {
+      this.#renderer.domElement.addEventListener("pointerdown", this.#handlePointerDown);
+      this.#renderer.domElement.addEventListener("pointerup", this.#handlePointerUp);
+    }
+
+    if (this.#interactions.resize) {
+      const observer = createResizeObserver(options.resizeObserverFactory, () => {
+        if (this.#disposed) {
+          return;
+        }
+        this.resize();
+      });
+      if (observer) {
+        observer.observe(this.#container);
+        this.#resizeObserver = observer;
+      }
+    }
+  }
+
+  #unmountInteractions(): void {
+    this.#renderer.domElement.removeEventListener("pointerdown", this.#handlePointerDown);
+    this.#renderer.domElement.removeEventListener("pointerup", this.#handlePointerUp);
+    this.#resizeObserver?.disconnect();
+    this.#resizeObserver = null;
+    this.#controls?.removeEventListener("change", this.#handleControlsChange);
+    this.#controls?.dispose();
+    this.#controls = null;
+    this.#selectionVisuals?.dispose();
+    this.#selectionVisuals = null;
+  }
 }
 
 export function createDefaultRenderer(container: HTMLElement): RendererLike {
@@ -198,4 +383,36 @@ function createPmremAdapter(renderer: RendererLike): RuntimePmremAdapter | undef
 
 function isThreeWebGLRenderer(renderer: RendererLike): renderer is ThreeWebGLRenderer & RendererLike {
   return "getRenderTarget" in renderer && "xr" in renderer;
+}
+
+function defaultScheduleFrame(callback: FrameRequestCallback): number {
+  if (typeof requestAnimationFrame === "function") {
+    return requestAnimationFrame(callback);
+  }
+  return setTimeout(() => callback(performance.now()), 0) as unknown as number;
+}
+
+function defaultCancelFrame(handle: number): void {
+  if (typeof cancelAnimationFrame === "function") {
+    cancelAnimationFrame(handle);
+    return;
+  }
+  clearTimeout(handle);
+}
+
+function createResizeObserver(
+  factory: ResizeObserverFactory | undefined,
+  callback: ResizeObserverCallback
+): Pick<ResizeObserver, "observe" | "disconnect"> | null {
+  if (factory) {
+    return factory(callback);
+  }
+  if (typeof ResizeObserver === "undefined") {
+    return null;
+  }
+  return new ResizeObserver(callback);
+}
+
+function isObject3D(object: Object3D | undefined): object is Object3D {
+  return Boolean(object);
 }
