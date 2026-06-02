@@ -2,21 +2,28 @@ import { computed, getCurrentInstance, markRaw, onBeforeUnmount, ref, shallowRef
 import {
   buildInspectorModel,
   createEditor,
+  executeEditorAction,
   resolveActiveLightId,
   type AdvancedEditorOperations,
   type Command,
   type Editor,
+  type EditorAction,
   type EditorOptions,
+  type EditorRuntime,
+  type HistoryState,
   type InspectorModel,
   type Problem,
   type ProjectExportOptions,
   type ProjectExportResult,
   type ProjectImportOptions,
   type ProjectImportResult,
+  type RuntimeCameraFrameOptions,
   type ReplaceAssetInput,
   type ReplaceAssetResult,
   type SceneSnapshot,
-  type SnapSettings
+  type SnapChannel,
+  type SnapSettings,
+  type TransformMode
 } from "@ek-aiot/3d-editor-core";
 
 export interface UseWorkbenchOptions extends EditorOptions {
@@ -28,11 +35,21 @@ export interface WorkbenchContext {
   snapshot: SceneSnapshot;
   inspector: InspectorModel;
   runtimeProblems: Problem[];
+  runtime: EditorRuntime | null;
+  runtimeReady: boolean;
   activeLightId: string | null;
   operations: AdvancedEditorOperations;
+  historyState: HistoryState;
   selectionCount: number;
   snap: SnapSettings;
+  transformMode: TransformMode;
   setActiveLightId(value: string | null): void;
+  setTransformMode(mode: TransformMode): void;
+  toggleSnap(channel: SnapChannel, increment?: number): SnapSettings;
+  runAction(action: EditorAction): ReturnType<typeof executeEditorAction>;
+  resetCamera(): void;
+  frameSelected(options?: RuntimeCameraFrameOptions): boolean;
+  frameAll(options?: RuntimeCameraFrameOptions): boolean;
   refreshProblems(): void;
   dispatch(command: Command): ReturnType<Editor["dispatch"]>;
   importProject(packageBytes: Uint8Array, options?: ProjectImportOptions): ProjectImportResult;
@@ -45,10 +62,19 @@ export interface UseWorkbenchResult {
   snapshot: ShallowRef<SceneSnapshot>;
   inspector: ComputedRef<InspectorModel>;
   runtimeProblems: ShallowRef<Problem[]>;
+  runtime: ShallowRef<EditorRuntime | null>;
   activeLightId: Ref<string | null>;
+  snap: ShallowRef<SnapSettings>;
+  transformMode: Ref<TransformMode>;
   context: ComputedRef<WorkbenchContext>;
   ownsEditor: boolean;
   setActiveLightId(value: string | null): void;
+  setTransformMode(mode: TransformMode): void;
+  toggleSnap(channel: SnapChannel, increment?: number): SnapSettings;
+  runAction(action: EditorAction): ReturnType<typeof executeEditorAction>;
+  resetCamera(): void;
+  frameSelected(options?: RuntimeCameraFrameOptions): boolean;
+  frameAll(options?: RuntimeCameraFrameOptions): boolean;
   refreshProblems(): void;
   dispatch(command: Command): ReturnType<Editor["dispatch"]>;
   importProject(packageBytes: Uint8Array, options?: ProjectImportOptions): ProjectImportResult;
@@ -64,12 +90,15 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   const ownsCurrentEditor = ref(editorOption ? !editorOption.value : !options.editor);
   const snapshot = shallowRef(currentEditor.value.getSnapshot());
   const snap = shallowRef<SnapSettings>(currentEditor.value.snap.get());
+  const transformMode = ref<TransformMode>(currentEditor.value.transformMode.get());
   const activeLightId = ref<string | null>(resolveActiveLightId(snapshot.value, null));
+  const runtime = shallowRef<EditorRuntime | null>(markRuntimeRaw(currentEditor.value.getRuntime()));
   const runtimeProblems = shallowRef<Problem[]>(currentEditor.value.getRuntime()?.getProblems() ?? []);
   let unsubscribeSnapshot: (() => void) | null = null;
   let unsubscribeRuntime: (() => void) | null = null;
   let unsubscribeProblems: (() => void) | null = null;
   let unsubscribeSnap: (() => void) | null = null;
+  let unsubscribeTransformMode: (() => void) | null = null;
   let disposed = false;
 
   function subscribeEditor(nextEditor: Editor): void {
@@ -81,11 +110,16 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     snapshot.value = nextEditor.getSnapshot();
     activeLightId.value = resolveActiveLightId(snapshot.value, activeLightId.value);
     unsubscribeRuntime = nextEditor.subscribeRuntime(() => {
+      runtime.value = markRuntimeRaw(nextEditor.getRuntime());
       subscribeRuntimeProblems();
     });
     unsubscribeSnap = nextEditor.subscribeSnap((nextSnap) => {
       snap.value = nextSnap;
     });
+    unsubscribeTransformMode = nextEditor.subscribeTransformMode((nextMode) => {
+      transformMode.value = nextMode;
+    });
+    runtime.value = markRuntimeRaw(nextEditor.getRuntime());
     subscribeRuntimeProblems();
   }
 
@@ -108,6 +142,8 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     unsubscribeProblems = null;
     unsubscribeSnap?.();
     unsubscribeSnap = null;
+    unsubscribeTransformMode?.();
+    unsubscribeTransformMode = null;
   }
 
   subscribeEditor(currentEditor.value);
@@ -130,6 +166,30 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
 
   function setActiveLightId(value: string | null): void {
     activeLightId.value = value;
+  }
+
+  function setTransformMode(mode: TransformMode): void {
+    currentEditor.value.transformMode.set(mode);
+  }
+
+  function toggleSnap(channel: SnapChannel, increment = defaultSnapIncrement(channel)): SnapSettings {
+    return currentEditor.value.snap.toggle(channel, increment);
+  }
+
+  function runAction(action: EditorAction): ReturnType<typeof executeEditorAction> {
+    return executeEditorAction(currentEditor.value, action);
+  }
+
+  function resetCamera(): void {
+    currentEditor.value.getRuntime()?.resetCamera();
+  }
+
+  function frameSelected(options?: RuntimeCameraFrameOptions): boolean {
+    return currentEditor.value.getRuntime()?.frameSelected(options) ?? false;
+  }
+
+  function frameAll(options?: RuntimeCameraFrameOptions): boolean {
+    return currentEditor.value.getRuntime()?.frameAll(options) ?? false;
   }
 
   function dispatch(command: Command): ReturnType<Editor["dispatch"]> {
@@ -174,11 +234,21 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     snapshot: snapshot.value,
     inspector: inspector.value,
     runtimeProblems: runtimeProblems.value,
+    runtime: runtime.value,
+    runtimeReady: runtime.value !== null,
     activeLightId: activeLightId.value,
     operations: currentEditor.value.operations,
+    historyState: currentEditor.value.getHistoryState(),
     selectionCount: inspector.value.selection.count,
     snap: snap.value,
+    transformMode: transformMode.value,
     setActiveLightId,
+    setTransformMode,
+    toggleSnap,
+    runAction,
+    resetCamera,
+    frameSelected,
+    frameAll,
     refreshProblems: subscribeRuntimeProblems,
     dispatch,
     importProject,
@@ -193,12 +263,21 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     snapshot,
     inspector,
     runtimeProblems,
+    runtime,
     activeLightId,
+    snap,
+    transformMode,
     context,
     get ownsEditor() {
       return ownsCurrentEditor.value;
     },
     setActiveLightId,
+    setTransformMode,
+    toggleSnap,
+    runAction,
+    resetCamera,
+    frameSelected,
+    frameAll,
     refreshProblems: subscribeRuntimeProblems,
     dispatch,
     importProject,
@@ -220,4 +299,15 @@ function resolveInitialEditor(options: UseWorkbenchOptions, editorOption: Ref<Ed
     return options.editor;
   }
   return createEditor({ snapshot: options.snapshot });
+}
+
+function defaultSnapIncrement(channel: SnapChannel): number {
+  if (channel === "rotate") {
+    return Math.PI / 12;
+  }
+  return channel === "scale" ? 0.1 : 0.5;
+}
+
+function markRuntimeRaw(runtime: EditorRuntime | null): EditorRuntime | null {
+  return runtime ? markRaw(runtime) : null;
 }

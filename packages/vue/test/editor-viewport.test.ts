@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { markRaw } from "vue";
 import { describe, expect, it, vi } from "vitest";
-import { AssetResolverBridge, createEditor, type RendererLike } from "@ek-aiot/3d-editor-core";
+import { AssetResolverBridge, createEditor, type EditorRuntimeOptions, type RendererLike } from "@ek-aiot/3d-editor-core";
 import EditorViewport from "../src/components/EditorViewport.vue";
 
 describe("EditorViewport", () => {
@@ -52,9 +52,35 @@ describe("EditorViewport", () => {
 
     expect(secondRendererDispose).toHaveBeenCalledTimes(1);
   });
+
+  it("forwards interaction options and emits runtime readiness", () => {
+    const editor = markRaw(createEditor());
+    const mountRuntime = vi.spyOn(editor, "mountRuntime");
+    const interactions = {
+      camera: true,
+      pointerSelection: { defaultMode: "toggle" },
+      resize: true,
+      selectionVisuals: true,
+      transform: true
+    } satisfies EditorRuntimeOptions["interactions"];
+    const wrapper = mount(EditorViewport, {
+      props: {
+        editor,
+        interactions,
+        rendererFactory: fakeRenderer
+      }
+    });
+
+    expect(mountRuntime).toHaveBeenCalledWith(expect.objectContaining({ interactions }));
+    expect(wrapper.emitted("runtimeReady")?.[0]?.[0]).toEqual(expect.objectContaining({ disposed: false }));
+
+    wrapper.unmount();
+
+    expect(wrapper.emitted("runtimeReady")?.at(-1)?.[0]).toBeNull();
+  });
 });
 
-function fakeRenderer(container: HTMLElement, dispose: () => void): RendererLike {
+function fakeRenderer(container: HTMLElement, dispose: () => void = () => {}): RendererLike {
   return {
     domElement: container.ownerDocument.createElement("canvas"),
     setSize() {},

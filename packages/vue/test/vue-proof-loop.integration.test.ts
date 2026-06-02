@@ -93,10 +93,14 @@ describe("Vue proof-loop parity", () => {
     expect(wrapper.text()).toContain("Environment");
     expect(wrapper.text()).toContain("Lights");
 
-    await wrapper.find("button").trigger("click");
+    const moveButton = wrapper.findAll("button").find((button) => button.text() === "Move object");
+    expect(moveButton).toBeTruthy();
+    await moveButton!.trigger("click");
     expect(editor.getSnapshot().objects["object-a"].transform.position).toEqual([4, 0, 0]);
 
-    await wrapper.findAll("button")[1].trigger("click");
+    const restoreButton = wrapper.findAll("button").find((button) => button.text() === "Save restore");
+    expect(restoreButton).toBeTruthy();
+    await restoreButton!.trigger("click");
     expect(editor.getSnapshot().objects["object-a"].transform.position).toEqual([4, 0, 0]);
     wrapper.unmount();
   });

@@ -94,6 +94,50 @@ describe("React EditorWorkbench", () => {
     expect(screen.getByText("Translate snap 0.5")).toBeTruthy();
   });
 
+  it("renders default workbench controls that route transform, snap, camera, and operations through core", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    const runtime = editor.getRuntime();
+    const resetCamera = vi.spyOn(runtime!, "resetCamera");
+    const frameSelected = vi.spyOn(runtime!, "frameSelected");
+    const duplicate = vi.spyOn(editor.operations, "duplicate");
+
+    fireEvent.click(screen.getByTitle("Rotate mode"));
+    expect(editor.transformMode.get()).toBe("rotate");
+    expect(screen.getByTitle("Rotate mode").getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(screen.getByTitle("Toggle move snap"));
+    expect(editor.snap.get().translate).toBe(0.5);
+    expect(screen.getByTitle("Toggle move snap").getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(screen.getByTitle("Reset camera"));
+    fireEvent.click(screen.getByTitle("Frame selected"));
+    expect(resetCamera).toHaveBeenCalledTimes(1);
+    expect(frameSelected).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTitle("Duplicate selection"));
+    expect(duplicate).toHaveBeenCalledTimes(1);
+  });
+
+  it("can hide the default toolbar while preserving extension regions", () => {
+    const editor = createEditor();
+
+    render(
+      <EditorWorkbench
+        editor={editor}
+        rendererFactory={fakeRenderer}
+        showDefaultToolbar={false}
+        toolbar={({ runtimeReady }) => <span>Runtime {runtimeReady ? "ready" : "missing"}</span>}
+      />
+    );
+
+    expect(screen.queryByTitle("Move mode")).toBeNull();
+    expect(screen.getByText("Runtime ready")).toBeTruthy();
+  });
+
   it("shares active light state between render context and the built-in inspector", () => {
     const editor = createEditor();
     editor.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
@@ -127,6 +171,37 @@ describe("React EditorWorkbench", () => {
     });
 
     expect(loader.load).toHaveBeenCalledWith(expect.objectContaining({ uri: "/box.glb" }));
+  });
+
+  it("forwards interaction options and runtime readiness through workbench", () => {
+    const editor = createEditor();
+    const mountRuntime = vi.spyOn(editor, "mountRuntime");
+    const runtimeReady = vi.fn();
+    const interactions: EditorRuntimeOptions["interactions"] = {
+      camera: { enableDamping: true },
+      pointerSelection: true,
+      resize: true,
+      selectionVisuals: true,
+      transform: true
+    };
+    const { unmount } = render(
+      <EditorWorkbench
+        editor={editor}
+        interactions={interactions}
+        onRuntimeReady={runtimeReady}
+        rendererFactory={fakeRenderer}
+        status={({ runtimeReady }) => <span>Runtime {runtimeReady ? "ready" : "missing"}</span>}
+      />
+    );
+
+    expect(mountRuntime).toHaveBeenCalledWith(expect.objectContaining({ interactions }));
+    expect(runtimeReady).toHaveBeenCalledWith(expect.objectContaining({ disposed: false }));
+    expect(screen.getByText("Runtime ready")).toBeTruthy();
+
+    unmount();
+
+    expect(runtimeReady).toHaveBeenLastCalledWith(null);
+    expect(editor.disposed).toBe(false);
   });
 
   it("exposes runtime problems through built-in UI and render context without serialization", async () => {

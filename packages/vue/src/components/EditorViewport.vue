@@ -11,6 +11,11 @@ const props = defineProps<{
   resolver?: AssetResolverBridge;
   loader?: EditorRuntimeOptions["loader"];
   rendererFactory?: EditorRuntimeOptions["rendererFactory"];
+  interactions?: EditorRuntimeOptions["interactions"];
+}>();
+
+const emit = defineEmits<{
+  runtimeReady: [runtime: EditorRuntime | null];
 }>();
 
 const container = ref<HTMLElement | null>(null);
@@ -27,16 +32,19 @@ function mountRuntime() {
     container: container.value,
     resolver: props.resolver ? toRaw(props.resolver) : undefined,
     loader: props.loader ? toRaw(props.loader) : undefined,
-    rendererFactory: props.rendererFactory ? toRaw(props.rendererFactory) : undefined
+    rendererFactory: props.rendererFactory ? toRaw(props.rendererFactory) : undefined,
+    interactions: props.interactions ? toRaw(props.interactions) : undefined
   });
+  emit("runtimeReady", runtime);
 }
 
 onMounted(mountRuntime);
-watch(() => [props.editor, props.resolver, props.loader, props.rendererFactory], mountRuntime);
+watch(() => [props.editor, props.resolver, props.loader, props.rendererFactory, props.interactions], mountRuntime);
 
 onBeforeUnmount(() => {
   runtime?.dispose();
   runtime = null;
+  emit("runtimeReady", null);
 });
 </script>
 
