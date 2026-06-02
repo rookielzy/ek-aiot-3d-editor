@@ -110,6 +110,15 @@ export type {
   RuntimeProblemSnapshot,
   RuntimeProblemSubscriber
 } from "./runtime/editor-runtime";
+export type {
+  RuntimeCameraControlsOptions,
+  RuntimeCameraFrameOptions,
+  RuntimeInteractionOptions,
+  RuntimePointerSelectionInput,
+  RuntimePointerSelectionModifiers,
+  RuntimePointerSelectionOptions,
+  RuntimeSelectionVisualOptions
+} from "./runtime/viewport-controls";
 export type { SnapSettings } from "./runtime/transform/snap";
 export type { EditorAction, ShortcutInput, ShortcutResolution } from "./shortcuts/types";
 export type { AssetKind, JsonPrimitive, JsonValue, LegacySceneSnapshot, SceneObject, SceneSnapshot, SerializedSceneSnapshot, Transform } from "./snapshot/types";

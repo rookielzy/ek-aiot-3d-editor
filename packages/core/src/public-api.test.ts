@@ -37,6 +37,9 @@ import {
   type ProblemTarget,
   type RegisterAssetCommand,
   type RemoveLightCommand,
+  type RuntimeInteractionOptions,
+  type RuntimePointerSelectionInput,
+  type RuntimeSelectionVisualOptions,
   type SceneEnvironmentPatch,
   type SelectObjectsCommand,
   type SetEnvironmentCommand,
@@ -91,6 +94,9 @@ describe("core public API", () => {
     expect(publicApi).not.toHaveProperty("ThreeTextureLoaderAdapter");
     expect(publicApi).not.toHaveProperty("ThreeHdrTextureLoaderAdapter");
     expect(publicApi).not.toHaveProperty("ThreePmremAdapter");
+    expect(publicApi).not.toHaveProperty("ObjectPicker");
+    expect(publicApi).not.toHaveProperty("RuntimeSelectionVisuals");
+    expect(publicApi).not.toHaveProperty("createOrbitViewportCameraControls");
   });
 
   it("exports expanded schema and command contracts from the package root", () => {
@@ -130,6 +136,9 @@ describe("core public API", () => {
     const groupObjects: GroupObjectsCommand = { type: "group-objects" };
     const action: EditorAction = "copy";
     const snap: SnapSettings = { translate: 0.5 };
+    const interactions: RuntimeInteractionOptions = { camera: true, pointerSelection: true, resize: true, selectionVisuals: true };
+    const pointerInput: RuntimePointerSelectionInput = { clientX: 10, clientY: 20, modifiers: { ctrlKey: true } };
+    const selectionVisuals: RuntimeSelectionVisualOptions = { selectedColor: "#4f8cff" };
     const textureSlot: TextureSlot = { assetId: "texture-a", colorSpace: "srgb" };
     const texturePatch: MaterialTexturePatch = { map: null };
     const packageVersion = PROJECT_PACKAGE_VERSION;
@@ -157,6 +166,9 @@ describe("core public API", () => {
     expect(groupObjects.type).toBe("group-objects");
     expect(action).toBe("copy");
     expect(snap.translate).toBe(0.5);
+    expect(interactions.camera).toBe(true);
+    expect(pointerInput.modifiers?.ctrlKey).toBe(true);
+    expect(selectionVisuals.selectedColor).toBe("#4f8cff");
     expect(textureSlot.assetId).toBe("texture-a");
     expect(texturePatch.map).toBeNull();
     expect(packageVersion).toBe(1);
