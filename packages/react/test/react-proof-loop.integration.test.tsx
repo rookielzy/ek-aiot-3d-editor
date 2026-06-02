@@ -50,10 +50,12 @@ describe("React proof-loop parity", () => {
     expect(restored.getSnapshot().lights["light-a"].intensity).toBe(2);
     expect(restored.getRuntime()?.getObject("object-a")).toBeTruthy();
     expect(restored.getRuntime()?.getProblems()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "material-texture-asset-unresolved", assetId: "texture-a" }),
       expect.objectContaining({ code: "environment-asset-unresolved", assetId: "hdr-a", metadata: { role: "background" } }),
       expect.objectContaining({ code: "environment-asset-unresolved", assetId: "hdr-a", metadata: { role: "environment" } })
     ]));
-    expect(await screen.findByText("Runtime problems 2")).toBeTruthy();
+    expect(await screen.findByText("Runtime problems 3")).toBeTruthy();
+    expect(JSON.stringify(restored.serialize())).not.toContain("material-texture-asset-unresolved");
     expect(JSON.stringify(restored.serialize())).not.toContain("environment-asset-unresolved");
   });
 

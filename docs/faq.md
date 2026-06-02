@@ -26,7 +26,7 @@
 
 ## 是否支持模型材质编辑？
 
-当前支持保存 `MeshStandardMaterial` override 的小子集和 texture slot 资产引用，并提供 React/Vue inspector。完整子网格 material slot discovery、复杂材质编辑和完善 runtime 投影仍是后续工作。
+当前支持保存 `MeshStandardMaterial` override 的小子集和 texture slot 资产引用，并在 runtime 将 object-level assignment 投影到 GLB 对象下的 `MeshStandardMaterial` mesh。完整子网格 material slot discovery、per-submesh assignment、复杂材质编辑、节点材质和 shader 编辑仍是后续工作。
 
 ## 是否支持 HDR 环境？
 

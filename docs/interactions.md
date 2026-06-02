@@ -135,9 +135,11 @@ editor.dispatch({
 
 - 保存 selected object 的 `MeshStandardMaterial` override 子集。
 - 保存 texture slot 的 asset ID。
+- Runtime 会把 object-level assignment 投影到 GLB 对象下的 `MeshStandardMaterial` mesh，并隔离 shared source material。
+- Texture slot 会通过 resolver/loader 加载为 transient texture；失败暴露为 runtime problem，不写回 Snapshot。
 - 保持 React/Vue inspector 行为一致。
 
-完整子网格发现、复杂材质编辑、节点材质、shader 编辑和完善的材质纹理 runtime 投影不在当前范围内。
+完整子网格发现、per-submesh 材质 assignment、复杂材质编辑、节点材质和 shader 编辑不在当前范围内。
 
 ## 项目导入/导出
 

@@ -1,4 +1,4 @@
-import { BoxGeometry, Mesh, MeshBasicMaterial, Object3D, Texture } from "three";
+import { BoxGeometry, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, Texture } from "three";
 import { describe, expect, it, vi } from "vitest";
 import { AssetResolverBridge } from "../assets/resolver";
 import { createEmptySnapshot } from "../snapshot/defaults";
@@ -68,6 +68,69 @@ describe("runtime disposal", () => {
     expect(adapterDispose).toHaveBeenCalledTimes(1);
     expect(light?.parent).toBeNull();
     expect(projector.scene.environment).toBeNull();
+  });
+
+  it("disposes material projection resources through the projector without serializing them", async () => {
+    const texture = new Texture();
+    const textureDispose = vi.spyOn(texture, "dispose");
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/asset" })),
+      loader: { load: vi.fn(async () => new Mesh(new BoxGeometry(), new MeshStandardMaterial())) },
+      textureLoader: { load: vi.fn(async () => texture) }
+    });
+    const snapshot = {
+      ...createEmptySnapshot(),
+      objects: {
+        "object-a": {
+          id: "object-a",
+          name: "Object A",
+          kind: "glb" as const,
+          parentId: null,
+          children: [],
+          asset: { id: "asset-a", kind: "glb" as const },
+          transform: {
+            position: [0, 0, 0] as [number, number, number],
+            rotation: [0, 0, 0] as [number, number, number],
+            scale: [1, 1, 1] as [number, number, number]
+          }
+        }
+      },
+      rootObjectIds: ["object-a"],
+      assets: {
+        "asset-a": { id: "asset-a", kind: "glb" as const },
+        "texture-a": { id: "texture-a", kind: "texture" as const }
+      },
+      materials: {
+        definitions: {
+          "material:object:object-a": {
+            id: "material:object:object-a",
+            name: "Runtime material",
+            kind: "mesh-standard" as const,
+            override: { textures: { map: { assetId: "texture-a" } } }
+          }
+        },
+        assignments: {
+          "object:object-a": {
+            id: "object:object-a",
+            materialId: "material:object:object-a",
+            target: { kind: "object" as const, objectId: "object-a" }
+          }
+        }
+      }
+    } satisfies SceneSnapshot;
+
+    await projector.project(snapshot);
+    const runtimeObject = projector.objects.get("object-a") as Mesh;
+    const projectedMaterial = runtimeObject.material as MeshStandardMaterial;
+    const projectedDispose = vi.spyOn(projectedMaterial, "dispose");
+    const serialized = JSON.stringify(snapshot);
+
+    projector.dispose();
+
+    expect(projectedDispose).toHaveBeenCalledTimes(1);
+    expect(textureDispose).toHaveBeenCalledTimes(1);
+    expect(serialized).not.toContain("isTexture");
+    expect(projector.objects.size).toBe(0);
   });
 });
 

@@ -53,10 +53,12 @@ describe("Vue proof-loop parity", () => {
     expect(vue.snapshot.value.lights["light-a"].intensity).toBe(2);
     expect(runtime?.getObject("object-a")).toBeTruthy();
     expect(runtime?.getProblems()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "material-texture-asset-unresolved", assetId: "texture-a" }),
       expect.objectContaining({ code: "environment-asset-unresolved", assetId: "hdr-a", metadata: { role: "background" } }),
       expect.objectContaining({ code: "environment-asset-unresolved", assetId: "hdr-a", metadata: { role: "environment" } })
     ]));
-    expect(wrapper.text()).toContain("Runtime problems 2");
+    expect(wrapper.text()).toContain("Runtime problems 3");
+    expect(JSON.stringify(vue.editor.serialize())).not.toContain("material-texture-asset-unresolved");
     expect(JSON.stringify(vue.editor.serialize())).not.toContain("environment-asset-unresolved");
     wrapper.unmount();
     vue.dispose();
