@@ -15,4 +15,17 @@ describe("execute editor action", () => {
     expect(editor.snap.get().translate).toBeNull();
     expect(editor.getSnapshot()).toBe(before);
   });
+
+  it("updates transform mode as session state without changing snapshots", () => {
+    const editor = createEditor();
+    const before = editor.getSnapshot();
+
+    expect(executeEditorAction(editor, "transform-rotate")?.ok).toBe(true);
+    expect(editor.transformMode.get()).toBe("rotate");
+    expect(editor.getSnapshot()).toBe(before);
+
+    executeEditorAction(editor, "transform-scale");
+    expect(editor.transformMode.get()).toBe("scale");
+    expect(editor.getSnapshot()).toBe(before);
+  });
 });

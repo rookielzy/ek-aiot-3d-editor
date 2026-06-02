@@ -14,22 +14,31 @@ describe("viewport controls", () => {
       camera: false,
       pointerSelection: false,
       resize: false,
-      selectionVisuals: false
+      selectionVisuals: false,
+      transform: false
     });
 
     expect(normalizeRuntimeInteractionOptions(true)).toMatchObject({
       camera: {},
       pointerSelection: { button: 0, clickTolerance: 4, defaultMode: "replace" },
       resize: true,
-      selectionVisuals: { selectedColor: 0x4f8cff, primarySelectedColor: 0xffc247 }
+      selectionVisuals: { selectedColor: 0x4f8cff, primarySelectedColor: 0xffc247 },
+      transform: {}
     });
 
     expect(normalizeRuntimeInteractionOptions({ resize: true })).toMatchObject({
       camera: false,
       pointerSelection: false,
       resize: true,
-      selectionVisuals: false
+      selectionVisuals: false,
+      transform: false
     });
+  });
+
+  it("normalizes transform controls without leaking disabled options", () => {
+    expect(normalizeRuntimeInteractionOptions({ transform: true }).transform).toEqual({});
+    expect(normalizeRuntimeInteractionOptions({ transform: { size: 0.8, space: "local" } }).transform).toEqual({ size: 0.8, space: "local" });
+    expect(normalizeRuntimeInteractionOptions({ transform: { enabled: false } }).transform).toBe(false);
   });
 
   it("maps pointer modifiers to additive selection modes", () => {

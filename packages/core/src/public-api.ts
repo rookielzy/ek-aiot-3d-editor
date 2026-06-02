@@ -119,6 +119,8 @@ export type {
   RuntimePointerSelectionOptions,
   RuntimeSelectionVisualOptions
 } from "./runtime/viewport-controls";
+export type { RuntimeTransformControlsOptions } from "./runtime/transform/transform-controls-adapter";
+export type { EditorTransformModeState, TransformMode, TransformModeSubscriber } from "./runtime/transform/transform-mode";
 export type { SnapSettings } from "./runtime/transform/snap";
 export type { EditorAction, ShortcutInput, ShortcutResolution } from "./shortcuts/types";
 export type { AssetKind, JsonPrimitive, JsonValue, LegacySceneSnapshot, SceneObject, SceneSnapshot, SerializedSceneSnapshot, Transform } from "./snapshot/types";

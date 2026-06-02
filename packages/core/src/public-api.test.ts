@@ -40,12 +40,14 @@ import {
   type RuntimeInteractionOptions,
   type RuntimePointerSelectionInput,
   type RuntimeSelectionVisualOptions,
+  type RuntimeTransformControlsOptions,
   type SceneEnvironmentPatch,
   type SelectObjectsCommand,
   type SetEnvironmentCommand,
   type SnapSettings,
   type TextureSlot,
   type TransformAxis,
+  type TransformMode,
   type TransformVectorName,
   type UpdateLightCommand
 } from "./index";
@@ -136,7 +138,9 @@ describe("core public API", () => {
     const groupObjects: GroupObjectsCommand = { type: "group-objects" };
     const action: EditorAction = "copy";
     const snap: SnapSettings = { translate: 0.5 };
-    const interactions: RuntimeInteractionOptions = { camera: true, pointerSelection: true, resize: true, selectionVisuals: true };
+    const transformMode: TransformMode = "rotate";
+    const transformControls: RuntimeTransformControlsOptions = { size: 0.75, space: "local" };
+    const interactions: RuntimeInteractionOptions = { camera: true, pointerSelection: true, resize: true, selectionVisuals: true, transform: transformControls };
     const pointerInput: RuntimePointerSelectionInput = { clientX: 10, clientY: 20, modifiers: { ctrlKey: true } };
     const selectionVisuals: RuntimeSelectionVisualOptions = { selectedColor: "#4f8cff" };
     const textureSlot: TextureSlot = { assetId: "texture-a", colorSpace: "srgb" };
@@ -166,7 +170,9 @@ describe("core public API", () => {
     expect(groupObjects.type).toBe("group-objects");
     expect(action).toBe("copy");
     expect(snap.translate).toBe(0.5);
+    expect(transformMode).toBe("rotate");
     expect(interactions.camera).toBe(true);
+    expect(interactions.transform).toEqual(transformControls);
     expect(pointerInput.modifiers?.ctrlKey).toBe(true);
     expect(selectionVisuals.selectedColor).toBe("#4f8cff");
     expect(textureSlot.assetId).toBe("texture-a");

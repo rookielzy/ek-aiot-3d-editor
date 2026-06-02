@@ -13,7 +13,11 @@ import { SceneProjector } from "./scene-projector";
 import { ObjectPicker } from "./picking";
 import type { RuntimeTextureLoaderAdapter } from "./texture-loader-adapter";
 import type { Unsubscribe } from "../editor/subscription";
+import type { EditorSnapState } from "../editor/snap-state";
 import { RuntimeSelectionVisuals } from "./selection-visuals";
+import { TransformControlsAdapter, createThreeTransformControls, type RuntimeTransformControlsFactory } from "./transform/transform-controls-adapter";
+import { TransformController } from "./transform/transform-controller";
+import type { EditorTransformModeState } from "./transform/transform-mode";
 import {
   createOrbitViewportCameraControls,
   frameCameraToObjects,
@@ -54,6 +58,9 @@ interface ThreeEditorRuntimeOptions extends EditorRuntimeOptions {
   hdrLoader?: RuntimeTextureLoaderAdapter;
   pmremFactory?: PmremFactory;
   cameraControlsFactory?: ViewportCameraControlsFactory;
+  transformControlsFactory?: RuntimeTransformControlsFactory;
+  snap?: EditorSnapState;
+  transformMode?: EditorTransformModeState;
   resizeObserverFactory?: ResizeObserverFactory;
   scheduleFrame?: RuntimeAnimationFrameScheduler;
   cancelFrame?: RuntimeAnimationFrameCancel;
@@ -93,12 +100,16 @@ export class ThreeEditorRuntime implements EditorRuntime {
   #renderer: RendererLike;
   #interactions = normalizeRuntimeInteractionOptions(false);
   #controls: ViewportCameraControls | null = null;
+  #transformControls: TransformControlsAdapter | null = null;
+  #transformController: TransformController;
   #selectionVisuals: RuntimeSelectionVisuals | null = null;
   #resizeObserver: Pick<ResizeObserver, "observe" | "disconnect"> | null = null;
   #scheduleFrame: RuntimeAnimationFrameScheduler;
   #cancelFrame: RuntimeAnimationFrameCancel;
   #pendingFrame: number | null = null;
   #unsubscribe: (() => void) | null = null;
+  #unsubscribeSnap: (() => void) | null = null;
+  #unsubscribeTransformMode: (() => void) | null = null;
   #problemSubscribers = new Set<RuntimeProblemSubscriber>();
   #problemVersion = 0;
   #disposed = false;
@@ -152,6 +163,7 @@ export class ThreeEditorRuntime implements EditorRuntime {
       pmrem: options.pmremFactory?.(this.#renderer) ?? createPmremAdapter(this.#renderer)
     });
     this.picker = new ObjectPicker(this.camera, this.projector.objects, options.dispatcher);
+    this.#transformController = new TransformController(this.projector.objects, options.dispatcher);
     this.camera.position.set(0, 2, 5);
     this.camera.lookAt(0, 0, 0);
 
@@ -172,6 +184,7 @@ export class ThreeEditorRuntime implements EditorRuntime {
       return;
     }
     this.#selectionVisuals?.sync();
+    this.#transformControls?.sync(snapshot);
     this.invalidateRender();
     this.#publishProblems();
   }
@@ -327,6 +340,30 @@ export class ThreeEditorRuntime implements EditorRuntime {
       this.#selectionVisuals = new RuntimeSelectionVisuals(this.scene, this.projector.objects, this.#interactions.selectionVisuals);
     }
 
+    if (this.#interactions.transform) {
+      const controlsFactory = options.transformControlsFactory ?? createThreeTransformControls;
+      this.#transformControls = new TransformControlsAdapter({
+        scene: this.scene,
+        controls: controlsFactory({
+          camera: this.camera,
+          domElement: this.#renderer.domElement,
+          options: this.#interactions.transform
+        }),
+        objects: this.projector.objects,
+        controller: this.#transformController,
+        cameraControls: this.#controls,
+        mode: options.transformMode?.get(),
+        snap: options.snap?.get(),
+        onChange: this.#handleControlsChange
+      });
+      this.#unsubscribeSnap = options.snap?.subscribe((settings) => {
+        this.#transformControls?.setSnap(settings);
+      }) ?? null;
+      this.#unsubscribeTransformMode = options.transformMode?.subscribe((mode) => {
+        this.#transformControls?.setMode(mode);
+      }) ?? null;
+    }
+
     if (this.#interactions.pointerSelection) {
       this.#renderer.domElement.addEventListener("pointerdown", this.#handlePointerDown);
       this.#renderer.domElement.addEventListener("pointerup", this.#handlePointerUp);
@@ -354,6 +391,12 @@ export class ThreeEditorRuntime implements EditorRuntime {
     this.#controls?.removeEventListener("change", this.#handleControlsChange);
     this.#controls?.dispose();
     this.#controls = null;
+    this.#unsubscribeSnap?.();
+    this.#unsubscribeSnap = null;
+    this.#unsubscribeTransformMode?.();
+    this.#unsubscribeTransformMode = null;
+    this.#transformControls?.dispose();
+    this.#transformControls = null;
     this.#selectionVisuals?.dispose();
     this.#selectionVisuals = null;
   }
