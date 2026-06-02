@@ -52,7 +52,9 @@ describe("Vue EditorWorkbench", () => {
       }
     });
 
-    await wrapper.find("button").trigger("click");
+    const moveButton = wrapper.findAll("button").find((button) => button.text() === "Move object");
+    expect(moveButton).toBeTruthy();
+    await moveButton!.trigger("click");
     await nextTick();
 
     expect(wrapper.text()).toContain("Position 2");
@@ -89,6 +91,57 @@ describe("Vue EditorWorkbench", () => {
     await wrapper.trigger("keydown", { key: "w", ctrlKey: true, altKey: true });
     await nextTick();
     expect(wrapper.text()).toContain("Translate snap 0.5");
+
+    wrapper.unmount();
+  });
+
+  it("renders default workbench controls that route transform, snap, camera, and operations through core", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer }
+    });
+    const runtime = editor.getRuntime();
+    const resetCamera = vi.spyOn(runtime!, "resetCamera");
+    const frameSelected = vi.spyOn(runtime!, "frameSelected");
+    const duplicate = vi.spyOn(editor.operations, "duplicate");
+
+    await wrapper.find('[title="Rotate mode"]').trigger("click");
+    await nextTick();
+    expect(editor.transformMode.get()).toBe("rotate");
+    expect(wrapper.find('[title="Rotate mode"]').attributes("aria-pressed")).toBe("true");
+
+    await wrapper.find('[title="Toggle move snap"]').trigger("click");
+    await nextTick();
+    expect(editor.snap.get().translate).toBe(0.5);
+    expect(wrapper.find('[title="Toggle move snap"]').attributes("aria-pressed")).toBe("true");
+
+    await wrapper.find('[title="Reset camera"]').trigger("click");
+    await wrapper.find('[title="Frame selected"]').trigger("click");
+    expect(resetCamera).toHaveBeenCalledTimes(1);
+    expect(frameSelected).toHaveBeenCalledTimes(1);
+
+    await wrapper.find('[title="Duplicate selection"]').trigger("click");
+    expect(duplicate).toHaveBeenCalledTimes(1);
+
+    wrapper.unmount();
+  });
+
+  it("can hide the default toolbar while preserving scoped slots", async () => {
+    const editor = markRaw(createEditor());
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer, showDefaultToolbar: false },
+      slots: {
+        toolbar: ({ runtimeReady }) => h("span", `Runtime ${runtimeReady ? "ready" : "missing"}`)
+      }
+    });
+
+    await nextTick();
+
+    expect(wrapper.find('[title="Move mode"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain("Runtime ready");
 
     wrapper.unmount();
   });
@@ -131,6 +184,38 @@ describe("Vue EditorWorkbench", () => {
 
     expect(loader.load).toHaveBeenCalledWith(expect.objectContaining({ uri: "/box.glb" }));
     wrapper.unmount();
+  });
+
+  it("forwards interaction options and runtime readiness through workbench", async () => {
+    const editor = markRaw(createEditor());
+    const mountRuntime = vi.spyOn(editor, "mountRuntime");
+    const interactions: EditorRuntimeOptions["interactions"] = {
+      camera: { enableDamping: true },
+      pointerSelection: true,
+      resize: true,
+      selectionVisuals: true,
+      transform: true
+    };
+    const wrapper = mount(EditorWorkbench, {
+      props: {
+        editor,
+        interactions,
+        rendererFactory: fakeRenderer
+      },
+      slots: {
+        status: ({ runtimeReady }) => h("span", `Runtime ${runtimeReady ? "ready" : "missing"}`)
+      }
+    });
+
+    await nextTick();
+
+    expect(mountRuntime).toHaveBeenCalledWith(expect.objectContaining({ interactions }));
+    expect(wrapper.emitted("runtimeReady")?.[0]?.[0]).toEqual(expect.objectContaining({ disposed: false }));
+    expect(wrapper.text()).toContain("Runtime ready");
+
+    wrapper.unmount();
+
+    expect(wrapper.emitted("runtimeReady")?.at(-1)?.[0]).toBeNull();
   });
 
   it("moves viewport, inspector, and slot context when the editor prop changes", async () => {

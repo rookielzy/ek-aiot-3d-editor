@@ -1,5 +1,5 @@
 import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
-import { executeEditorAction, resolveEditorShortcut, type AssetResolverBridge, type EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
+import { executeEditorAction, resolveEditorShortcut, type AssetResolverBridge, type EditorRuntime, type EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
 import { useWorkbench, type UseWorkbenchOptions, type WorkbenchContext } from "../hooks/use-workbench";
 import { EditorViewport } from "./EditorViewport";
 import { InspectorView } from "./InspectorView";
@@ -7,10 +7,21 @@ import "./workbench.css";
 
 export type WorkbenchRenderRegion = (context: WorkbenchContext) => ReactNode;
 
+const DEFAULT_WORKBENCH_INTERACTIONS = {
+  camera: true,
+  pointerSelection: true,
+  resize: true,
+  selectionVisuals: true,
+  transform: true
+} satisfies EditorRuntimeOptions["interactions"];
+
 export interface EditorWorkbenchProps extends UseWorkbenchOptions {
   resolver?: AssetResolverBridge;
   loader?: EditorRuntimeOptions["loader"];
   rendererFactory?: EditorRuntimeOptions["rendererFactory"];
+  interactions?: EditorRuntimeOptions["interactions"];
+  showDefaultToolbar?: boolean;
+  onRuntimeReady?(runtime: EditorRuntime | null): void;
   className?: string;
   style?: CSSProperties;
   viewportClassName?: string;
@@ -27,6 +38,9 @@ export function EditorWorkbench({
   resolver,
   loader,
   rendererFactory,
+  interactions = DEFAULT_WORKBENCH_INTERACTIONS,
+  showDefaultToolbar = true,
+  onRuntimeReady,
   className,
   style,
   viewportClassName,
@@ -92,16 +106,24 @@ export function EditorWorkbench({
   }, [workbench.editor]);
 
   const rootClassName = className ? `ek-workbench ${className}` : "ek-workbench";
+  const hasToolbar = showDefaultToolbar || toolbar;
 
   return (
     <main ref={rootRef} className={rootClassName} style={style} tabIndex={0}>
-      {toolbar ? <div className="ek-workbench__toolbar">{toolbar(workbench)}</div> : null}
+      {hasToolbar ? (
+        <div className="ek-workbench__toolbar">
+          {showDefaultToolbar ? <DefaultWorkbenchToolbar context={workbench} /> : null}
+          {toolbar ? <div className="ek-workbench__toolbar-region">{toolbar(workbench)}</div> : null}
+        </div>
+      ) : null}
       <section className="ek-workbench__viewport-shell" aria-label="3D viewport">
         <EditorViewport
           editor={workbench.editor}
           resolver={resolver}
           loader={loader}
           rendererFactory={rendererFactory}
+          interactions={interactions}
+          onRuntimeReady={onRuntimeReady}
           className={viewportClassName ? `ek-workbench__viewport ${viewportClassName}` : "ek-workbench__viewport"}
         />
         {viewportOverlay ? <div className="ek-workbench__overlay">{viewportOverlay(workbench)}</div> : null}
@@ -120,4 +142,85 @@ export function EditorWorkbench({
       {status ? <footer className="ek-workbench__status">{status(workbench)}</footer> : null}
     </main>
   );
+}
+
+function DefaultWorkbenchToolbar({ context }: { context: WorkbenchContext }) {
+  const history = context.historyState;
+  const snap = context.snap;
+
+  return (
+    <div className="ek-workbench__default-toolbar" aria-label="Editor controls">
+      <div className="ek-workbench__tool-group" aria-label="History">
+        <button type="button" onClick={() => context.runAction("undo")} disabled={history.undoCount === 0} title="Undo">
+          Undo
+        </button>
+        <button type="button" onClick={() => context.runAction("redo")} disabled={history.redoCount === 0} title="Redo">
+          Redo
+        </button>
+      </div>
+      <div className="ek-workbench__tool-group" aria-label="Transform mode">
+        <button type="button" onClick={() => context.runAction("transform-translate")} aria-pressed={context.transformMode === "translate"} title="Move mode">
+          Move
+        </button>
+        <button type="button" onClick={() => context.runAction("transform-rotate")} aria-pressed={context.transformMode === "rotate"} title="Rotate mode">
+          Rotate
+        </button>
+        <button type="button" onClick={() => context.runAction("transform-scale")} aria-pressed={context.transformMode === "scale"} title="Scale mode">
+          Scale
+        </button>
+      </div>
+      <div className="ek-workbench__tool-group" aria-label="Snap">
+        <button type="button" onClick={() => context.runAction("toggle-translate-snap")} aria-pressed={isSnapEnabled(snap.translate)} title="Toggle move snap">
+          Snap move
+        </button>
+        <button type="button" onClick={() => context.runAction("toggle-rotate-snap")} aria-pressed={isSnapEnabled(snap.rotate)} title="Toggle rotate snap">
+          Snap rotate
+        </button>
+        <button type="button" onClick={() => context.runAction("toggle-scale-snap")} aria-pressed={isSnapEnabled(snap.scale)} title="Toggle scale snap">
+          Snap scale
+        </button>
+      </div>
+      <div className="ek-workbench__tool-group" aria-label="Camera">
+        <button type="button" onClick={context.resetCamera} disabled={!context.runtimeReady} title="Reset camera">
+          Reset
+        </button>
+        <button type="button" onClick={() => context.frameSelected()} disabled={!context.runtimeReady || context.selectionCount === 0} title="Frame selected">
+          Frame sel
+        </button>
+        <button type="button" onClick={() => context.frameAll()} disabled={!context.runtimeReady || Object.keys(context.snapshot.objects).length === 0} title="Frame all">
+          Frame all
+        </button>
+      </div>
+      <div className="ek-workbench__tool-group" aria-label="Object operations">
+        <button type="button" onClick={() => context.runAction("copy")} disabled={context.selectionCount === 0} title="Copy selection">
+          Copy
+        </button>
+        <button type="button" onClick={() => context.runAction("paste")} title="Paste objects">
+          Paste
+        </button>
+        <button type="button" onClick={() => context.runAction("duplicate")} disabled={context.selectionCount === 0} title="Duplicate selection">
+          Duplicate
+        </button>
+        <button type="button" onClick={() => context.runAction("delete")} disabled={context.selectionCount === 0} title="Delete selection">
+          Delete
+        </button>
+        <button type="button" onClick={() => context.runAction("group")} disabled={context.selectionCount < 2} title="Group selection">
+          Group
+        </button>
+        <button type="button" onClick={() => context.runAction("ungroup")} disabled={context.selectionCount === 0} title="Ungroup selection">
+          Ungroup
+        </button>
+        <button type="button" onClick={() => context.runAction("select-all")} disabled={Object.keys(context.snapshot.objects).length === 0} title="Select all">
+          Select all
+        </button>
+        <button type="button" onClick={() => context.runAction("clear-selection")} disabled={context.selectionCount === 0} title="Clear selection">
+          Clear
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function isSnapEnabled(value: number | null | undefined): boolean {
+  return value !== null && value !== undefined;
 }
