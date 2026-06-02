@@ -93,6 +93,8 @@ describe("core public API", () => {
     expect(publicApi).not.toHaveProperty("EnvironmentProjector");
     expect(publicApi).not.toHaveProperty("EnvironmentResourceManager");
     expect(publicApi).not.toHaveProperty("LightProjector");
+    expect(publicApi).not.toHaveProperty("MaterialProjector");
+    expect(publicApi).not.toHaveProperty("MaterialResourceManager");
     expect(publicApi).not.toHaveProperty("ThreeTextureLoaderAdapter");
     expect(publicApi).not.toHaveProperty("ThreeHdrTextureLoaderAdapter");
     expect(publicApi).not.toHaveProperty("ThreePmremAdapter");

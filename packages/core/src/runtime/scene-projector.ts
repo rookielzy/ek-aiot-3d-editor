@@ -6,6 +6,7 @@ import { EnvironmentProjector } from "./environment-projector";
 import type { GltfLoaderAdapter } from "./gltf-loader-adapter";
 import { PlaceholderGltfLoaderAdapter } from "./gltf-loader-adapter";
 import { LightProjector } from "./light-projector";
+import { MaterialProjector } from "./material-projector";
 import type { RuntimePmremAdapter } from "./pmrem-adapter";
 import { disposeObjectTree } from "./disposal";
 import { applyTransform, readTransform } from "./transform";
@@ -28,6 +29,7 @@ export class SceneProjector {
   #loader: GltfLoaderAdapter;
   #environment: EnvironmentProjector;
   #lights: LightProjector;
+  #materials: MaterialProjector;
   #problems: Problem[] = [];
   #loadTokens = new Map<string, number>();
   #projectionGeneration = 0;
@@ -45,6 +47,10 @@ export class SceneProjector {
       pmrem: options.pmrem
     });
     this.#lights = new LightProjector(this.scene);
+    this.#materials = new MaterialProjector({
+      resolver: this.#resolver,
+      textureLoader: options.textureLoader
+    });
   }
 
   get problems(): Problem[] {
@@ -58,6 +64,7 @@ export class SceneProjector {
 
     const generation = this.#beginProjection();
     const nextIds = new Set(Object.keys(snapshot.objects));
+    this.#materials.releaseObjects(nextIds);
 
     for (const [objectId, runtimeObject] of [...this.objects.entries()]) {
       if (!this.#isActive(generation)) {
@@ -80,6 +87,12 @@ export class SceneProjector {
         }
       }
     }
+
+    const materialProblems = await this.#materials.project(snapshot, this.objects.entries());
+    if (!this.#isActive(generation)) {
+      return;
+    }
+    this.#appendProblems(materialProblems);
 
     const environmentProblems = await this.#environment.project(snapshot);
     if (!this.#isActive(generation)) {
@@ -173,6 +186,7 @@ export class SceneProjector {
       .map(([, object]) => object)
       .filter((object) => !this.#hasMappedAncestor(object));
 
+    this.#materials.dispose();
     for (const object of roots) {
       disposeObjectTree(object);
     }

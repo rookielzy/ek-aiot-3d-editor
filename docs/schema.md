@@ -128,9 +128,11 @@ Selection 是 durable state，因此可以序列化/恢复。`objectId` 是 prim
 材质状态保存一小部分 `MeshStandardMaterial` override 和 assignment。当前文档只描述使用边界：
 
 - material override 是持久化 authoring data。
-- texture slot 只保存 asset reference。
-- runtime 创建出来的 Three.js material/texture 不进入 Snapshot。
-- 当前非目标包括完整子网格 material slot discovery 和把 texture override 实际投影到所有 GLB 子网格的完善能力。
+- object-level assignment 会在 runtime 投影到对应 GLB 对象下的 `MeshStandardMaterial` mesh。
+- texture slot 只保存 asset reference；runtime 会解析并加载 `texture` / `image` 资产。
+- runtime 创建出来的 cloned Three.js material/texture 不进入 Snapshot。
+- resolver/loader 失败只产生 runtime problem，不删除 durable material assignment 或 texture slot。
+- 当前非目标包括完整子网格 material slot discovery、per-submesh assignment、复杂材质图、节点材质和 shader 编辑。
 
 ## Environment
 

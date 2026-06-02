@@ -1,4 +1,4 @@
-import { AmbientLight, Group, Texture } from "three";
+import { AmbientLight, BoxGeometry, Group, Mesh, MeshStandardMaterial, Texture } from "three";
 import { describe, expect, it, vi } from "vitest";
 import { AssetResolverBridge } from "../assets/resolver";
 import { AssetRegistry } from "../assets/registry";
@@ -233,5 +233,84 @@ describe("scene projector", () => {
     await oldProjection;
 
     expect(projector.getLight("light-a")).toBeUndefined();
+  });
+
+  it("projects object-level material overrides and aggregates material runtime problems", async () => {
+    const texture = new Texture();
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "register-asset", asset: { id: "texture-a", kind: "texture" } });
+    dispatcher.dispatch({
+      type: "set-material",
+      target: { kind: "object", objectId: "object-a" },
+      material: { color: "#336699", textures: { map: { assetId: "texture-a" } } }
+    });
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge((asset) => asset.id === "asset-a" ? { uri: "/box.glb" } : null),
+      loader: { load: async () => new Mesh(new BoxGeometry(), new MeshStandardMaterial()) },
+      textureLoader: { load: vi.fn(async () => texture) }
+    });
+
+    await projector.project(store.getSnapshot());
+
+    const runtimeObject = projector.objects.get("object-a") as Mesh;
+    expect((runtimeObject.material as MeshStandardMaterial).color.getHexString()).toBe("336699");
+    expect((runtimeObject.material as MeshStandardMaterial).map).toBeNull();
+    expect(projector.problems).toMatchObject([{ code: "material-texture-asset-unresolved", assetId: "texture-a" }]);
+    expect(store.getSnapshot().problems.acknowledged).toEqual({});
+  });
+
+  it("reapplies material overrides after project export/import restores durable references", async () => {
+    const texture = new Texture();
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "register-asset", asset: { id: "texture-a", kind: "texture" } });
+    dispatcher.dispatch({
+      type: "set-material",
+      target: { kind: "object", objectId: "object-a" },
+      material: { color: "#ff0000", textures: { map: { assetId: "texture-a" } } }
+    });
+    const restoredSnapshot = JSON.parse(JSON.stringify(store.getSnapshot()));
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/asset" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(), new MeshStandardMaterial()) },
+      textureLoader: { load: vi.fn(async () => texture) }
+    });
+
+    await projector.project(restoredSnapshot);
+
+    const runtimeObject = projector.objects.get("object-a") as Mesh;
+    expect((runtimeObject.material as MeshStandardMaterial).color.getHexString()).toBe("ff0000");
+    expect((runtimeObject.material as MeshStandardMaterial).map).toBe(texture);
+    expect(JSON.stringify(restoredSnapshot)).not.toContain("isTexture");
+  });
+
+  it("releases material projection resources when selected objects are deleted", async () => {
+    const texture = new Texture();
+    const textureDispose = vi.spyOn(texture, "dispose");
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "register-asset", asset: { id: "texture-a", kind: "texture" } });
+    dispatcher.dispatch({
+      type: "set-material",
+      target: { kind: "object", objectId: "object-a" },
+      material: { textures: { map: { assetId: "texture-a" } } }
+    });
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/asset" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(), new MeshStandardMaterial()) },
+      textureLoader: { load: vi.fn(async () => texture) }
+    });
+    await projector.project(store.getSnapshot());
+
+    dispatcher.dispatch({ type: "select-object", objectId: "object-a" });
+    dispatcher.dispatch({ type: "delete-objects" });
+    await projector.project(store.getSnapshot());
+
+    expect(projector.objects.get("object-a")).toBeUndefined();
+    expect(textureDispose).toHaveBeenCalledTimes(1);
   });
 });
