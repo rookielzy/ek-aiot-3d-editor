@@ -3,10 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import { AssetResolverBridge } from "../assets/resolver";
 import { AssetRegistry } from "../assets/registry";
 import { CommandDispatcher } from "../commands/dispatcher";
+import { EditorSnapState } from "../editor/snap-state";
 import { EditorStore } from "../editor/store";
 import { CommandHistory } from "../history/history";
 import { ThreeEditorRuntime, type RendererLike, type RuntimeProblemSnapshot } from "./editor-runtime";
 import type { ViewportCameraControls } from "./viewport-controls";
+import type { RuntimeTransformControls } from "./transform/transform-controls-adapter";
+import { EditorTransformModeState } from "./transform/transform-mode";
 
 describe("editor runtime", () => {
   it("projects resolvable GLB objects and updates transform from snapshot changes", async () => {
@@ -466,6 +469,76 @@ describe("editor runtime", () => {
     expect(renderer.render).not.toHaveBeenCalled();
     expect(runtime.scene.children.some((object) => object.userData.selectionHelper)).toBe(false);
   });
+
+  it("mounts transform controls on the primary selected object and routes drags through one transaction", async () => {
+    const frames = createFrameScheduler();
+    const renderer = createFakeRenderer(document.createElement("div"));
+    const transformControls = createFakeTransformControls();
+    const store = new EditorStore();
+    const history = new CommandHistory();
+    const dispatcher = new CommandDispatcher(store, history, new AssetRegistry());
+    const runtime = new ThreeEditorRuntime({
+      container: document.createElement("div"),
+      store,
+      dispatcher,
+      interactions: { transform: true },
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Group() },
+      rendererFactory: () => renderer,
+      transformControlsFactory: () => transformControls,
+      scheduleFrame: frames.schedule,
+      cancelFrame: frames.cancel
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "select-object", objectId: "object-a" });
+    await runtime.project();
+    const undoBefore = history.state.undoCount;
+
+    expect(transformControls.attached).toBe(runtime.getObject("object-a"));
+    expect(transformControls.helper.userData).toMatchObject({
+      runtimeOnly: true,
+      transformControlsHelper: true
+    });
+
+    transformControls.emit("mouseDown");
+    runtime.getObject("object-a")?.position.set(1, 0, 0);
+    transformControls.emit("objectChange");
+    runtime.getObject("object-a")?.position.set(2, 0, 0);
+    transformControls.emit("objectChange");
+    transformControls.emit("mouseUp");
+
+    expect(store.getSnapshot().objects["object-a"].transform.position).toEqual([2, 0, 0]);
+    expect(history.state.undoCount).toBe(undoBefore + 1);
+    expect(JSON.stringify(store.getSnapshot())).not.toContain("TransformControls");
+    runtime.dispose();
+  });
+
+  it("applies editor snap and transform mode session state to transform controls", async () => {
+    const transformControls = createFakeTransformControls();
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const snap = new EditorSnapState();
+    const transformMode = new EditorTransformModeState();
+    const runtime = new ThreeEditorRuntime({
+      container: document.createElement("div"),
+      store,
+      dispatcher,
+      interactions: { transform: true },
+      rendererFactory: createFakeRenderer,
+      transformControlsFactory: () => transformControls,
+      snap,
+      transformMode
+    });
+
+    snap.set({ translate: 0.5, rotate: Math.PI / 4, scale: 0.1 });
+    transformMode.set("rotate");
+
+    expect(transformControls.translationSnap).toBe(0.5);
+    expect(transformControls.rotationSnap).toBe(Math.PI / 4);
+    expect(transformControls.scaleSnap).toBe(0.1);
+    expect(transformControls.mode).toBe("rotate");
+    runtime.dispose();
+  });
 });
 
 function createFakeRenderer(container: HTMLElement): RendererLike {
@@ -529,4 +602,61 @@ function createFakeControls(): ViewportCameraControls & { emit(type: "change"): 
       }
     }
   };
+}
+
+function createFakeTransformControls() {
+  const listeners: Record<string, Set<() => void>> = {
+    change: new Set(),
+    mouseDown: new Set(),
+    mouseUp: new Set(),
+    objectChange: new Set()
+  };
+  const controls: RuntimeTransformControls & {
+    attached: Object3D | null;
+    helper: Object3D;
+    translationSnap: number | null;
+    rotationSnap: number | null;
+    scaleSnap: number | null;
+    mode: "translate" | "rotate" | "scale";
+    emit(type: "change" | "mouseDown" | "mouseUp" | "objectChange"): void;
+  } = {
+    attached: null,
+    helper: new Group(),
+    translationSnap: null,
+    rotationSnap: null,
+    scaleSnap: null,
+    mode: "translate",
+    attach: vi.fn((object: Object3D) => {
+      controls.attached = object;
+    }),
+    detach: vi.fn(() => {
+      controls.attached = null;
+    }),
+    dispose: vi.fn(),
+    getHelper: vi.fn(() => controls.helper),
+    setMode: vi.fn((mode) => {
+      controls.mode = mode;
+    }),
+    setTranslationSnap: vi.fn((value) => {
+      controls.translationSnap = value;
+    }),
+    setRotationSnap: vi.fn((value) => {
+      controls.rotationSnap = value;
+    }),
+    setScaleSnap: vi.fn((value) => {
+      controls.scaleSnap = value;
+    }),
+    addEventListener: vi.fn((type, listener) => {
+      listeners[type].add(listener);
+    }),
+    removeEventListener: vi.fn((type, listener) => {
+      listeners[type].delete(listener);
+    }),
+    emit(type) {
+      for (const listener of [...listeners[type]]) {
+        listener();
+      }
+    }
+  };
+  return controls;
 }

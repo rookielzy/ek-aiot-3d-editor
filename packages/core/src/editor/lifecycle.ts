@@ -12,6 +12,7 @@ import { replaceProjectAsset } from "../project/replace-asset";
 import type { ProjectAssetSourceInput } from "../project/project-api";
 import type { ProjectExportOptions, ProjectExportResult, ProjectImportOptions, ProjectImportResult, ReplaceAssetInput, ReplaceAssetResult } from "../project/project-api";
 import { ThreeEditorRuntime, type EditorRuntime } from "../runtime/editor-runtime";
+import { EditorTransformModeState, type TransformModeSubscriber } from "../runtime/transform/transform-mode";
 import type { SceneSnapshot, SerializedSceneSnapshot } from "../snapshot/types";
 import { createAdvancedEditorOperations, createMemoryClipboard, type AdvancedEditorOperations, type EditorClipboard } from "./operations";
 import { EditorSnapState, type SnapSubscriber } from "./snap-state";
@@ -28,6 +29,7 @@ export class CoreEditor implements Editor {
   readonly clipboard: EditorClipboard = createMemoryClipboard();
   readonly operations: AdvancedEditorOperations;
   readonly snap = new EditorSnapState();
+  readonly transformMode = new EditorTransformModeState();
   #runtime: EditorRuntime | null = null;
   #runtimeSubscribers = new Set<RuntimeSubscriber>();
   #resolver = new AssetResolverBridge(undefined, this.projectAssets);
@@ -50,6 +52,11 @@ export class CoreEditor implements Editor {
   subscribeSnap(subscriber: SnapSubscriber): () => void {
     this.#assertActive();
     return this.snap.subscribe(subscriber);
+  }
+
+  subscribeTransformMode(subscriber: TransformModeSubscriber): () => void {
+    this.#assertActive();
+    return this.transformMode.subscribe(subscriber);
   }
 
   dispatch(command: Command): CommandResult {
@@ -86,6 +93,7 @@ export class CoreEditor implements Editor {
     this.projectAssets.clear();
     this.clipboard.clear();
     this.snap.set({});
+    this.transformMode.reset();
     return this.store.replaceSnapshot(restored);
   }
 
@@ -159,7 +167,9 @@ export class CoreEditor implements Editor {
       ...options,
       store: this.store,
       dispatcher: this.dispatcher,
-      resolver: this.#resolver
+      resolver: this.#resolver,
+      snap: this.snap,
+      transformMode: this.transformMode
     });
     this.#notifyRuntimeSubscribers();
     return this.#runtime;
@@ -183,6 +193,7 @@ export class CoreEditor implements Editor {
     this.projectAssets.clear();
     this.clipboard.clear();
     this.snap.clear();
+    this.transformMode.clear();
     this.store.dispose();
   }
 

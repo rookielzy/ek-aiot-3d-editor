@@ -1,6 +1,7 @@
 import { Box3, PerspectiveCamera, Sphere, Vector3, type Object3D } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { SelectionMode } from "../selection/selection";
+import type { RuntimeTransformControlsOptions } from "./transform/transform-controls-adapter";
 
 export interface RuntimeCameraControlsOptions {
   enabled?: boolean;
@@ -54,6 +55,7 @@ export interface RuntimeInteractionOptions {
   pointerSelection?: boolean | RuntimePointerSelectionOptions;
   resize?: boolean;
   selectionVisuals?: boolean | RuntimeSelectionVisualOptions;
+  transform?: boolean | RuntimeTransformControlsOptions;
 }
 
 export interface ResolvedRuntimeInteractionOptions {
@@ -61,6 +63,7 @@ export interface ResolvedRuntimeInteractionOptions {
   pointerSelection: false | Required<RuntimePointerSelectionOptions>;
   resize: boolean;
   selectionVisuals: false | ResolvedRuntimeSelectionVisualOptions;
+  transform: false | RuntimeTransformControlsOptions;
 }
 
 export interface ViewportCameraControls {
@@ -93,7 +96,8 @@ export function normalizeRuntimeInteractionOptions(
       camera: false,
       pointerSelection: false,
       resize: false,
-      selectionVisuals: false
+      selectionVisuals: false,
+      transform: false
     };
   }
 
@@ -102,7 +106,8 @@ export function normalizeRuntimeInteractionOptions(
       camera: {},
       pointerSelection: normalizePointerSelectionOptions(true),
       resize: true,
-      selectionVisuals: normalizeSelectionVisualOptions(true)
+      selectionVisuals: normalizeSelectionVisualOptions(true),
+      transform: normalizeTransformControlsOptions(true)
     };
   }
 
@@ -110,7 +115,8 @@ export function normalizeRuntimeInteractionOptions(
     camera: options.camera === undefined ? false : normalizeCameraOptions(options.camera),
     pointerSelection: options.pointerSelection === undefined ? false : normalizePointerSelectionOptions(options.pointerSelection),
     resize: options.resize ?? true,
-    selectionVisuals: options.selectionVisuals === undefined ? false : normalizeSelectionVisualOptions(options.selectionVisuals)
+    selectionVisuals: options.selectionVisuals === undefined ? false : normalizeSelectionVisualOptions(options.selectionVisuals),
+    transform: options.transform === undefined ? false : normalizeTransformControlsOptions(options.transform)
   };
 }
 
@@ -255,4 +261,17 @@ function normalizeSelectionVisualOptions(
     selectedColor: normalized.selectedColor ?? 0x4f8cff,
     primarySelectedColor: normalized.primarySelectedColor ?? 0xffc247
   };
+}
+
+function normalizeTransformControlsOptions(
+  options: boolean | RuntimeTransformControlsOptions | undefined
+): false | RuntimeTransformControlsOptions {
+  if (options === false) {
+    return false;
+  }
+  const normalized = options === true || options === undefined ? {} : options;
+  if (normalized.enabled === false) {
+    return false;
+  }
+  return normalized;
 }

@@ -28,9 +28,14 @@ export function executeEditorAction(editor: Editor, action: EditorAction): Edito
     case "clear-selection":
       return editor.operations.clearSelection();
     case "transform-translate":
+      editor.transformMode.set("translate");
+      return { ok: true, snapshot: editor.getSnapshot() };
     case "transform-rotate":
+      editor.transformMode.set("rotate");
+      return { ok: true, snapshot: editor.getSnapshot() };
     case "transform-scale":
-      return null;
+      editor.transformMode.set("scale");
+      return { ok: true, snapshot: editor.getSnapshot() };
     case "toggle-translate-snap":
       editor.snap.toggle("translate", 0.5);
       return { ok: true, snapshot: editor.getSnapshot() };

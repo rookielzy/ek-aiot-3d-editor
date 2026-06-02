@@ -2,6 +2,7 @@ import type { AssetReference } from "../assets/types";
 import type { Command, CommandResult } from "../commands/types";
 import type { AdvancedEditorOperations, EditorClipboard } from "./operations";
 import type { EditorSnapState, SnapSubscriber } from "./snap-state";
+import type { EditorTransformModeState, TransformModeSubscriber } from "../runtime/transform/transform-mode";
 import type { HistoryState } from "../history/history";
 import type { ProjectExportOptions, ProjectExportResult, ProjectImportOptions, ProjectImportResult, ReplaceAssetInput, ReplaceAssetResult } from "../project/project-api";
 import type { EditorRuntime, EditorRuntimeOptions } from "../runtime/editor-runtime";
@@ -23,7 +24,9 @@ export interface Editor {
   readonly operations: AdvancedEditorOperations;
   readonly clipboard: EditorClipboard;
   readonly snap: EditorSnapState;
+  readonly transformMode: EditorTransformModeState;
   subscribeSnap(subscriber: SnapSubscriber): () => void;
+  subscribeTransformMode(subscriber: TransformModeSubscriber): () => void;
   undo(): CommandResult;
   redo(): CommandResult;
   getHistoryState(): HistoryState;
