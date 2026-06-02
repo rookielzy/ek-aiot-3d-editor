@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["vite/client"],
+    "paths": {
+      "@ek-aiot/3d-editor-core": ["../../packages/core/src/index.ts"],
+      "@ek-aiot/3d-editor-vue": ["../../packages/vue/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*", "vite.config.ts"]
+}

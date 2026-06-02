@@ -5,6 +5,7 @@ import { mount } from "@vue/test-utils";
 import { createEditor, AssetResolverBridge, type RendererLike } from "@ek-aiot/3d-editor-core";
 import EditorWorkbench from "../src/components/EditorWorkbench.vue";
 import { useEditor } from "../src/composables/use-editor";
+import VueProofLoopApp from "../../../examples/vue-proof-loop/src/App.vue";
 
 describe("Vue proof-loop parity", () => {
   it("uses core command, asset, history, and runtime behavior for restored snapshots", async () => {
@@ -61,50 +62,93 @@ describe("Vue proof-loop parity", () => {
     vue.dispose();
   });
 
-  it("renders workbench regions beside the inspector and commits through core commands", async () => {
-    const editor = markRaw(createEditor());
-    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
-    editor.dispatch({ type: "select-object", objectId: "object-a" });
-    editor.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
-
-    const wrapper = mount(EditorWorkbench, {
-      props: { editor, rendererFactory: fakeRenderer },
-      slots: {
-        toolbar: ({ dispatch, editor: workbenchEditor }) => [
-          h("button", {
-            onClick: () => dispatch({ type: "set-transform", objectId: "object-a", transform: { position: [4, 0, 0] } })
-          }, "Move object"),
-          h("button", {
-            onClick: () => {
-              const saved = workbenchEditor.serialize();
-              workbenchEditor.dispatch({ type: "set-transform", objectId: "object-a", transform: { position: [8, 0, 0] } });
-              workbenchEditor.restore(saved);
-            }
-          }, "Save restore")
-        ],
-        sidePanel: ({ snapshot, inspector }) => h("span", `${inspector.selection.objectId}:${Object.keys(snapshot.objects).length}`),
-        viewportOverlay: ({ runtimeProblems }) => h("span", `${runtimeProblems.length} runtime problems`)
+  it("renders the same local hierarchy, asset, and checklist validation surface", async () => {
+    const wrapper = mount(VueProofLoopApp, {
+      props: {
+        rendererFactory: fakeRenderer
       }
     });
+    await nextTick();
+    await nextTick();
 
-    expect(wrapper.text()).toContain("object-a:1");
-    expect(wrapper.text()).toContain("Transform");
-    expect(wrapper.text()).toContain("Material");
-    expect(wrapper.text()).toContain("Environment");
-    expect(wrapper.text()).toContain("Lights");
+    expect(wrapper.get('[data-testid="demo-hierarchy"]').text()).toContain("Simple box");
+    expect(wrapper.get('[data-testid="demo-hierarchy"]').text()).toContain("simple-box");
+    expect(wrapper.get('[data-testid="demo-hierarchy"]').text()).toContain("Recoverable asset");
+    expect(wrapper.get('[data-testid="demo-selection-count"]').text()).toContain("Simple box (1)");
+    expect(wrapper.get('[data-testid="demo-assets"]').text()).toContain("recoverable-box");
 
-    const moveButton = wrapper.findAll("button").find((button) => button.text() === "Move object");
-    expect(moveButton).toBeTruthy();
-    await moveButton!.trigger("click");
-    expect(editor.getSnapshot().objects["object-a"].transform.position).toEqual([4, 0, 0]);
+    await clickButton(wrapper, "Nudge primary");
+    expect(checklistItem(wrapper, "Transform command changed history").attributes("data-complete")).toBe("true");
+    expect(checklistItem(wrapper, "Undo is available").attributes("data-complete")).toBe("true");
 
-    const restoreButton = wrapper.findAll("button").find((button) => button.text() === "Save restore");
-    expect(restoreButton).toBeTruthy();
-    await restoreButton!.trigger("click");
-    expect(editor.getSnapshot().objects["object-a"].transform.position).toEqual([4, 0, 0]);
+    await clickButton(wrapper, "Undo");
+    expect(checklistItem(wrapper, "Redo is available").attributes("data-complete")).toBe("true");
+    await clickButton(wrapper, "Redo");
+
+    await clickButton(wrapper, "Frame selected");
+    expect(checklistItem(wrapper, "Camera helper used").attributes("data-complete")).toBe("true");
+
+    await clickButton(wrapper, "Snap move");
+    expect(checklistItem(wrapper, "Snap/mode status visible").attributes("data-complete")).toBe("true");
+
+    await clickButton(wrapper, "Duplicate");
+    expect(checklistItem(wrapper, "Copy/paste or duplicate ran").attributes("data-complete")).toBe("true");
+
+    await clickButton(wrapper, "Group demo");
+    expect(checklistItem(wrapper, "Hierarchy operation changed nesting").attributes("data-complete")).toBe("true");
+
+    await clickButton(wrapper, "Export project");
+    expect(checklistItem(wrapper, "Project exported").attributes("data-complete")).toBe("true");
+
+    await clickButton(wrapper, "Reopen package");
+    expect(checklistItem(wrapper, "Project reopened").attributes("data-complete")).toBe("true");
+    expect(wrapper.get('[data-testid="demo-status"]').text()).not.toContain("OK");
+
+    await waitForVue(() => {
+      expect(checklistItem(wrapper, "Missing asset surfaced").attributes("data-complete")).toBe("true");
+      expect(wrapper.get('[data-testid="demo-problem-badge"]').text()).toContain("1 problems");
+    });
+    expect(wrapper.get('[data-testid="demo-status"]').text()).not.toContain("asset-unresolved");
+
+    await clickButton(wrapper, "Replace missing asset");
+    await waitForVue(() => {
+      expect(checklistItem(wrapper, "Missing asset recovered").attributes("data-complete")).toBe("true");
+      expect(wrapper.get('[data-testid="demo-problem-badge"]').text()).toContain("0 problems");
+    });
+    expect(wrapper.get('[data-testid="demo-assets"]').text()).toContain("recoverable-box");
+
     wrapper.unmount();
-  });
+  }, 10000);
 });
+
+async function clickButton(wrapper: ReturnType<typeof mount>, text: string): Promise<void> {
+  const button = wrapper.findAll("button").filter((candidate) => candidate.text() === text).at(-1);
+  expect(button, `Expected button ${text}`).toBeTruthy();
+  await button!.trigger("click");
+  await nextTick();
+  await nextTick();
+}
+
+function checklistItem(wrapper: ReturnType<typeof mount>, label: string) {
+  const item = wrapper.findAll('[data-testid="demo-checklist"] li').find((candidate) => candidate.text().includes(label));
+  expect(item, `Expected checklist item ${label}`).toBeTruthy();
+  return item!;
+}
+
+async function waitForVue(assertion: () => void): Promise<void> {
+  let lastError: unknown;
+  for (let index = 0; index < 10; index += 1) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+      await nextTick();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
+  throw lastError;
+}
 
 function fakeRenderer(container: HTMLElement): RendererLike {
   return {

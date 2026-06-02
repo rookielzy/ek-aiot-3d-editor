@@ -1,9 +1,10 @@
 import React from "react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Group } from "three";
-import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { AssetResolverBridge, createEditor, type RendererLike } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
+import { App as ReactProofLoopApp } from "../../../examples/react-proof-loop/src/App";
 
 describe("React proof-loop parity", () => {
   it("renders a restored core snapshot without React-local editor behavior", async () => {
@@ -39,7 +40,9 @@ describe("React proof-loop parity", () => {
         status={({ runtimeProblems }) => <span>Runtime problems {runtimeProblems.length}</span>}
       />
     );
-    await restored.getRuntime()?.project();
+    await act(async () => {
+      await restored.getRuntime()?.project();
+    });
 
     expect(restored.getSnapshot().objects["object-a"].transform.position).toEqual([6, 0, 0]);
     expect(restored.getSnapshot().materials.definitions["material:object:object-a"].override.textures?.map?.assetId).toBe("texture-a");
@@ -54,50 +57,68 @@ describe("React proof-loop parity", () => {
     expect(JSON.stringify(restored.serialize())).not.toContain("environment-asset-unresolved");
   });
 
-  it("renders workbench regions beside the inspector and commits through core commands", () => {
-    const editor = createEditor();
-    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
-    editor.dispatch({ type: "select-object", objectId: "object-a" });
-    editor.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
+  it("turns the local proof-loop app into a hierarchy, asset, and checklist validation surface", async () => {
+    render(<ReactProofLoopApp rendererFactory={fakeRenderer} />);
+    await act(async () => undefined);
 
-    render(
-      <EditorWorkbench
-        editor={editor}
-        rendererFactory={fakeRenderer}
-        toolbar={({ dispatch, editor: workbenchEditor }) => (
-          <>
-            <button onClick={() => dispatch({ type: "set-transform", objectId: "object-a", transform: { position: [4, 0, 0] } })}>
-              Move object
-            </button>
-            <button
-              onClick={() => {
-                const saved = workbenchEditor.serialize();
-                workbenchEditor.dispatch({ type: "set-transform", objectId: "object-a", transform: { position: [8, 0, 0] } });
-                workbenchEditor.restore(saved);
-              }}
-            >
-              Save restore
-            </button>
-          </>
-        )}
-        sidePanel={({ snapshot, inspector }) => <span>{inspector.selection.objectId}:{Object.keys(snapshot.objects).length}</span>}
-        viewportOverlay={({ runtimeProblems }) => <span>{runtimeProblems.length} runtime problems</span>}
-      />
-    );
+    const hierarchy = await screen.findByTestId("demo-hierarchy");
+    expect(within(hierarchy).getByText("Simple box")).toBeTruthy();
+    expect(within(hierarchy).getByText("simple-box")).toBeTruthy();
+    expect(within(hierarchy).getByText("Recoverable asset")).toBeTruthy();
+    expect(screen.getByTestId("demo-selection-count").textContent).toContain("Simple box (1)");
+    expect(screen.getByTestId("demo-assets").textContent).toContain("recoverable-box");
 
-    expect(screen.getByText("object-a:1")).toBeTruthy();
-    expect(screen.getByText("Transform")).toBeTruthy();
-    expect(screen.getByText("Material")).toBeTruthy();
-    expect(screen.getByText("Environment")).toBeTruthy();
-    expect(screen.getByText("Lights")).toBeTruthy();
+    await act(async () => {
+      await clickButton("Nudge primary");
+    });
+    expect(screen.getByText("Transform command changed history").closest("li")?.dataset.complete).toBe("true");
+    expect(screen.getByText("Undo is available").closest("li")?.dataset.complete).toBe("true");
 
-    fireEvent.click(screen.getByText("Move object"));
-    expect(editor.getSnapshot().objects["object-a"].transform.position).toEqual([4, 0, 0]);
+    await clickButton("Undo");
+    expect(screen.getByText("Redo is available").closest("li")?.dataset.complete).toBe("true");
+    await clickButton("Redo");
 
-    fireEvent.click(screen.getByText("Save restore"));
-    expect(editor.getSnapshot().objects["object-a"].transform.position).toEqual([4, 0, 0]);
-  });
+    await clickButton("Frame selected");
+    expect(screen.getByText("Camera helper used").closest("li")?.dataset.complete).toBe("true");
+
+    await clickButton("Snap move");
+    expect(screen.getByText("Snap/mode status visible").closest("li")?.dataset.complete).toBe("true");
+
+    await clickButton("Duplicate");
+    expect(screen.getByText("Copy/paste or duplicate ran").closest("li")?.dataset.complete).toBe("true");
+
+    await clickButton("Group demo");
+    expect(screen.getByText("Hierarchy operation changed nesting").closest("li")?.dataset.complete).toBe("true");
+
+    await clickButton("Export project");
+    expect(screen.getByText("Project exported").closest("li")?.dataset.complete).toBe("true");
+
+    await clickButton("Reopen package");
+    expect(screen.getByText("Project reopened").closest("li")?.dataset.complete).toBe("true");
+    expect(screen.getByTestId("demo-status").textContent).not.toContain("OK");
+
+    await waitFor(() => {
+      expect(screen.getByText("Missing asset surfaced").closest("li")?.dataset.complete).toBe("true");
+      expect(screen.getByTestId("demo-problem-badge").textContent).toContain("1 problems");
+    });
+    expect(screen.getByTestId("demo-status").textContent).not.toContain("asset-unresolved");
+
+    await act(async () => {
+      await clickButton("Replace missing asset");
+    });
+    expect(await screen.findByText("Missing asset recovered")).toBeTruthy();
+    expect(screen.getByText("Missing asset recovered").closest("li")?.dataset.complete).toBe("true");
+    expect(screen.getByTestId("demo-problem-badge").textContent).toContain("0 problems");
+    expect(screen.getByTestId("demo-assets").textContent).toContain("recoverable-box");
+  }, 10000);
 });
+
+async function clickButton(name: string): Promise<void> {
+  const button = screen.getAllByRole("button", { name }).at(-1);
+  expect(button, `Expected button ${name}`).toBeTruthy();
+  fireEvent.click(button!);
+  await act(async () => undefined);
+}
 
 function fakeRenderer(container: HTMLElement): RendererLike {
   return {
