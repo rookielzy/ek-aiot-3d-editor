@@ -15,33 +15,230 @@ body {
   height: 100vh;
 }
 
-.proof-summary {
-  display: grid;
-  gap: 0.75rem;
-  margin: 0;
-}
-
-.proof-summary div {
+.demo-toolbar {
   display: flex;
-  justify-content: space-between;
-  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
   min-width: 0;
 }
 
-.proof-summary dt {
-  color: #657287;
-}
-
-.proof-summary dd {
-  margin: 0;
+.demo-toolbar__status {
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.625rem;
+  border: 1px solid #d8dee8;
+  border-radius: 0.375rem;
+  background: #eef5fb;
+  color: #304155;
+  font-size: 0.78rem;
   font-weight: 700;
 }
 
+.demo-panel-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.demo-panel {
+  min-width: 0;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #d8dee8;
+}
+
+.demo-panel:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.demo-panel__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.demo-panel h2 {
+  margin: 0;
+  color: #182230;
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+
+.demo-panel__header span {
+  color: #657287;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+.demo-hierarchy,
+.demo-hierarchy ul,
+.demo-assets,
+.demo-checklist {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.demo-hierarchy ul {
+  margin-top: 0.35rem;
+}
+
+.demo-hierarchy__row {
+  width: 100%;
+  max-width: none;
+  justify-content: start;
+  display: grid;
+  grid-template-columns: minmax(4.25rem, auto) minmax(0, 1fr);
+  grid-template-areas:
+    "marker name"
+    "marker asset";
+  gap: 0.1rem 0.5rem;
+  min-height: 3rem;
+  padding-left: calc(0.625rem + (var(--depth, 0) * 1rem));
+  text-align: left;
+}
+
+.demo-hierarchy__row[data-primary="true"] {
+  border-color: #146eb4;
+  background: #dceeff;
+}
+
+.demo-hierarchy__row[data-selected="true"]:not([data-primary="true"]) {
+  border-color: #6fa9d8;
+  background: #eef7ff;
+}
+
+.demo-hierarchy__marker {
+  grid-area: marker;
+  align-self: center;
+  color: #146eb4;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.demo-hierarchy__name {
+  grid-area: name;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.demo-hierarchy__asset {
+  grid-area: asset;
+  min-width: 0;
+  overflow: hidden;
+  color: #657287;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.demo-problem-dot {
+  grid-column: 1 / -1;
+  color: #9a4f00;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.demo-empty {
+  margin: 0;
+  color: #657287;
+}
+
+.demo-command-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.demo-command-grid button,
+.demo-panel > button {
+  width: 100%;
+  max-width: none;
+}
+
+.demo-assets li {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid #d8dee8;
+  border-radius: 0.375rem;
+  background: #ffffff;
+}
+
+.demo-assets span,
+.demo-assets small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.demo-assets span {
+  font-weight: 800;
+}
+
+.demo-assets small {
+  color: #657287;
+}
+
+.demo-checklist li {
+  display: grid;
+  grid-template-columns: 2.25rem minmax(0, 1fr);
+  gap: 0.45rem;
+  align-items: center;
+  min-height: 2rem;
+  color: #475569;
+  font-size: 0.78rem;
+}
+
+.demo-checklist span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.5rem;
+  border-radius: 0.25rem;
+  background: #e8edf3;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+.demo-checklist li[data-complete="true"] {
+  color: #0d4f2c;
+  font-weight: 700;
+}
+
+.demo-checklist li[data-complete="true"] span {
+  background: #dff3e6;
+  color: #0d6b35;
+}
+
 .proof-overlay {
-  padding: 0.35rem 0.5rem;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.45rem 0.55rem;
   border: 1px solid rgb(255 255 255 / 35%);
   border-radius: 0.375rem;
   background: rgb(17 24 32 / 78%);
   color: #ffffff;
   font-size: 0.78rem;
+}
+
+@media (min-width: 768px) {
+  .demo-command-grid {
+    grid-template-columns: 1fr;
+  }
 }

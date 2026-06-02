@@ -116,8 +116,21 @@ interface WorkbenchContext {
   snapshot: SceneSnapshot;
   inspector: InspectorModel;
   runtimeProblems: Problem[];
+  runtime: EditorRuntime | null;
+  runtimeReady: boolean;
   activeLightId: string | null;
+  operations: AdvancedEditorOperations;
+  historyState: HistoryState;
+  selectionCount: number;
+  snap: SnapSettings;
+  transformMode: TransformMode;
   setActiveLightId(value: string | null): void;
+  setTransformMode(mode: TransformMode): void;
+  toggleSnap(channel: SnapChannel, increment?: number): SnapSettings;
+  runAction(action: EditorAction): EditorActionResult;
+  resetCamera(): void;
+  frameSelected(options?: RuntimeCameraFrameOptions): boolean;
+  frameAll(options?: RuntimeCameraFrameOptions): boolean;
   refreshProblems(): void;
   dispatch(command: Command): CommandResult;
   importProject(packageBytes: Uint8Array, options?: ProjectImportOptions): ProjectImportResult;
@@ -125,6 +138,18 @@ interface WorkbenchContext {
   replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
 }
 ```
+
+## 本地 proof-loop demo
+
+本仓库的 React demo 可通过以下命令启动：
+
+```bash
+pnpm --filter @ek-aiot/react-proof-loop dev
+```
+
+示例首屏就是可操作 workbench，不是 landing page。侧栏从 `SceneSnapshot` 派生层级、资产列表和 proof checklist；toolbar 通过 `runAction()`、camera helpers 和 core operations 触发 transform mode、snap、undo/redo、copy/paste/duplicate/delete/group/ungroup、export/reopen 等验证动作。
+
+Demo checklist 只用于本地验证。它不会写入 snapshot、`.ek3d` 项目包或 React state 之外的 durable editor 数据。缺失资产恢复按钮使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem。
 
 ## 宿主拥有 editor 生命周期
 

@@ -1,132 +1,609 @@
 import { useEffect, useMemo, useState } from "react";
 import { BoxGeometry, Mesh, MeshBasicMaterial } from "three";
-import { AssetResolverBridge, type EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
-import { EditorWorkbench, useEditor } from "@ek-aiot/3d-editor-react";
+import {
+  AssetResolverBridge,
+  type Editor,
+  type EditorRuntimeOptions,
+  type SceneObject,
+  type SceneSnapshot
+} from "@ek-aiot/3d-editor-core";
+import { EditorWorkbench, useEditor, type WorkbenchContext } from "@ek-aiot/3d-editor-react";
+
+const RECOVERABLE_ASSET_ID = "recoverable-box";
+const DEMO_ASSET_BYTES = new Uint8Array([1, 2, 3, 4]);
 
 const demoLoader: EditorRuntimeOptions["loader"] = {
-  async load() {
-    const mesh = new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial({ color: "#3b82f6" }));
-    mesh.name = "Simple box";
+  async load(resolved) {
+    const assetId = typeof resolved.metadata?.assetId === "string" ? resolved.metadata.assetId : undefined;
+    const label = typeof resolved.metadata?.label === "string" ? resolved.metadata.label : undefined;
+    const color = assetId === RECOVERABLE_ASSET_ID ? "#f59e0b" : "#3b82f6";
+    const mesh = new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial({ color }));
+    mesh.name = label ?? assetId ?? "Demo mesh";
     return mesh;
   }
 };
 
-export function App() {
+interface DemoSessionState {
+  camera: boolean;
+  copied: boolean;
+  pasted: boolean;
+  duplicated: boolean;
+  deleted: boolean;
+  grouped: boolean;
+  ungrouped: boolean;
+  exported: boolean;
+  reopened: boolean;
+  missingAssetSeen: boolean;
+  missingAssetRecovered: boolean;
+}
+
+type DemoSessionKey = keyof DemoSessionState;
+
+const initialSession: DemoSessionState = {
+  camera: false,
+  copied: false,
+  pasted: false,
+  duplicated: false,
+  deleted: false,
+  grouped: false,
+  ungrouped: false,
+  exported: false,
+  reopened: false,
+  missingAssetSeen: false,
+  missingAssetRecovered: false
+};
+
+export interface AppProps {
+  rendererFactory?: EditorRuntimeOptions["rendererFactory"];
+}
+
+export function App({ rendererFactory }: AppProps = {}) {
   const editor = useEditor();
-  const resolver = useMemo(() => new AssetResolverBridge((asset) => asset.kind === "glb" ? { uri: `/assets/${asset.id}.glb` } : null), []);
+  const resolver = useMemo(() => new AssetResolverBridge((asset) => {
+    if (asset.kind !== "glb" || asset.id === RECOVERABLE_ASSET_ID) {
+      return null;
+    }
+    return { uri: `/assets/${asset.id}.glb`, metadata: { assetId: asset.id, ...(asset.label ? { label: asset.label } : {}) } };
+  }), []);
   const [status, setStatus] = useState("Project controls ready");
+  const [session, setSession] = useState<DemoSessionState>(initialSession);
 
   useEffect(() => {
     if (editor.getSnapshot().objects.box) {
       return;
     }
 
-    editor.dispatch({ type: "import-glb", objectId: "box", asset: { id: "simple-box", label: "Simple box" } });
+    editor.dispatch({ type: "import-glb", objectId: "box", name: "Simple box", asset: { id: "simple-box", label: "Simple box" } });
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "detail",
+      name: "Detail block",
+      asset: { id: "detail-box", label: "Detail block" },
+      transform: { position: [-1.35, 0, 0] }
+    });
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "recoverable",
+      name: "Recoverable asset",
+      asset: { id: RECOVERABLE_ASSET_ID, label: "Recoverable asset" },
+      transform: { position: [1.35, 0, 0] }
+    });
     editor.dispatch({ type: "select-object", objectId: "box" });
-    editor.dispatch({ type: "register-asset", asset: { id: "studio-hdr", kind: "hdr", label: "Studio HDR" } });
     editor.dispatch({
       type: "set-environment",
       environment: {
-        mode: "hdr",
-        environment: { assetId: "studio-hdr", intensity: 1, rotation: { x: 0, y: 0, z: 0 } },
+        mode: "none",
         background: { mode: "solid", color: "#eef3f8" }
       }
     });
     editor.dispatch({ type: "add-light", light: { id: "fill", kind: "ambient", intensity: 0.6 } });
+    editor.restore(editor.serialize());
   }, [editor]);
+
+  function markSession(key: DemoSessionKey, value = true): void {
+    setSession((current) => current[key] === value ? current : { ...current, [key]: value });
+  }
 
   return (
     <EditorWorkbench
       editor={editor}
       resolver={resolver}
       loader={demoLoader}
-      toolbar={({ dispatch, editor: workbenchEditor, operations }) => (
-        <>
+      rendererFactory={rendererFactory}
+      showDefaultToolbar={false}
+      toolbar={(context) => (
+        <DemoToolbar
+          context={context}
+          session={session}
+          setStatus={setStatus}
+          markSession={markSession}
+        />
+      )}
+      sidePanel={(context) => (
+        <DemoSidePanel
+          context={context}
+          session={session}
+          setStatus={setStatus}
+          markSession={markSession}
+        />
+      )}
+      viewportOverlay={({ runtimeProblems, inspector, transformMode, snap }) => (
+        <div className="proof-overlay" data-testid="demo-viewport-overlay">
+          <span>{runtimeProblems.length} runtime problems</span>
+          <span>Primary {inspector.selection.objectId ?? "None"}</span>
+          <span>{transformMode} · {formatSnapSummary(snap)}</span>
+        </div>
+      )}
+      status={({ snapshot, runtimeProblems, historyState, transformMode, snap }) => (
+        <span data-testid="demo-status">
+          Snapshot v{snapshot.version} · {Object.keys(snapshot.objects).length} objects · {runtimeProblems.length} runtime problems · Undo {historyState.undoCount} / Redo {historyState.redoCount} · {transformMode} · {formatSnapSummary(snap)} · {status}
+        </span>
+      )}
+    />
+  );
+}
+
+function DemoToolbar({
+  context,
+  session,
+  setStatus,
+  markSession
+}: {
+  context: WorkbenchContext;
+  session: DemoSessionState;
+  setStatus(value: string): void;
+  markSession(key: DemoSessionKey, value?: boolean): void;
+}) {
+  return (
+    <div className="demo-toolbar" aria-label="Demo validation controls">
+      <button
+        type="button"
+        onClick={() => {
+          context.runAction("transform-translate");
+          setStatus("Transform mode set to translate");
+        }}
+        aria-pressed={context.transformMode === "translate"}
+      >
+        Move mode
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          context.runAction("transform-rotate");
+          setStatus("Transform mode set to rotate");
+        }}
+        aria-pressed={context.transformMode === "rotate"}
+      >
+        Rotate mode
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          context.runAction("transform-scale");
+          setStatus("Transform mode set to scale");
+        }}
+        aria-pressed={context.transformMode === "scale"}
+      >
+        Scale mode
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          context.runAction("toggle-translate-snap");
+          setStatus("Translate snap toggled");
+        }}
+        aria-pressed={isSnapEnabled(context.snap.translate)}
+      >
+        Snap move
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          context.frameSelected();
+          markSession("camera");
+          setStatus("Framed selected object");
+        }}
+        disabled={!context.runtimeReady || context.selectionCount === 0}
+      >
+        Frame selected
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          context.resetCamera();
+          markSession("camera");
+          setStatus("Camera reset");
+        }}
+        disabled={!context.runtimeReady}
+      >
+        Reset camera
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          movePrimary(context);
+          setStatus("Moved primary object through core command");
+        }}
+        disabled={context.selectionCount === 0}
+      >
+        Nudge primary
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          context.runAction("undo");
+          setStatus("Undo applied");
+        }}
+        disabled={context.historyState.undoCount === 0}
+      >
+        Undo
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          context.runAction("redo");
+          setStatus("Redo applied");
+        }}
+        disabled={context.historyState.redoCount === 0}
+      >
+        Redo
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          const result = context.exportProject({ partial: true });
+          if (result.packageBytes instanceof Uint8Array) {
+            markSession("exported");
+            setStatus("Exported .ek3d project package");
+          } else {
+            setStatus(result.problems[0]?.message ?? "Export failed");
+          }
+        }}
+      >
+        Export project
+      </button>
+      <button
+        type="button"
+        onClick={() => reopenProject(context.editor, setStatus, markSession)}
+      >
+        Reopen package
+      </button>
+      <span className="demo-toolbar__status" data-testid="demo-toolbar-state">
+        {context.transformMode} · {formatSnapSummary(context.snap)} · {session.reopened ? "Restored" : "Live"}
+      </span>
+    </div>
+  );
+}
+
+function DemoSidePanel({
+  context,
+  session,
+  setStatus,
+  markSession
+}: {
+  context: WorkbenchContext;
+  session: DemoSessionState;
+  setStatus(value: string): void;
+  markSession(key: DemoSessionKey, value?: boolean): void;
+}) {
+  const state = deriveDemoState(context, session);
+
+  useEffect(() => {
+    if (state.problemCount > 0) {
+      markSession("missingAssetSeen");
+    }
+  }, [state.problemCount, markSession]);
+
+  return (
+    <div className="demo-panel-grid">
+      <section className="demo-panel" aria-labelledby="demo-hierarchy-title">
+        <div className="demo-panel__header">
+          <h2 id="demo-hierarchy-title">Scene hierarchy</h2>
+          <span data-testid="demo-selection-count">{state.selectionLabel}</span>
+        </div>
+        {state.hierarchy.length > 0 ? (
+          <ul className="demo-hierarchy" data-testid="demo-hierarchy">
+            {state.hierarchy.map((node) => (
+              <HierarchyNode
+                key={node.object.id}
+                node={node}
+                primaryObjectId={context.snapshot.selection.objectId}
+                selectedIds={context.snapshot.selection.objectIds}
+                problemObjectIds={state.problemObjectIds}
+                onSelect={(objectId) => {
+                  context.dispatch({ type: "select-object", objectId });
+                  setStatus(`Selected ${objectId} from hierarchy`);
+                }}
+              />
+            ))}
+          </ul>
+        ) : (
+          <p className="demo-empty">No scene objects</p>
+        )}
+      </section>
+
+      <section className="demo-panel" aria-labelledby="demo-operations-title">
+        <div className="demo-panel__header">
+          <h2 id="demo-operations-title">Object operations</h2>
+          <span>{context.operations.canPaste() ? "Clipboard ready" : "Clipboard empty"}</span>
+        </div>
+        <div className="demo-command-grid">
           <button
             type="button"
-            onClick={() => dispatch({ type: "set-transform", objectId: "box", transform: { position: [1.5, 0, 0] } })}
+            onClick={() => {
+              context.runAction("select-all");
+              setStatus("Selected all objects");
+            }}
           >
-            Move box
+            Select all
           </button>
           <button
             type="button"
             onClick={() => {
-              const saved = workbenchEditor.serialize();
-              workbenchEditor.dispatch({ type: "set-transform", objectId: "box", transform: { position: [3, 0, 0] } });
-              workbenchEditor.restore(saved);
+              const payload = context.operations.copy();
+              markSession("copied", Boolean(payload));
+              setStatus(payload ? "Copied selection" : "Nothing to copy");
             }}
+            disabled={context.selectionCount === 0}
           >
-            Save / restore
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const result = workbenchEditor.exportProject({ partial: true });
-              setStatus(result.packageBytes ? "Exported .ek3d project package" : result.problems[0]?.message ?? "Export failed");
-            }}
-          >
-            Export project
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const result = workbenchEditor.exportProject({ partial: true });
-              if (!(result.packageBytes instanceof Uint8Array)) {
-                setStatus("Project contains async browser file payloads");
-                return;
-              }
-              const imported = workbenchEditor.importProject(result.packageBytes);
-              setStatus(imported.ok ? "Imported .ek3d project package" : imported.problems[0]?.message ?? "Import failed");
-            }}
-          >
-            Reopen package
-          </button>
-          <button type="button" onClick={() => operations.copy()}>
             Copy
           </button>
-          <button type="button" onClick={() => operations.paste()}>
+          <button
+            type="button"
+            onClick={() => {
+              const result = context.operations.paste();
+              markSession("pasted", result.ok);
+              setStatus(result.ok ? "Pasted clipboard objects" : result.error ?? "Paste failed");
+            }}
+            disabled={!context.operations.canPaste()}
+          >
             Paste
           </button>
-          <button type="button" onClick={() => operations.duplicate()}>
+          <button
+            type="button"
+            onClick={() => {
+              const result = context.operations.duplicate();
+              markSession("duplicated", result.ok);
+              setStatus(result.ok ? "Duplicated selection" : result.error ?? "Duplicate failed");
+            }}
+            disabled={context.selectionCount === 0}
+          >
             Duplicate
           </button>
-          <button type="button" onClick={() => operations.delete()}>
+          <button
+            type="button"
+            onClick={() => {
+              const result = context.operations.delete();
+              markSession("deleted", result.ok);
+              setStatus(result.ok ? "Deleted selection" : result.error ?? "Delete failed");
+            }}
+            disabled={context.selectionCount === 0}
+          >
             Delete
           </button>
           <button
             type="button"
             onClick={() => {
-              dispatch({ type: "select-objects", mode: "all" });
-              operations.group();
+              context.dispatch({ type: "select-objects", mode: "replace", objectIds: ["box", "detail"], primaryObjectId: "box" });
+              const result = context.operations.group(["box", "detail"]);
+              markSession("grouped", result.ok);
+              setStatus(result.ok ? "Grouped detail under Simple box" : result.error ?? "Group failed");
             }}
+            disabled={!context.snapshot.objects.box || !context.snapshot.objects.detail}
           >
-            Group all
+            Group demo
           </button>
-          <button type="button" onClick={() => operations.ungroup()}>
+          <button
+            type="button"
+            onClick={() => {
+              const result = context.operations.ungroup("box");
+              markSession("ungrouped", result.ok);
+              setStatus(result.ok ? "Ungrouped Simple box children" : result.error ?? "Ungroup failed");
+            }}
+            disabled={!context.snapshot.objects.box?.children.length}
+          >
             Ungroup
           </button>
-        </>
-      )}
-      sidePanel={({ snapshot, inspector, selectionCount }) => (
-        <dl className="proof-summary">
-          <div>
-            <dt>Objects</dt>
-            <dd>{Object.keys(snapshot.objects).length}</dd>
-          </div>
-          <div>
-            <dt>Selection</dt>
-            <dd>{inspector.selection.objectId ?? "None"} ({selectionCount})</dd>
-          </div>
-        </dl>
-      )}
-      viewportOverlay={({ runtimeProblems }) => (
-        <span className="proof-overlay">{runtimeProblems.length} runtime problems</span>
-      )}
-      status={({ snapshot, runtimeProblems }) => (
-        <span>
-          Snapshot v{snapshot.version} · {runtimeProblems.length} runtime problems · {status}
-        </span>
-      )}
-    />
+        </div>
+      </section>
+
+      <section className="demo-panel" aria-labelledby="demo-assets-title">
+        <div className="demo-panel__header">
+          <h2 id="demo-assets-title">Assets and problems</h2>
+          <span data-testid="demo-problem-badge">{state.problemCount} problems</span>
+        </div>
+        <ul className="demo-assets" data-testid="demo-assets">
+          {state.assets.map((asset) => (
+            <li key={asset.id}>
+              <span>{asset.label ?? asset.id}</span>
+              <small>{asset.kind} · {asset.id}</small>
+            </li>
+          ))}
+        </ul>
+        <button
+          type="button"
+          onClick={async () => {
+            const result = await context.replaceAsset({
+              assetId: RECOVERABLE_ASSET_ID,
+              kind: "glb",
+              source: DEMO_ASSET_BYTES,
+              label: "Recovered box.glb",
+              mimeType: "model/gltf-binary"
+            });
+            if (result.ok) {
+              await context.runtime?.project();
+              context.refreshProblems();
+              markSession("missingAssetRecovered");
+              setStatus("Recovered missing asset without changing its asset ID");
+            } else {
+              setStatus(result.problems[0]?.message ?? "Replacement failed");
+            }
+          }}
+        >
+          Replace missing asset
+        </button>
+      </section>
+
+      <section className="demo-panel" aria-labelledby="demo-checklist-title">
+        <div className="demo-panel__header">
+          <h2 id="demo-checklist-title">Proof checklist</h2>
+          <span data-testid="demo-checklist-score">{state.completedCount}/{state.checklist.length}</span>
+        </div>
+        <ol className="demo-checklist" data-testid="demo-checklist">
+          {state.checklist.map((item) => (
+            <li key={item.label} data-complete={item.complete ? "true" : "false"}>
+              <span aria-hidden="true">{item.complete ? "OK" : "--"}</span>
+              {item.label}
+            </li>
+          ))}
+        </ol>
+      </section>
+    </div>
   );
+}
+
+interface HierarchyNodeModel {
+  object: SceneObject;
+  depth: number;
+  children: HierarchyNodeModel[];
+}
+
+function HierarchyNode({
+  node,
+  primaryObjectId,
+  selectedIds,
+  problemObjectIds,
+  onSelect
+}: {
+  node: HierarchyNodeModel;
+  primaryObjectId: string | null;
+  selectedIds: string[];
+  problemObjectIds: Set<string>;
+  onSelect(objectId: string): void;
+}) {
+  const selected = selectedIds.includes(node.object.id);
+  const primary = primaryObjectId === node.object.id;
+  const problem = problemObjectIds.has(node.object.id);
+
+  return (
+    <li>
+      <button
+        type="button"
+        className="demo-hierarchy__row"
+        style={{ "--depth": node.depth } as React.CSSProperties}
+        data-object-id={node.object.id}
+        data-selected={selected ? "true" : "false"}
+        data-primary={primary ? "true" : "false"}
+        onClick={() => onSelect(node.object.id)}
+      >
+        <span className="demo-hierarchy__marker">{primary ? "Primary" : selected ? "Selected" : "Object"}</span>
+        <span className="demo-hierarchy__name">{node.object.name}</span>
+        <span className="demo-hierarchy__asset">{node.object.asset.id}</span>
+        {problem ? <span className="demo-problem-dot">Problem</span> : null}
+      </button>
+      {node.children.length > 0 ? (
+        <ul>
+          {node.children.map((child) => (
+            <HierarchyNode
+              key={child.object.id}
+              node={child}
+              primaryObjectId={primaryObjectId}
+              selectedIds={selectedIds}
+              problemObjectIds={problemObjectIds}
+              onSelect={onSelect}
+            />
+          ))}
+        </ul>
+      ) : null}
+    </li>
+  );
+}
+
+function deriveDemoState(context: WorkbenchContext, session: DemoSessionState) {
+  const snapshot = context.snapshot;
+  const objectCount = Object.keys(snapshot.objects).length;
+  const selectedObject = snapshot.selection.objectId ? snapshot.objects[snapshot.selection.objectId] : undefined;
+  const transformMoved = Boolean(selectedObject && selectedObject.transform.position[0] > 0);
+  const problemObjectIds = new Set(context.runtimeProblems.map((problem) => problem.objectId).filter((objectId): objectId is string => Boolean(objectId)));
+  const checklist = [
+    { label: "Hierarchy lists seeded scene", complete: objectCount >= 3 },
+    { label: "Selection is visible", complete: context.selectionCount > 0 },
+    { label: "Camera helper used", complete: session.camera },
+    { label: "Transform command changed history", complete: transformMoved && context.historyState.undoCount > 0 },
+    { label: "Undo is available", complete: context.historyState.undoCount > 0 },
+    { label: "Redo is available", complete: context.historyState.redoCount > 0 },
+    { label: "Hierarchy operation changed nesting", complete: session.grouped || Object.values(snapshot.objects).some((object) => object.children.length > 0) },
+    { label: "Copy/paste or duplicate ran", complete: session.pasted || session.duplicated },
+    { label: "Project exported", complete: session.exported },
+    { label: "Project reopened", complete: session.reopened },
+    { label: "Missing asset surfaced", complete: session.missingAssetSeen || context.runtimeProblems.some((problem) => problem.assetId === RECOVERABLE_ASSET_ID) },
+    { label: "Missing asset recovered", complete: session.missingAssetRecovered && context.runtimeProblems.every((problem) => problem.assetId !== RECOVERABLE_ASSET_ID) },
+    { label: "Snap/mode status visible", complete: isSnapEnabled(context.snap.translate) || context.transformMode !== "translate" }
+  ];
+
+  return {
+    hierarchy: buildHierarchy(snapshot),
+    assets: Object.values(snapshot.assets),
+    checklist,
+    completedCount: checklist.filter((item) => item.complete).length,
+    problemCount: context.runtimeProblems.length,
+    problemObjectIds,
+    selectionLabel: selectedObject ? `${selectedObject.name} (${context.selectionCount})` : `None (${context.selectionCount})`
+  };
+}
+
+function buildHierarchy(snapshot: SceneSnapshot): HierarchyNodeModel[] {
+  const visit = (objectId: string, depth: number): HierarchyNodeModel | null => {
+    const object = snapshot.objects[objectId];
+    if (!object) {
+      return null;
+    }
+
+    return {
+      object,
+      depth,
+      children: object.children.map((childId) => visit(childId, depth + 1)).filter((node): node is HierarchyNodeModel => Boolean(node))
+    };
+  };
+
+  return snapshot.rootObjectIds.map((objectId) => visit(objectId, 0)).filter((node): node is HierarchyNodeModel => Boolean(node));
+}
+
+function movePrimary(context: WorkbenchContext): void {
+  const objectId = context.snapshot.selection.objectId;
+  if (!objectId) {
+    return;
+  }
+  const object = context.snapshot.objects[objectId];
+  context.dispatch({
+    type: "set-transform",
+    objectId,
+    transform: {
+      position: [object.transform.position[0] + 0.5, object.transform.position[1], object.transform.position[2]]
+    }
+  });
+}
+
+function reopenProject(editor: Editor, setStatus: (value: string) => void, markSession: (key: DemoSessionKey, value?: boolean) => void): void {
+  const result = editor.exportProject({ partial: true });
+  if (!(result.packageBytes instanceof Uint8Array)) {
+    setStatus("Project contains async browser file payloads");
+    return;
+  }
+  const imported = editor.importProject(result.packageBytes);
+  if (imported.ok) {
+    markSession("exported");
+    markSession("reopened");
+    setStatus("Imported .ek3d project package");
+  } else {
+    setStatus(imported.problems[0]?.message ?? "Import failed");
+  }
+}
+
+function formatSnapSummary(snap: WorkbenchContext["snap"]): string {
+  return `snap ${isSnapEnabled(snap.translate) ? "move" : "off"}`;
+}
+
+function isSnapEnabled(value: number | null | undefined): boolean {
+  return value !== null && value !== undefined;
 }
