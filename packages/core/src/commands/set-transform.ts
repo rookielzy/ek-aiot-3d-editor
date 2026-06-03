@@ -1,36 +1,21 @@
-import { cloneTransform, normalizeTransform, transformEquals } from "../snapshot/transforms";
-import { syncObjectNodeTransform } from "../snapshot/nodes";
+import { findObjectNodeId } from "../snapshot/nodes";
 import type { SceneSnapshot } from "../snapshot/types";
+import { applySetNodeTransform } from "./set-node-transform";
 import type { SetTransformCommand } from "./types";
 
 export function applySetTransform(snapshot: SceneSnapshot, command: SetTransformCommand): SceneSnapshot {
-  const object = snapshot.objects[command.objectId];
-  if (!object) {
+  if (!snapshot.objects[command.objectId]) {
     throw new Error(`Object ${command.objectId} does not exist.`);
   }
 
-  const nextTransform = cloneTransform(normalizeTransform({
-    ...object.transform,
-    ...command.transform
-  }));
-
-  if (transformEquals(object.transform, nextTransform)) {
-    return snapshot;
+  const nodeId = findObjectNodeId(snapshot, command.objectId);
+  if (!nodeId) {
+    throw new Error(`Object ${command.objectId} does not have a scene node.`);
   }
 
-  const nextSnapshot = {
-    ...snapshot,
-    objects: {
-      ...snapshot.objects,
-      [command.objectId]: {
-        ...object,
-        transform: nextTransform
-      }
-    }
-  };
-
-  return {
-    ...nextSnapshot,
-    ...syncObjectNodeTransform(nextSnapshot, command.objectId)
-  };
+  return applySetNodeTransform(snapshot, {
+    type: "set-node-transform",
+    nodeId,
+    transform: command.transform
+  });
 }

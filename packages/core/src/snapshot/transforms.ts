@@ -41,6 +41,21 @@ export function getLocalTransformForParent(snapshot: SceneSnapshot, objectId: st
   return matrixToTransform(parentWorldMatrix.invert().multiply(worldMatrix));
 }
 
+export function getWorldNodeTransform(snapshot: SceneSnapshot, nodeId: string): Transform {
+  const matrix = getWorldNodeMatrix(snapshot, nodeId);
+  return matrixToTransform(matrix);
+}
+
+export function getLocalNodeTransformForParent(snapshot: SceneSnapshot, nodeId: string, parentId: string | null): Transform {
+  const worldMatrix = getWorldNodeMatrix(snapshot, nodeId);
+  if (!parentId) {
+    return matrixToTransform(worldMatrix);
+  }
+
+  const parentWorldMatrix = getWorldNodeMatrix(snapshot, parentId);
+  return matrixToTransform(parentWorldMatrix.invert().multiply(worldMatrix));
+}
+
 function getWorldMatrix(snapshot: SceneSnapshot, objectId: string): Matrix4 {
   const object = snapshot.objects[objectId];
   if (!object) {
@@ -53,6 +68,20 @@ function getWorldMatrix(snapshot: SceneSnapshot, objectId: string): Matrix4 {
   }
 
   return getWorldMatrix(snapshot, object.parentId).multiply(localMatrix);
+}
+
+function getWorldNodeMatrix(snapshot: SceneSnapshot, nodeId: string): Matrix4 {
+  const node = snapshot.nodes[nodeId];
+  if (!node) {
+    throw new Error(`Node ${nodeId} does not exist.`);
+  }
+
+  const localMatrix = transformToMatrix(node.transform ?? normalizeTransform());
+  if (!node.parentId) {
+    return localMatrix;
+  }
+
+  return getWorldNodeMatrix(snapshot, node.parentId).multiply(localMatrix);
 }
 
 function transformToMatrix(transform: Transform): Matrix4 {

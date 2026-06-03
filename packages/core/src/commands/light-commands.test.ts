@@ -6,6 +6,28 @@ import { restoreSnapshot, serializeSnapshot } from "../editor/serialization";
 import { CommandDispatcher } from "./dispatcher";
 
 describe("light commands", () => {
+  it.each([
+    ["ambient", false],
+    ["directional", true],
+    ["hemisphere", false],
+    ["point", true],
+    ["spot", true]
+  ] as const)("adds %s lights with matching node transform capability", (kind, transformable) => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+
+    const result = dispatcher.dispatch({ type: "add-light", light: { id: `${kind}-a`, kind } });
+
+    expect(result.ok).toBe(true);
+    const node = result.snapshot.nodes[`${kind}-a`];
+    expect(node).toMatchObject({
+      id: `${kind}-a`,
+      kind: "light",
+      lightId: `${kind}-a`
+    });
+    expect("transform" in node).toBe(transformable);
+  });
+
   it("adds ambient lights as undoable durable authoring data", () => {
     const store = new EditorStore();
     const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
@@ -136,6 +158,23 @@ describe("light commands", () => {
 
     dispatcher.dispatch({ type: "remove-light", lightId: "point-a" });
     expect(store.getSnapshot().lights["point-a"]).toBeUndefined();
+  });
+
+  it("removes a light node subtree and normalizes selection", () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "add-light", light: { id: "point-a", kind: "point" } });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "reparent-node", nodeId: "object-a", parentId: "point-a" });
+    dispatcher.dispatch({ type: "select-nodes", mode: "replace", nodeIds: ["point-a", "object-a"], primaryNodeId: "point-a" });
+
+    const result = dispatcher.dispatch({ type: "remove-light", lightId: "point-a" });
+
+    expect(result.ok).toBe(true);
+    expect(result.snapshot.lights["point-a"]).toBeUndefined();
+    expect(result.snapshot.nodes["point-a"]).toBeUndefined();
+    expect(result.snapshot.objects["object-a"]).toBeUndefined();
+    expect(result.snapshot.selection).toEqual({ nodeId: null, nodeIds: [], objectId: null, objectIds: [] });
   });
 
   it("does not persist transforms on non-spatial light updates", () => {

@@ -1,8 +1,9 @@
 import { getSelectedObjectIds, getTopLevelSelectedObjectIds } from "../selection/selection";
-import { isAncestorOf, reparentObject } from "../snapshot/hierarchy";
-import { syncNodesFromObjectHierarchy, syncSelectionFromObjectSelection } from "../snapshot/nodes";
-import { getLocalTransformForParent } from "../snapshot/transforms";
+import { isNodeAncestorOf, reparentNode } from "../snapshot/hierarchy";
+import { findObjectNodeId } from "../snapshot/nodes";
+import { getLocalNodeTransformForParent } from "../snapshot/transforms";
 import type { SceneSnapshot } from "../snapshot/types";
+import { normalizeSelectionFromNodeIds, setNodeTransformInSnapshot, syncPayloadsFromNodes } from "./node-state";
 import type { GroupObjectsCommand } from "./types";
 
 export function applyGroupObjects(snapshot: SceneSnapshot, command: GroupObjectsCommand): SceneSnapshot {
@@ -23,42 +24,45 @@ export function applyGroupObjects(snapshot: SceneSnapshot, command: GroupObjects
     return snapshot;
   }
 
-  let objects = snapshot.objects;
-  let rootObjectIds = snapshot.rootObjectIds;
+  const primaryNodeId = findObjectNodeId(snapshot, primaryObjectId);
+  if (!primaryNodeId) {
+    throw new Error(`Object ${primaryObjectId} does not have a scene node.`);
+  }
+
+  let nextSnapshot = snapshot;
   for (const objectId of topLevelIds) {
     if (objectId === primaryObjectId) {
       continue;
     }
-    if (isAncestorOf(snapshot, objectId, primaryObjectId)) {
+    const nodeId = findObjectNodeId(nextSnapshot, objectId);
+    if (!nodeId) {
+      throw new Error(`Object ${objectId} does not have a scene node.`);
+    }
+    if (isNodeAncestorOf(nextSnapshot, nodeId, primaryNodeId)) {
       throw new Error("Group cannot create an ancestor cycle.");
     }
-    const transform = getLocalTransformForParent({ ...snapshot, objects, rootObjectIds }, objectId, primaryObjectId);
-    ({ objects, rootObjectIds } = reparentObject(objects, rootObjectIds, objectId, primaryObjectId));
-    objects = {
-      ...objects,
-      [objectId]: {
-        ...objects[objectId],
-        transform
-      }
-    };
+    const transform = getLocalNodeTransformForParent(nextSnapshot, nodeId, primaryNodeId);
+    const nodeState = reparentNode(nextSnapshot.nodes, nextSnapshot.rootNodeIds, nodeId, primaryNodeId);
+    nextSnapshot = syncPayloadsFromNodes({
+      ...nextSnapshot,
+      nodes: nodeState.nodes,
+      rootNodeIds: nodeState.rootNodeIds
+    });
+    nextSnapshot = setNodeTransformInSnapshot(nextSnapshot, nodeId, transform);
   }
 
-  const nextSnapshot: SceneSnapshot = {
-    ...snapshot,
-    objects,
-    rootObjectIds,
-    selection: {
-      nodeId: snapshot.selection.nodeId,
-      nodeIds: snapshot.selection.nodeIds,
-      objectId: primaryObjectId,
-      objectIds: topLevelIds
-    }
-  };
-
-  const nodeState = syncNodesFromObjectHierarchy(nextSnapshot);
   return {
     ...nextSnapshot,
-    ...nodeState,
-    selection: syncSelectionFromObjectSelection({ ...nextSnapshot, ...nodeState })
+    selection: normalizeSelectionFromNodeIds(
+      nextSnapshot,
+      topLevelIds.map((objectId) => {
+        const nodeId = findObjectNodeId(nextSnapshot, objectId);
+        if (!nodeId) {
+          throw new Error(`Object ${objectId} does not have a scene node.`);
+        }
+        return nodeId;
+      }),
+      primaryNodeId
+    )
   };
 }
