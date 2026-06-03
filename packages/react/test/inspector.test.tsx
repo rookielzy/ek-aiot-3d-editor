@@ -26,7 +26,7 @@ describe("React InspectorPanel", () => {
     fireEvent.change(input, { target: { value: "4" } });
     fireEvent.blur(input);
 
-    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "set-transform", objectId: "object-a", transform: { position: [4, 0, 0] } });
+    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "set-node-transform", nodeId: "object-a", transform: { position: [4, 0, 0] } });
     expect(editor.getSnapshot().objects["object-a"].transform.position).toEqual([4, 0, 0]);
   });
 

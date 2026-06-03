@@ -119,13 +119,16 @@ export interface MaterialInspectorSection extends InspectorSection {
 
 export interface LightListItem {
   id: string;
+  nodeId: string | null;
   label: string;
   kind: LightKind;
   active: boolean;
+  selected: boolean;
 }
 
 export interface LightInspectorSection extends InspectorSection {
   activeLightId: string | null;
+  activeLightNodeId: string | null;
   lights: LightListItem[];
   addOptions: InspectorFieldOption<LightKind>[];
 }
@@ -164,6 +167,9 @@ export interface InspectorModel {
 }
 
 export interface BuildInspectorModelOptions {
+  /**
+   * @deprecated Light inspector targeting is derived from node selection.
+   */
   activeLightId?: string | null;
   runtimeProblems?: readonly Problem[];
 }

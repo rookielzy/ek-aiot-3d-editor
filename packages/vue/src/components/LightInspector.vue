@@ -13,6 +13,8 @@
         :key="light.id"
         type="button"
         :class="{ 'is-active': light.active }"
+        :data-node-id="light.nodeId ?? undefined"
+        :data-selected="light.selected ? 'true' : 'false'"
         @click="$emit('update:activeLightId', light.id)"
       >
         <span>{{ light.label }}</span>
@@ -20,6 +22,7 @@
       </button>
     </div>
     <p v-else class="ek-inspector-empty">{{ section.reason }}</p>
+    <p v-if="section.empty && section.reason && section.lights.length > 0" class="ek-inspector-empty">{{ section.reason }}</p>
     <div v-if="section.activeLightId" class="ek-inspector-grid">
       <label v-for="field in section.fields" :key="field.id" class="ek-inspector-field">
         <span>{{ field.label }}</span>
@@ -47,7 +50,6 @@ import {
   buildAddLightCommand,
   buildRemoveLightCommand,
   buildUpdateLightCommand,
-  getNextActiveLightId,
   type Editor,
   type LightFieldId,
   type LightInspectorSection,
@@ -97,11 +99,9 @@ function removeActive() {
   if (!props.section.activeLightId) {
     return;
   }
-  const nextActiveId = getNextActiveLightId(props.snapshot, props.section.activeLightId);
   const result = buildRemoveLightCommand(props.snapshot, props.section.activeLightId);
   if (result.ok) {
     props.editor.dispatch(result.command);
-    emit("update:activeLightId", nextActiveId);
   }
 }
 </script>

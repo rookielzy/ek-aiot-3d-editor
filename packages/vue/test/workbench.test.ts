@@ -146,24 +146,33 @@ describe("Vue EditorWorkbench", () => {
     wrapper.unmount();
   });
 
-  it("shares active light state between slot context and the built-in inspector", async () => {
+  it("routes light list choices through node selection and exposes node-aware context", async () => {
     const editor = markRaw(createEditor());
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
     editor.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
     editor.dispatch({ type: "add-light", light: { id: "light-b", kind: "point" } });
 
     const wrapper = mount(EditorWorkbench, {
       props: { editor, rendererFactory: fakeRenderer },
       slots: {
-        status: ({ activeLightId }) => h("span", `Active ${activeLightId}`)
+        status: ({ activeLightId, selectedNodeId, selectedNodeKind, selectedObjectId, selectedLightId }) =>
+          h("span", `Active ${activeLightId ?? "none"} · Node ${selectedNodeId}:${selectedNodeKind} · Object ${selectedObjectId ?? "none"} · Light ${selectedLightId ?? "none"}`)
       }
     });
 
-    expect(wrapper.text()).toContain("Active light-a");
+    expect(wrapper.text()).toContain("Active none · Node object-a:object · Object object-a · Light none");
 
     await wrapper.findAll(".ek-inspector-light-list button")[1].trigger("click");
     await nextTick();
 
-    expect(wrapper.text()).toContain("Active light-b");
+    expect(editor.getSnapshot().selection).toMatchObject({
+      nodeId: "light-b",
+      nodeIds: ["light-b"],
+      objectId: null,
+      objectIds: []
+    });
+    expect(wrapper.text()).toContain("Active light-b · Node light-b:light · Object none · Light light-b");
     wrapper.unmount();
   });
 
@@ -348,6 +357,35 @@ describe("Vue EditorWorkbench", () => {
 
     wrapper.unmount();
     expect(editor.disposed).toBe(false);
+  });
+
+  it("keeps activeLightId as a writable compatibility selector for light nodes only", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+    editor.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
+    let workbench!: ReturnType<typeof useWorkbench>;
+    const Harness = defineComponent({
+      setup() {
+        workbench = useWorkbench({ editor });
+        return () => null;
+      }
+    });
+    const wrapper = mount(Harness);
+
+    workbench.activeLightId.value = null;
+    await nextTick();
+    expect(editor.getSnapshot().selection.nodeId).toBe("object-a");
+
+    workbench.activeLightId.value = "light-a";
+    await nextTick();
+    expect(editor.getSnapshot().selection.nodeId).toBe("light-a");
+
+    workbench.activeLightId.value = null;
+    await nextTick();
+    expect(editor.getSnapshot().selection.nodeId).toBeNull();
+
+    wrapper.unmount();
   });
 });
 

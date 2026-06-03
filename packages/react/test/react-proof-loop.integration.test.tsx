@@ -67,6 +67,8 @@ describe("React proof-loop parity", () => {
     expect(within(hierarchy).getByText("Simple box")).toBeTruthy();
     expect(within(hierarchy).getByText("simple-box")).toBeTruthy();
     expect(within(hierarchy).getByText("Recoverable asset")).toBeTruthy();
+    expect(within(hierarchy).getByText("Ambient light")).toBeTruthy();
+    expect(hierarchy.querySelector('[data-node-kind="light"][data-light-id="fill"]')).toBeTruthy();
     expect(screen.getByTestId("demo-selection-count").textContent).toContain("Simple box (1)");
     expect(screen.getByTestId("demo-assets").textContent).toContain("recoverable-box");
 

@@ -138,8 +138,10 @@ describe("React EditorWorkbench", () => {
     expect(screen.getByText("Runtime ready")).toBeTruthy();
   });
 
-  it("shares active light state between render context and the built-in inspector", () => {
+  it("routes light list choices through node selection and exposes node-aware context", () => {
     const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
     editor.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
     editor.dispatch({ type: "add-light", light: { id: "light-b", kind: "point" } });
 
@@ -147,15 +149,54 @@ describe("React EditorWorkbench", () => {
       <EditorWorkbench
         editor={editor}
         rendererFactory={fakeRenderer}
-        status={({ activeLightId }) => <span>Active {activeLightId}</span>}
+        status={({ activeLightId, selectedNodeId, selectedNodeKind, selectedObjectId, selectedLightId }) => (
+          <span>
+            Active {activeLightId ?? "none"} · Node {selectedNodeId}:{selectedNodeKind} · Object {selectedObjectId ?? "none"} · Light {selectedLightId ?? "none"}
+          </span>
+        )}
       />
     );
 
-    expect(screen.getByText("Active light-a")).toBeTruthy();
+    expect(screen.getByText(/Active none .* Node object-a:object .* Object object-a .* Light none/)).toBeTruthy();
 
     fireEvent.click(screen.getByText("Point light"));
 
-    expect(screen.getByText("Active light-b")).toBeTruthy();
+    expect(editor.getSnapshot().selection).toMatchObject({
+      nodeId: "light-b",
+      nodeIds: ["light-b"],
+      objectId: null,
+      objectIds: []
+    });
+    expect(screen.getByText(/Active light-b .* Node light-b:light .* Object none .* Light light-b/)).toBeTruthy();
+  });
+
+  it("keeps setActiveLightId as a compatibility selector for light nodes only", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+    editor.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
+
+    render(
+      <EditorWorkbench
+        editor={editor}
+        rendererFactory={fakeRenderer}
+        status={({ setActiveLightId }) => (
+          <>
+            <button onClick={() => setActiveLightId(null)}>Clear light focus</button>
+            <button onClick={() => setActiveLightId("light-a")}>Focus light</button>
+          </>
+        )}
+      />
+    );
+
+    fireEvent.click(screen.getByText("Clear light focus"));
+    expect(editor.getSnapshot().selection.nodeId).toBe("object-a");
+
+    fireEvent.click(screen.getByText("Focus light"));
+    expect(editor.getSnapshot().selection.nodeId).toBe("light-a");
+
+    fireEvent.click(screen.getByText("Clear light focus"));
+    expect(editor.getSnapshot().selection.nodeId).toBeNull();
   });
 
   it("forwards runtime options to the core viewport boundary", async () => {

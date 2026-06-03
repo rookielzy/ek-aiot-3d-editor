@@ -37,9 +37,16 @@ export interface WorkbenchContext {
   runtime: EditorRuntime | null;
   runtimeReady: boolean;
   activeLightId: string | null;
+  activeLightNodeId: string | null;
   operations: AdvancedEditorOperations;
   historyState: HistoryState;
   selectionCount: number;
+  selectedNodeId: string | null;
+  selectedNodeIds: string[];
+  selectedNodeKind: InspectorModel["selection"]["nodeKind"];
+  selectedObjectId: string | null;
+  selectedObjectIds: string[];
+  selectedLightId: string | null;
   snap: SnapSettings;
   transformMode: TransformMode;
   setActiveLightId(value: string | null): void;
@@ -112,9 +119,16 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     runtime,
     runtimeReady: runtime !== null,
     activeLightId: inspector.activeLightId,
+    activeLightNodeId: inspector.inspector.lights.activeLightNodeId,
     operations: editor.operations,
     historyState: editor.getHistoryState(),
     selectionCount: inspector.inspector.selection.count,
+    selectedNodeId: inspector.inspector.selection.nodeId,
+    selectedNodeIds: inspector.inspector.selection.nodeIds,
+    selectedNodeKind: inspector.inspector.selection.nodeKind,
+    selectedObjectId: inspector.inspector.selection.objectId,
+    selectedObjectIds: inspector.inspector.selection.objectIds,
+    selectedLightId: inspector.inspector.selection.lightId,
     snap,
     transformMode,
     setActiveLightId: inspector.setActiveLightId,
