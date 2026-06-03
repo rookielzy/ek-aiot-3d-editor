@@ -45,6 +45,8 @@ import {
   type SceneEnvironmentPatch,
   type SceneNode,
   type SceneObjectNode,
+  type SelectNodeCommand,
+  type SelectNodesCommand,
   type SelectObjectsCommand,
   type SetEnvironmentCommand,
   type SnapSettings,
@@ -137,6 +139,8 @@ describe("core public API", () => {
     const updateLight: UpdateLightCommand = { type: "update-light", lightId: "light-a", patch: { intensity: 2 } };
     const removeLight: RemoveLightCommand = { type: "remove-light", lightId: "light-a" };
     const batch: BatchCommand = { type: "batch", commands: [removeLight] };
+    const selectNode: SelectNodeCommand = { type: "select-node", nodeId: "node-a" };
+    const selectNodes: SelectNodesCommand = { type: "select-nodes", mode: "replace", nodeIds: ["node-a"], primaryNodeId: "node-a" };
     const selectObjects: SelectObjectsCommand = { type: "select-objects", mode: "clear" };
     const deleteObjects: DeleteObjectsCommand = { type: "delete-objects" };
     const duplicateObjects: DuplicateObjectsCommand = { type: "duplicate-objects" };
@@ -180,6 +184,8 @@ describe("core public API", () => {
     expect(updateLight.patch.intensity).toBe(2);
     expect(removeLight.lightId).toBe("light-a");
     expect(batch.commands).toHaveLength(1);
+    expect(selectNode.nodeId).toBe("node-a");
+    expect(selectNodes.primaryNodeId).toBe("node-a");
     expect(selectObjects.mode).toBe("clear");
     expect(deleteObjects.type).toBe("delete-objects");
     expect(duplicateObjects.type).toBe("duplicate-objects");

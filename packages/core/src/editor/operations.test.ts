@@ -43,4 +43,17 @@ describe("advanced editor operations", () => {
     expect(editor.operations.canPaste()).toBe(false);
     expect(editor.operations.paste().ok).toBe(false);
   });
+
+  it("selects and clears all scene nodes through advanced operations", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "add-light", light: { id: "ambient-a", kind: "ambient" } });
+
+    expect(editor.operations.selectAll().ok).toBe(true);
+    expect(editor.getSnapshot().selection.nodeIds).toEqual(["object-a", "ambient-a"]);
+    expect(editor.getSnapshot().selection.objectIds).toEqual(["object-a"]);
+
+    expect(editor.operations.clearSelection().ok).toBe(true);
+    expect(editor.getSnapshot().selection).toEqual({ nodeId: null, nodeIds: [], objectId: null, objectIds: [] });
+  });
 });

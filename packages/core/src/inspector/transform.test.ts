@@ -20,7 +20,7 @@ describe("transform inspector commands", () => {
     const result = buildSetTransformCommand(createEditor().getSnapshot(), "position.x", 4);
 
     expect(result.ok).toBe(false);
-    expect(result.ok ? undefined : result.problem.message).toContain("No selected object");
+    expect(result.ok ? undefined : result.problem.message).toContain("Select a transformable node");
   });
 
   it("keeps transform edits undoable through the core dispatcher", () => {

@@ -2,7 +2,8 @@ import type { Command } from "../commands/types";
 import type { LightKind } from "../lights/types";
 import type { MaterialSide, TextureSlotName } from "../materials/types";
 import type { Problem, ProblemRecoverability, ProblemSeverity, ProblemSource, ProblemTarget } from "../problems/types";
-import type { AssetKind, AssetReference, SceneObject } from "../snapshot/types";
+import type { AssetKind, AssetReference, SceneNode, SceneObject } from "../snapshot/types";
+import type { LightDefinition } from "../lights/types";
 
 export type InspectorSectionId = "transform" | "material" | "environment" | "lights" | "problems";
 export type InspectorFieldKind = "number" | "color" | "select" | "checkbox" | "asset" | "text";
@@ -96,10 +97,18 @@ export type LightFieldId =
   | "penumbra";
 
 export interface InspectorSelectionModel {
+  nodeId: string | null;
+  nodeIds: string[];
+  nodeKind: SceneNode["kind"] | null;
+  node: SceneNode | null;
   objectId: string | null;
   objectIds: string[];
+  lightId: string | null;
+  light: LightDefinition | null;
   count: number;
   object: SceneObject | null;
+  transformAvailable: boolean;
+  transformUnavailableReason?: string;
 }
 
 export interface MaterialInspectorSection extends InspectorSection {

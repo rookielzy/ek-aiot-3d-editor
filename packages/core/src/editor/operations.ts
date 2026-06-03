@@ -64,10 +64,10 @@ export function createAdvancedEditorOperations(editor: Editor, clipboard: Editor
       return editor.dispatch({ type: "ungroup-objects", objectId });
     },
     selectAll() {
-      return editor.dispatch({ type: "select-objects", mode: "all" });
+      return editor.dispatch({ type: "select-nodes", mode: "all" });
     },
     clearSelection() {
-      return editor.dispatch({ type: "select-objects", mode: "clear" });
+      return editor.dispatch({ type: "select-nodes", mode: "clear" });
     },
     canPaste() {
       return clipboard.get() !== null;
