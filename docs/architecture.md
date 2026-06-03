@@ -68,7 +68,7 @@ flowchart LR
   Snapshot[SceneSnapshot JSON] --> Projector[SceneProjector]
   Resolver[AssetResolverBridge] --> Projector
   Projector --> ThreeScene[Three.js Scene]
-  Projector --> ObjectMap[Object ID to Object3D map]
+  Projector --> NodeMap[NodeId to runtime target map]
   Projector --> RuntimeProblems[Runtime problems]
   RuntimeProblems -.not durable.-> Snapshot
 ```
@@ -76,10 +76,11 @@ flowchart LR
 Snapshot 保存：
 
 - scene identity
-- object identity / hierarchy / transform / asset reference
+- node identity / hierarchy / selection / transform target
+- object payload identity / asset reference
 - material overrides
 - environment/background authoring intent
-- light definitions
+- light definitions and their light node targets
 - authored problem metadata
 - JSON-compatible metadata
 
@@ -87,6 +88,7 @@ Runtime 保存或派生：
 
 - `Object3D`
 - loaded GLB scene
+- projected empty groups and light objects
 - loaded texture / HDR texture
 - PMREM render target
 - renderer / camera / scene
@@ -123,10 +125,10 @@ Core 的 `buildInspectorModel()` 生成框架无关 inspector model。React/Vue 
 
 当前 inspector 覆盖：
 
-- selected-object transform
-- selected-object material override
+- selected node transform when the node kind supports transform
+- selected object node material override
 - scene environment/background
-- lights
+- selected light node editing and light list operations
 - runtime/authored problems
 
 这样做的原因是保证 React 和 Vue 的字段、默认值、校验和 command 语义一致。
@@ -142,8 +144,15 @@ Workbench context 包含：
 - `inspector`
 - `runtimeProblems`
 - `activeLightId`
+- `activeLightNodeId`
 - `operations`
 - `selectionCount`
+- `selectedNodeId`
+- `selectedNodeIds`
+- `selectedNodeKind`
+- `selectedObjectId`
+- `selectedObjectIds`
+- `selectedLightId`
 - `snap`
 - `setActiveLightId()`
 - `refreshProblems()`
@@ -154,7 +163,7 @@ Workbench context 包含：
 
 Workbench 不形成插件系统，也不暴露私有 runtime projector。
 
-高级操作通过 core 的 `editor.operations` 暴露，React/Vue 只负责把 toolbar、slot/render-prop、keydown shortcut intent 路由到这些 helper。复制/粘贴、删除、组合、取消组合、select all、clear selection 都保持 command/history 语义一致，不在 shell 中重写对象层级或 material cleanup。
+高级操作通过 core 的 `editor.operations` 暴露，React/Vue 只负责把 toolbar、slot/render-prop、keydown shortcut intent 路由到这些 helper。默认复制/粘贴、删除、组合、select all、clear selection 作用于 node selection；显式传入 object IDs 的旧 helper 仍作为 object-only 兼容路径。所有操作都保持 command/history 语义一致，不在 shell 中重写节点层级、payload cleanup 或 material cleanup。
 
 ## 生命周期
 

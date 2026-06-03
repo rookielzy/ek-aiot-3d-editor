@@ -4,6 +4,10 @@
 
 这是独立的 3D 编辑器仓库，不复用 2D 编辑器的 Konva/Pinia/Vue full shell 架构。当前 3D 项目使用 Three.js runtime projection，并把 durable state 放在版本化 Scene Snapshot 中。
 
+## SceneNode 是什么？
+
+`SceneNode` 是当前 v4 snapshot 的 shared hierarchy/target contract。GLB object、empty group、light 都通过 `NodeId` 参与层级、选择、inspector targeting、runtime picking 和 command/history。Object payload 与 light payload 仍保留独立 map，material assignment 也仍以 object payload 为目标。
+
 ## Snapshot 里为什么不能存 File、Blob 或 Three.js 对象？
 
 因为 Snapshot 是持久化、可迁移、跨框架复用的 JSON contract。`File`、`Blob`、object URL、Three.js object、已加载 texture、PMREM 输出都只在某个浏览器 runtime 中有意义，写入后会破坏保存/恢复、测试和跨应用复用。
@@ -30,7 +34,7 @@
 
 ## React/Vue 本地 demo 能验证哪些交互？
 
-两个 demo 都是可操作 workbench：camera helper、viewport/层级选择、TransformControls 或 toolbar transform、undo/redo、material inspector、hierarchy operation、`.ek3d` export/reopen 和 missing-asset recovery。Proof checklist 是从当前 runtime/editor/session 状态派生的验证视图，不会保存到 Snapshot 或项目包。
+两个 demo 都是可操作 workbench：camera helper、viewport/层级 node selection、TransformControls 或 toolbar transform、undo/redo、material inspector、node hierarchy operation、`.ek3d` export/reopen 和 missing-asset recovery。Proof checklist 是从当前 runtime/editor/session 状态派生的验证视图，不会保存到 Snapshot 或项目包。
 
 ## `pnpm test:browser` 验证的是什么？
 

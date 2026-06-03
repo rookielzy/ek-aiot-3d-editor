@@ -160,7 +160,7 @@ const DefaultWorkbenchToolbar = defineComponent({
         h("button", { type: "button", disabled: !props.context.runtimeReady || props.context.selectionCount === 0, title: "Frame selected", onClick: () => props.context.frameSelected() }, "Frame sel"),
         h("button", { type: "button", disabled: !props.context.runtimeReady || Object.keys(props.context.snapshot.objects).length === 0, title: "Frame all", onClick: () => props.context.frameAll() }, "Frame all")
       ]),
-      h("div", { class: "ek-workbench__tool-group", "aria-label": "Object operations" }, [
+      h("div", { class: "ek-workbench__tool-group", "aria-label": "Node operations" }, [
         h("button", { type: "button", disabled: props.context.selectionCount === 0, title: "Copy selection", onClick: () => props.context.runAction("copy") }, "Copy"),
         h("button", { type: "button", title: "Paste objects", onClick: () => props.context.runAction("paste") }, "Paste"),
         h("button", { type: "button", disabled: props.context.selectionCount === 0, title: "Duplicate selection", onClick: () => props.context.runAction("duplicate") }, "Duplicate"),

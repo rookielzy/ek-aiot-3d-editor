@@ -40,8 +40,8 @@ export function EditorPage() {
           type="button"
           onClick={() =>
             dispatch({
-              type: "set-transform",
-              objectId: "box",
+              type: "set-node-transform",
+              nodeId: "box",
               transform: { position: [1, 0, 0] }
             })
           }
@@ -119,9 +119,16 @@ interface WorkbenchContext {
   runtime: EditorRuntime | null;
   runtimeReady: boolean;
   activeLightId: string | null;
+  activeLightNodeId: string | null;
   operations: AdvancedEditorOperations;
   historyState: HistoryState;
   selectionCount: number;
+  selectedNodeId: string | null;
+  selectedNodeIds: string[];
+  selectedNodeKind: InspectorModel["selection"]["nodeKind"];
+  selectedObjectId: string | null;
+  selectedObjectIds: string[];
+  selectedLightId: string | null;
   snap: SnapSettings;
   transformMode: TransformMode;
   setActiveLightId(value: string | null): void;
@@ -147,7 +154,7 @@ interface WorkbenchContext {
 pnpm --filter @ek-aiot/react-proof-loop dev
 ```
 
-示例首屏就是可操作 workbench，不是 landing page。侧栏从 `SceneSnapshot` 派生层级、资产列表和 proof checklist；toolbar 通过 `runAction()`、camera helpers 和 core operations 触发 transform mode、snap、undo/redo、copy/paste/duplicate/delete/group/ungroup、export/reopen 等验证动作。Inspector 可编辑 transform、material、environment 和 light 字段，其中 material override 会通过 runtime 投影到支持的 `MeshStandardMaterial` 对象。
+示例首屏就是可操作 workbench，不是 landing page。侧栏从 `SceneSnapshot.rootNodeIds` / `nodes` 派生 object/group/light 层级、资产列表和 proof checklist；toolbar 通过 `runAction()`、camera helpers 和 core operations 触发 transform mode、snap、undo/redo、copy/paste/duplicate/delete/group/ungroup、export/reopen 等验证动作。Inspector 可编辑 selected node transform、object-only material、environment 和 selected light 字段，其中 material override 会通过 runtime 投影到支持的 `MeshStandardMaterial` 对象。
 
 Demo checklist 只用于本地验证。它不会写入 snapshot、`.ek3d` 项目包或 React state 之外的 durable editor 数据。缺失资产恢复按钮使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem。
 

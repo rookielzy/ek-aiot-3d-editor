@@ -325,7 +325,7 @@ function DemoSidePanel({
 
       <section className="demo-panel" aria-labelledby="demo-operations-title">
         <div className="demo-panel__header">
-          <h2 id="demo-operations-title">Object operations</h2>
+          <h2 id="demo-operations-title">Node operations</h2>
           <span>{context.operations.canPaste() ? "Clipboard ready" : "Clipboard empty"}</span>
         </div>
         <div className="demo-command-grid">
@@ -333,7 +333,7 @@ function DemoSidePanel({
             type="button"
             onClick={() => {
               context.runAction("select-all");
-              setStatus("Selected all objects");
+              setStatus("Selected all nodes");
             }}
           >
             Select all
@@ -354,7 +354,7 @@ function DemoSidePanel({
             onClick={() => {
               const result = context.operations.paste();
               markSession("pasted", result.ok);
-              setStatus(result.ok ? "Pasted clipboard objects" : result.error ?? "Paste failed");
+              setStatus(result.ok ? "Pasted clipboard nodes" : result.error ?? "Paste failed");
             }}
             disabled={!context.operations.canPaste()}
           >
@@ -593,16 +593,16 @@ function formatNodeKind(kind: SceneNode["kind"]): string {
 }
 
 function movePrimary(context: WorkbenchContext): void {
-  const objectId = context.snapshot.selection.objectId;
-  if (!objectId) {
+  const nodeId = context.snapshot.selection.nodeId;
+  const node = nodeId ? context.snapshot.nodes[nodeId] : undefined;
+  if (!node || !("transform" in node) || !node.transform) {
     return;
   }
-  const object = context.snapshot.objects[objectId];
   context.dispatch({
-    type: "set-transform",
-    objectId,
+    type: "set-node-transform",
+    nodeId: node.id,
     transform: {
-      position: [object.transform.position[0] + 0.5, object.transform.position[1], object.transform.position[2]]
+      position: [node.transform.position[0] + 0.5, node.transform.position[1], node.transform.position[2]]
     }
   });
 }

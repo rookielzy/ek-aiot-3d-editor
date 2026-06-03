@@ -244,16 +244,16 @@ function markSession(key: DemoSessionKey, value = true): void {
 }
 
 function movePrimary(context: WorkbenchContext): void {
-  const objectId = context.snapshot.selection.objectId;
-  if (!objectId) {
+  const nodeId = context.snapshot.selection.nodeId;
+  const node = nodeId ? context.snapshot.nodes[nodeId] : undefined;
+  if (!node || !("transform" in node) || !node.transform) {
     return;
   }
-  const object = context.snapshot.objects[objectId];
   context.dispatch({
-    type: "set-transform",
-    objectId,
+    type: "set-node-transform",
+    nodeId: node.id,
     transform: {
-      position: [object.transform.position[0] + 0.5, object.transform.position[1], object.transform.position[2]]
+      position: [node.transform.position[0] + 0.5, node.transform.position[1], node.transform.position[2]]
     }
   });
 }
@@ -400,13 +400,13 @@ const DemoSidePanel = defineComponent({
       ]),
       h("section", { class: "demo-panel", "aria-labelledby": "demo-operations-title" }, [
         h("div", { class: "demo-panel__header" }, [
-          h("h2", { id: "demo-operations-title" }, "Object operations"),
+          h("h2", { id: "demo-operations-title" }, "Node operations"),
           h("span", props.context.operations.canPaste() ? "Clipboard ready" : "Clipboard empty")
         ]),
         h("div", { class: "demo-command-grid" }, [
           h("button", { type: "button", onClick: () => {
             props.context.runAction("select-all");
-            emit("status", "Selected all objects");
+            emit("status", "Selected all nodes");
           } }, "Select all"),
           h("button", { type: "button", disabled: props.context.selectionCount === 0, onClick: () => {
             const payload = props.context.operations.copy();
@@ -416,7 +416,7 @@ const DemoSidePanel = defineComponent({
           h("button", { type: "button", disabled: !props.context.operations.canPaste(), onClick: () => {
             const result = props.context.operations.paste();
             emit("markSession", "pasted", result.ok);
-            emit("status", result.ok ? "Pasted clipboard objects" : result.error ?? "Paste failed");
+            emit("status", result.ok ? "Pasted clipboard nodes" : result.error ?? "Paste failed");
           } }, "Paste"),
           h("button", { type: "button", disabled: props.context.selectionCount === 0, onClick: () => {
             const result = props.context.operations.duplicate();

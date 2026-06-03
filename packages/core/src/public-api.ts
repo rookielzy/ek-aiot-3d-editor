@@ -33,7 +33,14 @@ export type {
 export type { Editor, EditorOptions, MountRuntimeOptions, RuntimeSubscriber, SnapshotSubscriber } from "./editor/editor-api";
 export type { AdvancedEditorOperations, EditorClipboard } from "./editor/operations";
 export type { SnapChannel, SnapSubscriber } from "./editor/snap-state";
-export type { EditorClipboardPayload } from "./clipboard/types";
+export type {
+  ClipboardLightDefinition,
+  ClipboardSceneNode,
+  ClipboardSceneObject,
+  EditorClipboardPayload,
+  EditorNodeClipboardPayload,
+  EditorObjectClipboardPayload
+} from "./clipboard/types";
 export type { BackgroundMode, EnvironmentMode, EnvironmentRotation, SceneEnvironment } from "./environment/types";
 export type { HistoryState } from "./history/history";
 export type { NodeSelectionInput, SelectionInput, SelectionMode, SelectionState } from "./selection/selection";
@@ -150,7 +157,7 @@ export type {
 
 export { createEditor } from "./editor/create-editor";
 export { createAdvancedEditorOperations, createMemoryClipboard } from "./editor/operations";
-export { createClipboardPayload } from "./clipboard/create-clipboard";
+export { createClipboardPayload, createNodeClipboardPayload } from "./clipboard/create-clipboard";
 export {
   DEFAULT_PROJECT_PACKAGE_LIMITS,
   PROJECT_ASSET_DIR,

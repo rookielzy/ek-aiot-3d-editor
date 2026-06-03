@@ -33,8 +33,8 @@ editor.dispatch({
 runtime.pickObject("box");
 
 editor.dispatch({
-  type: "set-transform",
-  objectId: "box",
+  type: "set-node-transform",
+  nodeId: "box",
   transform: { position: [1, 0, 0] }
 });
 
@@ -50,13 +50,13 @@ restored.dispose();
 
 ```ts
 const unsubscribe = editor.subscribe((snapshot) => {
-  console.log(snapshot.selection.objectId);
+  console.log(snapshot.selection.nodeId);
 });
 
 unsubscribe();
 ```
 
-订阅回调接收最新 `SceneSnapshot`。不要在回调中直接修改 Snapshot；需要变更时调用 `editor.dispatch()`。
+订阅回调接收最新 `SceneSnapshot`。当前 durable selection 使用 `selection.nodeId/nodeIds`；`selection.objectId/objectIds` 是 object-only 兼容镜像。不要在回调中直接修改 Snapshot；需要变更时调用 `editor.dispatch()`。
 
 ## 撤销/重做
 

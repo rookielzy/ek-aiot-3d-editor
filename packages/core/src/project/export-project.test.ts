@@ -66,4 +66,24 @@ describe("project export", () => {
       byteSize: 3
     });
   });
+
+  it("exports v4 node graph scenes without changing the project package layout", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "create-group", nodeId: "group-a" });
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      parentId: "group-a",
+      asset: { id: "asset-a", label: "Box", source: new Uint8Array([1, 2, 3]) }
+    });
+    editor.dispatch({ type: "add-light", light: { id: "point-a", kind: "point" } });
+    editor.dispatch({ type: "reparent-node", nodeId: "point-a", parentId: "group-a" });
+
+    const result = editor.exportProject();
+
+    expect(result.ok).toBe(true);
+    expect(result.manifest?.version).toBe(1);
+    expect(result.manifest?.scenePath).toBe("scene.json");
+    expect(result.manifest?.assets["asset-a"].payloadPath).toBe("assets/asset-a.glb");
+  });
 });
