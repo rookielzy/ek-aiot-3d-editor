@@ -1,4 +1,4 @@
-import { AmbientLight, BoxGeometry, Group, Mesh, MeshStandardMaterial, Texture } from "three";
+import { AmbientLight, BoxGeometry, Group, Mesh, MeshStandardMaterial, PointLight, Texture } from "three";
 import { describe, expect, it, vi } from "vitest";
 import { AssetResolverBridge } from "../assets/resolver";
 import { AssetRegistry } from "../assets/registry";
@@ -21,6 +21,58 @@ describe("scene projector", () => {
     await projector.project(store.getSnapshot());
 
     expect(projector.objects.get("object-a")).toBeInstanceOf(Group);
+  });
+
+  it("projects root nodes recursively for groups, objects, and spatial lights", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "create-group", nodeId: "group-a", transform: { position: [3, 0, 0] } });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", parentId: "group-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "add-light", light: { id: "point-a", kind: "point", transform: { position: [1, 2, 3] } } });
+    dispatcher.dispatch({ type: "reparent-node", nodeId: "point-a", parentId: "group-a" });
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Group() }
+    });
+
+    await projector.project(store.getSnapshot());
+
+    const group = projector.objects.get("group-a");
+    const object = projector.objects.getObject("object-a");
+    const point = projector.objects.get("point-a");
+    expect(group).toBeInstanceOf(Group);
+    expect(object?.parent).toBe(group);
+    expect(point).toBeInstanceOf(PointLight);
+    expect(point?.parent).toBe(group);
+    expect(point?.position.toArray()).toEqual([1, 2, 3]);
+    const pickProxy = point?.children.find((child) => child.userData.runtimeLightPickProxyId === "point-a");
+    expect(pickProxy?.userData).toMatchObject({
+      runtimeOnly: true,
+      sceneNodeId: "point-a",
+      runtimeLightPickProxyId: "point-a"
+    });
+    expect(pickProxy ? projector.objects.getId(pickProxy) : null).toBe("point-a");
+    expect(projector.objects.getTarget("object-a")).toMatchObject({ kind: "object", objectId: "object-a", transformable: true });
+    expect(projector.objects.getTarget("group-a")).toMatchObject({ kind: "group", transformable: true });
+    expect(projector.objects.getTarget("point-a")).toMatchObject({ kind: "light", lightId: "point-a", transformable: true });
+  });
+
+  it("keeps non-spatial light nodes selectable but unavailable for transform targets", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "add-light", light: { id: "ambient-a", kind: "ambient" } });
+    dispatcher.dispatch({ type: "select-node", nodeId: "ambient-a" });
+    const projector = new SceneProjector();
+
+    await projector.project(store.getSnapshot());
+
+    const target = projector.objects.getTarget("ambient-a");
+    expect(target).toMatchObject({ kind: "light", lightId: "ambient-a", transformable: false });
+    expect(target?.object.userData).toMatchObject({
+      sceneNodeId: "ambient-a",
+      selected: true,
+      primarySelected: true
+    });
   });
 
   it("marks selected and primary selected objects as derived runtime state", async () => {
@@ -259,6 +311,28 @@ describe("scene projector", () => {
     expect((runtimeObject.material as MeshStandardMaterial).map).toBeNull();
     expect(projector.problems).toMatchObject([{ code: "material-texture-asset-unresolved", assetId: "texture-a" }]);
     expect(store.getSnapshot().problems.acknowledged).toEqual({});
+  });
+
+  it("applies object material overrides when object nodes are nested under groups", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "create-group", nodeId: "group-a" });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", parentId: "group-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({
+      type: "set-material",
+      target: { kind: "object", objectId: "object-a" },
+      material: { color: "#336699" }
+    });
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(), new MeshStandardMaterial()) }
+    });
+
+    await projector.project(store.getSnapshot());
+
+    const runtimeObject = projector.objects.getObject("object-a") as Mesh;
+    expect(runtimeObject.parent).toBe(projector.objects.get("group-a"));
+    expect((runtimeObject.material as MeshStandardMaterial).color.getHexString()).toBe("336699");
   });
 
   it("reapplies material overrides after project export/import restores durable references", async () => {

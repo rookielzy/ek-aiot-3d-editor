@@ -1,7 +1,7 @@
-import { BoxGeometry, Mesh, MeshBasicMaterial, Object3D, Scene } from "three";
+import { BoxGeometry, Group, Mesh, MeshBasicMaterial, Object3D, Scene } from "three";
 import { AssetResolverBridge } from "../assets/resolver";
 import { createMissingAssetProblem, type Problem } from "../assets/problems";
-import type { SceneObject, SceneSnapshot } from "../snapshot/types";
+import type { SceneLightNode, SceneNode, SceneObject, SceneObjectNode, SceneSnapshot } from "../snapshot/types";
 import { EnvironmentProjector } from "./environment-projector";
 import type { GltfLoaderAdapter } from "./gltf-loader-adapter";
 import { PlaceholderGltfLoaderAdapter } from "./gltf-loader-adapter";
@@ -63,30 +63,22 @@ export class SceneProjector {
     }
 
     const generation = this.#beginProjection();
-    const nextIds = new Set(Object.keys(snapshot.objects));
-    this.#materials.releaseObjects(nextIds);
+    const nextNodeIds = new Set(Object.keys(snapshot.nodes));
+    const nextObjectIds = new Set(Object.keys(snapshot.objects));
+    this.#materials.releaseObjects(nextObjectIds);
 
-    for (const [objectId, runtimeObject] of [...this.objects.entries()]) {
+    this.#releaseRemovedTargets(snapshot, nextNodeIds);
+
+    this.#problems = [];
+    const activeLightIds = new Set<string>();
+
+    for (const nodeId of snapshot.rootNodeIds) {
+      await this.#projectNode(nodeId, snapshot, this.scene, generation, activeLightIds);
       if (!this.#isActive(generation)) {
         return;
       }
-      if (!nextIds.has(objectId)) {
-        disposeObjectTree(runtimeObject);
-        this.objects.delete(objectId);
-      }
     }
-
-    this.#problems = [];
-
-    for (const objectId of snapshot.rootObjectIds) {
-      const object = snapshot.objects[objectId];
-      if (object) {
-        await this.#projectObject(object, snapshot, generation);
-        if (!this.#isActive(generation)) {
-          return;
-        }
-      }
-    }
+    this.#lights.release(activeLightIds);
 
     const materialProblems = await this.#materials.project(snapshot, this.objects.entries());
     if (!this.#isActive(generation)) {
@@ -99,7 +91,6 @@ export class SceneProjector {
       return;
     }
     this.#appendProblems(environmentProblems);
-    this.#lights.project(snapshot.lights);
   }
 
   getLight(lightId: string): Object3D | undefined {
@@ -110,12 +101,68 @@ export class SceneProjector {
     return this.#lights.getTarget(lightId);
   }
 
-  async #projectObject(object: SceneObject, snapshot: SceneSnapshot, generation: number): Promise<Object3D | null> {
+  async #projectNode(
+    nodeId: string,
+    snapshot: SceneSnapshot,
+    parent: Object3D,
+    generation: number,
+    activeLightIds: Set<string>
+  ): Promise<Object3D | null> {
     if (!this.#isActive(generation)) {
       return null;
     }
 
-    let runtimeObject: Object3D | null | undefined = this.objects.get(object.id);
+    const node = snapshot.nodes[nodeId];
+    if (!node) {
+      return null;
+    }
+
+    let runtimeObject: Object3D | null;
+    switch (node.kind) {
+      case "object":
+        runtimeObject = await this.#projectObjectNode(node, snapshot, generation);
+        break;
+      case "group":
+        runtimeObject = this.#projectGroupNode(node, snapshot);
+        break;
+      case "light":
+        runtimeObject = this.#projectLightNode(node, snapshot, parent, activeLightIds);
+        break;
+      default:
+        return assertNever(node);
+    }
+
+    if (!this.#isActive(generation)) {
+      return null;
+    }
+    if (!runtimeObject) {
+      return null;
+    }
+    if (runtimeObject.parent !== parent) {
+      parent.add(runtimeObject);
+    }
+
+    for (const childId of node.children) {
+      await this.#projectNode(childId, snapshot, runtimeObject, generation, activeLightIds);
+      if (!this.#isActive(generation)) {
+        return null;
+      }
+    }
+
+    return runtimeObject;
+  }
+
+  async #projectObjectNode(node: SceneObjectNode, snapshot: SceneSnapshot, generation: number): Promise<Object3D | null> {
+    if (!this.#isActive(generation)) {
+      return null;
+    }
+
+    const object = snapshot.objects[node.objectId];
+    if (!object) {
+      return null;
+    }
+
+    let runtimeObject: Object3D | null | undefined = this.objects.get(node.id);
     if (runtimeObject?.userData.problem) {
       const replacement = await this.#createRuntimeObject(object, generation);
       if (!this.#isActive(generation)) {
@@ -125,7 +172,12 @@ export class SceneProjector {
       if (!replacement) {
         return null;
       }
-      this.objects.set(object.id, replacement);
+      this.objects.set(node.id, replacement, {
+        kind: "object",
+        objectId: object.id,
+        transformable: true,
+        pickable: true
+      });
       if (runtimeObject.parent) {
         runtimeObject.parent.add(replacement);
       } else {
@@ -142,37 +194,101 @@ export class SceneProjector {
       if (!runtimeObject) {
         return null;
       }
-      this.objects.set(object.id, runtimeObject);
-      this.scene.add(runtimeObject);
+      this.objects.set(node.id, runtimeObject, {
+        kind: "object",
+        objectId: object.id,
+        transformable: true,
+        pickable: true
+      });
     }
 
-    applyTransform(runtimeObject, object.transform);
-    runtimeObject.name = object.name;
+    applyTransform(runtimeObject, node.transform);
+    runtimeObject.name = node.name;
     runtimeObject.userData = {
       ...runtimeObject.userData,
+      sceneNodeId: node.id,
+      nodeKind: node.kind,
       sceneObjectId: object.id,
-      selected: snapshot.selection.objectIds.includes(object.id),
-      primarySelected: snapshot.selection.objectId === object.id
+      selected: snapshot.selection.nodeIds.includes(node.id),
+      primarySelected: snapshot.selection.nodeId === node.id
     };
 
-    for (const childId of object.children) {
-      const child = snapshot.objects[childId];
-      if (!child) {
-        continue;
-      }
-      const childRuntime = await this.#projectObject(child, snapshot, generation);
-      if (!this.#isActive(generation)) {
-        return null;
-      }
-      if (!childRuntime) {
-        continue;
-      }
-      if (childRuntime.parent !== runtimeObject) {
-        runtimeObject.add(childRuntime);
-      }
+    return runtimeObject;
+  }
+
+  #projectGroupNode(node: SceneNode & { kind: "group" }, snapshot: SceneSnapshot): Object3D {
+    let runtimeObject = this.objects.get(node.id);
+    if (!runtimeObject) {
+      runtimeObject = new Group();
+      this.objects.set(node.id, runtimeObject, {
+        kind: "group",
+        transformable: true,
+        pickable: true
+      });
     }
 
+    applyTransform(runtimeObject, node.transform);
+    runtimeObject.name = node.name;
+    runtimeObject.userData = {
+      ...runtimeObject.userData,
+      sceneNodeId: node.id,
+      nodeKind: node.kind,
+      selected: snapshot.selection.nodeIds.includes(node.id),
+      primarySelected: snapshot.selection.nodeId === node.id
+    };
     return runtimeObject;
+  }
+
+  #projectLightNode(
+    node: SceneLightNode,
+    snapshot: SceneSnapshot,
+    parent: Object3D,
+    activeLightIds: Set<string>
+  ): Object3D | null {
+    const light = snapshot.lights[node.lightId];
+    if (!light) {
+      return null;
+    }
+
+    const definition = "transform" in light && node.transform
+      ? { ...light, name: node.name, transform: node.transform }
+      : { ...light, name: node.name };
+    const projected = this.#lights.projectLight(definition, parent);
+    activeLightIds.add(light.id);
+    this.objects.set(node.id, projected.light, {
+      kind: "light",
+      lightId: light.id,
+      transformable: Boolean(node.transform),
+      pickable: true
+    });
+    projected.light.userData = {
+      ...projected.light.userData,
+      sceneNodeId: node.id,
+      nodeKind: node.kind,
+      runtimeLightId: light.id,
+      selected: snapshot.selection.nodeIds.includes(node.id),
+      primarySelected: snapshot.selection.nodeId === node.id
+    };
+    if (projected.target) {
+      projected.target.userData = {
+        ...projected.target.userData,
+        runtimeOnly: true,
+        sceneNodeId: node.id,
+        nodeKind: node.kind,
+        runtimeLightTargetId: light.id
+      };
+    }
+    if (projected.pickProxy) {
+      this.objects.link(node.id, projected.pickProxy);
+      projected.pickProxy.userData = {
+        ...projected.pickProxy.userData,
+        runtimeOnly: true,
+        sceneNodeId: node.id,
+        nodeKind: node.kind,
+        runtimeLightPickProxyId: light.id
+      };
+    }
+    return projected.light;
   }
 
   dispose(): void {
@@ -182,8 +298,9 @@ export class SceneProjector {
 
     this.#disposed = true;
     this.#projectionGeneration += 1;
-    const roots = [...this.objects.entries()]
-      .map(([, object]) => object)
+    const roots = [...this.objects.targetEntries()]
+      .filter(([, target]) => target.kind !== "light")
+      .map(([, target]) => target.object)
       .filter((object) => !this.#hasMappedAncestor(object));
 
     this.#materials.dispose();
@@ -286,10 +403,64 @@ export class SceneProjector {
     return !this.#disposed && generation === this.#projectionGeneration;
   }
 
-  #hasMappedAncestor(object: Object3D): boolean {
+  #releaseRemovedTargets(snapshot: SceneSnapshot, nextNodeIds: Set<string>): void {
+    const removedNodeIds = new Set<string>();
+    for (const [nodeId, target] of this.objects.targetEntries()) {
+      if (!this.#shouldRetainTarget(snapshot, nodeId, target)) {
+        removedNodeIds.add(nodeId);
+      }
+    }
+
+    for (const [nodeId, target] of [...this.objects.targetEntries()]) {
+      if (!removedNodeIds.has(nodeId)) {
+        continue;
+      }
+      if (target.kind !== "light" && !this.#hasMappedAncestor(target.object, removedNodeIds)) {
+        disposeObjectTree(target.object);
+      }
+    }
+
+    for (const nodeId of removedNodeIds) {
+      this.objects.delete(nodeId);
+    }
+
+    for (const nodeId of nextNodeIds) {
+      const target = this.objects.getTarget(nodeId);
+      const node = snapshot.nodes[nodeId];
+      if (target && node && target.kind !== node.kind) {
+        if (target.kind !== "light") {
+          disposeObjectTree(target.object);
+        }
+        this.objects.delete(nodeId);
+      }
+    }
+  }
+
+  #shouldRetainTarget(snapshot: SceneSnapshot, nodeId: string, target: ReturnType<ThreeObjectMap["getTarget"]>): boolean {
+    if (!target) {
+      return false;
+    }
+    const node = snapshot.nodes[nodeId];
+    if (!node || node.kind !== target.kind) {
+      return false;
+    }
+    switch (node.kind) {
+      case "object":
+        return target.objectId === node.objectId && Boolean(snapshot.objects[node.objectId]);
+      case "group":
+        return true;
+      case "light":
+        return target.lightId === node.lightId && Boolean(snapshot.lights[node.lightId]);
+      default:
+        return assertNever(node);
+    }
+  }
+
+  #hasMappedAncestor(object: Object3D, limitedToNodeIds?: Set<string>): boolean {
     let parent = object.parent;
     while (parent) {
-      if (this.objects.getId(parent)) {
+      const nodeId = this.objects.getId(parent);
+      if (nodeId && (!limitedToNodeIds || limitedToNodeIds.has(nodeId))) {
         return true;
       }
       parent = parent.parent;
@@ -306,4 +477,8 @@ function createProblemPlaceholder(objectId: string): Object3D {
   mesh.userData.sceneObjectId = objectId;
   mesh.userData.problem = true;
   return mesh;
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unsupported scene node: ${JSON.stringify(value)}`);
 }

@@ -16,23 +16,34 @@ export class TransformController {
     this.#dispatcher = dispatcher;
   }
 
-  start(objectId: string, mode: TransformMode = "translate", options: { objectIds?: string[]; snap?: SnapSettings } = {}): TransformTransaction {
+  start(nodeId: string, mode: TransformMode = "translate", options: { nodeIds?: string[]; objectIds?: string[]; snap?: SnapSettings } = {}): TransformTransaction {
     this.cancel();
-    const object = this.#objects.get(objectId);
+    const target = this.#objects.getTarget(nodeId);
+    const object = target?.object;
     if (!object) {
-      throw new Error(`Object ${objectId} is not projected.`);
+      throw new Error(`Node ${nodeId} is not projected.`);
     }
-    const objectIds = options.objectIds?.length ? options.objectIds : [objectId];
-    const targets = objectIds.map((targetObjectId) => {
-      const targetObject = this.#objects.get(targetObjectId);
-      if (!targetObject) {
-        throw new Error(`Object ${targetObjectId} is not projected.`);
+    if (!target.transformable) {
+      throw new Error(`Node ${nodeId} does not support transforms.`);
+    }
+    const nodeIds = options.nodeIds?.length
+      ? options.nodeIds
+      : options.objectIds?.length
+        ? options.objectIds.map((objectId) => this.#objects.getObjectNodeId(objectId) ?? objectId)
+        : [nodeId];
+    const targets = nodeIds.map((targetNodeId) => {
+      const targetEntry = this.#objects.getTarget(targetNodeId);
+      if (!targetEntry) {
+        throw new Error(`Node ${targetNodeId} is not projected.`);
       }
-      return { objectId: targetObjectId, object: targetObject };
+      if (!targetEntry.transformable) {
+        throw new Error(`Node ${targetNodeId} does not support transforms.`);
+      }
+      return { nodeId: targetNodeId, object: targetEntry.object };
     });
 
     this.#transaction = new TransformTransaction({
-      objectId,
+      nodeId,
       object,
       targets,
       dispatcher: this.#dispatcher,

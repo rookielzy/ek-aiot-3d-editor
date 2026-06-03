@@ -2,8 +2,11 @@ import {
   AmbientLight,
   DirectionalLight,
   HemisphereLight,
+  Mesh,
+  MeshBasicMaterial,
   Object3D,
   PointLight,
+  SphereGeometry,
   SpotLight,
   type Light,
   type Scene
@@ -16,6 +19,13 @@ interface RuntimeLightEntry {
   kind: LightKind;
   light: Light;
   target?: Object3D;
+  pickProxy?: Mesh;
+}
+
+export interface ProjectedRuntimeLight {
+  light: Light;
+  target?: Object3D;
+  pickProxy?: Object3D;
 }
 
 export class LightProjector {
@@ -35,7 +45,31 @@ export class LightProjector {
     }
 
     for (const light of Object.values(lights)) {
-      this.#projectLight(light);
+      this.projectLight(light, this.#scene);
+    }
+  }
+
+  projectLight(definition: LightDefinition, parent?: Object3D): ProjectedRuntimeLight {
+    const entry = this.#projectLight(definition);
+    const lightParent = parent ?? this.#scene;
+    if (entry.light.parent !== lightParent) {
+      lightParent.add(entry.light);
+    }
+    if (entry.target && entry.target.parent !== this.#scene) {
+      this.#scene.add(entry.target);
+    }
+    return {
+      light: entry.light,
+      ...(entry.target ? { target: entry.target } : {}),
+      ...(entry.pickProxy ? { pickProxy: entry.pickProxy } : {})
+    };
+  }
+
+  release(activeLightIds: Set<string>): void {
+    for (const [lightId, entry] of [...this.#lights]) {
+      if (!activeLightIds.has(lightId)) {
+        this.#remove(lightId, entry);
+      }
     }
   }
 
@@ -53,7 +87,7 @@ export class LightProjector {
     }
   }
 
-  #projectLight(definition: LightDefinition): void {
+  #projectLight(definition: LightDefinition): RuntimeLightEntry {
     let entry = this.#lights.get(definition.id);
     if (!entry || entry.kind !== definition.kind) {
       if (entry) {
@@ -61,13 +95,10 @@ export class LightProjector {
       }
       entry = this.#create(definition);
       this.#lights.set(definition.id, entry);
-      this.#scene.add(entry.light);
-      if (entry.target) {
-        this.#scene.add(entry.target);
-      }
     }
 
     updateRuntimeLight(entry, definition);
+    return entry;
   }
 
   #create(definition: LightDefinition): RuntimeLightEntry {
@@ -80,7 +111,15 @@ export class LightProjector {
       target.name = `${definition.name} target`;
       target.userData.runtimeLightTargetId = definition.id;
       (light as DirectionalLight | SpotLight).target = target;
-      return { kind: definition.kind, light, target };
+      const pickProxy = createLightPickProxy(definition.id);
+      light.add(pickProxy);
+      return { kind: definition.kind, light, target, pickProxy };
+    }
+
+    if (definition.kind === "point") {
+      const pickProxy = createLightPickProxy(definition.id);
+      light.add(pickProxy);
+      return { kind: definition.kind, light, pickProxy };
     }
 
     return { kind: definition.kind, light };
@@ -91,6 +130,21 @@ export class LightProjector {
     disposeObjectTree(entry.light);
     this.#lights.delete(lightId);
   }
+}
+
+function createLightPickProxy(lightId: string): Mesh {
+  const proxy = new Mesh(
+    new SphereGeometry(0.25, 12, 8),
+    new MeshBasicMaterial({
+      opacity: 0,
+      transparent: true,
+      depthWrite: false
+    })
+  );
+  proxy.name = `Light pick proxy ${lightId}`;
+  proxy.userData.runtimeOnly = true;
+  proxy.userData.runtimeLightPickProxyId = lightId;
+  return proxy;
 }
 
 function createLight(definition: LightDefinition): Light {

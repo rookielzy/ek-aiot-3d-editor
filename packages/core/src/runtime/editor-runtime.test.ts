@@ -1,4 +1,4 @@
-import { AmbientLight, BoxGeometry, Group, Mesh, MeshBasicMaterial, Texture, Vector3 } from "three";
+import { AmbientLight, BoxGeometry, Group, Mesh, MeshBasicMaterial, PointLight, Texture, Vector3 } from "three";
 import { describe, expect, it, vi } from "vitest";
 import { AssetResolverBridge } from "../assets/resolver";
 import { AssetRegistry } from "../assets/registry";
@@ -165,6 +165,66 @@ describe("editor runtime", () => {
     runtime.dispose();
   });
 
+  it("frames selected spatial light nodes through runtime node targets", async () => {
+    const frames = createFrameScheduler();
+    const controls = createFakeControls();
+    const renderer = createFakeRenderer(document.createElement("div"));
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const runtime = new ThreeEditorRuntime({
+      container: document.createElement("div"),
+      store,
+      dispatcher,
+      interactions: { camera: true },
+      rendererFactory: () => renderer,
+      cameraControlsFactory: () => controls,
+      scheduleFrame: frames.schedule,
+      cancelFrame: frames.cancel
+    });
+    dispatcher.dispatch({ type: "add-light", light: { id: "point-a", kind: "point", transform: { position: [4, 0, 0] } } });
+    dispatcher.dispatch({ type: "select-node", nodeId: "point-a" });
+    await runtime.project();
+    frames.flush();
+    const serialized = JSON.stringify(store.getSnapshot());
+
+    expect(runtime.getNodeTarget("point-a")).toBeInstanceOf(PointLight);
+    expect(runtime.frameSelected()).toBe(true);
+    frames.flush();
+
+    expect(controls.target.x).toBeCloseTo(4);
+    expect(JSON.stringify(store.getSnapshot())).toBe(serialized);
+    runtime.dispose();
+  });
+
+  it("does not frame non-spatial light selections", async () => {
+    const frames = createFrameScheduler();
+    const controls = createFakeControls();
+    const renderer = createFakeRenderer(document.createElement("div"));
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const runtime = new ThreeEditorRuntime({
+      container: document.createElement("div"),
+      store,
+      dispatcher,
+      interactions: { camera: true },
+      rendererFactory: () => renderer,
+      cameraControlsFactory: () => controls,
+      scheduleFrame: frames.schedule,
+      cancelFrame: frames.cancel
+    });
+    dispatcher.dispatch({ type: "add-light", light: { id: "ambient-a", kind: "ambient" } });
+    dispatcher.dispatch({ type: "select-node", nodeId: "ambient-a" });
+    await runtime.project();
+    frames.flush();
+
+    expect(runtime.getNodeTarget("ambient-a")).toBeInstanceOf(AmbientLight);
+    expect(runtime.frameSelected()).toBe(false);
+    frames.flush();
+
+    expect(controls.target.toArray()).toEqual([0, 0, 0]);
+    runtime.dispose();
+  });
+
   it("dispatches selection commands from picking instead of mutating snapshots directly", async () => {
     const store = new EditorStore();
     const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
@@ -182,7 +242,7 @@ describe("editor runtime", () => {
     await runtime.project();
     runtime.pickObject("object-a");
 
-    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-object", objectId: "object-a" });
+    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-node", nodeId: "object-a" });
     expect(store.getSnapshot().selection.objectId).toBe("object-a");
     runtime.dispose();
   });
@@ -220,7 +280,7 @@ describe("editor runtime", () => {
     const result = runtime.selectFromPointer({ clientX: 100, clientY: 100 });
 
     expect(result.ok).toBe(true);
-    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-object", objectId: "object-b" });
+    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-node", nodeId: "object-b" });
     expect(store.getSnapshot().selection.objectId).toBe("object-b");
     runtime.dispose();
   });
@@ -262,7 +322,7 @@ describe("editor runtime", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-objects", mode: "toggle", objectId: "object-a" });
+    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-nodes", mode: "toggle", nodeId: "object-a" });
     expect(store.getSnapshot().selection.objectId).toBeNull();
     runtime.dispose();
   });
@@ -301,7 +361,7 @@ describe("editor runtime", () => {
     renderer.domElement.dispatchEvent(new PointerEvent("pointerdown", { clientX: 100, clientY: 100, button: 0, ctrlKey: true }));
     renderer.domElement.dispatchEvent(new PointerEvent("pointerup", { clientX: 100, clientY: 100, button: 0, ctrlKey: true }));
 
-    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-objects", mode: "toggle", objectId: "object-a" });
+    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-nodes", mode: "toggle", nodeId: "object-a" });
     expect(store.getSnapshot().selection.objectId).toBe("object-a");
     runtime.dispose();
   });
@@ -510,6 +570,47 @@ describe("editor runtime", () => {
     expect(store.getSnapshot().objects["object-a"].transform.position).toEqual([2, 0, 0]);
     expect(history.state.undoCount).toBe(undoBefore + 1);
     expect(JSON.stringify(store.getSnapshot())).not.toContain("TransformControls");
+    runtime.dispose();
+  });
+
+  it("mounts transform controls on spatial light nodes and skips ambient light nodes", async () => {
+    const frames = createFrameScheduler();
+    const renderer = createFakeRenderer(document.createElement("div"));
+    const transformControls = createFakeTransformControls();
+    const store = new EditorStore();
+    const history = new CommandHistory();
+    const dispatcher = new CommandDispatcher(store, history, new AssetRegistry());
+    const runtime = new ThreeEditorRuntime({
+      container: document.createElement("div"),
+      store,
+      dispatcher,
+      interactions: { transform: true },
+      rendererFactory: () => renderer,
+      transformControlsFactory: () => transformControls,
+      scheduleFrame: frames.schedule,
+      cancelFrame: frames.cancel
+    });
+    dispatcher.dispatch({ type: "add-light", light: { id: "point-a", kind: "point" } });
+    dispatcher.dispatch({ type: "select-node", nodeId: "point-a" });
+    await runtime.project();
+    const pointTarget = runtime.getNodeTarget("point-a");
+
+    expect(transformControls.attached).toBe(pointTarget);
+
+    transformControls.emit("mouseDown");
+    pointTarget?.position.set(1, 2, 3);
+    transformControls.emit("objectChange");
+    transformControls.emit("mouseUp");
+
+    expect(store.getSnapshot().nodes["point-a"].transform?.position).toEqual([1, 2, 3]);
+    expect(store.getSnapshot().lights["point-a"].transform?.position).toEqual([1, 2, 3]);
+
+    dispatcher.dispatch({ type: "add-light", light: { id: "ambient-a", kind: "ambient" } });
+    dispatcher.dispatch({ type: "select-node", nodeId: "ambient-a" });
+    await runtime.project();
+
+    expect(runtime.getNodeTarget("ambient-a")).toBeInstanceOf(AmbientLight);
+    expect(transformControls.attached).toBeNull();
     runtime.dispose();
   });
 

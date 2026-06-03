@@ -95,6 +95,22 @@ describe("runtime disposal", () => {
           }
         }
       },
+      nodes: {
+        "object-a": {
+          id: "object-a",
+          kind: "object" as const,
+          name: "Object A",
+          objectId: "object-a",
+          parentId: null,
+          children: [],
+          transform: {
+            position: [0, 0, 0] as [number, number, number],
+            rotation: [0, 0, 0] as [number, number, number],
+            scale: [1, 1, 1] as [number, number, number]
+          }
+        }
+      },
+      rootNodeIds: ["object-a"],
       rootObjectIds: ["object-a"],
       assets: {
         "asset-a": { id: "asset-a", kind: "glb" as const },
@@ -151,6 +167,17 @@ function snapshotWithHdrAndLight(): SceneSnapshot {
         color: "#ffffff",
         intensity: 1
       }
-    }
+    },
+    nodes: {
+      "light-a": {
+        id: "light-a",
+        kind: "light",
+        name: "Fill",
+        lightId: "light-a",
+        parentId: null,
+        children: []
+      }
+    },
+    rootNodeIds: ["light-a"]
   };
 }

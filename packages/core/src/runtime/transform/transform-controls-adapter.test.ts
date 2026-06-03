@@ -108,6 +108,51 @@ describe("transform controls adapter", () => {
     expect(dispatchSpy).not.toHaveBeenCalledWith(expect.objectContaining({ type: "set-transform", objectId: "object-a" }));
   });
 
+  it("commits spatial light node transforms through node commands", () => {
+    const setup = createAdapterHarness();
+    const dispatchSpy = vi.spyOn(setup.dispatcher, "dispatch");
+    const light = new Object3D();
+    setup.dispatcher.dispatch({ type: "add-light", light: { id: "point-a", kind: "point" } });
+    setup.dispatcher.dispatch({ type: "select-node", nodeId: "point-a" });
+    setup.objects.set("point-a", light, { kind: "light", lightId: "point-a", transformable: true });
+    setup.adapter.sync(setup.store.getSnapshot());
+
+    expect(setup.controls.attached).toBe(light);
+
+    setup.controls.emit("mouseDown");
+    light.position.set(5, 6, 7);
+    setup.controls.emit("objectChange");
+    setup.controls.emit("mouseUp");
+
+    expect(dispatchSpy).toHaveBeenLastCalledWith({
+      type: "batch",
+      label: "Transform node",
+      commands: [{ type: "set-node-transform", nodeId: "point-a", transform: { position: [5, 6, 7] } }]
+    });
+    expect(setup.store.getSnapshot().nodes["point-a"].transform?.position).toEqual([5, 6, 7]);
+    expect(setup.store.getSnapshot().lights["point-a"].transform?.position).toEqual([5, 6, 7]);
+  });
+
+  it("does not attach transform controls to non-spatial light nodes", () => {
+    const setup = createAdapterHarness();
+    const dispatchSpy = vi.spyOn(setup.dispatcher, "dispatch");
+    const ambient = new Object3D();
+    setup.dispatcher.dispatch({ type: "add-light", light: { id: "ambient-a", kind: "ambient" } });
+    setup.dispatcher.dispatch({ type: "select-node", nodeId: "ambient-a" });
+    setup.objects.set("ambient-a", ambient, { kind: "light", lightId: "ambient-a", transformable: false });
+
+    setup.adapter.sync(setup.store.getSnapshot());
+    setup.controls.emit("mouseDown");
+    ambient.position.set(1, 2, 3);
+    setup.controls.emit("objectChange");
+    setup.controls.emit("mouseUp");
+
+    expect(setup.controls.attached).toBeNull();
+    expect(setup.adapter.attachedNodeId).toBeNull();
+    expect(dispatchSpy).not.toHaveBeenCalledWith(expect.objectContaining({ type: "set-node-transform", nodeId: "ambient-a" }));
+    expect(setup.store.getSnapshot().nodes["ambient-a"].transform).toBeUndefined();
+  });
+
   it("disables camera controls while dragging and restores them after commit or cancellation", () => {
     const cameraControls = createFakeCameraControls();
     const setup = createAdapterHarness({ cameraControls });

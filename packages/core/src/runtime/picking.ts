@@ -14,11 +14,27 @@ export class ObjectPicker {
     private readonly dispatcher: CommandDispatcher
   ) {}
 
-  selectObject(objectId: string | null, mode: SelectionMode = "replace"): CommandResult {
+  selectNode(nodeId: string | null, mode: SelectionMode = "replace"): CommandResult {
     if (mode === "replace") {
-      return this.dispatcher.dispatch({ type: "select-object", objectId });
+      return this.dispatcher.dispatch({ type: "select-node", nodeId });
     }
-    return this.dispatcher.dispatch({ type: "select-objects", mode, objectId });
+    return this.dispatcher.dispatch({ type: "select-nodes", mode, nodeId });
+  }
+
+  selectObject(objectId: string | null, mode: SelectionMode = "replace"): CommandResult {
+    const nodeId = objectId ? this.objects.getObjectNodeId(objectId) ?? objectId : null;
+    return this.selectNode(nodeId, mode);
+  }
+
+  pickNodeFromClientPoint(
+    container: HTMLElement,
+    clientX: number,
+    clientY: number,
+    candidates: Object3D[],
+    mode: SelectionMode = "replace"
+  ): CommandResult {
+    const nodeId = this.#hitNodeId(container, clientX, clientY, candidates);
+    return this.selectNode(nodeId, mode);
   }
 
   pickFromClientPoint(
@@ -28,6 +44,20 @@ export class ObjectPicker {
     candidates: Object3D[],
     mode: SelectionMode = "replace"
   ): CommandResult {
+    const nodeId = this.#hitNodeId(container, clientX, clientY, candidates);
+    const target = nodeId ? this.objects.getTarget(nodeId) : undefined;
+    if (target?.kind === "object" && target.objectId) {
+      return this.selectObject(target.objectId, mode);
+    }
+    return this.selectNode(nodeId, mode);
+  }
+
+  #hitNodeId(
+    container: HTMLElement,
+    clientX: number,
+    clientY: number,
+    candidates: Object3D[]
+  ): string | null {
     const rect = container.getBoundingClientRect();
     const width = rect.width || container.clientWidth || 1;
     const height = rect.height || container.clientHeight || 1;
@@ -41,7 +71,6 @@ export class ObjectPicker {
     }
 
     const hit = this.#raycaster.intersectObjects(candidates, true)[0];
-    const objectId = hit ? this.objects.getId(hit.object) ?? null : null;
-    return this.selectObject(objectId, mode);
+    return hit ? this.objects.getId(hit.object) ?? null : null;
   }
 }

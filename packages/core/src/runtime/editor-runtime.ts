@@ -15,6 +15,7 @@ import type { RuntimeTextureLoaderAdapter } from "./texture-loader-adapter";
 import type { Unsubscribe } from "../editor/subscription";
 import type { EditorSnapState } from "../editor/snap-state";
 import { RuntimeSelectionVisuals } from "./selection-visuals";
+import type { RuntimeNodeTarget } from "./three-object-map";
 import { TransformControlsAdapter, createThreeTransformControls, type RuntimeTransformControlsFactory } from "./transform/transform-controls-adapter";
 import { TransformController } from "./transform/transform-controller";
 import type { EditorTransformModeState } from "./transform/transform-mode";
@@ -68,8 +69,10 @@ interface ThreeEditorRuntimeOptions extends EditorRuntimeOptions {
 
 export interface EditorRuntime {
   project(snapshot?: SceneSnapshot): Promise<void>;
+  pickNode(nodeId: string | null, mode?: SelectionMode): CommandResult;
   pickObject(objectId: string | null, mode?: SelectionMode): CommandResult;
   selectFromPointer(input: RuntimePointerSelectionInput): CommandResult;
+  getNodeTarget(nodeId: string): Object3D | undefined;
   getObject(objectId: string): Object3D | undefined;
   getProblems(): Problem[];
   subscribeProblems(subscriber: RuntimeProblemSubscriber): Unsubscribe;
@@ -189,6 +192,11 @@ export class ThreeEditorRuntime implements EditorRuntime {
     this.#publishProblems();
   }
 
+  pickNode(nodeId: string | null, mode: SelectionMode = "replace"): CommandResult {
+    this.#assertActive();
+    return this.picker.selectNode(nodeId, mode);
+  }
+
   pickObject(objectId: string | null, mode: SelectionMode = "replace"): CommandResult {
     this.#assertActive();
     return this.picker.selectObject(objectId, mode);
@@ -199,14 +207,18 @@ export class ThreeEditorRuntime implements EditorRuntime {
     const pointerSelection = this.#interactions.pointerSelection;
     const defaultMode = pointerSelection ? pointerSelection.defaultMode : undefined;
     const mode = input.mode ?? resolvePointerSelectionMode(input.modifiers, defaultMode);
-    const candidates = [...this.projector.objects.entries()]
-      .map(([, object]) => object)
-      .filter((object) => !object.userData.problem);
-    return this.picker.pickFromClientPoint(this.#container, input.clientX, input.clientY, candidates, mode);
+    const candidates = [...this.projector.objects.targetEntries()]
+      .filter(([, target]) => target.pickable && !target.object.userData.problem)
+      .map(([, target]) => target.object);
+    return this.picker.pickNodeFromClientPoint(this.#container, input.clientX, input.clientY, candidates, mode);
+  }
+
+  getNodeTarget(nodeId: string): Object3D | undefined {
+    return this.projector.objects.get(nodeId);
   }
 
   getObject(objectId: string): Object3D | undefined {
-    return this.projector.objects.get(objectId);
+    return this.projector.objects.getObject(objectId);
   }
 
   getProblems(): Problem[] {
@@ -263,10 +275,14 @@ export class ThreeEditorRuntime implements EditorRuntime {
   frameSelected(options?: RuntimeCameraFrameOptions): boolean {
     this.#assertActive();
     const snapshot = this.#store.getSnapshot();
-    const selected = snapshot.selection.objectIds.length > 0
-      ? snapshot.selection.objectIds
-      : snapshot.selection.objectId ? [snapshot.selection.objectId] : [];
-    const framed = frameCameraToObjects(this.camera, selected.map((objectId) => this.getObject(objectId)).filter(isObject3D), this.#controls ?? undefined, options);
+    const selected = snapshot.selection.nodeIds.length > 0
+      ? snapshot.selection.nodeIds
+      : snapshot.selection.nodeId ? [snapshot.selection.nodeId] : [];
+    const targets = selected
+      .map((nodeId) => this.projector.objects.getTarget(nodeId))
+      .filter(isTransformableTarget)
+      .map((target) => target.object);
+    const framed = frameCameraToObjects(this.camera, targets, this.#controls ?? undefined, options);
     if (framed) {
       this.invalidateRender();
     }
@@ -275,7 +291,14 @@ export class ThreeEditorRuntime implements EditorRuntime {
 
   frameAll(options?: RuntimeCameraFrameOptions): boolean {
     this.#assertActive();
-    const framed = frameCameraToObjects(this.camera, [...this.projector.objects.entries()].map(([, object]) => object), this.#controls ?? undefined, options);
+    const framed = frameCameraToObjects(
+      this.camera,
+      [...this.projector.objects.targetEntries()]
+        .filter(([, target]) => target.transformable)
+        .map(([, target]) => target.object),
+      this.#controls ?? undefined,
+      options
+    );
     if (framed) {
       this.invalidateRender();
     }
@@ -458,4 +481,8 @@ function createResizeObserver(
 
 function isObject3D(object: Object3D | undefined): object is Object3D {
   return Boolean(object);
+}
+
+function isTransformableTarget(target: RuntimeNodeTarget | undefined): target is RuntimeNodeTarget {
+  return Boolean(target?.transformable);
 }
