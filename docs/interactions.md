@@ -21,28 +21,30 @@
 React 和 Vue proof-loop demo 的可见验证路径保持一致：
 
 1. 使用 camera helper（Reset camera / Frame selected / Frame all）验证 transient camera controls。
-2. 通过 viewport picking 或 Scene hierarchy 选择对象，并在层级中看到 selected / primary 标记。
+2. 通过 viewport picking 或 Scene hierarchy 选择 object、group、light node，并在层级中看到 selected / primary 标记。
 3. 通过 TransformControls 或 demo toolbar 提交一次 transform，并验证 undo/redo。
 4. 通过 Material inspector 修改支持的 object-level `MeshStandardMaterial` 字段，并确认 runtime 投影更新。
-5. 通过 Object operations 执行 duplicate、copy/paste、delete、group、ungroup 等 hierarchy 操作。
+5. 通过 Node operations 执行 duplicate、copy/paste、delete、group、ungroup 等 hierarchy 操作。
 6. 导出并重新导入 `.ek3d` 项目包。
 7. 观察 recoverable missing-asset problem，然后用 stable asset ID 替换资产并清除 problem。
 
 `pnpm test:browser` 使用 headless Chromium 跑 browser-level evidence：runtime picking、TransformControls smoke、React/Vue demo checklist parity、hierarchy/status/problem badge 断言，以及 canvas 非空渲染 smoke。测试避免像素级 WebGL 比对，优先验证用户可观察且稳定的状态。
 
-## 对象选择与多选
+## 节点选择与多选
 
-Core runtime 提供 `pickObject(objectId, mode)`，默认内部 dispatch：
+当前 durable selection 使用 `NodeId`。GLB object、empty group、light 都可以成为选中目标；object-only API 仍保留为兼容路径，并从 node selection 派生 selected object IDs。
+
+Core runtime 提供 node-aware picking；命中 GLB mesh 时会选择所属 object node，命中 light runtime target 时会选择对应 light node。兼容 API `pickObject(objectId, mode)` 仍可选择对象 payload 对应的 object node。默认内部 dispatch：
 
 ```ts
-{ type: "select-object", objectId }
+{ type: "select-node", nodeId }
 ```
 
-`mode` 也可使用 `toggle`、`add`、`remove`、`clear`、`all`，对应 `select-objects` 命令。Snapshot 中 `selection.objectId` 是 primary selection，`selection.objectIds` 是有序多选集合。Inspector 继续编辑 primary object，同时暴露 selection count 给 workbench。
+`mode` 也可使用 `toggle`、`add`、`remove`、`clear`、`all`，对应 `select-nodes` 命令。Snapshot 中 `selection.nodeId` 是 primary selection，`selection.nodeIds` 是有序多选集合。`selection.objectId/objectIds` 是当前兼容镜像，只包含选中 object node 的 object payload ID。Inspector 根据 selected node kind 显示 transform、material 或 light section 的可用状态，同时暴露 selection count 给 workbench。
 
-Raycaster picking 能从 client point 解析候选对象；React/Vue workbench 默认开启 viewport pointer selection，示例中也可以从层级面板按钮触发同一套 selection command。框选和 lasso selection 仍未实现。
+Raycaster picking 能从 client point 解析候选 node；React/Vue workbench 默认开启 viewport pointer selection，示例中也可以从层级面板按钮触发同一套 selection command。框选和 lasso selection 仍未实现。
 
-## 高级对象操作
+## 高级节点操作
 
 Core 已提供 framework-neutral operation helper：
 
@@ -55,9 +57,11 @@ Core 已提供 framework-neutral operation helper：
 - `editor.operations.selectAll()`
 - `editor.operations.clearSelection()`
 
-这些操作都通过 core command 和 history 执行。复制 payload 是 transient JSON editor data，不包含 browser/system clipboard 数据、`File`、`Blob`、object URL、Three.js 对象、resolver 结果或二进制资产 payload。粘贴/复制会生成新对象 ID，共享 asset reference，并隔离复制对象的 material assignment。
+这些操作都通过 core command 和 history 执行。默认无参数调用作用于当前 node selection；显式传入 object IDs 时，`copy`、`duplicate`、`delete`、`group`、`ungroup` 仍走 object-only 兼容语义。
 
-分组是第一版 hierarchy grouping：以 primary selected object 作为 group root，把其他 selected top-level roots 挂到其下；取消分组把 primary object 的 children 移回上一层。React/Vue proof-loop demo 现在提供一个紧凑层级面板，直接从 `snapshot.rootObjectIds` 和 `snapshot.objects` 派生树形结构，并通过 core operations 执行 select/copy/paste/duplicate/delete/group/ungroup。当前没有新增 empty group node 类型。
+复制 payload 是 transient JSON editor data，不包含 browser/system clipboard 数据、`File`、`Blob`、object URL、Three.js 对象、resolver 结果或二进制资产 payload。v2 node clipboard 可以复制 group/object/light 子树，粘贴时生成新的 node/object/light IDs，共享 asset reference，并隔离复制对象的 material assignment。旧 v1 object clipboard payload 仍可粘贴到 v4 editor。
+
+分组是 node-native hierarchy grouping：`group-nodes` 会创建 empty group node，把 selected top-level nodes 挂到新 group 下；`ungroup-nodes` 把 group children 移回上一层。React/Vue proof-loop demo 现在提供一个紧凑层级面板，直接从 `snapshot.rootNodeIds` 和 `snapshot.nodes` 派生树形结构，并通过 core operations 执行 select/copy/paste/duplicate/delete/group/ungroup。
 
 ## Transform 编辑
 
@@ -71,17 +75,27 @@ Transform 持久化字段：
 
 ```ts
 editor.dispatch({
-  type: "set-transform",
-  objectId: "box",
+  type: "set-node-transform",
+  nodeId: "box-node",
   transform: {
     position: [1, 0, 0]
   }
 });
 ```
 
+旧 object-only host code 仍可使用兼容命令：
+
+```ts
+editor.dispatch({
+  type: "set-transform",
+  objectId: "box",
+  transform: { position: [1, 0, 0] }
+});
+```
+
 Runtime 内部有 transaction 结构：
 
-- `start(objectId, mode, { objectIds, snap })`
+- `start(nodeId, mode, { nodeIds, snap })`
 - `preview(transform)`
 - `commit()`
 - `cancel()`
@@ -92,9 +106,9 @@ Runtime 内部有 transaction 结构：
 - `rotate`
 - `scale`
 
-设计目标是一段拖拽最终只产生一个 undoable command，而不是每次 pointer move 都写 history。React/Vue workbench 默认开启可视 transform control；proof-loop demo 的 toolbar 也提供 mode、snap、camera、undo/redo 和 nudge 按钮，用于验证同一套状态是否在层级、status 和 checklist 中同步。TransformControls、helper、drag preview 和 camera controls 都是 runtime/UI state，不进入 Snapshot。
+设计目标是一段拖拽最终只产生一个 undoable command，而不是每次 pointer move 都写 history。当前 canonical transform command 是 `set-node-transform`；旧 `set-transform` 会映射到对应 object node。Object node、group node、directional/point/spot light node 支持 transform；ambient/hemisphere light node 可以被选择但不显示 transform 控件。React/Vue workbench 默认开启可视 transform control；proof-loop demo 的 toolbar 也提供 mode、snap、camera、undo/redo 和 nudge 按钮，用于验证同一套状态是否在层级、status 和 checklist 中同步。TransformControls、helper、drag preview 和 camera controls 都是 runtime/UI state，不进入 Snapshot。
 
-多对象 transaction 会把多个 `set-transform` 子命令合成一个 `batch` command。`snap` 支持 translation、rotation、scale increment helper；吸附结果进入 durable transform，吸附设置本身仍是 editor/session state。
+多节点 transaction 会把多个 `set-node-transform` 子命令合成一个 `batch` command。`snap` 支持 translation、rotation、scale increment helper；吸附结果进入 durable transform，吸附设置本身仍是 editor/session state。
 
 ## Inspector 编辑
 
@@ -141,7 +155,7 @@ editor.dispatch({
 });
 ```
 
-当前没有 durable light selection；workbench 内部使用 UI-local `activeLightId` 控制当前编辑的灯光面板。
+每个 light payload 都有对应 light node。选择 light list 中的灯光会选择对应 light node，而不是把当前灯光目标保存在框架本地状态里。`activeLightId` 仍作为 React/Vue context 的兼容字段暴露，但它从 inspector/node selection 派生。
 
 ## 材质
 
@@ -169,8 +183,8 @@ Workbench context 暴露：
 
 React 和 Vue proof-loop demo 的侧栏包含：
 
-- Scene hierarchy：显示对象名称、asset ID、selected/primary 标记和 problem badge。
-- Object operations：通过 core operations 触发 select all、copy、paste、duplicate、delete、group、ungroup。
+- Scene hierarchy：显示 object/group/light node 名称、payload 辅助信息、selected/primary 标记和 problem badge。
+- Node operations：通过 core operations 触发 select all、copy、paste、duplicate、delete、group、ungroup。
 - Assets and problems：列出 snapshot asset references，并提供一个 demo 级缺失 GLB 资产替换按钮。
 - Proof checklist：从当前 selection、material assignment、history、transform mode、snap、runtime problems 和本次 demo session 派生验证进度。
 

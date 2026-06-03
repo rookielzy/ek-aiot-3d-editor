@@ -4,7 +4,7 @@ Experimental `0.x` workspace for a snapshot-first 3D editor contract.
 
 Detailed Chinese project documentation starts at [docs/README.md](docs/README.md).
 
-The core contract now stores a versioned scene snapshot. Version 2 keeps the first proof loop intact and adds durable authoring data for:
+The core contract now stores a versioned scene snapshot. Version 4 uses a shared `SceneNode` / `NodeId` graph as the durable hierarchy and target layer for GLB object nodes, empty group nodes, and light nodes. Object and light payload maps remain separate compatibility surfaces, while hierarchy, selection, transform targeting, inspector targeting, and runtime picking route through nodes. The current snapshot also stores:
 
 - object-level `MeshStandardMaterial` overrides and texture-slot asset references
 - scene background/environment intent, including image and HDR asset references
@@ -14,7 +14,7 @@ The core contract now stores a versioned scene snapshot. Version 2 keeps the fir
 The proof loop remains intentionally narrow, but the local React and Vue demos now expose it as an interactive workbench:
 
 - import a GLB through a stable asset reference
-- select the imported object
+- select object, group, or light nodes through the shared hierarchy
 - orbit/reset/frame the transient camera without serializing camera state
 - click/select through the viewport or hierarchy
 - commit one transform command, including visual gizmo-backed transactions in the runtime
@@ -39,7 +39,7 @@ Portable local projects use a separate `.ek3d` package surface. A package contai
 
 The core Three.js runtime now consumes the environment and light parts of that snapshot. Solid backgrounds, texture/HDR backgrounds, HDR or image-based scene environment lighting, PMREM output when backed by the default WebGL renderer, and ambient/hemisphere/directional/point/spot lights are projected from durable asset references and light definitions. Resolver, loader, and PMREM failures are exposed as runtime problems instead of being written back into the snapshot.
 
-Vue and React packages now include a shared inspector surface over the core contract. The inspector can edit selected-object transforms and material overrides, scene environment/background settings, and ambient/hemisphere/directional/point/spot lights through core commands. It also displays runtime/authored problem metadata without serializing transient runtime failures.
+Vue and React packages now include a shared inspector surface over the core contract. The inspector can edit transformable selected nodes, object-only material overrides, scene environment/background settings, and selected light nodes through core commands. It also displays runtime/authored problem metadata without serializing transient runtime failures.
 
 The framework packages also expose `EditorWorkbench` and `useWorkbench()` convenience surfaces. They compose the existing viewport, inspector, snapshot subscription, runtime problem observation, project import/export, asset replacement, and command dispatch into a compact editor shell. React customization uses render props; Vue customization uses scoped slots. These shell extension regions receive the core editor, current snapshot, inspector model, runtime problems, and dispatch helper, but they do not expose private runtime projectors or create a core plugin API.
 
@@ -51,7 +51,7 @@ The framework packages also expose `EditorWorkbench` and `useWorkbench()` conven
 
 Run `pnpm exec playwright install chromium` once before `pnpm test:browser` on a fresh machine. Linux CI images may also need Playwright's Chromium system dependencies installed.
 
-In each framework demo, the visible validation path is camera helper use, hierarchy or viewport selection, transform/history, material inspector edit, hierarchy operation, project export/reopen, and missing-asset replacement. The checklist is derived UI state; it is not written into snapshots or `.ek3d` packages.
+In each framework demo, the visible validation path is camera helper use, hierarchy or viewport node selection, transform/history, material inspector edit, node hierarchy operation, project export/reopen, and missing-asset replacement. The checklist is derived UI state; it is not written into snapshots or `.ek3d` packages.
 
 ## Release Commands
 

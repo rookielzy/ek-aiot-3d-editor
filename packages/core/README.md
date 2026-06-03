@@ -8,11 +8,11 @@ Use `createEditor()` to create a framework-neutral editor, dispatch commands, su
 
 ## Snapshot Contract
 
-Snapshots are portable JSON-compatible records. Version 3 stores GLB scene objects, ordered multi-object selection with a primary object, and durable schema namespaces for material overrides, environment/background intent, lights, and authored problem metadata. Version 1/2 snapshots restore through the migration path and are normalized into the current schema.
+Snapshots are portable JSON-compatible records. Version 4 stores a canonical `SceneNode` / `NodeId` graph with `nodes`, `rootNodeIds`, and node-based selection. The first node kinds are GLB object nodes, empty group nodes, and light nodes. Object and light payload maps remain separate, while hierarchy, selection, transform targeting, inspector targeting, and runtime picking use nodes. Version 1/2/3 snapshots restore through the migration path and are normalized into the current schema.
 
 Runtime values are never saved. Hosts may register GLB, texture, HDR, or image assets with runtime `source` values, but snapshots only keep stable asset references.
 
-When mounted, the core runtime projects GLB objects, scene background/environment intent, and durable light definitions into Three.js. Texture and HDR environment assets are resolved through the same `AssetResolverBridge` boundary as GLB assets. With the default Three.js `WebGLRenderer`, HDR/equirectangular environment lighting is converted to runtime-only PMREM output; custom `RendererLike` test renderers use the raw resolved texture unless they are backed by a real Three.js WebGL renderer. Stale textures, render targets, light objects, and light target objects are disposed through the runtime lifecycle.
+When mounted, the core runtime projects the node graph, GLB payloads, scene background/environment intent, and durable light definitions into Three.js. Texture and HDR environment assets are resolved through the same `AssetResolverBridge` boundary as GLB assets. With the default Three.js `WebGLRenderer`, HDR/equirectangular environment lighting is converted to runtime-only PMREM output; custom `RendererLike` test renderers use the raw resolved texture unless they are backed by a real Three.js WebGL renderer. Stale textures, render targets, projected groups, light objects, and light target objects are disposed through the runtime lifecycle.
 
 ## Project Packages
 
@@ -24,7 +24,7 @@ The experimental `.ek3d` project package is a ZIP container with:
 - `scene.json`: the normal serialized `SceneSnapshot`
 - `assets/*`: GLB, texture, HDR, or image payload bytes referenced by asset ID
 
-Import validates archive shape, entry paths, manifest records, scene snapshot, payload references, and size limits before replacing editor state. Export fails by default when a referenced payload is unavailable; callers can opt into `partial: true`, which marks the manifest as partial and reports structured package problems.
+Import validates archive shape, entry paths, manifest records, scene snapshot, payload references, and size limits before replacing editor state. Old scene snapshots are migrated to the current v4 node graph during import. Export fails by default when a referenced payload is unavailable; callers can opt into `partial: true`, which marks the manifest as partial and reports structured package problems. The package manifest remains version 1 because the package layout is unchanged.
 
 `editor.replaceAsset({ assetId, source })` replaces the transient payload for an existing asset ID. Scene objects, materials, environment fields, and authored problem state keep their durable references. Mounted runtimes retry projection through the project-aware resolver; successful recovery removes derived runtime problems without writing resolver output, `File`, `Blob`, object URLs, loaded textures, or PMREM output into the snapshot.
 
@@ -32,21 +32,22 @@ Import validates archive shape, entry paths, manifest records, scene snapshot, p
 
 All durable edits enter through commands so undo/redo remains framework-neutral:
 
-- `import-glb`, `select-object`, `select-objects`, and `set-transform` preserve the first proof loop and add ordered multi-selection.
+- `import-glb`, `select-node`, `select-nodes`, `create-group`, `delete-nodes`, `group-nodes`, `ungroup-nodes`, `reparent-node`, and `set-node-transform` own node-native hierarchy and target semantics.
+- `select-object`, `select-objects`, `set-transform`, `delete-objects`, `duplicate-objects`, `group-objects`, `ungroup-objects`, and `reparent-object` preserve object-only compatibility by resolving object payload IDs to object nodes.
 - `batch` records composite operations as one undoable history entry.
 - `register-asset` records stable GLB, texture, HDR, or image asset references.
-- `delete-objects`, `paste-objects`, `duplicate-objects`, `group-objects`, and `ungroup-objects` own advanced static-scene editing semantics.
+- `paste-objects` accepts legacy v1 object clipboard payloads and current v2 node clipboard payloads.
 - `set-material` stores a small `MeshStandardMaterial` override subset with texture-slot references.
 - `set-environment` stores background/environment intent without PMREM or loaded textures.
-- `add-light`, `update-light`, and `remove-light` store durable light authoring data.
+- `add-light`, `update-light`, and `remove-light` store durable light authoring data and keep light nodes synchronized with light payloads.
 
-`editor.operations` exposes core-backed helpers for copy, paste, duplicate, delete, group, ungroup, select all, and clear selection. Clipboard payloads are transient JSON editor data; they do not contain browser clipboard state, files, blobs, object URLs, loaded Three.js objects, resolver output, or project payload bytes.
+`editor.operations` exposes core-backed helpers for copy, paste, duplicate, delete, group, ungroup, select all, and clear selection. Default calls operate on node selection; calls with explicit object IDs keep object-only compatibility. Clipboard payloads are transient JSON editor data; v2 payloads can carry group/object/light node subtrees while v1 object payloads still paste into v4 editors. Clipboard data does not contain browser clipboard state, files, blobs, object URLs, loaded Three.js objects, resolver output, or project payload bytes.
 
 ## Inspector Helpers
 
 Core exports a framework-neutral inspector contract through `buildInspectorModel()` and command builders for transform, material, environment, and light fields. The model is pure JSON-compatible data derived from a snapshot plus optional runtime problems. Framework packages render it and dispatch the returned commands; they do not mutate snapshots, Three.js objects, or runtime resources directly.
 
-The inspector helpers cover primary selected-object transforms, primary selected-object `MeshStandardMaterial` overrides, ordered selection metadata, texture-slot asset references, scene environment/background fields, light list/add/update/remove behavior, and runtime/authored problem display metadata.
+The inspector helpers cover selected node transforms when available, selected object node `MeshStandardMaterial` overrides, ordered node selection metadata, texture-slot asset references, scene environment/background fields, selected light node editing, light list/add/update/remove behavior, and runtime/authored problem display metadata.
 
 Framework workbench shells are composition adapters over this core contract. They may arrange the viewport, inspector, runtime problem display, and framework-native extension regions, but durable behavior remains in core commands, snapshots, serialization, restore, and runtime projection.
 
@@ -56,4 +57,4 @@ Resolver, runtime, and project package diagnostics use a structured problem cont
 
 ## Deferred Runtime and UX Work
 
-Material texture projection onto imported GLB meshes, per-submesh material slot discovery, shadow controls, light helper gizmos, cloud asset libraries, marketplace metadata, durable upload queues, and advanced decoder configuration remain follow-up work.
+GLB internal hierarchy editing, per-submesh material slot discovery, shadow controls, advanced light helper gizmos, cloud asset libraries, marketplace metadata, durable upload queues, data binding, Agent command proposal runtime, hosted publishing, and advanced decoder configuration remain follow-up work.

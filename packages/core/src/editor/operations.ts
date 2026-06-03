@@ -1,6 +1,8 @@
-import { createClipboardPayload } from "../clipboard/create-clipboard";
+import { createClipboardPayload, createNodeClipboardPayload } from "../clipboard/create-clipboard";
 import type { EditorClipboardPayload } from "../clipboard/types";
 import type { CommandResult } from "../commands/types";
+import { getSelectedNodeIds } from "../selection/selection";
+import type { SceneSnapshot } from "../snapshot/types";
 import type { Editor } from "./editor-api";
 
 export interface EditorClipboard {
@@ -37,8 +39,11 @@ export function createMemoryClipboard(): EditorClipboard {
 export function createAdvancedEditorOperations(editor: Editor, clipboard: EditorClipboard = createMemoryClipboard()): AdvancedEditorOperations {
   return {
     copy(objectIds) {
-      const payload = createClipboardPayload(editor.getSnapshot(), objectIds);
-      if (payload.rootObjectIds.length === 0) {
+      const snapshot = editor.getSnapshot();
+      const payload = objectIds
+        ? createClipboardPayload(snapshot, objectIds)
+        : createClipboardPayloadForSelection(snapshot);
+      if (getClipboardRootCount(payload) === 0) {
         clipboard.clear();
         return null;
       }
@@ -52,16 +57,36 @@ export function createAdvancedEditorOperations(editor: Editor, clipboard: Editor
       return editor.dispatch({ type: "paste-objects", payload });
     },
     duplicate(objectIds) {
-      return editor.dispatch({ type: "duplicate-objects", objectIds });
+      const snapshot = editor.getSnapshot();
+      if (objectIds || isObjectOnlySelection(snapshot)) {
+        return editor.dispatch({ type: "duplicate-objects", objectIds });
+      }
+      const payload = createNodeClipboardPayload(snapshot);
+      if (payload.rootNodeIds.length === 0) {
+        return { ok: true, snapshot };
+      }
+      return editor.dispatch({ type: "paste-objects", payload });
     },
     delete(objectIds) {
-      return editor.dispatch({ type: "delete-objects", objectIds });
+      return objectIds || isObjectOnlySelection(editor.getSnapshot())
+        ? editor.dispatch({ type: "delete-objects", objectIds })
+        : editor.dispatch({ type: "delete-nodes" });
     },
     group(objectIds) {
-      return editor.dispatch({ type: "group-objects", objectIds });
+      return objectIds || isObjectOnlySelection(editor.getSnapshot())
+        ? editor.dispatch({ type: "group-objects", objectIds })
+        : editor.dispatch({ type: "group-nodes" });
     },
     ungroup(objectId) {
-      return editor.dispatch({ type: "ungroup-objects", objectId });
+      if (objectId) {
+        return editor.dispatch({ type: "ungroup-objects", objectId });
+      }
+
+      const snapshot = editor.getSnapshot();
+      const selectedNode = snapshot.selection.nodeId ? snapshot.nodes[snapshot.selection.nodeId] : undefined;
+      return selectedNode?.kind === "group"
+        ? editor.dispatch({ type: "ungroup-nodes" })
+        : editor.dispatch({ type: "ungroup-objects" });
     },
     selectAll() {
       return editor.dispatch({ type: "select-nodes", mode: "all" });
@@ -73,4 +98,25 @@ export function createAdvancedEditorOperations(editor: Editor, clipboard: Editor
       return clipboard.get() !== null;
     }
   };
+}
+
+function getClipboardRootCount(payload: EditorClipboardPayload): number {
+  return payload.kind === "ek-aiot-3d-editor-nodes"
+    ? payload.rootNodeIds.length
+    : payload.rootObjectIds.length;
+}
+
+function createClipboardPayloadForSelection(snapshot: SceneSnapshot): EditorClipboardPayload {
+  const selectedNodeIds = getSelectedNodeIds(snapshot);
+
+  return isObjectOnlySelection(snapshot, selectedNodeIds)
+    ? createClipboardPayload(snapshot)
+    : createNodeClipboardPayload(snapshot, selectedNodeIds);
+}
+
+function isObjectOnlySelection(
+  snapshot: SceneSnapshot,
+  selectedNodeIds = getSelectedNodeIds(snapshot)
+): boolean {
+  return selectedNodeIds.every((nodeId) => snapshot.nodes[nodeId]?.kind === "object");
 }

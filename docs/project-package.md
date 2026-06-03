@@ -30,7 +30,7 @@ assets/
 固定路径：
 
 - `project.json`：项目包 manifest。
-- `scene.json`：普通 `SceneSnapshot`。
+- `scene.json`：普通 `SceneSnapshot`。当前导出是 v4 node graph；导入旧 v1/v2/v3 scene 会先迁移到当前 schema。
 - `assets/*`：资产 payload bytes。
 
 ## project.json
@@ -92,7 +92,7 @@ if (!result.ok) {
 - ZIP 结构。
 - entry path 是否安全。
 - manifest version 和字段。
-- `scene.json` Snapshot。
+- `scene.json` Snapshot，并通过 snapshot migration 归一化为当前 v4 node graph。
 - asset record 与 payload 引用。
 - size limits。
 
@@ -137,4 +137,5 @@ Core runtime 可以从两类来源拿到资产：
 - 不要信任外部 `.ek3d` 文件；导入前必须走 core validator。
 - 不要允许 ZIP entry path 跳出项目包范围。
 - 不要把 secret、tenant token、用户会话等运行时变量写入 manifest metadata。
+- project manifest 当前仍是 version 1；引入 v4 `SceneNode` 只改变 `scene.json` 的 snapshot schema，不改变 `.ek3d` 包布局。
 - `.ek3d` 仍是实验性格式；在 `0.x` 阶段不保证长期兼容。

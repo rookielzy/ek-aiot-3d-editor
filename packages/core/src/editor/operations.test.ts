@@ -9,7 +9,8 @@ describe("advanced editor operations", () => {
     editor.dispatch({ type: "select-objects", mode: "replace", objectIds: ["object-a", "object-b"], primaryObjectId: "object-a" });
 
     const payload = editor.operations.copy();
-    expect(payload?.rootObjectIds).toEqual(["object-a", "object-b"]);
+    expect(payload?.kind).toBe("ek-aiot-3d-editor-objects");
+    expect(payload?.kind === "ek-aiot-3d-editor-objects" ? payload.rootObjectIds : []).toEqual(["object-a", "object-b"]);
     expect(editor.operations.canPaste()).toBe(true);
 
     expect(editor.operations.paste({
@@ -44,6 +45,22 @@ describe("advanced editor operations", () => {
     expect(editor.operations.paste().ok).toBe(false);
   });
 
+  it("keeps object-only operation compatibility for default object selections", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" }, transform: { position: [10, 0, 0] } });
+    editor.dispatch({ type: "import-glb", objectId: "object-b", asset: { id: "asset-b" }, transform: { position: [12, 0, 0] } });
+    editor.dispatch({ type: "select-objects", mode: "replace", objectIds: ["object-a", "object-b"], primaryObjectId: "object-a" });
+
+    expect(editor.operations.duplicate().ok).toBe(true);
+    expect(editor.getSnapshot().selection.objectId).not.toBe("object-a");
+    expect(editor.getSnapshot().selection.objectIds).toHaveLength(2);
+
+    editor.dispatch({ type: "select-objects", mode: "replace", objectIds: ["object-a", "object-b"], primaryObjectId: "object-a" });
+    expect(editor.operations.group().ok).toBe(true);
+    expect(editor.getSnapshot().nodes["object-b"].parentId).toBe("object-a");
+    expect(editor.getSnapshot().selection).toEqual({ nodeId: "object-a", nodeIds: ["object-a", "object-b"], objectId: "object-a", objectIds: ["object-a", "object-b"] });
+  });
+
   it("selects and clears all scene nodes through advanced operations", () => {
     const editor = createEditor();
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
@@ -55,5 +72,30 @@ describe("advanced editor operations", () => {
 
     expect(editor.operations.clearSelection().ok).toBe(true);
     expect(editor.getSnapshot().selection).toEqual({ nodeId: null, nodeIds: [], objectId: null, objectIds: [] });
+  });
+
+  it("copies, duplicates, deletes, and groups current node selections by default", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "add-light", light: { id: "point-a", kind: "point" } });
+    editor.dispatch({ type: "select-nodes", mode: "replace", nodeIds: ["object-a", "point-a"], primaryNodeId: "object-a" });
+
+    const payload = editor.operations.copy();
+    expect(payload?.kind).toBe("ek-aiot-3d-editor-nodes");
+    expect(editor.operations.duplicate().ok).toBe(true);
+    const duplicatedObjectNodeId = editor.getSnapshot().selection.nodeId;
+    expect(duplicatedObjectNodeId).not.toBeNull();
+    expect(duplicatedObjectNodeId ? editor.getSnapshot().nodes[duplicatedObjectNodeId]?.kind : null).toBe("object");
+    expect(editor.getSnapshot().nodes["copy:point-a"]).toMatchObject({ kind: "light", lightId: "copy:point-a" });
+
+    editor.dispatch({ type: "select-nodes", mode: "replace", nodeIds: ["object-a", "point-a"], primaryNodeId: "object-a" });
+    expect(editor.operations.group().ok).toBe(true);
+    const groupId = editor.getSnapshot().selection.nodeId;
+    expect(groupId ? editor.getSnapshot().nodes[groupId]?.kind : null).toBe("group");
+
+    expect(editor.operations.delete().ok).toBe(true);
+    expect(groupId ? editor.getSnapshot().nodes[groupId] : undefined).toBeUndefined();
+    expect(editor.getSnapshot().objects["object-a"]).toBeUndefined();
+    expect(editor.getSnapshot().lights["point-a"]).toBeUndefined();
   });
 });

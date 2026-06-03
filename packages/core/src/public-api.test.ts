@@ -6,6 +6,7 @@ import {
   createEditor,
   createAdvancedEditorOperations,
   createClipboardPayload,
+  createNodeClipboardPayload,
   createEmptySnapshot,
   buildInspectorModel,
   buildSetTransformCommand,
@@ -33,6 +34,9 @@ import {
   type AuthoredProblemState,
   type AssetOption,
   type BuildInspectorModelOptions,
+  type ClipboardSceneNode,
+  type EditorNodeClipboardPayload,
+  type EditorObjectClipboardPayload,
   type InspectorFieldKind,
   type InspectorFieldOption,
   type MaterialState,
@@ -112,6 +116,9 @@ describe("core public API", () => {
     expect(publicApi).not.toHaveProperty("ObjectPicker");
     expect(publicApi).not.toHaveProperty("RuntimeSelectionVisuals");
     expect(publicApi).not.toHaveProperty("createOrbitViewportCameraControls");
+    expect(publicApi).not.toHaveProperty("SceneProjector");
+    expect(publicApi).not.toHaveProperty("ThreeNodeMap");
+    expect(publicApi).not.toHaveProperty("ThreeObjectMap");
   });
 
   it("exports expanded schema and command contracts from the package root", () => {
@@ -187,6 +194,7 @@ describe("core public API", () => {
       transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }
     };
     const sceneNode: SceneNode = objectNode;
+    const clipboardNode: ClipboardSceneNode = { ...objectNode, originalId: "object-a" };
 
     expect(command.type).toBe("set-material");
     expect(registerAsset.asset.kind).toBe("texture");
@@ -227,6 +235,7 @@ describe("core public API", () => {
     expect(assetOption.kind).toBe("glb");
     expect(`${transformVector}.${transformAxis}`).toBe("position.x");
     expect(sceneNode.kind).toBe("object");
+    expect(clipboardNode.originalId).toBe("object-a");
     expect(environment.mode).toBe("none");
     expect(light.kind).toBe("ambient");
     expect(problem.target).toEqual({ kind: "object", objectId: "object-a" });
@@ -247,9 +256,13 @@ describe("core public API", () => {
     editor.dispatch({ type: "select-object", objectId: "object-a" });
     const operations: AdvancedEditorOperations = createAdvancedEditorOperations(editor);
     const payload: EditorClipboardPayload | null = operations.copy();
+    const objectPayload: EditorObjectClipboardPayload = createClipboardPayload(editor.getSnapshot());
+    const nodePayload: EditorNodeClipboardPayload = createNodeClipboardPayload(editor.getSnapshot());
 
-    expect(payload?.rootObjectIds).toEqual(["object-a"]);
-    expect(createClipboardPayload(editor.getSnapshot()).rootObjectIds).toEqual(["object-a"]);
+    expect(payload?.kind).toBe("ek-aiot-3d-editor-objects");
+    expect(payload?.kind === "ek-aiot-3d-editor-objects" ? payload.rootObjectIds : []).toEqual(["object-a"]);
+    expect(objectPayload.rootObjectIds).toEqual(["object-a"]);
+    expect(nodePayload.rootNodeIds).toEqual(["object-a"]);
     expect(resolveEditorShortcut({ key: "c", ctrlKey: true }).action).toBe("copy");
     expect(snapNumber(0.74, 0.5)).toBe(0.5);
   });

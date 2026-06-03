@@ -191,7 +191,7 @@ function DefaultWorkbenchToolbar({ context }: { context: WorkbenchContext }) {
           Frame all
         </button>
       </div>
-      <div className="ek-workbench__tool-group" aria-label="Object operations">
+      <div className="ek-workbench__tool-group" aria-label="Node operations">
         <button type="button" onClick={() => context.runAction("copy")} disabled={context.selectionCount === 0} title="Copy selection">
           Copy
         </button>

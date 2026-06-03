@@ -51,9 +51,9 @@ pnpm release:verify
 
 ## 能力概览（当前实现）
 
-- Core：版本化 JSON Scene Snapshot、命令分发、撤销/重做、订阅、序列化/恢复、runtime 挂载/销毁。
-- 场景对象：通过稳定资产引用导入 GLB，保存对象 ID、层级、Transform、选择状态和 JSON metadata。
-- Transform：支持 position / rotation / scale 的持久化变更；runtime 提供 transform transaction 的 start / preview / commit / cancel 结构。
+- Core：版本化 JSON Scene Snapshot、`SceneNode` / `NodeId` 层级与 target contract、命令分发、撤销/重做、订阅、序列化/恢复、runtime 挂载/销毁。
+- 场景节点：GLB object node、empty group node、light node 共享层级、Transform target、选择状态和 JSON metadata；object/light payload 仍保留独立 map。
+- Transform：支持 position / rotation / scale 的持久化变更；runtime 提供 node transform transaction 的 start / preview / commit / cancel 结构。
 - 资产：支持 `glb`、`texture`、`hdr`、`image` 四类资产引用；真实 `File`、`Blob`、URL、纹理、PMREM 输出只属于运行时。
 - 材质：持久化一小部分 `MeshStandardMaterial` override 与纹理槽资产引用。
 - 环境：持久化背景和环境光意图，支持 none / solid / texture / hdr 相关字段。
@@ -70,7 +70,7 @@ pnpm release:verify
 当前 proof loop 关注的是：
 
 1. 导入或注册 GLB 资产引用。
-2. 选择对象。
+2. 选择 object、group 或 light node。
 3. 提交一次 Transform 变更。
 4. 撤销/重做。
 5. 序列化 Scene Snapshot。
@@ -83,7 +83,7 @@ pnpm release:verify
 - Durable editor state 只存在于版本化 Scene Snapshot 中。
 - 禁止把 Three.js 对象、`File`、`Blob`、object URL、已加载 texture、PMREM render target、resolver 结果、framework component state 写入 Snapshot。
 - Core 是编辑行为来源；Vue/React 只负责生命周期、渲染和宿主集成。
-- 持久化编辑必须通过 command：`import-glb`、`register-asset`、`select-object`、`set-transform`、`set-material`、`set-environment`、`add-light`、`update-light`、`remove-light`。
+- 持久化编辑必须通过 command：`import-glb`、`register-asset`、`select-node`、`select-nodes`、`create-group`、`set-node-transform`、`delete-nodes`、`group-nodes`、`set-material`、`set-environment`、`add-light`、`update-light`、`remove-light`。旧 `select-object` / `set-transform` 等 object-only 命令是兼容路径。
 - Snapshot 是 JSON-compatible 记录；二进制资产通过 `.ek3d` 项目包 payload 或宿主 resolver 管理。
 - runtime problem 是派生状态；除非未来新增显式恢复命令，否则不要把 resolver/loader 失败结果写回 Snapshot。
 - `@ek-aiot/3d-editor-core` 是 ESM only，并直接依赖 Three.js。

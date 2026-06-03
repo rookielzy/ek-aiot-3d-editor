@@ -249,6 +249,14 @@ type Command =
   | BatchCommand
   | ImportGlbCommand
   | RegisterAssetCommand
+  | SelectNodeCommand
+  | SelectNodesCommand
+  | CreateGroupCommand
+  | DeleteNodesCommand
+  | GroupNodesCommand
+  | UngroupNodesCommand
+  | ReparentNodeCommand
+  | SetNodeTransformCommand
   | SelectObjectCommand
   | SelectObjectsCommand
   | DeleteObjectsCommand
@@ -269,11 +277,22 @@ type Command =
 
 ```ts
 editor.dispatch({
-  type: "set-transform",
-  objectId: "box",
+  type: "set-node-transform",
+  nodeId: "box",
   transform: { position: [1, 0, 0] }
 });
 ```
+
+旧 object-only host code 可继续使用 `select-object`、`select-objects`、`set-transform` 等兼容命令；这些命令会解析 object payload ID 到对应 object node。
+
+## Clipboard Payload
+
+Clipboard payload 是 transient JSON editor data，不属于 durable Snapshot：
+
+- v1 object clipboard：`kind: "ek-aiot-3d-editor-objects"`，保留旧 object-only copy/paste 行为。
+- v2 node clipboard：`kind: "ek-aiot-3d-editor-nodes"`，可携带 group/object/light node 子树、相关 object/light payload、material assignment、asset IDs。
+
+两种 payload 都必须 JSON-compatible，不包含 browser/system clipboard 状态、`File`、`Blob`、object URL、Three.js runtime object、resolver 输出或 `.ek3d` asset payload bytes。`.ek3d` 项目包仍只保存 `scene.json` Snapshot 和 `assets/*` payload；clipboard payload 不会写入项目包。
 
 ## 序列化与恢复
 
