@@ -13,6 +13,8 @@ export type {
   RegisterAssetCommand,
   ReparentObjectCommand,
   RemoveLightCommand,
+  SelectNodeCommand,
+  SelectNodesCommand,
   SelectObjectCommand,
   SelectObjectsCommand,
   SceneEnvironmentPatch,
@@ -28,7 +30,7 @@ export type { SnapChannel, SnapSubscriber } from "./editor/snap-state";
 export type { EditorClipboardPayload } from "./clipboard/types";
 export type { BackgroundMode, EnvironmentMode, EnvironmentRotation, SceneEnvironment } from "./environment/types";
 export type { HistoryState } from "./history/history";
-export type { SelectionMode, SelectionState } from "./selection/selection";
+export type { NodeSelectionInput, SelectionInput, SelectionMode, SelectionState } from "./selection/selection";
 export type {
   AssetOption,
   BuildInspectorModelOptions,
@@ -180,7 +182,8 @@ export {
   buildTransformSection
 } from "./inspector/transform";
 export { createEmptySnapshot, createTransform } from "./snapshot/defaults";
-export { getSelectedObjectIds, getTopLevelSelectedObjectIds } from "./selection/selection";
+export { getSelectedNodeIds, getSelectedObjectIds, getTopLevelSelectedObjectIds, normalizeNodeSelection, normalizeSelection } from "./selection/selection";
+export { collectNodeSubtreeIds, getTopLevelNodeIds, isNodeAncestorOf } from "./snapshot/hierarchy";
 export { migrateSerializedSnapshot, validateSerializedSceneSnapshot } from "./snapshot/migrations";
 export { isJsonCompatible, validateSceneSnapshot } from "./snapshot/validation";
 export { normalizeTransform } from "./snapshot/transforms";

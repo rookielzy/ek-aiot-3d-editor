@@ -5,12 +5,12 @@ import { createEditor } from "@ek-aiot/3d-editor-core";
 import { InspectorPanel } from "../src/components/InspectorPanel";
 
 describe("React InspectorPanel", () => {
-  it("renders disabled object sections and available scene sections with no selection", () => {
+  it("renders disabled node transform sections and available scene sections with no selection", () => {
     const editor = createEditor();
 
     render(<InspectorPanel editor={editor} />);
 
-    expect(screen.getByText("Select a GLB object to edit transform.")).toBeTruthy();
+    expect(screen.getByText("Select a transformable node to edit transform.")).toBeTruthy();
     expect(screen.getByText("Environment")).toBeTruthy();
     expect(screen.getByText("Lights")).toBeTruthy();
   });

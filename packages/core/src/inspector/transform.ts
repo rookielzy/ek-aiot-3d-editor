@@ -1,6 +1,7 @@
 import type { SetTransformCommand } from "../commands/types";
 import type { SceneSnapshot, Transform } from "../snapshot/types";
 import { numberField } from "./fields";
+import { getSelectedNodeTarget } from "./node-targets";
 import type { InspectorCommandResult, InspectorSection, TransformAxis, TransformFieldId, TransformVectorName } from "./types";
 import { parseFiniteNumber } from "./fields";
 
@@ -8,18 +9,18 @@ const AXES = ["x", "y", "z"] as const;
 const VECTORS = ["position", "rotation", "scale"] as const;
 
 export function buildTransformSection(snapshot: SceneSnapshot): InspectorSection {
-  const object = getSelectedObject(snapshot);
-  const disabled = !object;
+  const target = getSelectedNodeTarget(snapshot);
+  const disabled = !target.transformAvailable || !target.transform;
 
   return {
     id: "transform",
     title: "Transform",
     enabled: !disabled,
     empty: disabled,
-    reason: disabled ? "Select a GLB object to edit transform." : undefined,
+    reason: disabled ? target.transformUnavailableReason : undefined,
     fields: VECTORS.flatMap((vector) =>
       AXES.map((axis, axisIndex) =>
-        numberField(`${vector}.${axis}`, `${formatVector(vector)} ${axis.toUpperCase()}`, object?.transform[vector][axisIndex] ?? defaultTransformValue(vector), {
+        numberField(`${vector}.${axis}`, `${formatVector(vector)} ${axis.toUpperCase()}`, target.transform?.[vector][axisIndex] ?? defaultTransformValue(vector), {
           disabled,
           step: vector === "scale" ? 0.1 : 0.01
         })
@@ -29,9 +30,16 @@ export function buildTransformSection(snapshot: SceneSnapshot): InspectorSection
 }
 
 export function buildSetTransformCommand(snapshot: SceneSnapshot, fieldId: TransformFieldId, value: unknown): InspectorCommandResult {
-  const object = getSelectedObject(snapshot);
+  const target = getSelectedNodeTarget(snapshot);
+  if (!target.node || !target.transform) {
+    return problem(fieldId, target.transformUnavailableReason ?? "No selected transformable node to edit.");
+  }
+  if (target.node.kind !== "object") {
+    return problem(fieldId, "Node transform commands are not available yet.");
+  }
+  const object = snapshot.objects[target.node.objectId];
   if (!object) {
-    return problem(fieldId, "No selected object to edit.");
+    return problem(fieldId, "Selected object payload does not exist.");
   }
 
   const [vector, axis] = fieldId.split(".") as [TransformVectorName, TransformAxis];
@@ -52,11 +60,6 @@ export function buildSetTransformCommand(snapshot: SceneSnapshot, fieldId: Trans
     } as Partial<Transform>
   };
   return { ok: true, command };
-}
-
-function getSelectedObject(snapshot: SceneSnapshot) {
-  const objectId = snapshot.selection.objectId;
-  return objectId ? snapshot.objects[objectId] ?? null : null;
 }
 
 function defaultTransformValue(vector: TransformVectorName): number {

@@ -13,6 +13,7 @@ import { applyPasteObjects } from "./paste-objects";
 import { applyRegisterAsset } from "./register-asset";
 import { applyRemoveLight } from "./remove-light";
 import { applyReparentObject } from "./reparent-object";
+import { applySelectNode, applySelectNodes } from "./select-node";
 import { applySelectObject, applySelectObjects } from "./select-object";
 import { applySetEnvironment } from "./set-environment";
 import { applySetMaterial } from "./set-material";
@@ -104,6 +105,10 @@ export class CommandDispatcher {
         return applyImportGlb(snapshot, command, this.assets);
       case "register-asset":
         return applyRegisterAsset(snapshot, command, this.assets);
+      case "select-node":
+        return applySelectNode(snapshot, command);
+      case "select-nodes":
+        return applySelectNodes(snapshot, command);
       case "select-object":
         return applySelectObject(snapshot, command);
       case "select-objects":

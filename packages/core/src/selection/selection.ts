@@ -17,14 +17,79 @@ export interface SelectionInput {
   mode?: SelectionMode;
 }
 
+export interface NodeSelectionInput {
+  nodeId?: string | null;
+  nodeIds?: readonly string[];
+  primaryNodeId?: string | null;
+  mode?: SelectionMode;
+}
+
+export function normalizeNodeSelection(
+  snapshot: SceneSnapshot,
+  input: NodeSelectionInput
+): SelectionState {
+  const mode = input.mode ?? "replace";
+  const current = getSelectedNodeIds(snapshot);
+
+  let nodeIds: string[];
+  let primaryNodeId = input.primaryNodeId ?? input.nodeId ?? null;
+
+  switch (mode) {
+    case "replace":
+      nodeIds = input.nodeIds ? [...input.nodeIds] : input.nodeId ? [input.nodeId] : [];
+      primaryNodeId = input.primaryNodeId ?? nodeIds[0] ?? null;
+      break;
+    case "add":
+      nodeIds = [...current, ...nodeIdsFromInput(input)];
+      primaryNodeId = input.primaryNodeId ?? input.nodeId ?? snapshot.selection.nodeId ?? nodeIds[0] ?? null;
+      break;
+    case "remove": {
+      const removeIds = new Set(nodeIdsFromInput(input));
+      nodeIds = current.filter((nodeId) => !removeIds.has(nodeId));
+      primaryNodeId = nodeIds.includes(snapshot.selection.nodeId ?? "")
+        ? snapshot.selection.nodeId
+        : nodeIds[0] ?? null;
+      break;
+    }
+    case "toggle": {
+      nodeIds = [...current];
+      for (const nodeId of nodeIdsFromInput(input)) {
+        if (nodeIds.includes(nodeId)) {
+          nodeIds = nodeIds.filter((selectedId) => selectedId !== nodeId);
+        } else {
+          nodeIds.push(nodeId);
+        }
+      }
+      primaryNodeId = input.primaryNodeId ??
+        (nodeIds.includes(input.nodeId ?? "")
+          ? input.nodeId ?? null
+          : nodeIds.includes(snapshot.selection.nodeId ?? "")
+            ? snapshot.selection.nodeId
+            : nodeIds[0] ?? null);
+      break;
+    }
+    case "clear":
+      nodeIds = [];
+      primaryNodeId = null;
+      break;
+    case "all":
+      nodeIds = getAllNodeIds(snapshot);
+      primaryNodeId = input.primaryNodeId ?? snapshot.selection.nodeId ?? nodeIds[0] ?? null;
+      break;
+  }
+
+  return assertNodeSelectionExists(snapshot, {
+    nodeId: primaryNodeId,
+    nodeIds: dedupe(nodeIds)
+  });
+}
+
 export function normalizeSelection(
   snapshot: SceneSnapshot,
   input: SelectionInput
 ): SelectionState {
   const mode = input.mode ?? "replace";
-  const current = snapshot.selection.objectIds.length > 0
-    ? snapshot.selection.objectIds
-    : snapshot.selection.objectId ? [snapshot.selection.objectId] : [];
+  const current = getSelectedObjectIds(snapshot);
 
   let objectIds: string[];
   let primaryObjectId = input.primaryObjectId ?? input.objectId ?? null;
@@ -78,8 +143,6 @@ export function normalizeSelection(
   }
 
   return assertSelectionExists(snapshot, {
-    nodeId: null,
-    nodeIds: [],
     objectId: primaryObjectId,
     objectIds: dedupe(objectIds)
   });
@@ -95,23 +158,57 @@ export function selectionEquals(left: SelectionState, right: SelectionState): bo
 }
 
 export function getSelectedObjectIds(snapshot: SceneSnapshot): string[] {
-  return snapshot.selection.objectIds.length > 0
-    ? [...snapshot.selection.objectIds]
-    : snapshot.selection.objectId ? [snapshot.selection.objectId] : [];
+  return deriveObjectSelection(snapshot, snapshot.selection.nodeId, getSelectedNodeIds(snapshot)).objectIds;
+}
+
+export function getSelectedNodeIds(snapshot: SceneSnapshot): string[] {
+  return snapshot.selection.nodeIds.length > 0
+    ? [...snapshot.selection.nodeIds]
+    : snapshot.selection.nodeId ? [snapshot.selection.nodeId] : [];
 }
 
 export function getTopLevelSelectedObjectIds(snapshot: SceneSnapshot, objectIds = getSelectedObjectIds(snapshot)): string[] {
   const selected = new Set(objectIds);
   return objectIds.filter((objectId) => {
-    let parentId = snapshot.objects[objectId]?.parentId ?? null;
-    while (parentId) {
-      if (selected.has(parentId)) {
+    const nodeId = findObjectNodeId(snapshot, objectId);
+    let parentNodeId = nodeId ? snapshot.nodes[nodeId]?.parentId ?? null : null;
+    while (parentNodeId) {
+      const parent = snapshot.nodes[parentNodeId];
+      if (parent?.kind === "object" && selected.has(parent.objectId)) {
         return false;
       }
-      parentId = snapshot.objects[parentId]?.parentId ?? null;
+      parentNodeId = parent?.parentId ?? null;
     }
     return true;
   });
+}
+
+function nodeIdsFromInput(input: NodeSelectionInput): string[] {
+  return dedupe([
+    ...(input.nodeIds ?? []),
+    ...(input.nodeId ? [input.nodeId] : [])
+  ]);
+}
+
+function getAllNodeIds(snapshot: SceneSnapshot): string[] {
+  const ids: string[] = [];
+  const visit = (nodeId: string): void => {
+    if (ids.includes(nodeId) || !snapshot.nodes[nodeId]) {
+      return;
+    }
+    ids.push(nodeId);
+    for (const childId of snapshot.nodes[nodeId].children) {
+      visit(childId);
+    }
+  };
+
+  for (const nodeId of snapshot.rootNodeIds) {
+    visit(nodeId);
+  }
+  for (const nodeId of Object.keys(snapshot.nodes)) {
+    visit(nodeId);
+  }
+  return ids;
 }
 
 function idsFromInput(input: SelectionInput): string[] {
@@ -121,11 +218,14 @@ function idsFromInput(input: SelectionInput): string[] {
   ]);
 }
 
-function dedupe(objectIds: readonly string[]): string[] {
-  return [...new Set(objectIds)];
+function dedupe(ids: readonly string[]): string[] {
+  return [...new Set(ids)];
 }
 
-function assertSelectionExists(snapshot: SceneSnapshot, selection: SelectionState): SelectionState {
+function assertSelectionExists(
+  snapshot: SceneSnapshot,
+  selection: Pick<SelectionState, "objectId" | "objectIds">
+): SelectionState {
   for (const objectId of selection.objectIds) {
     if (!snapshot.objects[objectId]) {
       throw new Error(`Object ${objectId} does not exist.`);
@@ -142,13 +242,60 @@ function assertSelectionExists(snapshot: SceneSnapshot, selection: SelectionStat
   }
 
   const nodeIds = selection.objectIds
-    .map((objectId) => findObjectNodeId(snapshot, objectId))
-    .filter((nodeId): nodeId is string => Boolean(nodeId));
+    .map((objectId) => {
+      const nodeId = findObjectNodeId(snapshot, objectId);
+      if (!nodeId) {
+        throw new Error(`Object ${objectId} does not have a scene node.`);
+      }
+      return nodeId;
+    });
   const primaryNodeId = selection.objectId ? findObjectNodeId(snapshot, selection.objectId) : nodeIds[0] ?? null;
+
+  return assertNodeSelectionExists(snapshot, {
+    nodeId: primaryNodeId && nodeIds.includes(primaryNodeId) ? primaryNodeId : nodeIds[0] ?? null,
+    nodeIds
+  });
+}
+
+function assertNodeSelectionExists(
+  snapshot: SceneSnapshot,
+  selection: Pick<SelectionState, "nodeId" | "nodeIds">
+): SelectionState {
+  for (const nodeId of selection.nodeIds) {
+    if (!snapshot.nodes[nodeId]) {
+      throw new Error(`Node ${nodeId} does not exist.`);
+    }
+  }
+
+  if (selection.nodeId !== null) {
+    if (!snapshot.nodes[selection.nodeId]) {
+      throw new Error(`Node ${selection.nodeId} does not exist.`);
+    }
+    if (!selection.nodeIds.includes(selection.nodeId)) {
+      throw new Error(`Primary selected node ${selection.nodeId} must be included in selected node IDs.`);
+    }
+  }
 
   return {
     ...selection,
-    nodeId: primaryNodeId && nodeIds.includes(primaryNodeId) ? primaryNodeId : nodeIds[0] ?? null,
-    nodeIds
+    ...deriveObjectSelection(snapshot, selection.nodeId, selection.nodeIds)
+  };
+}
+
+function deriveObjectSelection(
+  snapshot: SceneSnapshot,
+  primaryNodeId: string | null,
+  nodeIds: readonly string[]
+): Pick<SelectionState, "objectId" | "objectIds"> {
+  const objectIds = nodeIds
+    .map((nodeId) => snapshot.nodes[nodeId])
+    .filter((node) => node?.kind === "object")
+    .map((node) => node.objectId);
+  const primaryNode = primaryNodeId ? snapshot.nodes[primaryNodeId] : undefined;
+  const objectId = primaryNode?.kind === "object" ? primaryNode.objectId : objectIds[0] ?? null;
+
+  return {
+    objectId,
+    objectIds
   };
 }

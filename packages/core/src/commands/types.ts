@@ -3,7 +3,7 @@ import type { SceneEnvironment } from "../environment/types";
 import type { LightDefinition, LightKind } from "../lights/types";
 import type { MaterialAssignmentTarget, MaterialPatch } from "../materials/types";
 import type { EditorClipboardPayload } from "../clipboard/types";
-import type { SceneSnapshot, Transform } from "../snapshot/types";
+import type { NodeId, SceneSnapshot, Transform } from "../snapshot/types";
 
 export type Command =
   | BatchCommand
@@ -12,6 +12,8 @@ export type Command =
 export type SingleCommand =
   | ImportGlbCommand
   | RegisterAssetCommand
+  | SelectNodeCommand
+  | SelectNodesCommand
   | SelectObjectCommand
   | SelectObjectsCommand
   | DeleteObjectsCommand
@@ -39,6 +41,19 @@ export interface ImportGlbCommand {
 export interface SelectObjectCommand {
   type: "select-object";
   objectId: string | null;
+}
+
+export interface SelectNodeCommand {
+  type: "select-node";
+  nodeId: NodeId | null;
+}
+
+export interface SelectNodesCommand {
+  type: "select-nodes";
+  mode: "replace" | "add" | "remove" | "toggle" | "clear" | "all";
+  nodeId?: NodeId | null;
+  nodeIds?: NodeId[];
+  primaryNodeId?: NodeId | null;
 }
 
 export interface SelectObjectsCommand {

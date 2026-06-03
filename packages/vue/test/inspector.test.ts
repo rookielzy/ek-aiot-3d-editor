@@ -6,11 +6,11 @@ import InspectorPanel from "../src/components/InspectorPanel.vue";
 import { useInspector } from "../src/composables/use-inspector";
 
 describe("Vue InspectorPanel", () => {
-  it("renders disabled object sections and available scene sections with no selection", () => {
+  it("renders disabled node transform sections and available scene sections with no selection", () => {
     const editor = markRaw(createEditor());
     const wrapper = mount(InspectorPanel, { props: { editor } });
 
-    expect(wrapper.text()).toContain("Select a GLB object to edit transform.");
+    expect(wrapper.text()).toContain("Select a transformable node to edit transform.");
     expect(wrapper.text()).toContain("Environment");
     expect(wrapper.text()).toContain("Lights");
 
