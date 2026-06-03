@@ -1,5 +1,6 @@
 import { createTransform } from "../snapshot/defaults";
 import type { LightDefinition } from "../lights/types";
+import { findLightNodeId } from "../snapshot/nodes";
 import type { SceneSnapshot } from "../snapshot/types";
 import type { UpdateLightCommand } from "./types";
 
@@ -14,8 +15,28 @@ export function applyUpdateLight(snapshot: SceneSnapshot, command: UpdateLightCo
 
   const next = normalizeUpdatedLight({ ...light, ...command.patch } as LightDefinition);
 
+  const nodeId = findLightNodeId(snapshot, command.lightId);
+  const node = nodeId ? snapshot.nodes[nodeId] : undefined;
+  const nodes = nodeId && node?.kind === "light"
+    ? {
+        ...snapshot.nodes,
+        [nodeId]: next.transform
+          ? { ...node, name: next.name, transform: next.transform }
+          : {
+              id: node.id,
+              kind: "light" as const,
+              name: next.name,
+              lightId: node.lightId,
+              parentId: node.parentId,
+              children: [...node.children],
+              ...(node.metadata ? { metadata: { ...node.metadata } } : {})
+            }
+      }
+    : snapshot.nodes;
+
   return {
     ...snapshot,
+    nodes,
     lights: {
       ...snapshot.lights,
       [command.lightId]: next
@@ -25,9 +46,14 @@ export function applyUpdateLight(snapshot: SceneSnapshot, command: UpdateLightCo
 
 function normalizeUpdatedLight(light: LightDefinition): LightDefinition {
   switch (light.kind) {
-    case "ambient":
-    case "hemisphere":
-      return light;
+    case "ambient": {
+      const { transform: _transform, ...ambient } = light;
+      return ambient;
+    }
+    case "hemisphere": {
+      const { transform: _transform, ...hemisphere } = light;
+      return hemisphere;
+    }
     case "directional":
     case "point":
     case "spot":

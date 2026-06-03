@@ -28,6 +28,13 @@ describe("light commands", () => {
       name: "Fill",
       intensity: 0.5
     });
+    expect(store.getSnapshot().nodes["light-a"]).toMatchObject({
+      id: "light-a",
+      kind: "light",
+      lightId: "light-a",
+      name: "Fill"
+    });
+    expect("transform" in store.getSnapshot().nodes["light-a"]).toBe(false);
     dispatcher.undo();
     expect(store.getSnapshot().lights["light-a"]).toBeUndefined();
     dispatcher.redo();
@@ -61,6 +68,15 @@ describe("light commands", () => {
         scale: [1, 1, 1]
       },
       target: [0, 0, 0]
+    });
+    expect(restored.nodes.sun).toMatchObject({
+      kind: "light",
+      lightId: "sun",
+      transform: {
+        position: [1, 2, 3],
+        rotation: [0, 0, 0],
+        scale: [1, 1, 1]
+      }
     });
   });
 
@@ -120,5 +136,21 @@ describe("light commands", () => {
 
     dispatcher.dispatch({ type: "remove-light", lightId: "point-a" });
     expect(store.getSnapshot().lights["point-a"]).toBeUndefined();
+  });
+
+  it("does not persist transforms on non-spatial light updates", () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "add-light", light: { id: "ambient-a", kind: "ambient" } });
+
+    const result = dispatcher.dispatch({
+      type: "update-light",
+      lightId: "ambient-a",
+      patch: { transform: { position: [1, 2, 3] } }
+    });
+
+    expect(result.ok).toBe(true);
+    expect("transform" in store.getSnapshot().lights["ambient-a"]).toBe(false);
+    expect("transform" in store.getSnapshot().nodes["ambient-a"]).toBe(false);
   });
 });

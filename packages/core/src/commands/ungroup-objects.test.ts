@@ -17,7 +17,7 @@ describe("ungroup objects command", () => {
     expect(result.snapshot.objects["object-b"].parentId).toBeNull();
     expect(result.snapshot.objects["object-a"].children).toEqual([]);
     expect(getWorldTransform(result.snapshot, "object-b").position).toEqual(worldBefore);
-    expect(result.snapshot.selection).toEqual({ objectId: "object-b", objectIds: ["object-b"] });
+    expect(result.snapshot.selection).toEqual({ nodeId: "object-b", nodeIds: ["object-b"], objectId: "object-b", objectIds: ["object-b"] });
     expect(editor.getHistoryState().undoCount).toBe(undoBeforeUngroup + 1);
 
     editor.undo();

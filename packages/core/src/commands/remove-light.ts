@@ -1,3 +1,4 @@
+import { removeNodeForLight } from "../snapshot/nodes";
 import type { SceneSnapshot } from "../snapshot/types";
 import type { RemoveLightCommand } from "./types";
 
@@ -7,8 +8,10 @@ export function applyRemoveLight(snapshot: SceneSnapshot, command: RemoveLightCo
   }
 
   const { [command.lightId]: _removed, ...lights } = snapshot.lights;
+  const nodes = removeNodeForLight(snapshot, command.lightId);
   return {
     ...snapshot,
-    lights
+    lights,
+    ...nodes
   };
 }

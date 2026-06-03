@@ -262,7 +262,7 @@ describe("React EditorWorkbench", () => {
     unmount();
 
     expect(editor.disposed).toBe(false);
-    expect(editor.getSnapshot().version).toBe(3);
+    expect(editor.getSnapshot().version).toBe(4);
   });
 
   it("disposes a shell-created editor when the workbench unmounts", async () => {

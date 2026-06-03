@@ -1,4 +1,5 @@
 import { cloneTransform, normalizeTransform, transformEquals } from "../snapshot/transforms";
+import { syncObjectNodeTransform } from "../snapshot/nodes";
 import type { SceneSnapshot } from "../snapshot/types";
 import type { SetTransformCommand } from "./types";
 
@@ -17,7 +18,7 @@ export function applySetTransform(snapshot: SceneSnapshot, command: SetTransform
     return snapshot;
   }
 
-  return {
+  const nextSnapshot = {
     ...snapshot,
     objects: {
       ...snapshot.objects,
@@ -26,5 +27,10 @@ export function applySetTransform(snapshot: SceneSnapshot, command: SetTransform
         transform: nextTransform
       }
     }
+  };
+
+  return {
+    ...nextSnapshot,
+    ...syncObjectNodeTransform(nextSnapshot, command.objectId)
   };
 }

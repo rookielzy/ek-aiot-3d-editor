@@ -15,7 +15,7 @@ describe("duplicate objects command", () => {
 
     expect(result.ok).toBe(true);
     expect(result.snapshot.objects["object-copy-a"].asset.id).toBe("asset-a");
-    expect(result.snapshot.selection).toEqual({ objectId: "object-copy-a", objectIds: ["object-copy-a"] });
+    expect(result.snapshot.selection).toEqual({ nodeId: "object-copy-a", nodeIds: ["object-copy-a"], objectId: "object-copy-a", objectIds: ["object-copy-a"] });
     expect(editor.getHistoryState().undoCount).toBe(undoBeforeDuplicate + 1);
 
     editor.undo();

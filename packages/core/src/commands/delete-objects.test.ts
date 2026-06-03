@@ -25,7 +25,7 @@ describe("delete objects command", () => {
     expect(result.snapshot.objects["object-b"]).toBeUndefined();
     expect(result.snapshot.objects["object-c"]).toBeTruthy();
     expect(result.snapshot.rootObjectIds).toEqual(["object-c"]);
-    expect(result.snapshot.selection).toEqual({ objectId: null, objectIds: [] });
+    expect(result.snapshot.selection).toEqual({ nodeId: null, nodeIds: [], objectId: null, objectIds: [] });
     expect(result.snapshot.materials.assignments["object:object-a"]).toBeUndefined();
     expect(result.snapshot.materials.assignments["object:object-b"]).toBeUndefined();
     expect(result.snapshot.materials.assignments["object:object-c"]).toBeTruthy();

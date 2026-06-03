@@ -34,6 +34,7 @@ import {
   type InspectorFieldOption,
   type MaterialState,
   type MaterialTexturePatch,
+  type NodeId,
   type ProblemTarget,
   type RegisterAssetCommand,
   type RemoveLightCommand,
@@ -42,6 +43,8 @@ import {
   type RuntimeSelectionVisualOptions,
   type RuntimeTransformControlsOptions,
   type SceneEnvironmentPatch,
+  type SceneNode,
+  type SceneObjectNode,
   type SelectObjectsCommand,
   type SetEnvironmentCommand,
   type SnapSettings,
@@ -157,6 +160,17 @@ describe("core public API", () => {
     const assetOption: AssetOption = { value: "asset-a", label: "Asset A", kind: "glb" };
     const transformVector: TransformVectorName = "position";
     const transformAxis: TransformAxis = "x";
+    const nodeId: NodeId = "object-a";
+    const objectNode: SceneObjectNode = {
+      id: nodeId,
+      kind: "object",
+      name: "Object",
+      objectId: "object-a",
+      parentId: null,
+      children: [],
+      transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }
+    };
+    const sceneNode: SceneNode = objectNode;
 
     expect(command.type).toBe("set-material");
     expect(registerAsset.asset.kind).toBe("texture");
@@ -188,6 +202,7 @@ describe("core public API", () => {
     expect(fieldOption.value).toBe("opaque");
     expect(assetOption.kind).toBe("glb");
     expect(`${transformVector}.${transformAxis}`).toBe("position.x");
+    expect(sceneNode.kind).toBe("object");
     expect(environment.mode).toBe("none");
     expect(light.kind).toBe("ambient");
     expect(problem.target).toEqual({ kind: "object", objectId: "object-a" });

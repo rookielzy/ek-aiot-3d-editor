@@ -1,6 +1,7 @@
 import { isSupportedAssetKind } from "../snapshot/primitives";
 import type { AssetReference, SceneSnapshot } from "../snapshot/types";
 import { isJsonCompatible, validateSceneSnapshot } from "../snapshot/validation";
+import { migrateSerializedSnapshot } from "../snapshot/migrations";
 import { decodeArchiveJson, type ArchiveAdapter, type ArchiveEntry } from "./archive-adapter";
 import {
   DEFAULT_PROJECT_PACKAGE_LIMITS,
@@ -224,14 +225,22 @@ function readJsonEntry(
 }
 
 function validateProjectScene(value: unknown, problems: ProjectProblem[]): SceneSnapshot | undefined {
-  const result = validateSceneSnapshot(value);
+  let scene: SceneSnapshot;
+  try {
+    scene = migrateSerializedSnapshot(value as never);
+  } catch (error) {
+    problems.push(createProjectProblem("project-scene-invalid", errorMessage(error)));
+    return undefined;
+  }
+
+  const result = validateSceneSnapshot(scene);
   if (!result.ok) {
     for (const error of result.errors) {
       problems.push(createProjectProblem("project-scene-invalid", error));
     }
     return undefined;
   }
-  return value as SceneSnapshot;
+  return scene;
 }
 
 function validateManifestRecord(assetId: string, value: unknown, problems: ProjectProblem[]): void {

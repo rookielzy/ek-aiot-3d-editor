@@ -123,7 +123,22 @@ export type { RuntimeTransformControlsOptions } from "./runtime/transform/transf
 export type { EditorTransformModeState, TransformMode, TransformModeSubscriber } from "./runtime/transform/transform-mode";
 export type { SnapSettings } from "./runtime/transform/snap";
 export type { EditorAction, ShortcutInput, ShortcutResolution } from "./shortcuts/types";
-export type { AssetKind, JsonPrimitive, JsonValue, LegacySceneSnapshot, SceneObject, SceneSnapshot, SerializedSceneSnapshot, Transform } from "./snapshot/types";
+export type {
+  AssetKind,
+  JsonPrimitive,
+  JsonValue,
+  LegacySceneSnapshot,
+  NodeId,
+  SceneGroupNode,
+  SceneLightNode,
+  SceneNode,
+  SceneObject,
+  SceneObjectNode,
+  SceneSnapshot,
+  SerializedSceneSnapshot,
+  Transform,
+  V3SceneSnapshot
+} from "./snapshot/types";
 
 export { createEditor } from "./editor/create-editor";
 export { createAdvancedEditorOperations, createMemoryClipboard } from "./editor/operations";
