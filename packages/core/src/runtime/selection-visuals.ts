@@ -22,16 +22,17 @@ export class RuntimeSelectionVisuals {
 
     let changed = false;
     const activeIds = new Set<string>();
-    for (const [objectId, object] of this.#objects.entries()) {
+    for (const [nodeId, target] of this.#objects.targetEntries()) {
+      const object = target.object;
       if (!object.userData.selected && !object.userData.primarySelected) {
         continue;
       }
 
-      activeIds.add(objectId);
+      activeIds.add(nodeId);
       const color = object.userData.primarySelected
         ? this.#options.primarySelectedColor
         : this.#options.selectedColor;
-      const helper = this.#helpers.get(objectId);
+      const helper = this.#helpers.get(nodeId);
       if (helper) {
         helper.box.copy(boundsForObject(object));
         setHelperColor(helper, color);
@@ -43,22 +44,28 @@ export class RuntimeSelectionVisuals {
       }
 
       const nextHelper = new Box3Helper(boundsForObject(object), color);
-      nextHelper.name = `Selection helper ${objectId}`;
+      nextHelper.name = `Selection helper ${nodeId}`;
       nextHelper.userData.runtimeOnly = true;
       nextHelper.userData.selectionHelper = true;
-      nextHelper.userData.sceneObjectId = objectId;
-      this.#helpers.set(objectId, nextHelper);
+      nextHelper.userData.sceneNodeId = nodeId;
+      if (target.objectId) {
+        nextHelper.userData.sceneObjectId = target.objectId;
+      }
+      if (target.lightId) {
+        nextHelper.userData.runtimeLightId = target.lightId;
+      }
+      this.#helpers.set(nodeId, nextHelper);
       this.#scene.add(nextHelper);
       changed = true;
     }
 
-    for (const [objectId, helper] of [...this.#helpers]) {
-      if (activeIds.has(objectId)) {
+    for (const [nodeId, helper] of [...this.#helpers]) {
+      if (activeIds.has(nodeId)) {
         continue;
       }
       helper.removeFromParent();
       helper.dispose();
-      this.#helpers.delete(objectId);
+      this.#helpers.delete(nodeId);
       changed = true;
     }
 

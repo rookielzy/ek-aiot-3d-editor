@@ -17,7 +17,24 @@ describe("object picking", () => {
     const result = picker.selectObject("object-a");
 
     expect(result.ok).toBe(true);
+    expect(result.snapshot.selection.nodeId).toBe("object-a");
     expect(result.snapshot.selection.objectId).toBe("object-a");
+  });
+
+  it("dispatches node selection for non-object runtime targets", () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "add-light", light: { id: "point-a", kind: "point" } });
+    const objects = new ThreeObjectMap();
+    const lightProxy = new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial());
+    objects.set("point-a", lightProxy, { kind: "light", lightId: "point-a", transformable: true });
+    const picker = new ObjectPicker(new PerspectiveCamera(), objects, dispatcher);
+
+    const result = picker.selectNode("point-a");
+
+    expect(result.ok).toBe(true);
+    expect(result.snapshot.selection.nodeId).toBe("point-a");
+    expect(result.snapshot.selection.objectId).toBeNull();
   });
 
   it("raycasts from a client point and dispatches replace selection for the hit object", () => {
@@ -50,7 +67,7 @@ describe("object picking", () => {
     const result = picker.pickFromClientPoint(container, 100, 100, [mesh], "replace");
 
     expect(result.ok).toBe(true);
-    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-object", objectId: "object-a" });
+    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-node", nodeId: "object-a" });
     expect(store.getSnapshot().selection.objectId).toBe("object-a");
   });
 
@@ -85,7 +102,7 @@ describe("object picking", () => {
     const result = picker.pickFromClientPoint(container, 100, 100, [mesh], "toggle");
 
     expect(result.ok).toBe(true);
-    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-objects", mode: "toggle", objectId: "object-a" });
+    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-nodes", mode: "toggle", nodeId: "object-a" });
     expect(store.getSnapshot().selection.objectId).toBeNull();
   });
 });

@@ -61,8 +61,8 @@ export class TransformControlsAdapter {
   #mode: TransformMode;
   #snap: SnapSettings;
   #helper: Object3D;
-  #attachedObjectId: string | null = null;
-  #dragObjectId: string | null = null;
+  #attachedNodeId: string | null = null;
+  #dragNodeId: string | null = null;
   #cameraEnabledBeforeDrag: boolean | null = null;
   #disposed = false;
 
@@ -108,21 +108,22 @@ export class TransformControlsAdapter {
       return;
     }
 
-    const objectId = snapshot.selection.objectId;
-    const object = objectId && snapshot.objects[objectId] ? this.#objects.get(objectId) : undefined;
+    const nodeId = snapshot.selection.nodeId;
+    const target = nodeId ? this.#objects.getTarget(nodeId) : undefined;
+    const object = target?.transformable ? target.object : undefined;
 
-    if (this.#dragObjectId && this.#dragObjectId !== objectId) {
+    if (this.#dragNodeId && this.#dragNodeId !== nodeId) {
       this.cancel();
     }
 
-    if (!objectId || !object) {
+    if (!nodeId || !object) {
       this.#detach();
       return;
     }
 
-    if (this.#attachedObjectId !== objectId) {
+    if (this.#attachedNodeId !== nodeId) {
       this.#controls.attach(object);
-      this.#attachedObjectId = objectId;
+      this.#attachedNodeId = nodeId;
       this.#onChange();
     }
   }
@@ -132,7 +133,7 @@ export class TransformControlsAdapter {
       return;
     }
 
-    if (this.#dragObjectId) {
+    if (this.#dragNodeId) {
       this.cancel();
     }
 
@@ -152,12 +153,12 @@ export class TransformControlsAdapter {
   }
 
   cancel(): void {
-    if (!this.#dragObjectId) {
+    if (!this.#dragNodeId) {
       return;
     }
 
     this.#controller.cancel();
-    this.#dragObjectId = null;
+    this.#dragNodeId = null;
     this.#restoreCameraControls();
     this.#onChange();
   }
@@ -179,36 +180,40 @@ export class TransformControlsAdapter {
   }
 
   get attachedObjectId(): string | null {
-    return this.#attachedObjectId;
+    return this.#attachedNodeId;
+  }
+
+  get attachedNodeId(): string | null {
+    return this.#attachedNodeId;
   }
 
   get dragging(): boolean {
-    return this.#dragObjectId !== null;
+    return this.#dragNodeId !== null;
   }
 
   #startDrag(): void {
-    if (this.#disposed || !this.#attachedObjectId) {
+    if (this.#disposed || !this.#attachedNodeId) {
       return;
     }
 
     try {
-      this.#controller.start(this.#attachedObjectId, this.#mode, { snap: this.#snap });
+      this.#controller.start(this.#attachedNodeId, this.#mode, { snap: this.#snap });
     } catch {
       this.#detach();
       return;
     }
 
-    this.#dragObjectId = this.#attachedObjectId;
+    this.#dragNodeId = this.#attachedNodeId;
     this.#disableCameraControls();
     this.#onChange();
   }
 
   #previewDrag(): void {
-    if (this.#disposed || !this.#dragObjectId) {
+    if (this.#disposed || !this.#dragNodeId) {
       return;
     }
 
-    const object = this.#objects.get(this.#dragObjectId);
+    const object = this.#objects.get(this.#dragNodeId);
     if (!object) {
       this.cancel();
       this.#detach();
@@ -220,15 +225,15 @@ export class TransformControlsAdapter {
   }
 
   #commitDrag(): CommandResult | null {
-    if (this.#disposed || !this.#dragObjectId) {
+    if (this.#disposed || !this.#dragNodeId) {
       return null;
     }
 
-    const objectId = this.#dragObjectId;
-    this.#dragObjectId = null;
+    const nodeId = this.#dragNodeId;
+    this.#dragNodeId = null;
     this.#restoreCameraControls();
 
-    if (!this.#objects.get(objectId)) {
+    if (!this.#objects.get(nodeId)) {
       this.#controller.cancel();
       this.#detach();
       this.#onChange();
@@ -242,11 +247,11 @@ export class TransformControlsAdapter {
 
   #detach(): void {
     this.cancel();
-    if (!this.#attachedObjectId) {
+    if (!this.#attachedNodeId) {
       return;
     }
     this.#controls.detach();
-    this.#attachedObjectId = null;
+    this.#attachedNodeId = null;
     this.#onChange();
   }
 

@@ -7,45 +7,70 @@ import { snapTransform, type SnapSettings } from "./snap";
 import type { TransformMode } from "./transform-mode";
 
 export interface TransformTransactionTarget {
-  objectId: string;
+  nodeId: string;
+  object: Object3D;
+}
+
+export interface TransformTransactionInputTarget {
+  nodeId?: string;
+  /** @deprecated Runtime transforms now target scene nodes. Use nodeId. */
+  objectId?: string;
   object: Object3D;
 }
 
 export interface TransformTransactionOptions {
-  objectId: string;
+  nodeId?: string;
+  /** @deprecated Runtime transforms now target scene nodes. Use nodeId. */
+  objectId?: string;
   object: Object3D;
-  targets?: TransformTransactionTarget[];
+  targets?: TransformTransactionInputTarget[];
   dispatcher: CommandDispatcher;
   mode?: TransformMode;
   snap?: SnapSettings;
 }
 
 export class TransformTransaction {
-  readonly objectId: string;
+  readonly nodeId: string;
   readonly mode: TransformMode;
   readonly before: Transform;
   readonly targets: TransformTransactionTarget[];
-  #beforeByObjectId = new Map<string, Transform>();
+  #beforeByNodeId = new Map<string, Transform>();
   #dispatcher: CommandDispatcher;
   #snap: SnapSettings;
   #active = true;
   #changed = false;
 
   constructor(options: TransformTransactionOptions) {
-    this.objectId = options.objectId;
+    const nodeId = options.nodeId ?? options.objectId;
+    if (!nodeId) {
+      throw new Error("Transform transaction requires a nodeId.");
+    }
+    this.nodeId = nodeId;
     this.mode = options.mode ?? "translate";
-    this.targets = options.targets ?? [{ objectId: options.objectId, object: options.object }];
+    this.targets = (options.targets ?? [{ nodeId, object: options.object }])
+      .map((target) => {
+        const targetNodeId = target.nodeId ?? target.objectId;
+        if (!targetNodeId) {
+          throw new Error("Transform transaction target requires a nodeId.");
+        }
+        return { nodeId: targetNodeId, object: target.object };
+      });
     this.#dispatcher = options.dispatcher;
     this.#snap = options.snap ?? {};
     for (const target of this.targets) {
-      this.#beforeByObjectId.set(target.objectId, readTransform(target.object));
+      this.#beforeByNodeId.set(target.nodeId, readTransform(target.object));
     }
-    this.before = this.#beforeByObjectId.get(this.objectId) ?? readTransform(options.object);
+    this.before = this.#beforeByNodeId.get(this.nodeId) ?? readTransform(options.object);
   }
 
-  preview(transform: Partial<Transform>, objectId = this.objectId): void {
+  /** @deprecated Runtime transforms now target scene nodes. Use nodeId. */
+  get objectId(): string {
+    return this.nodeId;
+  }
+
+  preview(transform: Partial<Transform>, nodeId = this.nodeId): void {
     this.#assertActive();
-    const target = this.#targetFor(objectId);
+    const target = this.#targetFor(nodeId);
     const current = readTransform(target.object);
     const snapped = snapTransform({
       position: transform.position ?? current.position,
@@ -71,14 +96,14 @@ export class TransformTransaction {
 
     const commands = this.targets
       .map((target) => ({
-        type: "set-transform" as const,
-        objectId: target.objectId,
+        type: "set-node-transform" as const,
+        nodeId: target.nodeId,
         transform: this.#filterByMode(readTransform(target.object))
       }));
 
     return this.#dispatcher.dispatch({
       type: "batch",
-      label: this.targets.length > 1 ? "Transform selected objects" : "Transform object",
+      label: this.targets.length > 1 ? "Transform selected nodes" : "Transform node",
       commands
     });
   }
@@ -89,7 +114,7 @@ export class TransformTransaction {
     }
 
     for (const target of this.targets) {
-      const before = this.#beforeByObjectId.get(target.objectId);
+      const before = this.#beforeByNodeId.get(target.nodeId);
       if (before) {
         applyTransform(target.object, before);
       }
@@ -118,10 +143,10 @@ export class TransformTransaction {
     }
   }
 
-  #targetFor(objectId: string): TransformTransactionTarget {
-    const target = this.targets.find((candidate) => candidate.objectId === objectId);
+  #targetFor(nodeId: string): TransformTransactionTarget {
+    const target = this.targets.find((candidate) => candidate.nodeId === nodeId);
     if (!target) {
-      throw new Error(`Object ${objectId} is not part of this transform transaction.`);
+      throw new Error(`Node ${nodeId} is not part of this transform transaction.`);
     }
     return target;
   }
