@@ -1,8 +1,9 @@
 import type { AssetRegistry } from "../assets/registry";
 import { createId } from "../snapshot/defaults";
-import { addObjectNode } from "../snapshot/nodes";
+import { reparentNode } from "../snapshot/hierarchy";
 import { cloneTransform, normalizeTransform } from "../snapshot/transforms";
-import type { SceneObject, SceneSnapshot } from "../snapshot/types";
+import type { SceneObject, SceneObjectNode, SceneSnapshot } from "../snapshot/types";
+import { syncPayloadsFromNodes } from "./node-state";
 import type { ImportGlbCommand } from "./types";
 
 export function applyImportGlb(snapshot: SceneSnapshot, command: ImportGlbCommand, assets: AssetRegistry): SceneSnapshot {
@@ -16,9 +17,16 @@ export function applyImportGlb(snapshot: SceneSnapshot, command: ImportGlbComman
   if (snapshot.objects[objectId]) {
     throw new Error(`Object ${objectId} already exists.`);
   }
+  if (snapshot.nodes[objectId]) {
+    throw new Error(`Node ${objectId} already exists.`);
+  }
 
-  if (parentId && !snapshot.objects[parentId]) {
-    throw new Error(`Parent object ${parentId} does not exist.`);
+  const parentNode = parentId ? snapshot.nodes[parentId] : null;
+  if (parentId && !parentNode) {
+    throw new Error(`Parent node ${parentId} does not exist.`);
+  }
+  if (parentNode?.kind === "light") {
+    throw new Error(`Parent node ${parentId} cannot contain imported objects.`);
   }
 
   const transform = cloneTransform(normalizeTransform(command.transform));
@@ -27,9 +35,18 @@ export function applyImportGlb(snapshot: SceneSnapshot, command: ImportGlbComman
     id: objectId,
     name: command.name ?? asset.label ?? "GLB object",
     kind: "glb",
-    parentId,
+    parentId: parentNode?.kind === "object" ? parentNode.objectId : null,
     children: [],
     asset,
+    transform
+  };
+  const node: SceneObjectNode = {
+    id: objectId,
+    kind: "object",
+    name: object.name,
+    objectId,
+    parentId: null,
+    children: [],
     transform
   };
 
@@ -38,9 +55,9 @@ export function applyImportGlb(snapshot: SceneSnapshot, command: ImportGlbComman
     [objectId]: object
   };
 
-  if (parentId) {
-    const parent = objects[parentId];
-    objects[parentId] = {
+  if (parentNode?.kind === "object") {
+    const parent = objects[parentNode.objectId];
+    objects[parentNode.objectId] = {
       ...parent,
       children: [...parent.children, objectId]
     };
@@ -53,11 +70,20 @@ export function applyImportGlb(snapshot: SceneSnapshot, command: ImportGlbComman
       [asset.id]: asset
     },
     objects,
-    rootObjectIds: parentId ? snapshot.rootObjectIds : [...snapshot.rootObjectIds, objectId]
+    rootObjectIds: parentNode?.kind === "object" ? snapshot.rootObjectIds : [...snapshot.rootObjectIds, objectId],
+    nodes: {
+      ...snapshot.nodes,
+      [objectId]: node
+    },
+    rootNodeIds: [...snapshot.rootNodeIds, objectId]
   };
 
-  return {
+  const nodeState = parentId
+    ? reparentNode(nextSnapshot.nodes, nextSnapshot.rootNodeIds, objectId, parentId)
+    : { nodes: nextSnapshot.nodes, rootNodeIds: nextSnapshot.rootNodeIds };
+  return syncPayloadsFromNodes({
     ...nextSnapshot,
-    ...addObjectNode(nextSnapshot, objectId)
-  };
+    nodes: nodeState.nodes,
+    rootNodeIds: nodeState.rootNodeIds
+  });
 }

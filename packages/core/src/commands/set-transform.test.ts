@@ -33,4 +33,73 @@ describe("set transform command", () => {
 
     expect(history.state.undoCount).toBe(afterImport + 1);
   });
+
+  it("sets group node transforms through node command history", () => {
+    const store = new EditorStore();
+    const history = new CommandHistory();
+    const dispatcher = new CommandDispatcher(store, history, new AssetRegistry());
+    dispatcher.dispatch({ type: "create-group", nodeId: "group-a" });
+
+    const result = dispatcher.dispatch({
+      type: "set-node-transform",
+      nodeId: "group-a",
+      transform: { position: [4, 5, 6] }
+    });
+
+    expect(result.ok).toBe(true);
+    expect(store.getSnapshot().nodes["group-a"].transform?.position).toEqual([4, 5, 6]);
+    dispatcher.undo();
+    expect(store.getSnapshot().nodes["group-a"].transform?.position).toEqual([0, 0, 0]);
+    dispatcher.redo();
+    expect(store.getSnapshot().nodes["group-a"].transform?.position).toEqual([4, 5, 6]);
+  });
+
+  it("delegates legacy object transforms to the object node", () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+
+    const result = dispatcher.dispatch({
+      type: "set-transform",
+      objectId: "object-a",
+      transform: { position: [7, 8, 9] }
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.snapshot.objects["object-a"].transform.position).toEqual([7, 8, 9]);
+    expect(result.snapshot.nodes["object-a"].transform?.position).toEqual([7, 8, 9]);
+  });
+
+  it("updates spatial light payloads when transforming light nodes", () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "add-light", light: { id: "point-a", kind: "point" } });
+
+    const result = dispatcher.dispatch({
+      type: "set-node-transform",
+      nodeId: "point-a",
+      transform: { position: [1, 2, 3] }
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.snapshot.nodes["point-a"].transform?.position).toEqual([1, 2, 3]);
+    expect(result.snapshot.lights["point-a"].transform?.position).toEqual([1, 2, 3]);
+  });
+
+  it("rejects transforms for non-spatial light nodes without mutation", () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "add-light", light: { id: "ambient-a", kind: "ambient" } });
+    const before = store.getSnapshot();
+
+    const result = dispatcher.dispatch({
+      type: "set-node-transform",
+      nodeId: "ambient-a",
+      transform: { position: [1, 2, 3] }
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("does not support transforms");
+    expect(store.getSnapshot()).toBe(before);
+  });
 });

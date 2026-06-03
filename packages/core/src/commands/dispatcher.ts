@@ -5,19 +5,25 @@ import { immutableClone } from "../snapshot/immutability";
 import type { SceneSnapshot } from "../snapshot/types";
 import { assertValidSceneSnapshot } from "../snapshot/validation";
 import { applyAddLight } from "./add-light";
+import { applyCreateGroup } from "./create-group";
+import { applyDeleteNodes } from "./delete-nodes";
 import { applyDeleteObjects } from "./delete-objects";
 import { applyDuplicateObjects } from "./duplicate-objects";
+import { applyGroupNodes } from "./group-nodes";
 import { applyGroupObjects } from "./group-objects";
 import { applyImportGlb } from "./import-glb";
 import { applyPasteObjects } from "./paste-objects";
 import { applyRegisterAsset } from "./register-asset";
+import { applyReparentNode } from "./reparent-node";
 import { applyRemoveLight } from "./remove-light";
 import { applyReparentObject } from "./reparent-object";
 import { applySelectNode, applySelectNodes } from "./select-node";
 import { applySelectObject, applySelectObjects } from "./select-object";
 import { applySetEnvironment } from "./set-environment";
 import { applySetMaterial } from "./set-material";
+import { applySetNodeTransform } from "./set-node-transform";
 import { applySetTransform } from "./set-transform";
+import { applyUngroupNodes } from "./ungroup-nodes";
 import { applyUngroupObjects } from "./ungroup-objects";
 import { applyUpdateLight } from "./update-light";
 import type { Command, CommandResult, SingleCommand } from "./types";
@@ -109,6 +115,18 @@ export class CommandDispatcher {
         return applySelectNode(snapshot, command);
       case "select-nodes":
         return applySelectNodes(snapshot, command);
+      case "create-group":
+        return applyCreateGroup(snapshot, command);
+      case "delete-nodes":
+        return applyDeleteNodes(snapshot, command);
+      case "group-nodes":
+        return applyGroupNodes(snapshot, command);
+      case "ungroup-nodes":
+        return applyUngroupNodes(snapshot, command);
+      case "reparent-node":
+        return applyReparentNode(snapshot, command);
+      case "set-node-transform":
+        return applySetNodeTransform(snapshot, command);
       case "select-object":
         return applySelectObject(snapshot, command);
       case "select-objects":

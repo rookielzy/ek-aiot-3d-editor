@@ -3,7 +3,7 @@ import type { SceneEnvironment } from "../environment/types";
 import type { LightDefinition, LightKind } from "../lights/types";
 import type { MaterialAssignmentTarget, MaterialPatch } from "../materials/types";
 import type { EditorClipboardPayload } from "../clipboard/types";
-import type { NodeId, SceneSnapshot, Transform } from "../snapshot/types";
+import type { JsonValue, NodeId, SceneSnapshot, Transform } from "../snapshot/types";
 
 export type Command =
   | BatchCommand
@@ -14,6 +14,12 @@ export type SingleCommand =
   | RegisterAssetCommand
   | SelectNodeCommand
   | SelectNodesCommand
+  | CreateGroupCommand
+  | DeleteNodesCommand
+  | GroupNodesCommand
+  | UngroupNodesCommand
+  | ReparentNodeCommand
+  | SetNodeTransformCommand
   | SelectObjectCommand
   | SelectObjectsCommand
   | DeleteObjectsCommand
@@ -54,6 +60,53 @@ export interface SelectNodesCommand {
   nodeId?: NodeId | null;
   nodeIds?: NodeId[];
   primaryNodeId?: NodeId | null;
+}
+
+export interface CreateGroupCommand {
+  type: "create-group";
+  nodeId?: NodeId;
+  name?: string;
+  parentId?: NodeId | null;
+  transform?: Partial<Transform>;
+  metadata?: Record<string, JsonValue>;
+  select?: boolean;
+}
+
+export interface DeleteNodesCommand {
+  type: "delete-nodes";
+  nodeIds?: NodeId[];
+}
+
+export interface GroupNodesCommand {
+  type: "group-nodes";
+  nodeIds?: NodeId[];
+  primaryNodeId?: NodeId;
+  nodeId?: NodeId;
+  name?: string;
+  parentId?: NodeId | null;
+  transform?: Partial<Transform>;
+  metadata?: Record<string, JsonValue>;
+  preserveWorldTransform?: boolean;
+}
+
+export interface UngroupNodesCommand {
+  type: "ungroup-nodes";
+  nodeId?: NodeId;
+  preserveWorldTransform?: boolean;
+}
+
+export interface ReparentNodeCommand {
+  type: "reparent-node";
+  nodeId: NodeId;
+  parentId: NodeId | null;
+  transform?: Transform;
+  preserveWorldTransform?: boolean;
+}
+
+export interface SetNodeTransformCommand {
+  type: "set-node-transform";
+  nodeId: NodeId;
+  transform: Partial<Transform>;
 }
 
 export interface SelectObjectsCommand {

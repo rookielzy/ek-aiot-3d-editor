@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AssetRegistry } from "../assets/registry";
+import { createEditor } from "../editor/create-editor";
 import { EditorStore } from "../editor/store";
 import { CommandHistory } from "../history/history";
 import { CommandDispatcher } from "./dispatcher";
@@ -88,6 +89,49 @@ describe("import GLB command", () => {
     });
 
     expect(result.ok).toBe(false);
+    expect(registry.get("asset-a")).toBeUndefined();
+  });
+
+  it("imports under a group node without corrupting object compatibility roots", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "create-group", nodeId: "group-a", name: "Group A" });
+
+    const result = editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      parentId: "group-a",
+      asset: { id: "asset-a" }
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.snapshot.nodes["object-a"]).toMatchObject({
+      kind: "object",
+      objectId: "object-a",
+      parentId: "group-a"
+    });
+    expect(result.snapshot.nodes["group-a"].children).toEqual(["object-a"]);
+    expect(result.snapshot.rootNodeIds).toEqual(["group-a"]);
+    expect(result.snapshot.objects["object-a"].parentId).toBeNull();
+    expect(result.snapshot.rootObjectIds).toEqual(["object-a"]);
+  });
+
+  it("rejects light nodes as import parents without registering the asset", () => {
+    const registry = new AssetRegistry();
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), registry);
+    dispatcher.dispatch({ type: "add-light", light: { id: "point-a", kind: "point" } });
+    const before = store.getSnapshot();
+
+    const result = dispatcher.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      parentId: "point-a",
+      asset: { id: "asset-a" }
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("Parent node point-a cannot contain imported objects");
+    expect(store.getSnapshot()).toBe(before);
     expect(registry.get("asset-a")).toBeUndefined();
   });
 });

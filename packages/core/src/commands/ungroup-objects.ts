@@ -1,7 +1,8 @@
 import type { SceneSnapshot } from "../snapshot/types";
-import { reparentObject } from "../snapshot/hierarchy";
-import { syncNodesFromObjectHierarchy, syncSelectionFromObjectSelection } from "../snapshot/nodes";
-import { getLocalTransformForParent } from "../snapshot/transforms";
+import { reparentNode } from "../snapshot/hierarchy";
+import { findObjectNodeId } from "../snapshot/nodes";
+import { getLocalNodeTransformForParent } from "../snapshot/transforms";
+import { normalizeSelectionFromNodeIds, setNodeTransformInSnapshot, syncPayloadsFromNodes } from "./node-state";
 import type { UngroupObjectsCommand } from "./types";
 
 export function applyUngroupObjects(snapshot: SceneSnapshot, command: UngroupObjectsCommand): SceneSnapshot {
@@ -17,37 +18,38 @@ export function applyUngroupObjects(snapshot: SceneSnapshot, command: UngroupObj
     return snapshot;
   }
 
-  let objects = snapshot.objects;
-  let rootObjectIds = snapshot.rootObjectIds;
+  const nodeId = findObjectNodeId(snapshot, objectId);
+  if (!nodeId) {
+    throw new Error(`Object ${objectId} does not have a scene node.`);
+  }
+  const node = snapshot.nodes[nodeId];
+  const ungroupedNodeIds = object.children.map((childId) => {
+    const childNodeId = findObjectNodeId(snapshot, childId);
+    if (!childNodeId) {
+      throw new Error(`Object ${childId} does not have a scene node.`);
+    }
+    return childNodeId;
+  });
+
+  let nextSnapshot = snapshot;
+  const parentNodeId = node.parentId;
   for (const childId of object.children) {
-    const transform = getLocalTransformForParent({ ...snapshot, objects, rootObjectIds }, childId, object.parentId);
-    ({ objects, rootObjectIds } = reparentObject(objects, rootObjectIds, childId, object.parentId));
-    objects = {
-      ...objects,
-      [childId]: {
-        ...objects[childId],
-        transform
-      }
-    };
+    const childNodeId = findObjectNodeId(nextSnapshot, childId);
+    if (!childNodeId) {
+      throw new Error(`Object ${childId} does not have a scene node.`);
+    }
+    const transform = getLocalNodeTransformForParent(nextSnapshot, childNodeId, parentNodeId);
+    const nodeState = reparentNode(nextSnapshot.nodes, nextSnapshot.rootNodeIds, childNodeId, parentNodeId);
+    nextSnapshot = syncPayloadsFromNodes({
+      ...nextSnapshot,
+      nodes: nodeState.nodes,
+      rootNodeIds: nodeState.rootNodeIds
+    });
+    nextSnapshot = setNodeTransformInSnapshot(nextSnapshot, childNodeId, transform);
   }
 
-  const ungroupedIds = object.children;
-  const nextSnapshot: SceneSnapshot = {
-    ...snapshot,
-    objects,
-    rootObjectIds,
-    selection: {
-      nodeId: snapshot.selection.nodeId,
-      nodeIds: snapshot.selection.nodeIds,
-      objectId: ungroupedIds[0] ?? objectId,
-      objectIds: ungroupedIds
-    }
-  };
-
-  const nodeState = syncNodesFromObjectHierarchy(nextSnapshot);
   return {
     ...nextSnapshot,
-    ...nodeState,
-    selection: syncSelectionFromObjectSelection({ ...nextSnapshot, ...nodeState })
+    selection: normalizeSelectionFromNodeIds(nextSnapshot, ungroupedNodeIds, ungroupedNodeIds[0] ?? null)
   };
 }

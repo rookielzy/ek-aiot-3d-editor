@@ -1,7 +1,7 @@
-import { getSelectedObjectIds, getTopLevelSelectedObjectIds } from "../selection/selection";
-import { collectObjectSubtreeIds, removeObjectsFromHierarchy } from "../snapshot/hierarchy";
-import { removeNodesForObjects } from "../snapshot/nodes";
+import { getSelectedObjectIds } from "../selection/selection";
+import { findObjectNodeId } from "../snapshot/nodes";
 import type { SceneSnapshot } from "../snapshot/types";
+import { applyDeleteNodes } from "./delete-nodes";
 import type { DeleteObjectsCommand } from "./types";
 
 export function applyDeleteObjects(snapshot: SceneSnapshot, command: DeleteObjectsCommand): SceneSnapshot {
@@ -16,40 +16,13 @@ export function applyDeleteObjects(snapshot: SceneSnapshot, command: DeleteObjec
     }
   }
 
-  const topLevelIds = getTopLevelSelectedObjectIds(snapshot, targetIds);
-  const removedObjectIds = new Set<string>();
-  for (const objectId of topLevelIds) {
-    for (const subtreeId of collectObjectSubtreeIds(snapshot, objectId)) {
-      removedObjectIds.add(subtreeId);
+  const nodeIds = targetIds.map((objectId) => {
+    const nodeId = findObjectNodeId(snapshot, objectId);
+    if (!nodeId) {
+      throw new Error(`Object ${objectId} does not have a scene node.`);
     }
-  }
+    return nodeId;
+  });
 
-  const { objects, rootObjectIds } = removeObjectsFromHierarchy(snapshot, removedObjectIds);
-  const selectionObjectIds = snapshot.selection.objectIds.filter((objectId) => !removedObjectIds.has(objectId));
-  const objectId = selectionObjectIds.includes(snapshot.selection.objectId ?? "")
-    ? snapshot.selection.objectId
-    : selectionObjectIds[0] ?? null;
-
-  const assignments = Object.fromEntries(
-    Object.entries(snapshot.materials.assignments).filter(([, assignment]) => !removedObjectIds.has(assignment.target.objectId))
-  );
-
-  const nodeState = removeNodesForObjects(snapshot, removedObjectIds);
-
-  return {
-    ...snapshot,
-    objects,
-    rootObjectIds,
-    selection: {
-      ...nodeState.selection,
-      objectId,
-      objectIds: selectionObjectIds
-    },
-    nodes: nodeState.nodes,
-    rootNodeIds: nodeState.rootNodeIds,
-    materials: {
-      ...snapshot.materials,
-      assignments
-    }
-  };
+  return applyDeleteNodes(snapshot, { type: "delete-nodes", nodeIds });
 }

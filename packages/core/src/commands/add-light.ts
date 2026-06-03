@@ -1,6 +1,7 @@
 import { createLightDefinition } from "../lights/defaults";
 import type { LightDefinition } from "../lights/types";
-import { addLightNode } from "../snapshot/nodes";
+import { createLightNode } from "../snapshot/defaults";
+import { createLightNodeId } from "../snapshot/nodes";
 import type { SceneSnapshot } from "../snapshot/types";
 import type { AddLightCommand } from "./types";
 
@@ -10,17 +11,19 @@ export function applyAddLight(snapshot: SceneSnapshot, command: AddLightCommand)
   if (snapshot.lights[light.id]) {
     throw new Error(`Light ${light.id} already exists.`);
   }
+  const nodeId = createLightNodeId(light.id, snapshot.nodes);
+  const node = createLightNode(light, nodeId);
 
-  const nextSnapshot = {
+  return {
     ...snapshot,
     lights: {
       ...snapshot.lights,
       [light.id]: light
-    }
-  };
-
-  return {
-    ...nextSnapshot,
-    ...addLightNode(nextSnapshot, light)
+    },
+    nodes: {
+      ...snapshot.nodes,
+      [nodeId]: node
+    },
+    rootNodeIds: [...snapshot.rootNodeIds, nodeId]
   };
 }

@@ -5,12 +5,16 @@ export type {
   BatchCommand,
   Command,
   CommandResult,
+  CreateGroupCommand,
+  DeleteNodesCommand,
   DeleteObjectsCommand,
   DuplicateObjectsCommand,
+  GroupNodesCommand,
   GroupObjectsCommand,
   ImportGlbCommand,
   PasteObjectsCommand,
   RegisterAssetCommand,
+  ReparentNodeCommand,
   ReparentObjectCommand,
   RemoveLightCommand,
   SelectNodeCommand,
@@ -20,7 +24,9 @@ export type {
   SceneEnvironmentPatch,
   SetEnvironmentCommand,
   SetMaterialCommand,
+  SetNodeTransformCommand,
   SetTransformCommand,
+  UngroupNodesCommand,
   UngroupObjectsCommand,
   UpdateLightCommand
 } from "./commands/types";
@@ -186,7 +192,7 @@ export { getSelectedNodeIds, getSelectedObjectIds, getTopLevelSelectedObjectIds,
 export { collectNodeSubtreeIds, getTopLevelNodeIds, isNodeAncestorOf } from "./snapshot/hierarchy";
 export { migrateSerializedSnapshot, validateSerializedSceneSnapshot } from "./snapshot/migrations";
 export { isJsonCompatible, validateSceneSnapshot } from "./snapshot/validation";
-export { normalizeTransform } from "./snapshot/transforms";
+export { getLocalNodeTransformForParent, getWorldNodeTransform, normalizeTransform } from "./snapshot/transforms";
 export { snapNumber, snapTransform, snapVector } from "./runtime/transform/snap";
 export { executeEditorAction } from "./shortcuts/actions";
 export { isEditableTarget, resolveEditorShortcut } from "./shortcuts/resolve-shortcut";

@@ -14,10 +14,13 @@ import {
   validateSceneSnapshot,
   type AdvancedEditorOperations,
   type BatchCommand,
+  type CreateGroupCommand,
+  type DeleteNodesCommand,
   type DeleteObjectsCommand,
   type DuplicateObjectsCommand,
   type EditorAction,
   type EditorClipboardPayload,
+  type GroupNodesCommand,
   type GroupObjectsCommand,
   type InspectorModel,
   type InspectorCommandResult,
@@ -37,6 +40,7 @@ import {
   type NodeId,
   type ProblemTarget,
   type RegisterAssetCommand,
+  type ReparentNodeCommand,
   type RemoveLightCommand,
   type RuntimeInteractionOptions,
   type RuntimePointerSelectionInput,
@@ -49,11 +53,13 @@ import {
   type SelectNodesCommand,
   type SelectObjectsCommand,
   type SetEnvironmentCommand,
+  type SetNodeTransformCommand,
   type SnapSettings,
   type TextureSlot,
   type TransformAxis,
   type TransformMode,
   type TransformVectorName,
+  type UngroupNodesCommand,
   type UpdateLightCommand
 } from "./index";
 
@@ -141,6 +147,12 @@ describe("core public API", () => {
     const batch: BatchCommand = { type: "batch", commands: [removeLight] };
     const selectNode: SelectNodeCommand = { type: "select-node", nodeId: "node-a" };
     const selectNodes: SelectNodesCommand = { type: "select-nodes", mode: "replace", nodeIds: ["node-a"], primaryNodeId: "node-a" };
+    const createGroup: CreateGroupCommand = { type: "create-group", nodeId: "group-a" };
+    const deleteNodes: DeleteNodesCommand = { type: "delete-nodes", nodeIds: ["node-a"] };
+    const groupNodes: GroupNodesCommand = { type: "group-nodes", nodeIds: ["node-a"], nodeId: "group-a" };
+    const ungroupNodes: UngroupNodesCommand = { type: "ungroup-nodes", nodeId: "group-a" };
+    const reparentNode: ReparentNodeCommand = { type: "reparent-node", nodeId: "node-a", parentId: null };
+    const setNodeTransform: SetNodeTransformCommand = { type: "set-node-transform", nodeId: "node-a", transform: { position: [1, 2, 3] } };
     const selectObjects: SelectObjectsCommand = { type: "select-objects", mode: "clear" };
     const deleteObjects: DeleteObjectsCommand = { type: "delete-objects" };
     const duplicateObjects: DuplicateObjectsCommand = { type: "duplicate-objects" };
@@ -186,6 +198,12 @@ describe("core public API", () => {
     expect(batch.commands).toHaveLength(1);
     expect(selectNode.nodeId).toBe("node-a");
     expect(selectNodes.primaryNodeId).toBe("node-a");
+    expect(createGroup.type).toBe("create-group");
+    expect(deleteNodes.nodeIds).toEqual(["node-a"]);
+    expect(groupNodes.nodeId).toBe("group-a");
+    expect(ungroupNodes.nodeId).toBe("group-a");
+    expect(reparentNode.parentId).toBeNull();
+    expect(setNodeTransform.transform.position).toEqual([1, 2, 3]);
     expect(selectObjects.mode).toBe("clear");
     expect(deleteObjects.type).toBe("delete-objects");
     expect(duplicateObjects.type).toBe("duplicate-objects");
