@@ -1,5 +1,6 @@
 import { getSelectedObjectIds, getTopLevelSelectedObjectIds } from "../selection/selection";
 import { isAncestorOf, reparentObject } from "../snapshot/hierarchy";
+import { syncNodesFromObjectHierarchy, syncSelectionFromObjectSelection } from "../snapshot/nodes";
 import { getLocalTransformForParent } from "../snapshot/transforms";
 import type { SceneSnapshot } from "../snapshot/types";
 import type { GroupObjectsCommand } from "./types";
@@ -42,13 +43,22 @@ export function applyGroupObjects(snapshot: SceneSnapshot, command: GroupObjects
     };
   }
 
-  return {
+  const nextSnapshot: SceneSnapshot = {
     ...snapshot,
     objects,
     rootObjectIds,
     selection: {
+      nodeId: snapshot.selection.nodeId,
+      nodeIds: snapshot.selection.nodeIds,
       objectId: primaryObjectId,
       objectIds: topLevelIds
     }
+  };
+
+  const nodeState = syncNodesFromObjectHierarchy(nextSnapshot);
+  return {
+    ...nextSnapshot,
+    ...nodeState,
+    selection: syncSelectionFromObjectSelection({ ...nextSnapshot, ...nodeState })
   };
 }

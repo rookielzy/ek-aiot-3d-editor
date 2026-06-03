@@ -1,5 +1,6 @@
 import { createId } from "../snapshot/defaults";
 import { cloneSceneObject } from "../snapshot/hierarchy";
+import { syncNodesFromObjectHierarchy, syncSelectionFromObjectSelection } from "../snapshot/nodes";
 import type { SceneSnapshot } from "../snapshot/types";
 import type { PasteObjectsCommand } from "./types";
 
@@ -63,11 +64,13 @@ export function applyPasteObjects(snapshot: SceneSnapshot, command: PasteObjects
 
   const pastedRootIds = payload.rootObjectIds.map((objectId) => idMap[objectId]).filter((objectId): objectId is string => Boolean(objectId));
 
-  return {
+  const nextSnapshot: SceneSnapshot = {
     ...snapshot,
     objects,
     rootObjectIds: [...snapshot.rootObjectIds, ...pastedRootIds],
     selection: {
+      nodeId: snapshot.selection.nodeId,
+      nodeIds: snapshot.selection.nodeIds,
       objectId: pastedRootIds[0] ?? null,
       objectIds: pastedRootIds
     },
@@ -75,6 +78,13 @@ export function applyPasteObjects(snapshot: SceneSnapshot, command: PasteObjects
       definitions,
       assignments
     }
+  };
+
+  const nodeState = syncNodesFromObjectHierarchy(nextSnapshot);
+  return {
+    ...nextSnapshot,
+    ...nodeState,
+    selection: syncSelectionFromObjectSelection({ ...nextSnapshot, ...nodeState })
   };
 }
 

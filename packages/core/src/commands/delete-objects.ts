@@ -1,5 +1,6 @@
 import { getSelectedObjectIds, getTopLevelSelectedObjectIds } from "../selection/selection";
 import { collectObjectSubtreeIds, removeObjectsFromHierarchy } from "../snapshot/hierarchy";
+import { removeNodesForObjects } from "../snapshot/nodes";
 import type { SceneSnapshot } from "../snapshot/types";
 import type { DeleteObjectsCommand } from "./types";
 
@@ -33,14 +34,19 @@ export function applyDeleteObjects(snapshot: SceneSnapshot, command: DeleteObjec
     Object.entries(snapshot.materials.assignments).filter(([, assignment]) => !removedObjectIds.has(assignment.target.objectId))
   );
 
+  const nodeState = removeNodesForObjects(snapshot, removedObjectIds);
+
   return {
     ...snapshot,
     objects,
     rootObjectIds,
     selection: {
+      ...nodeState.selection,
       objectId,
       objectIds: selectionObjectIds
     },
+    nodes: nodeState.nodes,
+    rootNodeIds: nodeState.rootNodeIds,
     materials: {
       ...snapshot.materials,
       assignments

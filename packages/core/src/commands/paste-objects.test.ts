@@ -25,7 +25,7 @@ describe("paste objects command", () => {
     expect(result.snapshot.objects["object-copy-a"].asset.id).toBe("asset-a");
     expect(result.snapshot.objects["object-copy-b"].parentId).toBe("object-copy-a");
     expect(result.snapshot.objects["object-copy-a"].children).toEqual(["object-copy-b"]);
-    expect(result.snapshot.selection).toEqual({ objectId: "object-copy-a", objectIds: ["object-copy-a"] });
+    expect(result.snapshot.selection).toEqual({ nodeId: "object-copy-a", nodeIds: ["object-copy-a"], objectId: "object-copy-a", objectIds: ["object-copy-a"] });
     expect(result.snapshot.materials.assignments["object:object-copy-a"].materialId).not.toBe("material:object:object-a");
     expect(result.snapshot.materials.definitions[result.snapshot.materials.assignments["object:object-copy-a"].materialId].override.color).toBe("#111111");
     expect(editor.getHistoryState().undoCount).toBe(undoBeforePaste + 1);

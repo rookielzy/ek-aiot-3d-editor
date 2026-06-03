@@ -1,7 +1,8 @@
 import { createDefaultEnvironment } from "../environment/defaults";
+import type { LightDefinition } from "../lights/types";
 import { createEmptyMaterialState } from "../materials/defaults";
 import { createEmptyAuthoredProblemState } from "../problems/defaults";
-import { SNAPSHOT_VERSION, type SceneSnapshot, type Transform } from "./types";
+import { SNAPSHOT_VERSION, type SceneLightNode, type SceneObject, type SceneObjectNode, type SceneSnapshot, type Transform } from "./types";
 
 let nextId = 0;
 
@@ -25,9 +26,13 @@ export function createEmptySnapshot(sceneId = createId("scene")): SceneSnapshot 
       id: sceneId,
       name: "Untitled scene"
     },
+    nodes: {},
+    rootNodeIds: [],
     objects: {},
     rootObjectIds: [],
     selection: {
+      nodeId: null,
+      nodeIds: [],
       objectId: null,
       objectIds: []
     },
@@ -39,4 +44,49 @@ export function createEmptySnapshot(sceneId = createId("scene")): SceneSnapshot 
   };
 
   return Object.freeze(snapshot);
+}
+
+export function createObjectNode(object: SceneObject): SceneObjectNode {
+  return {
+    id: object.id,
+    kind: "object",
+    name: object.name,
+    objectId: object.id,
+    parentId: object.parentId,
+    children: [...object.children],
+    transform: createTransform(object.transform),
+    ...(object.metadata ? { metadata: { ...object.metadata } } : {})
+  };
+}
+
+export function createLightNode(light: LightDefinition, id = light.id): SceneLightNode {
+  const transform = getLightNodeTransform(light);
+  return {
+    id,
+    kind: "light",
+    name: light.name,
+    lightId: light.id,
+    parentId: null,
+    children: [],
+    ...(transform ? { transform: createTransform(transform) } : {}),
+    ...(light.metadata ? { metadata: { ...light.metadata } } : {})
+  };
+}
+
+function getLightNodeTransform(light: LightDefinition): Transform | undefined {
+  switch (light.kind) {
+    case "directional":
+    case "point":
+    case "spot":
+      return light.transform;
+    case "ambient":
+    case "hemisphere":
+      return undefined;
+    default:
+      return assertNever(light);
+  }
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unsupported light: ${JSON.stringify(value)}`);
 }

@@ -1,5 +1,6 @@
 import type { AssetRegistry } from "../assets/registry";
 import { createId } from "../snapshot/defaults";
+import { addObjectNode } from "../snapshot/nodes";
 import { cloneTransform, normalizeTransform } from "../snapshot/transforms";
 import type { SceneObject, SceneSnapshot } from "../snapshot/types";
 import type { ImportGlbCommand } from "./types";
@@ -45,7 +46,7 @@ export function applyImportGlb(snapshot: SceneSnapshot, command: ImportGlbComman
     };
   }
 
-  return {
+  const nextSnapshot = {
     ...snapshot,
     assets: {
       ...snapshot.assets,
@@ -53,5 +54,10 @@ export function applyImportGlb(snapshot: SceneSnapshot, command: ImportGlbComman
     },
     objects,
     rootObjectIds: parentId ? snapshot.rootObjectIds : [...snapshot.rootObjectIds, objectId]
+  };
+
+  return {
+    ...nextSnapshot,
+    ...addObjectNode(nextSnapshot, objectId)
   };
 }

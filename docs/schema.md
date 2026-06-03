@@ -4,24 +4,29 @@ Scene Snapshot 是本项目的 durable editor state。它必须是 JSON-compatib
 
 当前版本：
 
-- `SceneSnapshot.version = 3`
+- `SceneSnapshot.version = 4`
+- `V3SceneSnapshot.version = 3`
 - `PreviousSceneSnapshot.version = 2`
 - `LegacySceneSnapshot.version = 1`
 
-Version 1/2 snapshot 会通过 migration 规范化为当前 schema。
+Version 1/2/3 snapshot 会通过 migration 规范化为当前 schema。
 
 ## 顶层结构
 
 ```ts
 interface SceneSnapshot {
-  version: 3;
+  version: 4;
   scene: {
     id: string;
     name: string;
   };
+  nodes: Record<NodeId, SceneNode>;
+  rootNodeIds: NodeId[];
   objects: Record<string, SceneObject>;
   rootObjectIds: string[];
   selection: {
+    nodeId: NodeId | null;
+    nodeIds: NodeId[];
     objectId: string | null;
     objectIds: string[];
   };
@@ -33,6 +38,8 @@ interface SceneSnapshot {
   metadata?: Record<string, JsonValue>;
 }
 ```
+
+`nodes` / `rootNodeIds` 是 v4 的 canonical hierarchy 和 target layer。`objects`、`lights` 仍保存 payload；`rootObjectIds` 与 `selection.objectId/objectIds` 是当前兼容镜像，供旧 object-only API 使用，新的 durable target 应使用 `NodeId`。
 
 ## JSON-compatible 约束
 
@@ -91,7 +98,52 @@ Snapshot 只保存资产引用，不保存资产 payload。真实二进制来源
 - transient project asset store
 - `.ek3d` 的 `assets/*` payload
 
-## SceneObject
+## SceneNode
+
+```ts
+type NodeId = string;
+
+type SceneNode =
+  | {
+      id: NodeId;
+      kind: "object";
+      name: string;
+      objectId: string;
+      parentId: NodeId | null;
+      children: NodeId[];
+      transform: Transform;
+      metadata?: Record<string, JsonValue>;
+    }
+  | {
+      id: NodeId;
+      kind: "group";
+      name: string;
+      parentId: NodeId | null;
+      children: NodeId[];
+      transform: Transform;
+      metadata?: Record<string, JsonValue>;
+    }
+  | {
+      id: NodeId;
+      kind: "light";
+      name: string;
+      lightId: string;
+      parentId: NodeId | null;
+      children: NodeId[];
+      transform?: Transform;
+      metadata?: Record<string, JsonValue>;
+    };
+```
+
+`SceneNode` 保存共同 authoring target 字段：稳定 ID、展示名称、类型、父子关系、可选 metadata，以及有意义时的 transform。object node 引用 `objects` payload，light node 引用 `lights` payload，group node 没有额外 payload。
+
+迁移规则：
+
+- v3 object 默认迁移为同 ID 的 object node。
+- v3 light 默认迁移为同 ID 的 light node。
+- 如果 object ID 与 light ID 冲突，object node 保留 object ID，light payload ID 不变，light node ID 会稳定生成为类似 `light-a:light` 的 collision-safe ID。
+
+## SceneObject Payload
 
 ```ts
 interface SceneObject {
@@ -106,19 +158,24 @@ interface SceneObject {
 }
 ```
 
-当前对象类型只有 `glb`。对象结构保存稳定 ID、层级和 Transform。即使资产无法解析，对象也不应被删除。
+当前对象类型只有 `glb`。v4 中对象 payload 仍保存 GLB asset reference 与兼容层级/transform 字段；canonical hierarchy、selection 和 target identity 属于 `SceneNode`。即使资产无法解析，对象 payload 也不应被删除。
 
 ## Selection
 
 ```ts
 selection: {
+  nodeId: NodeId | null;
+  nodeIds: NodeId[];
   objectId: string | null;
   objectIds: string[];
 }
 ```
 
-Selection 是 durable state，因此可以序列化/恢复。`objectId` 是 primary selection，用于保持 inspector 和旧单选流程兼容；`objectIds` 是有序多选集合。校验要求：
+Selection 是 durable state，因此可以序列化/恢复。`nodeId` 是 primary selection，`nodeIds` 是有序多选集合。`objectId/objectIds` 是兼容镜像，只包含 selected object nodes。校验要求：
 
+- `nodeId` 要么为 `null`，要么存在于 `nodes` 中。
+- 非空 `nodeId` 必须包含在 `nodeIds` 中。
+- `nodeIds` 中所有 node 都必须存在且不能重复。
 - `objectId` 要么为 `null`，要么存在于 `objects` 中。
 - 非空 `objectId` 必须包含在 `objectIds` 中。
 - `objectIds` 中所有对象都必须存在且不能重复。
@@ -177,6 +234,8 @@ type LightKind = "ambient" | "directional" | "hemisphere" | "point" | "spot";
 
 Runtime 会把这些定义投影为 Three.js light object，并在更新/删除时清理旧对象。
 
+v4 中每个 light payload 必须被一个 light node 引用。ambient 和 hemisphere light node 可被选择，但当前不暴露 transform capability；directional、point、spot light node 可以携带 transform。
+
 ## Problems
 
 Snapshot 中的 `problems` 是 authored problem state。resolver、loader、PMREM、runtime projection 失败属于 derived runtime problem，通过 runtime API 暴露，不写回 Snapshot。
@@ -228,11 +287,27 @@ editor.dispatch({
 
 ```json
 {
-  "version": 3,
+  "version": 4,
   "scene": {
     "id": "scene",
     "name": "Untitled scene"
   },
+  "nodes": {
+    "box": {
+      "id": "box",
+      "kind": "object",
+      "name": "Simple box",
+      "objectId": "box",
+      "parentId": null,
+      "children": [],
+      "transform": {
+        "position": [1, 0, 0],
+        "rotation": [0, 0, 0],
+        "scale": [1, 1, 1]
+      }
+    }
+  },
+  "rootNodeIds": ["box"],
   "objects": {
     "box": {
       "id": "box",
@@ -254,6 +329,8 @@ editor.dispatch({
   },
   "rootObjectIds": ["box"],
   "selection": {
+    "nodeId": "box",
+    "nodeIds": ["box"],
     "objectId": "box",
     "objectIds": ["box"]
   },

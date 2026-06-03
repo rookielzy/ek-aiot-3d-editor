@@ -1,5 +1,6 @@
 import type { SceneSnapshot } from "../snapshot/types";
 import { reparentObject } from "../snapshot/hierarchy";
+import { syncNodesFromObjectHierarchy, syncSelectionFromObjectSelection } from "../snapshot/nodes";
 import { getLocalTransformForParent } from "../snapshot/transforms";
 import type { UngroupObjectsCommand } from "./types";
 
@@ -31,13 +32,22 @@ export function applyUngroupObjects(snapshot: SceneSnapshot, command: UngroupObj
   }
 
   const ungroupedIds = object.children;
-  return {
+  const nextSnapshot: SceneSnapshot = {
     ...snapshot,
     objects,
     rootObjectIds,
     selection: {
+      nodeId: snapshot.selection.nodeId,
+      nodeIds: snapshot.selection.nodeIds,
       objectId: ungroupedIds[0] ?? objectId,
       objectIds: ungroupedIds
     }
+  };
+
+  const nodeState = syncNodesFromObjectHierarchy(nextSnapshot);
+  return {
+    ...nextSnapshot,
+    ...nodeState,
+    selection: syncSelectionFromObjectSelection({ ...nextSnapshot, ...nodeState })
   };
 }

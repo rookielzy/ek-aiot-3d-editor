@@ -19,6 +19,8 @@ describe("select object command", () => {
     expect(result.ok).toBe(true);
     expect(result.snapshot.selection.objectId).toBe("object-a");
     expect(result.snapshot.selection.objectIds).toEqual(["object-a"]);
+    expect(result.snapshot.selection.nodeId).toBe("object-a");
+    expect(result.snapshot.selection.nodeIds).toEqual(["object-a"]);
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
@@ -31,16 +33,16 @@ describe("select object command", () => {
     dispatcher.dispatch({ type: "import-glb", objectId: "object-c", asset: { id: "asset-c" } });
 
     expect(dispatcher.dispatch({ type: "select-objects", mode: "replace", objectIds: ["object-a", "object-b"], primaryObjectId: "object-b" }).ok).toBe(true);
-    expect(store.getSnapshot().selection).toEqual({ objectId: "object-b", objectIds: ["object-a", "object-b"] });
+    expect(store.getSnapshot().selection).toEqual({ nodeId: "object-b", nodeIds: ["object-a", "object-b"], objectId: "object-b", objectIds: ["object-a", "object-b"] });
 
     dispatcher.dispatch({ type: "select-objects", mode: "toggle", objectId: "object-b" });
-    expect(store.getSnapshot().selection).toEqual({ objectId: "object-a", objectIds: ["object-a"] });
+    expect(store.getSnapshot().selection).toEqual({ nodeId: "object-a", nodeIds: ["object-a"], objectId: "object-a", objectIds: ["object-a"] });
 
     dispatcher.dispatch({ type: "select-objects", mode: "add", objectIds: ["object-c", "object-a"] });
-    expect(store.getSnapshot().selection).toEqual({ objectId: "object-a", objectIds: ["object-a", "object-c"] });
+    expect(store.getSnapshot().selection).toEqual({ nodeId: "object-a", nodeIds: ["object-a", "object-c"], objectId: "object-a", objectIds: ["object-a", "object-c"] });
 
     dispatcher.dispatch({ type: "select-objects", mode: "clear" });
-    expect(store.getSnapshot().selection).toEqual({ objectId: null, objectIds: [] });
+    expect(store.getSnapshot().selection).toEqual({ nodeId: null, nodeIds: [], objectId: null, objectIds: [] });
   });
 
   it("selects all objects deterministically with roots first", () => {
@@ -54,7 +56,7 @@ describe("select object command", () => {
     const result = dispatcher.dispatch({ type: "select-objects", mode: "all" });
 
     expect(result.ok).toBe(true);
-    expect(result.snapshot.selection).toEqual({ objectId: "object-a", objectIds: ["object-a", "object-c", "object-b"] });
+    expect(result.snapshot.selection).toEqual({ nodeId: "object-a", nodeIds: ["object-a", "object-c", "object-b"], objectId: "object-a", objectIds: ["object-a", "object-c", "object-b"] });
   });
 
   it("rejects unknown object IDs without mutating selection", () => {

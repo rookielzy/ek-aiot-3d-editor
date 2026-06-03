@@ -1,8 +1,11 @@
 import type { SceneSnapshot } from "../snapshot/types";
+import { findObjectNodeId } from "../snapshot/nodes";
 
 export type SelectionMode = "replace" | "add" | "remove" | "toggle" | "clear" | "all";
 
 export interface SelectionState {
+  nodeId: string | null;
+  nodeIds: string[];
   objectId: string | null;
   objectIds: string[];
 }
@@ -75,13 +78,18 @@ export function normalizeSelection(
   }
 
   return assertSelectionExists(snapshot, {
+    nodeId: null,
+    nodeIds: [],
     objectId: primaryObjectId,
     objectIds: dedupe(objectIds)
   });
 }
 
 export function selectionEquals(left: SelectionState, right: SelectionState): boolean {
-  return left.objectId === right.objectId &&
+  return left.nodeId === right.nodeId &&
+    left.nodeIds.length === right.nodeIds.length &&
+    left.nodeIds.every((nodeId, index) => nodeId === right.nodeIds[index]) &&
+    left.objectId === right.objectId &&
     left.objectIds.length === right.objectIds.length &&
     left.objectIds.every((objectId, index) => objectId === right.objectIds[index]);
 }
@@ -133,5 +141,14 @@ function assertSelectionExists(snapshot: SceneSnapshot, selection: SelectionStat
     }
   }
 
-  return selection;
+  const nodeIds = selection.objectIds
+    .map((objectId) => findObjectNodeId(snapshot, objectId))
+    .filter((nodeId): nodeId is string => Boolean(nodeId));
+  const primaryNodeId = selection.objectId ? findObjectNodeId(snapshot, selection.objectId) : nodeIds[0] ?? null;
+
+  return {
+    ...selection,
+    nodeId: primaryNodeId && nodeIds.includes(primaryNodeId) ? primaryNodeId : nodeIds[0] ?? null,
+    nodeIds
+  };
 }

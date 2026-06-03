@@ -101,7 +101,12 @@ export type {
   RuntimeProblemSubscriber,
   SceneEnvironment,
   SceneEnvironmentPatch,
+  NodeId,
+  SceneGroupNode,
+  SceneLightNode,
+  SceneNode,
   SceneObject,
+  SceneObjectNode,
   SceneSnapshot,
   SelectObjectCommand,
   SelectObjectsCommand,
@@ -132,7 +137,8 @@ export type {
   TransformModeSubscriber,
   TransformVectorName,
   UngroupObjectsCommand,
-  UpdateLightCommand
+  UpdateLightCommand,
+  V3SceneSnapshot
 } from "./public-api";
 
 export {
