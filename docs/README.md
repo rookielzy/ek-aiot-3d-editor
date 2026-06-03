@@ -33,11 +33,15 @@ pnpm test
 - Vue proof loop：`pnpm --filter @ek-aiot/vue-proof-loop dev`
 - Vanilla proof loop：`pnpm --filter @ek-aiot/vanilla-proof-loop dev`
 
-浏览器相关 runtime 测试：
+浏览器相关 runtime/demo 测试：
 
 ```bash
 pnpm test:browser
 ```
+
+该命令使用 Vitest browser mode + headless Chromium，覆盖 runtime picking、TransformControls smoke，以及 React/Vue proof-loop demo 的可见 checklist、层级、问题 badge 和 canvas 非空渲染 smoke。
+
+新机器首次运行前需要执行 `pnpm exec playwright install chromium`。Linux CI/容器还需要 Playwright Chromium 的系统依赖；可用 `pnpm exec playwright install-deps --dry-run chromium` 查看缺失包。
 
 发布前完整校验：
 
@@ -59,7 +63,7 @@ pnpm release:verify
 - 项目包：实验性 `.ek3d` ZIP 容器，包含 `project.json`、`scene.json` 和 `assets/*` payload。
 - React：`useEditor()`、`useEditorSnapshot()`、`useInspector()`、`useWorkbench()`、`EditorViewport`、`InspectorPanel`、`EditorWorkbench`。
 - Vue：`useEditor()`、`useInspector()`、`useWorkbench()`、`EditorViewport`、`InspectorPanel`、`EditorWorkbench`。
-- 本地 React/Vue proof-loop demo：提供交互 toolbar、Scene hierarchy、asset/problem surface 和派生 proof checklist，用于验证 camera、selection、transform、history、hierarchy、project package 和缺失资产恢复流程。
+- 本地 React/Vue proof-loop demo：提供交互 toolbar、Scene hierarchy、asset/problem surface 和派生 proof checklist，用于验证 camera、selection、transform、material inspector、history、hierarchy、project package 和缺失资产恢复流程。
 
 ## 当前工作流边界
 
@@ -72,7 +76,7 @@ pnpm release:verify
 5. 序列化 Scene Snapshot。
 6. 从 Snapshot 恢复等价 core/runtime 场景。
 7. 在需要携带二进制资产时导出/导入 `.ek3d` 项目包。
-8. 在 React/Vue 本地 demo 中通过层级、资产/问题面板和 checklist 验证可见状态。
+8. 在 React/Vue 本地 demo 中通过层级、资产/问题面板、material inspector 和 checklist 验证可见状态。
 
 ## 关键约束（必读）
 
@@ -88,7 +92,7 @@ pnpm release:verify
 
 ## 当前非目标
 
-框选/lasso、系统剪贴板集成、外部 paste 格式、完整资产库、云端资产库、模型市场、持久化布局、schema-driven inspector 插件、材质纹理实际投影到 GLB 子网格、阴影、高级辅助器、数据绑定、事件编排、运行态发布、Agent 集成和稳定非 `0.x` API 都是后续工作。
+框选/lasso、系统剪贴板集成、外部 paste 格式、完整资产库、云端资产库、模型市场、本地导入队列、持久化布局、schema-driven inspector 插件、per-submesh 材质槽发现、完整 GLTF 材质图编辑、阴影、高级辅助器、数据绑定、事件编排、运行态发布、Agent 集成和稳定非 `0.x` API 都是后续工作。
 
 ## 需求与规划来源
 

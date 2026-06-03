@@ -119,9 +119,17 @@ interface WorkbenchContext {
 pnpm --filter @ek-aiot/vue-proof-loop dev
 ```
 
-示例首屏就是可操作 workbench，不是 landing page。侧栏从 `SceneSnapshot` 派生层级、资产列表和 proof checklist；toolbar 通过 `runAction()`、camera helpers 和 core operations 触发 transform mode、snap、undo/redo、copy/paste/duplicate/delete/group/ungroup、export/reopen 等验证动作。
+示例首屏就是可操作 workbench，不是 landing page。侧栏从 `SceneSnapshot` 派生层级、资产列表和 proof checklist；toolbar 通过 `runAction()`、camera helpers 和 core operations 触发 transform mode、snap、undo/redo、copy/paste/duplicate/delete/group/ungroup、export/reopen 等验证动作。Inspector 可编辑 transform、material、environment 和 light 字段，其中 material override 会通过 runtime 投影到支持的 `MeshStandardMaterial` 对象。
 
 Demo checklist 只用于本地验证。它不会写入 snapshot、`.ek3d` 项目包或 Vue reactive store 之外的 durable editor 数据。缺失资产恢复按钮使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem。
+
+浏览器证据通过仓库根目录命令运行：
+
+```bash
+pnpm test:browser
+```
+
+该命令使用 headless Chromium 验证 Vue demo 的 hierarchy、selection、camera helper、transform/history、material inspector smoke、project export/reopen、missing-asset recovery、problem badge 和 canvas 非空渲染状态，并和 React demo 的 checklist 标签保持一致。它不是端到端托管发布测试，也不承诺完整资产库、外部 paste、数据绑定或事件编排能力。
 
 ## 响应式边界
 

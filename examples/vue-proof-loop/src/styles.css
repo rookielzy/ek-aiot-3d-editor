@@ -15,6 +15,10 @@ body {
   height: 100vh;
 }
 
+.demo-viewport {
+  min-height: 320px;
+}
+
 .demo-toolbar {
   display: flex;
   flex-wrap: wrap;

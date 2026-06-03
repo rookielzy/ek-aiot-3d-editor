@@ -28,6 +28,14 @@
 
 当前支持保存 `MeshStandardMaterial` override 的小子集和 texture slot 资产引用，并在 runtime 将 object-level assignment 投影到 GLB 对象下的 `MeshStandardMaterial` mesh。完整子网格 material slot discovery、per-submesh assignment、复杂材质编辑、节点材质和 shader 编辑仍是后续工作。
 
+## React/Vue 本地 demo 能验证哪些交互？
+
+两个 demo 都是可操作 workbench：camera helper、viewport/层级选择、TransformControls 或 toolbar transform、undo/redo、material inspector、hierarchy operation、`.ek3d` export/reopen 和 missing-asset recovery。Proof checklist 是从当前 runtime/editor/session 状态派生的验证视图，不会保存到 Snapshot 或项目包。
+
+## `pnpm test:browser` 验证的是什么？
+
+它使用 Vitest browser mode 和 headless Chromium，覆盖 runtime picking、TransformControls smoke、React/Vue demo checklist parity、问题 badge、层级文本和 canvas 非空渲染 smoke。它避免脆弱的 WebGL 像素级比对，也不是完整发布站点或托管 runtime 测试。
+
 ## 是否支持 HDR 环境？
 
 Snapshot 和 runtime 已有 HDR environment/background intent、资产解析和 PMREM runtime 输出路径。解析失败会暴露 runtime problem。不要把 HDR texture 或 PMREM 输出写入 Snapshot。

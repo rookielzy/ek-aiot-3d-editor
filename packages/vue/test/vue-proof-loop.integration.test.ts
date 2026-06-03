@@ -93,6 +93,12 @@ describe("Vue proof-loop parity", () => {
     await clickButton(wrapper, "Snap move");
     expect(checklistItem(wrapper, "Snap/mode status visible").attributes("data-complete")).toBe("true");
 
+    const baseColorInput = wrapper.findAll("label").find((candidate) => candidate.text().includes("Base color"))?.find('input[type="color"]');
+    expect(baseColorInput, "Expected Base color material input").toBeTruthy();
+    await baseColorInput!.setValue("#00aa88");
+    await nextTick();
+    expect(checklistItem(wrapper, "Material inspector changed runtime").attributes("data-complete")).toBe("true");
+
     await clickButton(wrapper, "Duplicate");
     expect(checklistItem(wrapper, "Copy/paste or duplicate ran").attributes("data-complete")).toBe("true");
 

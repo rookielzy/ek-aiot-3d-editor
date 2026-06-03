@@ -14,7 +14,21 @@
 6. 恢复 Snapshot。
 7. runtime 重新投影等价场景。
 8. 可选导出/导入 `.ek3d` 项目包。
-9. React/Vue 本地 proof-loop demo 中通过层级面板、资产/问题面板和 proof checklist 验证这些状态。
+9. React/Vue 本地 proof-loop demo 中通过层级面板、资产/问题面板、material inspector 和 proof checklist 验证这些状态。
+
+## 本地 demo 浏览器验证
+
+React 和 Vue proof-loop demo 的可见验证路径保持一致：
+
+1. 使用 camera helper（Reset camera / Frame selected / Frame all）验证 transient camera controls。
+2. 通过 viewport picking 或 Scene hierarchy 选择对象，并在层级中看到 selected / primary 标记。
+3. 通过 TransformControls 或 demo toolbar 提交一次 transform，并验证 undo/redo。
+4. 通过 Material inspector 修改支持的 object-level `MeshStandardMaterial` 字段，并确认 runtime 投影更新。
+5. 通过 Object operations 执行 duplicate、copy/paste、delete、group、ungroup 等 hierarchy 操作。
+6. 导出并重新导入 `.ek3d` 项目包。
+7. 观察 recoverable missing-asset problem，然后用 stable asset ID 替换资产并清除 problem。
+
+`pnpm test:browser` 使用 headless Chromium 跑 browser-level evidence：runtime picking、TransformControls smoke、React/Vue demo checklist parity、hierarchy/status/problem badge 断言，以及 canvas 非空渲染 smoke。测试避免像素级 WebGL 比对，优先验证用户可观察且稳定的状态。
 
 ## 对象选择与多选
 
@@ -78,7 +92,7 @@ Runtime 内部有 transaction 结构：
 - `rotate`
 - `scale`
 
-设计目标是一段拖拽最终只产生一个 undoable command，而不是每次 pointer move 都写 history。React/Vue workbench 默认开启可视 transform control；proof-loop demo 的 toolbar 也提供 mode、snap、camera、undo/redo 和 nudge 按钮，用于验证同一套状态是否在层级、status 和 checklist 中同步。
+设计目标是一段拖拽最终只产生一个 undoable command，而不是每次 pointer move 都写 history。React/Vue workbench 默认开启可视 transform control；proof-loop demo 的 toolbar 也提供 mode、snap、camera、undo/redo 和 nudge 按钮，用于验证同一套状态是否在层级、status 和 checklist 中同步。TransformControls、helper、drag preview 和 camera controls 都是 runtime/UI state，不进入 Snapshot。
 
 多对象 transaction 会把多个 `set-transform` 子命令合成一个 `batch` command。`snap` 支持 translation、rotation、scale increment helper；吸附结果进入 durable transform，吸附设置本身仍是 editor/session state。
 
@@ -158,7 +172,7 @@ React 和 Vue proof-loop demo 的侧栏包含：
 - Scene hierarchy：显示对象名称、asset ID、selected/primary 标记和 problem badge。
 - Object operations：通过 core operations 触发 select all、copy、paste、duplicate、delete、group、ungroup。
 - Assets and problems：列出 snapshot asset references，并提供一个 demo 级缺失 GLB 资产替换按钮。
-- Proof checklist：从当前 selection、history、transform mode、snap、runtime problems 和本次 demo session 派生验证进度。
+- Proof checklist：从当前 selection、material assignment、history、transform mode、snap、runtime problems 和本次 demo session 派生验证进度。
 
 Checklist 不是 durable project state。导出 `.ek3d`、导入 `.ek3d` 或序列化 Scene Snapshot 时，不会保存 checklist 进度、camera/control 状态、runtime problems、`File`、`Blob`、object URL 或 resolver 结果。
 

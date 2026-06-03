@@ -11,15 +11,19 @@ The core contract now stores a versioned scene snapshot. Version 2 keeps the fir
 - editable light definitions for ambient, directional, hemisphere, point, and spot lights
 - richer framework-neutral problem metadata for validation, resolver, and runtime diagnostics
 
-The proof loop remains intentionally narrow:
+The proof loop remains intentionally narrow, but the local React and Vue demos now expose it as an interactive workbench:
 
 - import a GLB through a stable asset reference
 - select the imported object
-- commit one transform command
+- orbit/reset/frame the transient camera without serializing camera state
+- click/select through the viewport or hierarchy
+- commit one transform command, including visual gizmo-backed transactions in the runtime
 - undo and redo that transform
+- edit supported object-level `MeshStandardMaterial` overrides and project them visibly at runtime
 - serialize a portable JSON snapshot
 - restore the snapshot into an equivalent core/runtime scene
 - export/import an experimental `.ek3d` project package when binary payloads should travel with the snapshot
+- surface and recover a missing asset by stable asset ID
 
 ## Packages
 
@@ -39,6 +43,16 @@ Vue and React packages now include a shared inspector surface over the core cont
 
 The framework packages also expose `EditorWorkbench` and `useWorkbench()` convenience surfaces. They compose the existing viewport, inspector, snapshot subscription, runtime problem observation, project import/export, asset replacement, and command dispatch into a compact editor shell. React customization uses render props; Vue customization uses scoped slots. These shell extension regions receive the core editor, current snapshot, inspector model, runtime problems, and dispatch helper, but they do not expose private runtime projectors or create a core plugin API.
 
+## Local Demo Verification
+
+- `pnpm dev:demo:react`: run the React proof-loop workbench locally.
+- `pnpm dev:demo:vue`: run the Vue proof-loop workbench locally.
+- `pnpm test:browser`: run headless Chromium browser tests for picking, transform controls, canvas smoke checks, and React/Vue demo checklist parity.
+
+Run `pnpm exec playwright install chromium` once before `pnpm test:browser` on a fresh machine. Linux CI images may also need Playwright's Chromium system dependencies installed.
+
+In each framework demo, the visible validation path is camera helper use, hierarchy or viewport selection, transform/history, material inspector edit, hierarchy operation, project export/reopen, and missing-asset replacement. The checklist is derived UI state; it is not written into snapshots or `.ek3d` packages.
+
 ## Release Commands
 
 - `pnpm changeset`: record package-facing release intent.
@@ -48,4 +62,4 @@ The framework packages also expose `EditorWorkbench` and `useWorkbench()` conven
 
 ## Current Non-Goals
 
-Hierarchy panels, durable light selection, full toolbar systems, dockable or persisted layouts, schema-driven inspector plugins, material texture projection onto GLB meshes, shadows, helper gizmos, cloud asset libraries, marketplace metadata, decoder configuration, multi-select, data binding, event orchestration, stable non-`0.x` API guarantees, and hosted runtime publishing are deferred follow-up work.
+Box/lasso selection, system clipboard formats, full asset libraries, cloud asset storage, model marketplaces, local import queues, dockable or persisted layouts, schema-driven inspector plugins, per-submesh material slot discovery, full GLTF material graph editing, shadows, advanced light helpers, animation timelines, data binding, event orchestration, hosted publishing, stable non-`0.x` API guarantees, and Le5le-style low-code runtime workflows are deferred follow-up work.
