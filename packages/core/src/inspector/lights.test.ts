@@ -8,8 +8,10 @@ describe("light inspector commands", () => {
     const editor = createEditor();
     editor.dispatch({ type: "add-light", light: { id: "ambient-a", kind: "ambient" } });
     editor.dispatch({ type: "add-light", light: { id: "sun", kind: "directional" } });
+    editor.dispatch({ type: "select-node", nodeId: "ambient-a" });
 
     const ambient = buildLightSection(editor.getSnapshot(), "ambient-a");
+    editor.dispatch({ type: "select-node", nodeId: "sun" });
     const directional = buildLightSection(editor.getSnapshot(), "sun");
 
     expect(ambient.fields.map((field) => field.id)).not.toContain("target.x");
@@ -21,7 +23,9 @@ describe("light inspector commands", () => {
     editor.dispatch({ type: "add-light", light: { id: "ambient-a", kind: "ambient" } });
     editor.dispatch({ type: "add-light", light: { id: "hemi-a", kind: "hemisphere" } });
 
+    editor.dispatch({ type: "select-node", nodeId: "ambient-a" });
     const ambient = buildLightSection(editor.getSnapshot(), "ambient-a");
+    editor.dispatch({ type: "select-node", nodeId: "hemi-a" });
     const hemisphere = buildLightSection(editor.getSnapshot(), "hemi-a");
 
     expect(ambient.fields.find((field) => field.id === "color")?.value).toBe("#ffffff");
@@ -73,6 +77,38 @@ describe("light inspector commands", () => {
     editor.dispatch({ type: "add-light", light: { id: "light-b", kind: "ambient" } });
 
     expect(getNextActiveLightId(editor.getSnapshot(), "light-a")).toBe("light-b");
+  });
+
+  it("derives the active light target from selected light nodes", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
+    editor.dispatch({ type: "add-light", light: { id: "light-b", kind: "point" } });
+    editor.dispatch({ type: "select-node", nodeId: "light-b" });
+
+    const section = buildLightSection(editor.getSnapshot(), "light-a");
+
+    expect(section.activeLightId).toBe("light-b");
+    expect(section.activeLightNodeId).toBe("light-b");
+    expect(section.fields).not.toEqual([]);
+    expect(section.lights).toEqual([
+      expect.objectContaining({ id: "light-a", nodeId: "light-a", active: false, selected: false }),
+      expect.objectContaining({ id: "light-b", nodeId: "light-b", active: true, selected: true })
+    ]);
+  });
+
+  it("does not expose a light edit target when no light node is selected", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+
+    const section = buildLightSection(editor.getSnapshot(), "light-a");
+
+    expect(section.activeLightId).toBeNull();
+    expect(section.activeLightNodeId).toBeNull();
+    expect(section.fields).toEqual([]);
+    expect(section.reason).toBe("Select a light node to edit scene lighting.");
+    expect(section.lights[0]).toEqual(expect.objectContaining({ id: "light-a", nodeId: "light-a", active: false, selected: false }));
   });
 
   it("rejects out-of-range light numeric drafts before dispatch", () => {

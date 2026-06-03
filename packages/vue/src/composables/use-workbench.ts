@@ -3,7 +3,6 @@ import {
   buildInspectorModel,
   createEditor,
   executeEditorAction,
-  resolveActiveLightId,
   type AdvancedEditorOperations,
   type Command,
   type Editor,
@@ -38,9 +37,16 @@ export interface WorkbenchContext {
   runtime: EditorRuntime | null;
   runtimeReady: boolean;
   activeLightId: string | null;
+  activeLightNodeId: string | null;
   operations: AdvancedEditorOperations;
   historyState: HistoryState;
   selectionCount: number;
+  selectedNodeId: string | null;
+  selectedNodeIds: string[];
+  selectedNodeKind: InspectorModel["selection"]["nodeKind"];
+  selectedObjectId: string | null;
+  selectedObjectIds: string[];
+  selectedLightId: string | null;
   snap: SnapSettings;
   transformMode: TransformMode;
   setActiveLightId(value: string | null): void;
@@ -91,7 +97,6 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   const snapshot = shallowRef(currentEditor.value.getSnapshot());
   const snap = shallowRef<SnapSettings>(currentEditor.value.snap.get());
   const transformMode = ref<TransformMode>(currentEditor.value.transformMode.get());
-  const activeLightId = ref<string | null>(resolveActiveLightId(snapshot.value, null));
   const runtime = shallowRef<EditorRuntime | null>(markRuntimeRaw(currentEditor.value.getRuntime()));
   const runtimeProblems = shallowRef<Problem[]>(currentEditor.value.getRuntime()?.getProblems() ?? []);
   let unsubscribeSnapshot: (() => void) | null = null;
@@ -105,10 +110,8 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     cleanupSubscriptions();
     unsubscribeSnapshot = nextEditor.subscribe((nextSnapshot) => {
       snapshot.value = nextSnapshot;
-      activeLightId.value = resolveActiveLightId(nextSnapshot, activeLightId.value);
     });
     snapshot.value = nextEditor.getSnapshot();
-    activeLightId.value = resolveActiveLightId(snapshot.value, activeLightId.value);
     unsubscribeRuntime = nextEditor.subscribeRuntime(() => {
       runtime.value = markRuntimeRaw(nextEditor.getRuntime());
       subscribeRuntimeProblems();
@@ -165,7 +168,20 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   }
 
   function setActiveLightId(value: string | null): void {
-    activeLightId.value = value;
+    if (!value) {
+      const snapshot = currentEditor.value.getSnapshot();
+      const selectedNode = snapshot.selection.nodeId ? snapshot.nodes[snapshot.selection.nodeId] : undefined;
+      if (selectedNode?.kind === "light") {
+        currentEditor.value.dispatch({ type: "select-nodes", mode: "clear" });
+      }
+      return;
+    }
+
+    const target = Object.values(currentEditor.value.getSnapshot().nodes)
+      .find((node) => node.kind === "light" && node.lightId === value);
+    if (target) {
+      currentEditor.value.dispatch({ type: "select-node", nodeId: target.id });
+    }
   }
 
   function setTransformMode(mode: TransformMode): void {
@@ -225,10 +241,13 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
 
   const inspector = computed(() =>
     buildInspectorModel(snapshot.value, {
-      activeLightId: activeLightId.value,
       runtimeProblems: runtimeProblems.value
     })
   );
+  const activeLightId = computed({
+    get: () => inspector.value.lights.activeLightId,
+    set: setActiveLightId
+  });
   const context = computed<WorkbenchContext>(() => ({
     editor: currentEditor.value,
     snapshot: snapshot.value,
@@ -237,9 +256,16 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     runtime: runtime.value,
     runtimeReady: runtime.value !== null,
     activeLightId: activeLightId.value,
+    activeLightNodeId: inspector.value.lights.activeLightNodeId,
     operations: currentEditor.value.operations,
     historyState: currentEditor.value.getHistoryState(),
     selectionCount: inspector.value.selection.count,
+    selectedNodeId: inspector.value.selection.nodeId,
+    selectedNodeIds: inspector.value.selection.nodeIds,
+    selectedNodeKind: inspector.value.selection.nodeKind,
+    selectedObjectId: inspector.value.selection.objectId,
+    selectedObjectIds: inspector.value.selection.objectIds,
+    selectedLightId: inspector.value.selection.lightId,
     snap: snap.value,
     transformMode: transformMode.value,
     setActiveLightId,

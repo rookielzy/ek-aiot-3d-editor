@@ -12,8 +12,44 @@ describe("transform inspector commands", () => {
 
     expect(result).toEqual({
       ok: true,
-      command: { type: "set-transform", objectId: "object-a", transform: { position: [4, 2, 3] } }
+      command: { type: "set-node-transform", nodeId: "object-a", transform: { position: [4, 2, 3] } }
     });
+  });
+
+  it("builds set-node-transform commands for group nodes", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "create-group", nodeId: "group-a", transform: { position: [1, 2, 3] }, select: true });
+
+    const result = buildSetTransformCommand(editor.getSnapshot(), "rotation.y", 0.5);
+
+    expect(result).toEqual({
+      ok: true,
+      command: { type: "set-node-transform", nodeId: "group-a", transform: { rotation: [0, 0.5, 0] } }
+    });
+  });
+
+  it("builds set-node-transform commands for spatial light nodes", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "add-light", light: { id: "point-a", kind: "point", transform: { position: [1, 2, 3] } } });
+    editor.dispatch({ type: "select-node", nodeId: "point-a" });
+
+    const result = buildSetTransformCommand(editor.getSnapshot(), "position.z", 6);
+
+    expect(result).toEqual({
+      ok: true,
+      command: { type: "set-node-transform", nodeId: "point-a", transform: { position: [1, 2, 6] } }
+    });
+  });
+
+  it("returns a controlled problem for non-spatial light nodes", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "add-light", light: { id: "ambient-a", kind: "ambient" } });
+    editor.dispatch({ type: "select-node", nodeId: "ambient-a" });
+
+    const result = buildSetTransformCommand(editor.getSnapshot(), "position.x", 4);
+
+    expect(result.ok).toBe(false);
+    expect(result.ok ? undefined : result.problem.message).toBe("Ambient lights do not have transform controls.");
   });
 
   it("returns a controlled problem without selection", () => {

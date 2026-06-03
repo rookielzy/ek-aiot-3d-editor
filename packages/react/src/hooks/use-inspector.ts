@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   buildInspectorModel,
-  resolveActiveLightId,
   type Editor,
   type InspectorModel,
   type Problem,
@@ -24,16 +23,11 @@ export interface UseInspectorResult {
 
 export function useInspector({ editor }: UseInspectorOptions): UseInspectorResult {
   const snapshot = useEditorSnapshot(editor);
-  const [activeLightId, setActiveLightId] = useState<string | null>(() => resolveActiveLightId(editor.getSnapshot(), null));
   const [runtimeProblems, setRuntimeProblems] = useState<Problem[]>(() => editor.getRuntime()?.getProblems() ?? []);
 
   const refreshProblems = useCallback(() => {
     setRuntimeProblems(editor.getRuntime()?.getProblems() ?? []);
   }, [editor]);
-
-  useEffect(() => {
-    setActiveLightId((current) => resolveActiveLightId(snapshot, current));
-  }, [snapshot]);
 
   useEffect(() => {
     let unsubscribeProblems: (() => void) | null = null;
@@ -54,9 +48,26 @@ export function useInspector({ editor }: UseInspectorOptions): UseInspectorResul
   }, [editor]);
 
   const inspector = useMemo(
-    () => buildInspectorModel(snapshot, { activeLightId, runtimeProblems }),
-    [snapshot, activeLightId, runtimeProblems]
+    () => buildInspectorModel(snapshot, { runtimeProblems }),
+    [snapshot, runtimeProblems]
   );
+  const activeLightId = inspector.lights.activeLightId;
+  const setActiveLightId = useCallback((lightId: string | null) => {
+    if (!lightId) {
+      const snapshot = editor.getSnapshot();
+      const selectedNode = snapshot.selection.nodeId ? snapshot.nodes[snapshot.selection.nodeId] : undefined;
+      if (selectedNode?.kind === "light") {
+        editor.dispatch({ type: "select-nodes", mode: "clear" });
+      }
+      return;
+    }
+
+    const target = Object.values(editor.getSnapshot().nodes)
+      .find((node) => node.kind === "light" && node.lightId === lightId);
+    if (target) {
+      editor.dispatch({ type: "select-node", nodeId: target.id });
+    }
+  }, [editor]);
 
   return {
     activeLightId,

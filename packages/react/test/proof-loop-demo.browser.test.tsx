@@ -39,7 +39,9 @@ async function verifyDemoFlow(host: HTMLElement): Promise<void> {
     expect(text(testId(host, "demo-hierarchy"))).toContain("Simple box");
     expect(text(testId(host, "demo-hierarchy"))).toContain("simple-box");
     expect(text(testId(host, "demo-hierarchy"))).toContain("Recoverable asset");
+    expect(text(testId(host, "demo-hierarchy"))).toContain("Ambient light");
   });
+  expect(testId(host, "demo-hierarchy").querySelector('[data-node-kind="light"][data-light-id="fill"]')).toBeTruthy();
   expect(text(testId(host, "demo-selection-count"))).toContain("Simple box (1)");
   expect(text(testId(host, "demo-assets"))).toContain("recoverable-box");
 

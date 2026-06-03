@@ -1,4 +1,4 @@
-import type { SetTransformCommand } from "../commands/types";
+import type { SetNodeTransformCommand } from "../commands/types";
 import type { SceneSnapshot, Transform } from "../snapshot/types";
 import { numberField } from "./fields";
 import { getSelectedNodeTarget } from "./node-targets";
@@ -34,13 +34,6 @@ export function buildSetTransformCommand(snapshot: SceneSnapshot, fieldId: Trans
   if (!target.node || !target.transform) {
     return problem(fieldId, target.transformUnavailableReason ?? "No selected transformable node to edit.");
   }
-  if (target.node.kind !== "object") {
-    return problem(fieldId, "Node transform commands are not available yet.");
-  }
-  const object = snapshot.objects[target.node.objectId];
-  if (!object) {
-    return problem(fieldId, "Selected object payload does not exist.");
-  }
 
   const [vector, axis] = fieldId.split(".") as [TransformVectorName, TransformAxis];
   const parsed = parseFiniteNumber(value, fieldId);
@@ -49,12 +42,12 @@ export function buildSetTransformCommand(snapshot: SceneSnapshot, fieldId: Trans
   }
 
   const axisIndex = AXES.indexOf(axis);
-  const nextVector = [...object.transform[vector]] as [number, number, number];
+  const nextVector = [...target.transform[vector]] as [number, number, number];
   nextVector[axisIndex] = parsed.value;
 
-  const command: SetTransformCommand = {
-    type: "set-transform",
-    objectId: object.id,
+  const command: SetNodeTransformCommand = {
+    type: "set-node-transform",
+    nodeId: target.node.id,
     transform: {
       [vector]: nextVector
     } as Partial<Transform>

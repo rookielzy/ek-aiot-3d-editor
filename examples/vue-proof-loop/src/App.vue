@@ -144,7 +144,7 @@ import { computed, defineComponent, h, reactive, ref, watch, type PropType } fro
 import {
   AssetResolverBridge,
   type EditorRuntimeOptions,
-  type SceneObject,
+  type SceneNode,
   type SceneSnapshot
 } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench, useEditor, type WorkbenchContext } from "@ek-aiot/3d-editor-vue";
@@ -173,7 +173,8 @@ interface DemoSessionState {
 type DemoSessionKey = keyof DemoSessionState;
 
 interface HierarchyNodeModel {
-  object: SceneObject;
+  node: SceneNode;
+  secondary: string;
   depth: number;
   children: HierarchyNodeModel[];
 }
@@ -286,12 +287,13 @@ function reopenProject(context: WorkbenchContext): void {
 function deriveDemoState(context: WorkbenchContext, session: DemoSessionState) {
   const snapshot = context.snapshot;
   const objectCount = Object.keys(snapshot.objects).length;
+  const selectedNode = snapshot.selection.nodeId ? snapshot.nodes[snapshot.selection.nodeId] : undefined;
   const selectedObject = snapshot.selection.objectId ? snapshot.objects[snapshot.selection.objectId] : undefined;
   const transformMoved = Boolean(selectedObject && selectedObject.transform.position[0] > 0);
   const materialEdited = Object.keys(snapshot.materials.assignments).length > 0;
   const problemObjectIds = new Set(context.runtimeProblems.map((problem) => problem.objectId).filter((objectId): objectId is string => Boolean(objectId)));
   const checklist = [
-    { label: "Hierarchy lists seeded scene", complete: objectCount >= 3 },
+    { label: "Hierarchy lists seeded scene", complete: objectCount >= 3 && Object.keys(snapshot.lights).length > 0 },
     { label: "Selection is visible", complete: context.selectionCount > 0 },
     { label: "Camera helper used", complete: session.camera },
     { label: "Transform command changed history", complete: transformMoved && context.historyState.undoCount > 0 },
@@ -314,25 +316,40 @@ function deriveDemoState(context: WorkbenchContext, session: DemoSessionState) {
     completedCount: checklist.filter((item) => item.complete).length,
     problemCount: context.runtimeProblems.length,
     problemObjectIds,
-    selectionLabel: selectedObject ? `${selectedObject.name} (${context.selectionCount})` : `None (${context.selectionCount})`
+    selectionLabel: selectedNode ? `${selectedNode.name} (${context.selectionCount})` : `None (${context.selectionCount})`
   };
 }
 
 function buildHierarchy(snapshot: SceneSnapshot): HierarchyNodeModel[] {
-  const visit = (objectId: string, depth: number): HierarchyNodeModel | null => {
-    const object = snapshot.objects[objectId];
-    if (!object) {
+  const visit = (nodeId: string, depth: number): HierarchyNodeModel | null => {
+    const node = snapshot.nodes[nodeId];
+    if (!node) {
       return null;
     }
 
     return {
-      object,
+      node,
+      secondary: getHierarchySecondary(snapshot, node),
       depth,
-      children: object.children.map((childId) => visit(childId, depth + 1)).filter((node): node is HierarchyNodeModel => Boolean(node))
+      children: node.children.map((childId) => visit(childId, depth + 1)).filter((child): child is HierarchyNodeModel => Boolean(child))
     };
   };
 
-  return snapshot.rootObjectIds.map((objectId) => visit(objectId, 0)).filter((node): node is HierarchyNodeModel => Boolean(node));
+  return snapshot.rootNodeIds.map((nodeId) => visit(nodeId, 0)).filter((node): node is HierarchyNodeModel => Boolean(node));
+}
+
+function getHierarchySecondary(snapshot: SceneSnapshot, node: SceneNode): string {
+  if (node.kind === "object") {
+    return snapshot.objects[node.objectId]?.asset.id ?? node.objectId;
+  }
+  if (node.kind === "light") {
+    return snapshot.lights[node.lightId]?.kind ?? node.lightId;
+  }
+  return `${node.children.length} nodes`;
+}
+
+function formatNodeKind(kind: SceneNode["kind"]): string {
+  return kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 
 function formatSnapSummary(snap: WorkbenchContext["snap"]): string {
@@ -374,9 +391,9 @@ const DemoSidePanel = defineComponent({
         ]),
         state.value.hierarchy.length > 0
           ? h("ul", { class: "demo-hierarchy", "data-testid": "demo-hierarchy" }, state.value.hierarchy.map((node) =>
-              renderHierarchyNode(node, props.context, state.value.problemObjectIds, (objectId) => {
-                props.context.dispatch({ type: "select-object", objectId });
-                emit("status", `Selected ${objectId} from hierarchy`);
+              renderHierarchyNode(node, props.context, state.value.problemObjectIds, (nodeId) => {
+                props.context.dispatch({ type: "select-node", nodeId });
+                emit("status", `Selected ${nodeId} from hierarchy`);
               })
             ))
           : h("p", { class: "demo-empty" }, "No scene objects")
@@ -473,25 +490,28 @@ function renderHierarchyNode(
   node: HierarchyNodeModel,
   context: WorkbenchContext,
   problemObjectIds: Set<string>,
-  onSelect: (objectId: string) => void
+  onSelect: (nodeId: string) => void
 ) {
-  const selected = context.snapshot.selection.objectIds.includes(node.object.id);
-  const primary = context.snapshot.selection.objectId === node.object.id;
-  const problem = problemObjectIds.has(node.object.id);
+  const selected = context.snapshot.selection.nodeIds.includes(node.node.id);
+  const primary = context.snapshot.selection.nodeId === node.node.id;
+  const problem = node.node.kind === "object" && problemObjectIds.has(node.node.objectId);
 
-  return h("li", { key: node.object.id }, [
+  return h("li", { key: node.node.id }, [
     h("button", {
       type: "button",
       class: "demo-hierarchy__row",
       style: { "--depth": String(node.depth) },
-      "data-object-id": node.object.id,
+      "data-node-id": node.node.id,
+      "data-node-kind": node.node.kind,
+      "data-object-id": node.node.kind === "object" ? node.node.objectId : undefined,
+      "data-light-id": node.node.kind === "light" ? node.node.lightId : undefined,
       "data-selected": selected ? "true" : "false",
       "data-primary": primary ? "true" : "false",
-      onClick: () => onSelect(node.object.id)
+      onClick: () => onSelect(node.node.id)
     }, [
-      h("span", { class: "demo-hierarchy__marker" }, primary ? "Primary" : selected ? "Selected" : "Object"),
-      h("span", { class: "demo-hierarchy__name" }, node.object.name),
-      h("span", { class: "demo-hierarchy__asset" }, node.object.asset.id),
+      h("span", { class: "demo-hierarchy__marker" }, primary ? "Primary" : selected ? "Selected" : formatNodeKind(node.node.kind)),
+      h("span", { class: "demo-hierarchy__name" }, node.node.name),
+      h("span", { class: "demo-hierarchy__asset" }, node.secondary),
       problem ? h("span", { class: "demo-problem-dot" }, "Problem") : null
     ]),
     node.children.length > 0

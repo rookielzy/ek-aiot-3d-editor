@@ -76,6 +76,8 @@ describe("Vue proof-loop parity", () => {
     expect(wrapper.get('[data-testid="demo-hierarchy"]').text()).toContain("Simple box");
     expect(wrapper.get('[data-testid="demo-hierarchy"]').text()).toContain("simple-box");
     expect(wrapper.get('[data-testid="demo-hierarchy"]').text()).toContain("Recoverable asset");
+    expect(wrapper.get('[data-testid="demo-hierarchy"]').text()).toContain("Ambient light");
+    expect(wrapper.get('[data-testid="demo-hierarchy"]').find('[data-node-kind="light"][data-light-id="fill"]').exists()).toBe(true);
     expect(wrapper.get('[data-testid="demo-selection-count"]').text()).toContain("Simple box (1)");
     expect(wrapper.get('[data-testid="demo-assets"]').text()).toContain("recoverable-box");
 

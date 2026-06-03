@@ -13,7 +13,7 @@ export interface TransformInspectorProps {
 }
 
 export function TransformInspector({ editor, snapshot, section }: TransformInspectorProps) {
-  const targetKey = snapshot.selection.objectId ?? "none";
+  const targetKey = snapshot.selection.nodeId ?? "none";
 
   function commit(fieldId: TransformFieldId, value: string) {
     const result = buildSetTransformCommand(snapshot, fieldId, value);

@@ -28,7 +28,7 @@ describe("Vue InspectorPanel", () => {
     await input.setValue("4");
     await input.trigger("blur");
 
-    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "set-transform", objectId: "object-a", transform: { position: [4, 0, 0] } });
+    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "set-node-transform", nodeId: "object-a", transform: { position: [4, 0, 0] } });
     expect(editor.getSnapshot().objects["object-a"].transform.position).toEqual([4, 0, 0]);
 
     wrapper.unmount();

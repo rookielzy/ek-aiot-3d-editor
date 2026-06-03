@@ -3,7 +3,6 @@ import {
   buildAddLightCommand,
   buildRemoveLightCommand,
   buildUpdateLightCommand,
-  getNextActiveLightId,
   type Editor,
   type LightFieldId,
   type LightInspectorSection,
@@ -29,7 +28,8 @@ export function LightInspector({ editor, snapshot, section, onActiveLightIdChang
     const result = buildAddLightCommand(kind);
     if (result.ok) {
       const dispatch = editor.dispatch(result.command);
-      onActiveLightIdChange(Object.keys(dispatch.snapshot.lights).at(-1) ?? null);
+      const nextLightId = Object.keys(dispatch.snapshot.lights).at(-1) ?? null;
+      onActiveLightIdChange(nextLightId);
       setAddKind("");
     }
   }
@@ -48,11 +48,9 @@ export function LightInspector({ editor, snapshot, section, onActiveLightIdChang
     if (!section.activeLightId) {
       return;
     }
-    const nextActiveId = getNextActiveLightId(snapshot, section.activeLightId);
     const result = buildRemoveLightCommand(snapshot, section.activeLightId);
     if (result.ok) {
       editor.dispatch(result.command);
-      onActiveLightIdChange(nextActiveId);
     }
   }
 
@@ -81,7 +79,14 @@ export function LightInspector({ editor, snapshot, section, onActiveLightIdChang
       {section.lights.length ? (
         <div className="ek-inspector-light-list" role="list">
           {section.lights.map((light) => (
-            <button key={light.id} type="button" className={light.active ? "is-active" : ""} onClick={() => onActiveLightIdChange(light.id)}>
+            <button
+              key={light.id}
+              type="button"
+              className={light.active ? "is-active" : ""}
+              data-node-id={light.nodeId ?? undefined}
+              data-selected={light.selected ? "true" : "false"}
+              onClick={() => onActiveLightIdChange(light.id)}
+            >
               <span>{light.label}</span>
               <small>{light.kind}</small>
             </button>
@@ -90,6 +95,7 @@ export function LightInspector({ editor, snapshot, section, onActiveLightIdChang
       ) : (
         <p className="ek-inspector-empty">{section.reason}</p>
       )}
+      {section.empty && section.reason && section.lights.length > 0 ? <p className="ek-inspector-empty">{section.reason}</p> : null}
       {section.activeLightId ? (
         <div className="ek-inspector-grid">
           {section.fields.map((field) => (

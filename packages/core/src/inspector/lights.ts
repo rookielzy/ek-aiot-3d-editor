@@ -1,5 +1,6 @@
 import type { AddLightCommand, RemoveLightCommand, UpdateLightCommand } from "../commands/types";
 import type { LightDefinition, LightKind } from "../lights/types";
+import { findLightNodeId } from "../snapshot/nodes";
 import { colorField, numberField, parseFiniteNumber, selectField, textField, type NumberRange } from "./fields";
 import type { InspectorCommandProblem, InspectorCommandResult, LightFieldId, LightInspectorSection, LightListItem } from "./types";
 import type { SceneSnapshot } from "../snapshot/types";
@@ -16,14 +17,17 @@ const NUMBER_RANGES = {
 type LightPatchResult = { ok: true; patch: Partial<LightDefinition> } | { ok: false; problem: InspectorCommandProblem };
 
 export function resolveActiveLightId(snapshot: SceneSnapshot, activeLightId?: string | null): string | null {
-  if (activeLightId && snapshot.lights[activeLightId]) {
-    return activeLightId;
+  void activeLightId;
+  const selectedLightId = getSelectedLightId(snapshot);
+  if (selectedLightId) {
+    return selectedLightId;
   }
-  return Object.keys(snapshot.lights)[0] ?? null;
+  return null;
 }
 
 export function buildLightSection(snapshot: SceneSnapshot, activeLightId?: string | null): LightInspectorSection {
   const resolvedActiveLightId = resolveActiveLightId(snapshot, activeLightId);
+  const activeLightNodeId = resolvedActiveLightId ? findLightNodeId(snapshot, resolvedActiveLightId) : null;
   const activeLight = resolvedActiveLightId ? snapshot.lights[resolvedActiveLightId] : null;
 
   return {
@@ -31,8 +35,9 @@ export function buildLightSection(snapshot: SceneSnapshot, activeLightId?: strin
     title: "Lights",
     enabled: true,
     empty: !activeLight,
-    reason: activeLight ? undefined : "Add a light to edit scene lighting.",
+    reason: activeLight ? undefined : getLightSectionEmptyReason(snapshot),
     activeLightId: resolvedActiveLightId,
+    activeLightNodeId,
     lights: buildLightList(snapshot, resolvedActiveLightId),
     addOptions: LIGHT_KINDS.map((kind) => ({ value: kind, label: formatLightKind(kind) })),
     fields: activeLight ? buildLightFields(activeLight) : []
@@ -85,12 +90,29 @@ export function getNextActiveLightId(snapshot: SceneSnapshot, removedLightId: st
 }
 
 function buildLightList(snapshot: SceneSnapshot, activeLightId: string | null): LightListItem[] {
-  return Object.values(snapshot.lights).map((light) => ({
-    id: light.id,
-    label: light.name,
-    kind: light.kind,
-    active: light.id === activeLightId
-  }));
+  return Object.values(snapshot.lights).map((light) => {
+    const nodeId = findLightNodeId(snapshot, light.id);
+    const selected = Boolean(nodeId && snapshot.selection.nodeIds.includes(nodeId));
+    return {
+      id: light.id,
+      nodeId,
+      label: light.name,
+      kind: light.kind,
+      active: light.id === activeLightId,
+      selected
+    };
+  });
+}
+
+function getSelectedLightId(snapshot: SceneSnapshot): string | null {
+  const node = snapshot.selection.nodeId ? snapshot.nodes[snapshot.selection.nodeId] : undefined;
+  return node?.kind === "light" && snapshot.lights[node.lightId] ? node.lightId : null;
+}
+
+function getLightSectionEmptyReason(snapshot: SceneSnapshot): string {
+  return Object.keys(snapshot.lights).length === 0
+    ? "Add a light to edit scene lighting."
+    : "Select a light node to edit scene lighting.";
 }
 
 function buildLightFields(light: LightDefinition) {

@@ -1,7 +1,6 @@
-import { computed, getCurrentInstance, onBeforeUnmount, ref, shallowRef, toRaw, watch, type ComputedRef, type Ref, type ShallowRef } from "vue";
+import { computed, getCurrentInstance, onBeforeUnmount, shallowRef, toRaw, type ComputedRef, type Ref, type ShallowRef } from "vue";
 import {
   buildInspectorModel,
-  resolveActiveLightId,
   type Editor,
   type InspectorModel,
   type Problem,
@@ -26,7 +25,6 @@ export function useInspector(options: UseInspectorOptions): UseInspectorResult {
   const editor = toRaw(options.editor);
   const localSnapshot = shallowRef(editor.getSnapshot());
   const snapshot = computed(() => options.snapshot?.value ?? localSnapshot.value);
-  const activeLightId = ref<string | null>(resolveActiveLightId(snapshot.value, null));
   const runtimeProblems = shallowRef<Problem[]>(editor.getRuntime()?.getProblems() ?? []);
   let unsubscribeSnapshot: (() => void) | null = editor.subscribe((nextSnapshot) => {
     localSnapshot.value = nextSnapshot;
@@ -50,16 +48,31 @@ export function useInspector(options: UseInspectorOptions): UseInspectorResult {
     subscribeRuntimeProblems();
   });
 
-  watch(snapshot, (nextSnapshot) => {
-    activeLightId.value = resolveActiveLightId(nextSnapshot, activeLightId.value);
-  });
-
   const inspector = computed(() =>
     buildInspectorModel(snapshot.value, {
-      activeLightId: activeLightId.value,
       runtimeProblems: runtimeProblems.value
     })
   );
+  const activeLightId = computed({
+    get: () => inspector.value.lights.activeLightId,
+    set: setActiveLightId
+  });
+
+  function setActiveLightId(lightId: string | null): void {
+    if (!lightId) {
+      const selectedNode = snapshot.value.selection.nodeId ? snapshot.value.nodes[snapshot.value.selection.nodeId] : undefined;
+      if (selectedNode?.kind === "light") {
+        editor.dispatch({ type: "select-nodes", mode: "clear" });
+      }
+      return;
+    }
+
+    const target = Object.values(editor.getSnapshot().nodes)
+      .find((node) => node.kind === "light" && node.lightId === lightId);
+    if (target) {
+      editor.dispatch({ type: "select-node", nodeId: target.id });
+    }
+  }
 
   function dispose(): void {
     unsubscribeSnapshot?.();
