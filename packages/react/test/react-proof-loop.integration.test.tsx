@@ -86,6 +86,11 @@ describe("React proof-loop parity", () => {
     await clickButton("Snap move");
     expect(screen.getByText("Snap/mode status visible").closest("li")?.dataset.complete).toBe("true");
 
+    const baseColorInput = screen.getByLabelText("Base color") as HTMLInputElement;
+    fireEvent.change(baseColorInput, { target: { value: "#00aa88" } });
+    await act(async () => undefined);
+    expect(screen.getByText("Material inspector changed runtime").closest("li")?.dataset.complete).toBe("true");
+
     await clickButton("Duplicate");
     expect(screen.getByText("Copy/paste or duplicate ran").closest("li")?.dataset.complete).toBe("true");
 

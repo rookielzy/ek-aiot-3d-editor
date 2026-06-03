@@ -4,6 +4,7 @@
     :resolver="resolver"
     :loader="demoLoader"
     :renderer-factory="rendererFactory"
+    viewport-class-name="demo-viewport"
     :show-default-toolbar="false"
   >
     <template #toolbar="context">
@@ -138,7 +139,7 @@
 </template>
 
 <script setup lang="ts">
-import { BoxGeometry, Mesh, MeshBasicMaterial } from "three";
+import { BoxGeometry, Mesh, MeshStandardMaterial } from "three";
 import { computed, defineComponent, h, reactive, ref, watch, type PropType } from "vue";
 import {
   AssetResolverBridge,
@@ -203,7 +204,7 @@ const demoLoader: EditorRuntimeOptions["loader"] = {
     const assetId = typeof resolved.metadata?.assetId === "string" ? resolved.metadata.assetId : undefined;
     const label = typeof resolved.metadata?.label === "string" ? resolved.metadata.label : undefined;
     const color = assetId === RECOVERABLE_ASSET_ID ? "#f59e0b" : "#3b82f6";
-    const mesh = new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial({ color }));
+    const mesh = new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial({ color }));
     mesh.name = label ?? assetId ?? "Demo mesh";
     return mesh;
   }
@@ -287,12 +288,14 @@ function deriveDemoState(context: WorkbenchContext, session: DemoSessionState) {
   const objectCount = Object.keys(snapshot.objects).length;
   const selectedObject = snapshot.selection.objectId ? snapshot.objects[snapshot.selection.objectId] : undefined;
   const transformMoved = Boolean(selectedObject && selectedObject.transform.position[0] > 0);
+  const materialEdited = Object.keys(snapshot.materials.assignments).length > 0;
   const problemObjectIds = new Set(context.runtimeProblems.map((problem) => problem.objectId).filter((objectId): objectId is string => Boolean(objectId)));
   const checklist = [
     { label: "Hierarchy lists seeded scene", complete: objectCount >= 3 },
     { label: "Selection is visible", complete: context.selectionCount > 0 },
     { label: "Camera helper used", complete: session.camera },
     { label: "Transform command changed history", complete: transformMoved && context.historyState.undoCount > 0 },
+    { label: "Material inspector changed runtime", complete: materialEdited },
     { label: "Undo is available", complete: context.historyState.undoCount > 0 },
     { label: "Redo is available", complete: context.historyState.redoCount > 0 },
     { label: "Hierarchy operation changed nesting", complete: session.grouped || Object.values(snapshot.objects).some((object) => object.children.length > 0) },

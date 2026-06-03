@@ -1,15 +1,25 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import vue from "@vitejs/plugin-vue";
+import { playwright } from "@vitest/browser-playwright";
 
 export default defineConfig({
   plugins: [react(), vue()],
   test: {
-    environment: "jsdom",
     globals: true,
     include: ["packages/**/*.browser.test.{ts,tsx}"],
     exclude: ["**/node_modules/**", "**/dist/**"],
-    pool: "threads"
+    browser: {
+      enabled: true,
+      provider: playwright(),
+      headless: true,
+      instances: [
+        {
+          browser: "chromium",
+          viewport: { width: 1280, height: 900 }
+        }
+      ]
+    }
   },
   resolve: {
     alias: {
