@@ -18,10 +18,10 @@ describe("react public API", () => {
   it("exposes the install-ready workbench contract from the package root", () => {
     const regionName: WorkbenchRegionName = "leftPanel";
     const props: Pick<EditorWorkbenchProps, "leftPanel" | "rightPanel" | "sidePanel" | "status"> = {
-      leftPanel: (context: WorkbenchContext) => context.selection.count,
+      leftPanel: (context: WorkbenchContext) => context.model.hierarchy.totalCount,
       rightPanel: (context) => context.problems.totalCount,
       sidePanel: (context) => context.history.undoCount,
-      status: (context) => context.project.exportProject().ok ? "ok" : "blocked"
+      status: (context) => context.model.status.problemCount === 0 && context.project.exportProject().ok ? "ok" : "blocked"
     };
 
     expect(regionName).toBe("leftPanel");

@@ -119,6 +119,21 @@ export type {
   ReplaceAssetResult
 } from "./project/project-api";
 export type {
+  BuildWorkbenchModelOptions,
+  WorkbenchAssetItem,
+  WorkbenchAssetModel,
+  WorkbenchHierarchyModel,
+  WorkbenchHierarchyRow,
+  WorkbenchMissingAssetItem,
+  WorkbenchModel,
+  WorkbenchProblemsModel,
+  WorkbenchProblemItem,
+  WorkbenchProjectModel,
+  WorkbenchSelectionModel,
+  WorkbenchStatusModel,
+  WorkbenchToolbarModel
+} from "./workbench/workbench-model";
+export type {
   EditorRuntime,
   EditorRuntimeOptions,
   RendererLike,
@@ -179,6 +194,9 @@ export {
   buildInspectorModel,
   getInspectorSelection
 } from "./inspector/selection";
+export {
+  buildWorkbenchModel
+} from "./workbench/workbench-model";
 export {
   buildEnvironmentSection
 } from "./inspector/environment";

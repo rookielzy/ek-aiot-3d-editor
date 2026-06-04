@@ -1,6 +1,7 @@
 import { computed, getCurrentInstance, markRaw, onBeforeUnmount, ref, shallowRef, watch, type ComputedRef, type Ref, type ShallowRef } from "vue";
 import {
   buildInspectorModel,
+  buildWorkbenchModel,
   createEditor,
   executeEditorAction,
   type AdvancedEditorOperations,
@@ -9,6 +10,8 @@ import {
   type EditorAction,
   type EditorOptions,
   type EditorRuntime,
+  type WorkbenchModel,
+  type WorkbenchProblemItem,
   type HistoryState,
   type InspectorModel,
   type Problem,
@@ -63,7 +66,7 @@ export interface WorkbenchAssetContext {
 }
 
 export interface WorkbenchProblemsContext {
-  items: InspectorModel["problems"]["problems"];
+  items: WorkbenchProblemItem[];
   runtime: Problem[];
   authoredCount: number;
   runtimeCount: number;
@@ -73,6 +76,7 @@ export interface WorkbenchProblemsContext {
 
 export interface WorkbenchContext {
   editor: Editor;
+  model: WorkbenchModel;
   snapshot: SceneSnapshot;
   inspector: InspectorModel;
   selection: WorkbenchSelectionContext;
@@ -116,6 +120,7 @@ export interface UseWorkbenchResult {
   editor: Editor;
   snapshot: ShallowRef<SceneSnapshot>;
   inspector: ComputedRef<InspectorModel>;
+  model: ComputedRef<WorkbenchModel>;
   runtimeProblems: ShallowRef<Problem[]>;
   runtime: ShallowRef<EditorRuntime | null>;
   activeLightId: Ref<string | null>;
@@ -293,22 +298,33 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
       runtimeProblems: runtimeProblems.value
     })
   );
+  const model = computed(() =>
+    buildWorkbenchModel(snapshot.value, {
+      inspector: inspector.value,
+      runtimeProblems: runtimeProblems.value,
+      history: currentEditor.value.getHistoryState(),
+      snap: snap.value,
+      transformMode: transformMode.value,
+      runtimeReady: runtime.value !== null
+    })
+  );
   const activeLightId = computed({
     get: () => inspector.value.lights.activeLightId,
     set: setActiveLightId
   });
   const context = computed<WorkbenchContext>(() => ({
     editor: currentEditor.value,
+    model: model.value,
     snapshot: snapshot.value,
     inspector: inspector.value,
     selection: {
-      count: inspector.value.selection.count,
-      nodeId: inspector.value.selection.nodeId,
-      nodeIds: inspector.value.selection.nodeIds,
-      nodeKind: inspector.value.selection.nodeKind,
-      objectId: inspector.value.selection.objectId,
-      objectIds: inspector.value.selection.objectIds,
-      lightId: inspector.value.selection.lightId
+      count: model.value.selection.count,
+      nodeId: model.value.selection.nodeId,
+      nodeIds: model.value.selection.nodeIds,
+      nodeKind: model.value.selection.nodeKind,
+      objectId: model.value.selection.objectId,
+      objectIds: model.value.selection.objectIds,
+      lightId: model.value.selection.lightId
     },
     history: currentEditor.value.getHistoryState(),
     transform: {
@@ -331,11 +347,11 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
       replaceAsset
     },
     problems: {
-      items: inspector.value.problems.problems,
+      items: model.value.problems.items,
       runtime: runtimeProblems.value,
-      authoredCount: inspector.value.problems.problems.filter((problem) => !problem.runtime).length,
-      runtimeCount: runtimeProblems.value.length,
-      totalCount: inspector.value.problems.problems.length,
+      authoredCount: model.value.problems.authoredCount,
+      runtimeCount: model.value.problems.runtimeCount,
+      totalCount: model.value.problems.totalCount,
       refresh: subscribeRuntimeProblems
     },
     runtimeProblems: runtimeProblems.value,
@@ -345,13 +361,13 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     activeLightNodeId: inspector.value.lights.activeLightNodeId,
     operations: currentEditor.value.operations,
     historyState: currentEditor.value.getHistoryState(),
-    selectionCount: inspector.value.selection.count,
-    selectedNodeId: inspector.value.selection.nodeId,
-    selectedNodeIds: inspector.value.selection.nodeIds,
-    selectedNodeKind: inspector.value.selection.nodeKind,
-    selectedObjectId: inspector.value.selection.objectId,
-    selectedObjectIds: inspector.value.selection.objectIds,
-    selectedLightId: inspector.value.selection.lightId,
+    selectionCount: model.value.selection.count,
+    selectedNodeId: model.value.selection.nodeId,
+    selectedNodeIds: model.value.selection.nodeIds,
+    selectedNodeKind: model.value.selection.nodeKind,
+    selectedObjectId: model.value.selection.objectId,
+    selectedObjectIds: model.value.selection.objectIds,
+    selectedLightId: model.value.selection.lightId,
     snap: snap.value,
     transformMode: transformMode.value,
     setActiveLightId,
@@ -374,6 +390,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     },
     snapshot,
     inspector,
+    model,
     runtimeProblems,
     runtime,
     activeLightId,
