@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { EditorViewport, EditorWorkbench, InspectorPanel, useEditor, useEditorSnapshot, useInspector, useWorkbench } from "./index";
+import { EditorViewport, EditorWorkbench, InspectorPanel, useEditor, useEditorSnapshot, useInspector, useWorkbench, type EditorWorkbenchProps, type WorkbenchContext, type WorkbenchRegionName } from "./index";
 
 describe("react public API", () => {
   it("exports only the thin React adapter surface", () => {
@@ -13,6 +13,22 @@ describe("react public API", () => {
     expect(useEditorSnapshot).toEqual(expect.any(Function));
     expect(useInspector).toEqual(expect.any(Function));
     expect(useWorkbench).toEqual(expect.any(Function));
+  });
+
+  it("exposes the install-ready workbench contract from the package root", () => {
+    const regionName: WorkbenchRegionName = "leftPanel";
+    const props: Pick<EditorWorkbenchProps, "leftPanel" | "rightPanel" | "sidePanel" | "status"> = {
+      leftPanel: (context: WorkbenchContext) => context.selection.count,
+      rightPanel: (context) => context.problems.totalCount,
+      sidePanel: (context) => context.history.undoCount,
+      status: (context) => context.project.exportProject().ok ? "ok" : "blocked"
+    };
+
+    expect(regionName).toBe("leftPanel");
+    expect(typeof props.leftPanel).toBe("function");
+    expect(typeof props.rightPanel).toBe("function");
+    expect(typeof props.sidePanel).toBe("function");
+    expect(typeof props.status).toBe("function");
   });
 
   it("declares React as peer dependency and core as workspace dependency", () => {

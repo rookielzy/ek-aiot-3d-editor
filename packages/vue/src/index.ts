@@ -6,9 +6,20 @@ export { default as MaterialInspector } from "./components/MaterialInspector.vue
 export { default as EnvironmentInspector } from "./components/EnvironmentInspector.vue";
 export { default as LightInspector } from "./components/LightInspector.vue";
 export { default as ProblemsPanel } from "./components/ProblemsPanel.vue";
+export type { EditorWorkbenchEmits, EditorWorkbenchProps, EditorWorkbenchSlots, WorkbenchRegionName } from "./components/EditorWorkbench.types";
 export { useEditor } from "./composables/use-editor";
 export type { UseEditorOptions, UseEditorResult } from "./composables/use-editor";
 export { useInspector } from "./composables/use-inspector";
 export type { UseInspectorOptions, UseInspectorResult } from "./composables/use-inspector";
 export { useWorkbench } from "./composables/use-workbench";
-export type { UseWorkbenchOptions, UseWorkbenchResult, WorkbenchContext } from "./composables/use-workbench";
+export type {
+  UseWorkbenchOptions,
+  UseWorkbenchResult,
+  WorkbenchAssetContext,
+  WorkbenchCameraContext,
+  WorkbenchContext,
+  WorkbenchProblemsContext,
+  WorkbenchProjectContext,
+  WorkbenchSelectionContext,
+  WorkbenchTransformContext
+} from "./composables/use-workbench";
