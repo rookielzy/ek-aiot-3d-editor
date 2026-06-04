@@ -52,7 +52,9 @@ describe("vue public API", () => {
       version: string;
     };
 
-    expect(Object.keys(packageJson.exports)).toEqual(["."]);
+    expect(Object.keys(packageJson.exports)).toEqual([".", "./styles.css"]);
+    expect(packageJson.exports["./styles.css"]).toBe("./dist/index.css");
+    expect(packageJson.exports).not.toHaveProperty("./components/EditorWorkbench.vue");
     expect(packageJson.description).toContain("Vue composables");
     expect(packageJson.files).toEqual(expect.arrayContaining(["dist", "README.md", "CHANGELOG.md"]));
     expect(packageJson.license).toBe("MIT");

@@ -12,7 +12,11 @@ Vue 是 peer dependency。
 
 ## 样式
 
-包产物包含 `dist/index.css`，package manifest 的 `style` 字段会指向该文件。当前 `exports` 只暴露包根入口，未暴露 CSS 子路径；宿主应用需要让构建系统读取 package `style` 字段，或在后续包配置中显式增加 CSS export 后再手动导入样式。
+包产物包含 `dist/index.css`，package manifest 的 `style` 字段会指向该文件。推荐从公开 CSS 子路径显式导入样式：
+
+```ts
+import "@ek-aiot/3d-editor-vue/styles.css";
+```
 
 ## Workbench 用法
 
@@ -37,6 +41,7 @@ Vue 是 peer dependency。
 <script setup lang="ts">
 import { AssetResolverBridge } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench, useEditor } from "@ek-aiot/3d-editor-vue";
+import "@ek-aiot/3d-editor-vue/styles.css";
 
 const { editor } = useEditor();
 const resolver = new AssetResolverBridge((asset) =>

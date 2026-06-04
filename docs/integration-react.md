@@ -12,7 +12,11 @@ React 和 React DOM 是 peer dependencies。
 
 ## 样式
 
-包产物包含 `dist/index.css`，package manifest 的 `style` 字段会指向该文件。当前 `exports` 只暴露包根入口，未暴露 CSS 子路径；宿主应用需要让构建系统读取 package `style` 字段，或在后续包配置中显式增加 CSS export 后再手动导入样式。
+包产物包含 `dist/index.css`，package manifest 的 `style` 字段会指向该文件。推荐从公开 CSS 子路径显式导入样式：
+
+```ts
+import "@ek-aiot/3d-editor-react/styles.css";
+```
 
 ## Workbench 用法
 
@@ -20,6 +24,7 @@ React 和 React DOM 是 peer dependencies。
 import { useMemo } from "react";
 import { AssetResolverBridge } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench, useEditor } from "@ek-aiot/3d-editor-react";
+import "@ek-aiot/3d-editor-react/styles.css";
 
 export function EditorPage() {
   const editor = useEditor();

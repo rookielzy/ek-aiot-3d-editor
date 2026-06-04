@@ -45,7 +45,20 @@ When the release PR is merged and no changesets remain, the same workflow runs `
 - tarball file-list checks for required dist, README, license, and changelog content
 - exclusion checks for sources, tests, fixtures, `.tsbuildinfo`, examples, and JavaScript source maps
 - temporary consumer install/import checks from the packed tarballs
+- fresh Vite React and Vite Vue consumer builds that import the package root API plus the documented `styles.css` CSS subpath and mount `EditorWorkbench`
 - private subpath import checks through package `exports`
+
+React and Vue packages intentionally expose only the package root and CSS subpath:
+
+```ts
+import { EditorWorkbench } from "@ek-aiot/3d-editor-react";
+import "@ek-aiot/3d-editor-react/styles.css";
+
+import { EditorWorkbench as VueEditorWorkbench } from "@ek-aiot/3d-editor-vue";
+import "@ek-aiot/3d-editor-vue/styles.css";
+```
+
+Do not document or rely on deep imports such as `@ek-aiot/3d-editor-react/components/*` or `@ek-aiot/3d-editor-vue/components/*`; the release verifier checks that those remain private.
 
 The packed shell manifests must contain registry-consumable semver ranges for `@ek-aiot/3d-editor-core`; workspace protocol ranges must not leak into tarballs.
 

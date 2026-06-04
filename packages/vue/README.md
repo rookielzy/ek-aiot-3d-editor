@@ -23,6 +23,15 @@ This package is experimental `0.x`. It tracks the current core package contract 
     </template>
   </EditorWorkbench>
 </template>
+
+<script setup lang="ts">
+import { AssetResolverBridge } from "@ek-aiot/3d-editor-core";
+import { EditorWorkbench, useEditor } from "@ek-aiot/3d-editor-vue";
+import "@ek-aiot/3d-editor-vue/styles.css";
+
+const { editor } = useEditor();
+const resolver = new AssetResolverBridge((asset) => asset.kind === "glb" ? { uri: `/assets/${asset.id}.glb` } : null);
+</script>
 ```
 
 Scoped slots receive the core editor, current snapshot, inspector model, runtime problems, active light state, selected node/object/light IDs, advanced operation helpers, selection count, project import/export helpers, asset replacement, and a dispatch helper. Runtime options such as `resolver`, loader, and renderer factory are passed through to core runtime mounting; Vue shell code does not resolve assets or serialize runtime problems.
