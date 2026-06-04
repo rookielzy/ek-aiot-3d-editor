@@ -1,5 +1,5 @@
 import React, { StrictMode } from "react";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Group } from "three";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -123,6 +123,36 @@ describe("React EditorWorkbench", () => {
     expect(duplicate).toHaveBeenCalledTimes(1);
   });
 
+  it("routes default project open and export controls through core project APIs", async () => {
+    const source = createEditor();
+    source.dispatch({
+      type: "import-glb",
+      objectId: "restored-object",
+      name: "Restored robot",
+      asset: { id: "restored-asset", label: "restored.glb", source: new Uint8Array([1, 2, 3]) }
+    });
+    const packageBytes = source.exportProject().packageBytes as Uint8Array;
+    const editor = createEditor();
+    const importProject = vi.spyOn(editor, "importProject");
+    const exportProject = vi.spyOn(editor, "exportProject");
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+
+    const fileInput = document.querySelector(".ek-workbench__file-input") as HTMLInputElement;
+    const file = new File([packageBytes], "restored.ek3d", { type: "application/octet-stream" });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    expect(await screen.findByText("Opened restored.ek3d")).toBeTruthy();
+    expect(importProject.mock.calls[0]?.[0]).toBeInstanceOf(Uint8Array);
+    expect(screen.getByText("Restored robot")).toBeTruthy();
+
+    fireEvent.click(screen.getByTitle("Export complete project"));
+
+    expect(exportProject).toHaveBeenLastCalledWith({ partial: false });
+    expect(await screen.findByText("Exported project")).toBeTruthy();
+  });
+
   it("renders the install-ready default shell when no regions are provided", () => {
     const editor = createEditor();
     editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Robot arm", asset: { id: "asset-a", label: "robot.glb" } });
@@ -136,15 +166,30 @@ describe("React EditorWorkbench", () => {
     expect(screen.getByLabelText("Inspector panel")).toBeTruthy();
     expect(screen.getByLabelText("Editor status")).toBeTruthy();
     expect(screen.getByText("Hierarchy")).toBeTruthy();
-    expect(screen.getByText("Assets")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Assets" })).toBeTruthy();
     expect(screen.getByText("Project")).toBeTruthy();
     expect(screen.getByText("Robot arm")).toBeTruthy();
     expect(screen.getByText("robot.glb")).toBeTruthy();
+    expect(screen.getByText("Project Ready")).toBeTruthy();
     expect(screen.getByText("Selection none")).toBeTruthy();
 
     fireEvent.click(screen.getByTitle("Select all"));
 
     expect(screen.getByText("Selection 2 nodes")).toBeTruthy();
+  });
+
+  it("selects hierarchy rows through core node selection and updates inspector and status", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "create-group", nodeId: "group-a", name: "Assembly" });
+    editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Robot arm", asset: { id: "asset-a", label: "robot.glb" }, parentId: "group-a" });
+
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+
+    fireEvent.click(screen.getByText("Robot arm"));
+
+    expect(editor.getSnapshot().selection.nodeId).toBe("object-a");
+    expect(screen.getByText("Selection Robot arm")).toBeTruthy();
+    expect((screen.getByLabelText("Position X") as HTMLInputElement).value).toBe("0");
   });
 
   it("supports explicit left/right region overrides while keeping sidePanel compatible", () => {
@@ -359,6 +404,40 @@ describe("React EditorWorkbench", () => {
       source: file,
       label: "box.glb",
       mimeType: "model/gltf-binary"
+    });
+  });
+
+  it("surfaces missing asset recovery in the default left panel", async () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a", label: "Missing box" } });
+    const replaceAsset = vi.spyOn(editor, "replaceAsset");
+
+    render(
+      <EditorWorkbench
+        editor={editor}
+        resolver={new AssetResolverBridge(() => null)}
+        rendererFactory={fakeRenderer}
+      />
+    );
+
+    await act(async () => {
+      await editor.getRuntime()?.project();
+    });
+
+    expect(await screen.findByLabelText("Missing asset recovery")).toBeTruthy();
+    const recoveryPanel = screen.getByLabelText("Missing asset recovery");
+    const input = recoveryPanel.querySelector("input") as HTMLInputElement;
+    const file = new File([new Uint8Array([1, 2, 3])], "recovered.glb", { type: "model/gltf-binary" });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    expect(replaceAsset).toHaveBeenCalledWith({
+      assetId: "asset-a",
+      source: file,
+      label: "recovered.glb",
+      mimeType: "model/gltf-binary"
+    });
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Missing asset recovery")).toBeNull();
     });
   });
 
