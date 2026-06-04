@@ -13,6 +13,7 @@ This package is experimental `0.x`. It tracks the current core package contract 
 ```tsx
 import { AssetResolverBridge } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench, useEditor } from "@ek-aiot/3d-editor-react";
+import "@ek-aiot/3d-editor-react/styles.css";
 
 const resolver = new AssetResolverBridge((asset) => asset.kind === "glb" ? { uri: `/assets/${asset.id}.glb` } : null);
 

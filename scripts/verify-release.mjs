@@ -21,6 +21,7 @@ export const releasePackages = [
     dir: "packages/react",
     frameworkPeers: ["react", "react-dom"],
     requiredFiles: ["package.json", "README.md", "CHANGELOG.md", "dist/index.js", "dist/index.css", "dist/index.d.ts"],
+    cssImport: "@ek-aiot/3d-editor-react/styles.css",
     forbiddenImport: "@ek-aiot/3d-editor-react/components/EditorWorkbench"
   },
   {
@@ -29,6 +30,7 @@ export const releasePackages = [
     dir: "packages/vue",
     frameworkPeers: ["vue"],
     requiredFiles: ["package.json", "README.md", "CHANGELOG.md", "dist/index.js", "dist/index.css", "dist/index.d.ts"],
+    cssImport: "@ek-aiot/3d-editor-vue/styles.css",
     forbiddenImport: "@ek-aiot/3d-editor-vue/components/EditorWorkbench.vue"
   }
 ];
@@ -84,6 +86,21 @@ function run(command, args, options = {}) {
   return result.stdout ?? "";
 }
 
+function runExpectFailure(command, args, options = {}) {
+  const result = spawnSync(command, args, {
+    cwd: options.cwd ?? rootDir,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, ...options.env }
+  });
+
+  if (result.status === 0) {
+    throw new Error(`${command} ${args.join(" ")} unexpectedly succeeded`);
+  }
+
+  return [result.stdout, result.stderr].filter(Boolean).join("\n");
+}
+
 async function readJson(path) {
   return JSON.parse(await readFile(path, "utf8"));
 }
@@ -107,9 +124,17 @@ export function assertPackageManifest(spec, manifest, options = {}) {
   assert(manifest.main === "./dist/index.js", `${spec.name} main must point at dist/index.js`);
   assert(manifest.module === "./dist/index.js", `${spec.name} module must point at dist/index.js`);
   assert(manifest.types === "./dist/index.d.ts", `${spec.name} types must point at dist/index.d.ts`);
-  assert(Object.keys(manifest.exports ?? {}).join(",") === ".", `${spec.name} must only export the package root`);
+  const expectedExports = spec.cssImport ? [".", "./styles.css"] : ["."];
+  assert(Object.keys(manifest.exports ?? {}).join(",") === expectedExports.join(","), `${spec.name} must only export ${expectedExports.join(" and ")}`);
   assert(manifest.exports["."].import === "./dist/index.js", `${spec.name} root import export is incorrect`);
   assert(manifest.exports["."].types === "./dist/index.d.ts", `${spec.name} root types export is incorrect`);
+  if (spec.cssImport) {
+    assert(manifest.style === "./dist/index.css", `${spec.name} style must point at dist/index.css`);
+    assert(manifest.exports["./styles.css"] === "./dist/index.css", `${spec.name} CSS export must point at dist/index.css`);
+    assert(Array.isArray(manifest.sideEffects) && manifest.sideEffects.includes("./dist/index.css"), `${spec.name} must mark emitted CSS as a side effect`);
+    assert(!manifest.exports["./components/EditorWorkbench"], `${spec.name} must not expose private React component paths`);
+    assert(!manifest.exports["./components/EditorWorkbench.vue"], `${spec.name} must not expose private Vue component paths`);
+  }
   assert(Array.isArray(manifest.files), `${spec.name} must use a files allowlist`);
   for (const entry of ["dist", "README.md", "CHANGELOG.md"]) {
     assert(manifest.files.includes(entry), `${spec.name} files must include ${entry}`);
@@ -268,9 +293,12 @@ async function verifyConsumerInstall(tarballsByPackage) {
         vue: vueManifest.devDependencies.vue
       },
       devDependencies: {
+        "@vitejs/plugin-react": rootManifest.devDependencies["@vitejs/plugin-react"],
+        "@vitejs/plugin-vue": rootManifest.devDependencies["@vitejs/plugin-vue"],
         "@types/react": rootManifest.devDependencies["@types/react"],
         "@types/react-dom": rootManifest.devDependencies["@types/react-dom"],
-        typescript: rootManifest.devDependencies.typescript
+        typescript: rootManifest.devDependencies.typescript,
+        vite: rootManifest.devDependencies.vite
       },
       pnpm: {
         overrides: {
@@ -282,11 +310,21 @@ async function verifyConsumerInstall(tarballsByPackage) {
     await writeFile(join(tempDir, "package.json"), `${JSON.stringify(consumerManifest, null, 2)}\n`);
     await writeFile(join(tempDir, "runtime-check.mjs"), runtimeCheckSource());
     await writeFile(join(tempDir, "type-check.ts"), typeCheckSource());
+    await writeFile(join(tempDir, "private-subpath-check.ts"), privateSubpathCheckSource());
     await writeFile(join(tempDir, "tsconfig.json"), `${JSON.stringify(consumerTsconfig(), null, 2)}\n`);
+    await writeFile(join(tempDir, "tsconfig.private.json"), `${JSON.stringify(privateConsumerTsconfig(), null, 2)}\n`);
+    await writeViteConsumerFixtures(tempDir);
 
     run("pnpm", ["install", "--no-frozen-lockfile"], { cwd: tempDir });
     run("node", ["runtime-check.mjs"], { cwd: tempDir });
     run("pnpm", ["exec", "tsc", "-p", "tsconfig.json", "--noEmit"], { cwd: tempDir });
+    const privateImportOutput = runExpectFailure("pnpm", ["exec", "tsc", "-p", "tsconfig.private.json", "--noEmit"], { cwd: tempDir });
+    for (const specifier of releasePackages.map((spec) => spec.forbiddenImport).filter(Boolean)) {
+      assert(privateImportOutput.includes(specifier), `private subpath type check did not mention ${specifier}`);
+    }
+    const viteBin = join(tempDir, "node_modules/vite/bin/vite.js");
+    run("node", [viteBin, "build", "--config", "vite.config.ts"], { cwd: join(tempDir, "react-vite") });
+    run("node", [viteBin, "build", "--config", "vite.config.ts"], { cwd: join(tempDir, "vue-vite") });
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -337,6 +375,13 @@ editor.dispose();
 `;
 }
 
+function privateSubpathCheckSource() {
+  return `import "@ek-aiot/3d-editor-core/runtime/editor-runtime";
+import "@ek-aiot/3d-editor-react/components/EditorWorkbench";
+import "@ek-aiot/3d-editor-vue/components/EditorWorkbench.vue";
+`;
+}
+
 function consumerTsconfig() {
   return {
     compilerOptions: {
@@ -350,6 +395,76 @@ function consumerTsconfig() {
     },
     include: ["type-check.ts"]
   };
+}
+
+function privateConsumerTsconfig() {
+  return {
+    compilerOptions: {
+      target: "ES2022",
+      module: "ESNext",
+      moduleResolution: "Bundler",
+      strict: true,
+      skipLibCheck: false,
+      noEmit: true
+    },
+    include: ["private-subpath-check.ts"]
+  };
+}
+
+async function writeViteConsumerFixtures(tempDir) {
+  const reactDir = join(tempDir, "react-vite");
+  const vueDir = join(tempDir, "vue-vite");
+
+  await mkdir(join(reactDir, "src"), { recursive: true });
+  await mkdir(join(vueDir, "src"), { recursive: true });
+
+  await writeFile(join(reactDir, "index.html"), `<div id="root"></div><script type="module" src="/src/main.tsx"></script>\n`);
+  await writeFile(join(reactDir, "src/main.tsx"), `import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { EditorWorkbench } from "@ek-aiot/3d-editor-react";
+import "@ek-aiot/3d-editor-react/styles.css";
+
+const root = document.getElementById("root");
+if (!root) throw new Error("missing root");
+
+createRoot(root).render(
+  <StrictMode>
+    <EditorWorkbench />
+  </StrictMode>
+);
+`);
+  await writeFile(join(reactDir, "vite.config.ts"), `import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+export default defineConfig({
+  plugins: [react()],
+  build: {
+    outDir: "dist",
+    emptyOutDir: true
+  }
+});
+`);
+
+  await writeFile(join(vueDir, "index.html"), `<div id="app"></div><script type="module" src="/src/main.ts"></script>\n`);
+  await writeFile(join(vueDir, "src/main.ts"), `import { createApp, h } from "vue";
+import { EditorWorkbench } from "@ek-aiot/3d-editor-vue";
+import "@ek-aiot/3d-editor-vue/styles.css";
+
+createApp({
+  render: () => h(EditorWorkbench)
+}).mount("#app");
+`);
+  await writeFile(join(vueDir, "vite.config.ts"), `import { defineConfig } from "vite";
+import vue from "@vitejs/plugin-vue";
+
+export default defineConfig({
+  plugins: [vue()],
+  build: {
+    outDir: "dist",
+    emptyOutDir: true
+  }
+});
+`);
 }
 
 export async function verifyRelease() {

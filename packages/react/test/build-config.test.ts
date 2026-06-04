@@ -15,6 +15,21 @@ describe("React package build config", () => {
     expect(config).toContain("\"@ek-aiot/3d-editor-core\"");
   });
 
+  it("publishes the workbench CSS through a stable package subpath", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const config = readFileSync(resolve(here, "../vite.config.ts"), "utf8");
+    const packageJson = JSON.parse(readFileSync(resolve(here, "../package.json"), "utf8")) as {
+      exports: Record<string, unknown>;
+      sideEffects?: string[];
+      style?: string;
+    };
+
+    expect(config).toContain("cssFileName: \"index\"");
+    expect(packageJson.style).toBe("./dist/index.css");
+    expect(packageJson.exports["./styles.css"]).toBe("./dist/index.css");
+    expect(packageJson.sideEffects).toEqual(expect.arrayContaining(["./dist/index.css"]));
+  });
+
   it("keeps workbench CSS inside the package source boundary", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const css = readFileSync(resolve(here, "../src/components/workbench.css"), "utf8");

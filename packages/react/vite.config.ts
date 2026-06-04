@@ -7,7 +7,8 @@ export default defineConfig({
     lib: {
       entry: "src/index.ts",
       formats: ["es"],
-      fileName: "index"
+      fileName: "index",
+      cssFileName: "index"
     },
     rollupOptions: {
       external: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime", "@ek-aiot/3d-editor-core"]
