@@ -1,6 +1,6 @@
 # 集成指南：Vue
 
-`@ek-aiot/3d-editor-vue` 是 `@ek-aiot/3d-editor-core` 的 Vue 薄适配层，提供 composables、viewport、inspector 和 workbench shell。
+`@ek-aiot/3d-editor-vue` 是 `@ek-aiot/3d-editor-core` 的 Vue 适配层。默认路径是安装包、导入 CSS、渲染 `EditorWorkbench`，它会直接给出完整 editor shell：顶部工具栏、左侧 hierarchy/assets/project 面板、中心 3D viewport、右侧 inspector/problems 面板和底部状态栏。
 
 ## 安装
 
@@ -22,20 +22,7 @@ import "@ek-aiot/3d-editor-vue/styles.css";
 
 ```vue
 <template>
-  <EditorWorkbench :editor="editor" :resolver="resolver">
-    <template #toolbar="{ dispatch }">
-      <button
-        type="button"
-        @click="dispatch({ type: 'set-node-transform', nodeId: 'box', transform: { position: [1, 0, 0] } })"
-      >
-        Move
-      </button>
-    </template>
-
-    <template #status="{ snapshot, runtimeProblems }">
-      <span>Snapshot v{{ snapshot.version }} · {{ runtimeProblems.length }} runtime problems</span>
-    </template>
-  </EditorWorkbench>
+  <EditorWorkbench :editor="editor" :resolver="resolver" />
 </template>
 
 <script setup lang="ts">
@@ -59,6 +46,8 @@ if (!editor.getSnapshot().objects.box) {
 </script>
 ```
 
+不传 `toolbar`、`leftPanel`、`rightPanel` 或 `status` slot 时，Workbench 会使用 package-owned 默认 UI。默认 toolbar 已包含 open/export、undo/redo、transform mode、snap、camera、copy/paste/duplicate/delete/group/ungroup/select controls；默认左栏会显示 hierarchy、assets、project summary、project/runtime problems 和缺失资产恢复入口。
+
 ## Primitive 组件
 
 如果不使用 `EditorWorkbench`，可以直接组合：
@@ -81,8 +70,10 @@ const { editor, snapshot } = useEditor();
 Vue workbench 支持 scoped slots：
 
 - `toolbar`
-- `sidePanel`
+- `leftPanel`
+- `sidePanel`（兼容旧名称，推荐新代码使用 `leftPanel`）
 - `viewportOverlay`
+- `rightPanel`
 - `status`
 
 每个 slot 接收同一个上下文：
@@ -131,9 +122,9 @@ interface WorkbenchContext {
 pnpm --filter @ek-aiot/vue-proof-loop dev
 ```
 
-示例首屏就是可操作 workbench，不是 landing page。侧栏从 `SceneSnapshot.rootNodeIds` / `nodes` 派生 object/group/light 层级、资产列表和 proof checklist；toolbar 通过 `runAction()`、camera helpers 和 core operations 触发 transform mode、snap、undo/redo、copy/paste/duplicate/delete/group/ungroup、export/reopen 等验证动作。Inspector 可编辑 selected node transform、object-only material、environment 和 selected light 字段，其中 material override 会通过 runtime 投影到支持的 `MeshStandardMaterial` 对象。
+示例首屏就是可操作 workbench，不是 landing page。示例代码只保留真实宿主通常需要拥有的部分：创建 editor、初始化 starter snapshot、配置 resolver/loader、选择可选 renderer factory，以及一个很薄的 viewport overlay。toolbar、hierarchy、assets、project status、missing-asset recovery、inspector 和 status 都来自 `@ek-aiot/3d-editor-vue` 默认 Workbench。
 
-Demo checklist 只用于本地验证。它不会写入 snapshot、`.ek3d` 项目包或 Vue reactive store 之外的 durable editor 数据。缺失资产恢复按钮使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem。
+默认 UI 可以完成 starter flow：选择 hierarchy row、编辑 Transform/Material inspector、切换 snap/transform、undo/redo、duplicate、export partial package、通过 Open 重新载入 `.ek3d`、以及从左栏恢复缺失资产。缺失资产恢复使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem。
 
 浏览器证据通过仓库根目录命令运行：
 
@@ -141,7 +132,7 @@ Demo checklist 只用于本地验证。它不会写入 snapshot、`.ek3d` 项目
 pnpm test:browser
 ```
 
-该命令使用 headless Chromium 验证 Vue demo 的 hierarchy、selection、camera helper、transform/history、material inspector smoke、project export/reopen、missing-asset recovery、problem badge 和 canvas 非空渲染状态，并和 React demo 的 checklist 标签保持一致。它不是端到端托管发布测试，也不承诺完整资产库、外部 paste、数据绑定或事件编排能力。
+该命令使用 headless Chromium 验证 Vue starter 的默认 workbench 区域、selection、transform/history、material inspector smoke、project export/open、missing-asset recovery、problem status 和 canvas 非空渲染状态，并和 React starter 保持同等行为。它不是端到端托管发布测试，也不承诺完整资产库、外部 paste、数据绑定或事件编排能力。
 
 ## 响应式边界
 
@@ -151,6 +142,8 @@ Vue 适配层会把 editor/runtime 保持在浅层响应式或 raw 对象中。�
 - 不要直接改 `snapshot.value` 内部字段。
 - 持久化变更通过 `editor.dispatch()`。
 - runtime-only 对象不进入 Vue store。
+
+Pinia 或其他宿主 store 可以镜像可序列化的项目 metadata、当前 route、最近保存的 `SceneSnapshot` 或 `.ek3d` bytes。`Editor`、`EditorRuntime`、Three.js 对象、`File`、`Blob`、object URL、resolver 输出和 runtime problem 对象应保持 raw/shallow、client-owned，不作为 durable store state。需要给宿主 UI 同步状态时，优先从 `useWorkbench()` 或 scoped slot context 派生 serializable projection。
 
 ## 宿主拥有 editor 生命周期
 

@@ -10,119 +10,109 @@ import VueDemoStyles from "../../../examples/vue-proof-loop/src/styles.css?raw";
 import WorkbenchStyles from "../src/components/workbench.css?raw";
 import InspectorStyles from "../src/components/inspector.css?raw";
 
-describe("proof-loop demo browser verification", () => {
+describe("proof-loop starter demo browser verification", () => {
   let cleanup: (() => void) | null = null;
 
   afterEach(() => {
     cleanup?.();
     cleanup = null;
     document.body.innerHTML = "";
+    delete window.__lastDownloadedProject;
   });
 
-  it("drives the React demo through visible checklist states and canvas smoke checks", async () => {
+  it("drives the React starter through the package default workbench", async () => {
     const root = mountReactDemo();
     cleanup = root.cleanup;
 
-    await verifyDemoFlow(root.host);
+    await verifyStarterFlow(root.host);
   }, 15000);
 
-  it("drives the Vue demo through the same visible checklist states and final shape", async () => {
+  it("drives the Vue starter through the package default workbench", async () => {
     const root = mountVueDemo();
     cleanup = root.cleanup;
 
-    await verifyDemoFlow(root.host);
+    await verifyStarterFlow(root.host);
   }, 15000);
 });
 
-async function verifyDemoFlow(host: HTMLElement): Promise<void> {
-  await waitFor(() => {
-    expect(text(testId(host, "demo-hierarchy"))).toContain("Simple box");
-    expect(text(testId(host, "demo-hierarchy"))).toContain("simple-box");
-    expect(text(testId(host, "demo-hierarchy"))).toContain("Recoverable asset");
-    expect(text(testId(host, "demo-hierarchy"))).toContain("Ambient light");
-  });
-  expect(testId(host, "demo-hierarchy").querySelector('[data-node-kind="light"][data-light-id="fill"]')).toBeTruthy();
-  expect(text(testId(host, "demo-selection-count"))).toContain("Simple box (1)");
-  expect(text(testId(host, "demo-assets"))).toContain("recoverable-box");
+async function verifyStarterFlow(host: HTMLElement): Promise<void> {
+  const restoreDownloadCapture = installDownloadCapture();
+  try {
+    await waitFor(() => {
+      expect(text(section(host, "Hierarchy"))).toContain("Simple box");
+      expect(text(section(host, "Hierarchy"))).toContain("Recoverable asset");
+      expect(text(section(host, "Hierarchy"))).toContain("Ambient light");
+    });
+    expect(text(section(host, "Assets"))).toContain("Recoverable asset");
+    expect(text(section(host, "Assets"))).toContain("glb · referenced");
+    expect(text(testId(host, "starter-overlay"))).toContain("3 objects");
+    expect(text(host)).toContain("Selection Simple box");
 
-  const viewport = host.querySelector(".demo-viewport") as HTMLElement | null;
-  expect(viewport).toBeTruthy();
-  const canvas = viewport!.querySelector("canvas") as HTMLCanvasElement | null;
-  expect(canvas).toBeTruthy();
-  await waitFor(() => {
-    expect(canvas!.width).toBeGreaterThan(1);
-    expect(canvas!.height).toBeGreaterThan(1);
-    expect(canvas!.getBoundingClientRect().width).toBeGreaterThan(100);
-    expect(canvas!.getBoundingClientRect().height).toBeGreaterThan(100);
-    expect(hasNonBlankCanvasPixel(canvas!)).toBe(true);
-  });
+    const viewport = host.querySelector(".starter-viewport") as HTMLElement | null;
+    expect(viewport).toBeTruthy();
+    const canvas = viewport!.querySelector("canvas") as HTMLCanvasElement | null;
+    expect(canvas).toBeTruthy();
+    await waitFor(() => {
+      expect(canvas!.width).toBeGreaterThan(1);
+      expect(canvas!.height).toBeGreaterThan(1);
+      expect(canvas!.getBoundingClientRect().width).toBeGreaterThan(100);
+      expect(canvas!.getBoundingClientRect().height).toBeGreaterThan(100);
+      expect(hasNonBlankCanvasPixel(canvas!)).toBe(true);
+    });
 
-  await clickByText(host, "Nudge primary");
-  await expectChecklist(host, "Transform command changed history");
-  await expectChecklist(host, "Undo is available");
+    await clickByText(host, "Snap move");
+    expect(button(host, "Snap move")?.getAttribute("aria-pressed")).toBe("true");
 
-  await clickByText(host, "Undo");
-  await expectChecklist(host, "Redo is available");
-  await clickByText(host, "Redo");
+    const positionX = findFieldInput(host, "Position X", 'input[type="number"]') as HTMLInputElement | null;
+    expect(positionX, "Expected transform Position X input").toBeTruthy();
+    positionX!.value = "2";
+    positionX!.dispatchEvent(new Event("input", { bubbles: true }));
+    positionX!.dispatchEvent(new FocusEvent("blur", { bubbles: true }));
+    await waitFor(() => {
+      expect(text(host)).toContain("Undo 1");
+      expect(text(host)).toContain("Dirty");
+    });
 
-  await clickByText(host, "Frame selected");
-  await expectChecklist(host, "Camera helper used");
+    await clickByText(host, "Undo");
+    await waitFor(() => expect(text(host)).toContain("Redo 1"));
+    await clickByText(host, "Redo");
 
-  await clickByText(host, "Snap move");
-  await expectChecklist(host, "Snap/mode status visible");
-  expect(text(testId(host, "demo-toolbar-state"))).toContain("snap move");
+    const colorInput = findFieldInput(host, "Base color", 'input[type="color"]') as HTMLInputElement | null;
+    expect(colorInput, "Expected material inspector Base color input").toBeTruthy();
+    colorInput!.value = "#00aa88";
+    colorInput!.dispatchEvent(new Event("input", { bubbles: true }));
+    colorInput!.dispatchEvent(new Event("change", { bubbles: true }));
+    await waitFor(() => expect(text(host)).toContain("Dirty"));
 
-  const colorInput = findFieldInput(host, "Base color", 'input[type="color"]') as HTMLInputElement | null;
-  expect(colorInput, "Expected material inspector Base color input").toBeTruthy();
-  colorInput!.value = "#00aa88";
-  colorInput!.dispatchEvent(new Event("input", { bubbles: true }));
-  colorInput!.dispatchEvent(new Event("change", { bubbles: true }));
-  await expectChecklist(host, "Material inspector changed runtime");
-  await waitFor(() => {
-    expect(text(testId(host, "demo-status"))).toContain("Undo");
-  });
+    await clickByText(host, "Duplicate");
+    await waitFor(() => expect(text(section(host, "Project"))).toContain("Objects4"));
 
-  await clickByText(host, "Duplicate");
-  await expectChecklist(host, "Copy/paste or duplicate ran");
+    await clickByText(host, "Export partial");
+    await waitFor(() => expect(text(host)).toContain("Exported partial project"));
+    await waitFor(() => expect(window.__lastDownloadedProject).toBeInstanceOf(Uint8Array));
+    expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("asset-unresolved");
 
-  await clickByText(host, "Group demo");
-  await expectChecklist(host, "Hierarchy operation changed nesting");
+    const openInput = section(host, "Project actions").querySelector('input[type="file"]') as HTMLInputElement | null;
+    expect(openInput, "Expected default Open project file input").toBeTruthy();
+    await uploadFile(openInput!, new File([copyBytes(window.__lastDownloadedProject!)], "starter.ek3d", { type: "application/octet-stream" }));
+    await waitFor(() => expect(text(host)).toContain("Opened starter.ek3d"));
 
-  await clickByText(host, "Export project");
-  await expectChecklist(host, "Project exported");
+    await waitFor(() => {
+      expect(text(section(host, "Missing asset recovery"))).toContain("Replace asset");
+      expect(text(section(host, "Project"))).toContain("1 problems");
+    });
 
-  await clickByText(host, "Reopen package");
-  await expectChecklist(host, "Project reopened");
-  await waitFor(() => {
-    expect(text(testId(host, "demo-problem-badge"))).toContain("1 problems");
-    expect(text(testId(host, "demo-status"))).not.toContain("asset-unresolved");
-  });
-  await expectChecklist(host, "Missing asset surfaced");
-
-  await clickByText(host, "Replace missing asset");
-  await expectChecklist(host, "Missing asset recovered");
-  await waitFor(() => {
-    expect(text(testId(host, "demo-problem-badge"))).toContain("0 problems");
-  });
-  expect(text(testId(host, "demo-assets"))).toContain("recoverable-box");
-
-  const checklistLabels = checklist(host).map((item) => item.textContent?.replace(/^(OK|--)/, "").trim());
-  expect(checklistLabels).toEqual([
-    "Hierarchy lists seeded scene",
-    "Selection is visible",
-    "Camera helper used",
-    "Transform command changed history",
-    "Material inspector changed runtime",
-    "Undo is available",
-    "Redo is available",
-    "Hierarchy operation changed nesting",
-    "Copy/paste or duplicate ran",
-    "Project exported",
-    "Project reopened",
-    "Missing asset surfaced",
-    "Missing asset recovered",
-    "Snap/mode status visible"
-  ]);
+    const recoveryInput = section(host, "Missing asset recovery").querySelector('input[type="file"]') as HTMLInputElement | null;
+    expect(recoveryInput, "Expected default missing asset recovery input").toBeTruthy();
+    await uploadFile(recoveryInput!, new File([new Uint8Array([1, 2, 3, 4])], "recovered.glb", { type: "model/gltf-binary" }));
+    await waitFor(() => {
+      expect(host.querySelector('[aria-label="Missing asset recovery"]')).toBeNull();
+      expect(text(host)).toContain("Problems 0");
+    });
+    expect(text(section(host, "Assets"))).toContain("Recoverable asset");
+  } finally {
+    restoreDownloadCapture();
+  }
 }
 
 function mountReactDemo(): { host: HTMLElement; cleanup(): void } {
@@ -202,22 +192,20 @@ function hasNonBlankCanvasPixel(canvas: HTMLCanvasElement): boolean {
 }
 
 async function clickByText(host: HTMLElement, label: string): Promise<void> {
-  const button = [...host.querySelectorAll("button")].find((candidate) => text(candidate) === label);
-  expect(button, `Expected button ${label}`).toBeTruthy();
-  button!.click();
+  const target = button(host, label);
+  expect(target, `Expected button ${label}`).toBeTruthy();
+  target!.click();
   await waitForAnimationFrame();
 }
 
-async function expectChecklist(host: HTMLElement, label: string): Promise<void> {
-  await waitFor(() => {
-    const item = checklist(host).find((candidate) => text(candidate).includes(label));
-    expect(item, `Expected checklist item ${label}`).toBeTruthy();
-    expect(item!.dataset.complete).toBe("true");
-  });
+function button(host: HTMLElement, label: string): HTMLButtonElement | null {
+  return [...host.querySelectorAll("button")].find((candidate) => text(candidate) === label) ?? null;
 }
 
-function checklist(host: HTMLElement): HTMLLIElement[] {
-  return [...testId(host, "demo-checklist").querySelectorAll("li")];
+function section(host: HTMLElement, label: string): HTMLElement {
+  const element = host.querySelector(`[aria-label="${label}"]`) as HTMLElement | null;
+  expect(element, `Expected [aria-label="${label}"]`).toBeTruthy();
+  return element!;
 }
 
 function testId(host: HTMLElement, id: string): HTMLElement {
@@ -227,12 +215,21 @@ function testId(host: HTMLElement, id: string): HTMLElement {
 }
 
 function text(element: Element): string {
-  return element.textContent?.trim() ?? "";
+  return element.textContent?.replace(/\s+/g, " ").trim() ?? "";
 }
 
 function findFieldInput(host: HTMLElement, label: string, selector: string): Element | null {
   const field = [...host.querySelectorAll("label")].find((candidate) => text(candidate).includes(label));
   return field?.querySelector(selector) ?? null;
+}
+
+async function uploadFile(input: HTMLInputElement, file: File): Promise<void> {
+  Object.defineProperty(input, "files", {
+    configurable: true,
+    value: [file]
+  });
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  await waitForAnimationFrame();
 }
 
 async function waitFor(assertion: () => void, timeout = 4000): Promise<void> {
@@ -264,4 +261,36 @@ function installStyles(id: string, blocks: string[]): void {
 
 function removeStyles(id: string): void {
   document.getElementById(id)?.remove();
+}
+
+function installDownloadCapture(): () => void {
+  const originalCreateObjectURL = URL.createObjectURL;
+  const originalRevokeObjectURL = URL.revokeObjectURL;
+  const originalAnchorClick = HTMLAnchorElement.prototype.click;
+  URL.createObjectURL = ((blob: Blob) => {
+    void blob.arrayBuffer().then((buffer) => {
+      window.__lastDownloadedProject = new Uint8Array(buffer);
+    });
+    return "blob:starter-project";
+  }) as typeof URL.createObjectURL;
+  URL.revokeObjectURL = (() => undefined) as typeof URL.revokeObjectURL;
+  HTMLAnchorElement.prototype.click = () => undefined;
+
+  return () => {
+    URL.createObjectURL = originalCreateObjectURL;
+    URL.revokeObjectURL = originalRevokeObjectURL;
+    HTMLAnchorElement.prototype.click = originalAnchorClick;
+  };
+}
+
+function copyBytes(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
+declare global {
+  interface Window {
+    __lastDownloadedProject?: Uint8Array;
+  }
 }

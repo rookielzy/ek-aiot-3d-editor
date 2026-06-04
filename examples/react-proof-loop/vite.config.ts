@@ -5,9 +5,19 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: {
-      "@ek-aiot/3d-editor-core": fileURLToPath(new URL("../../packages/core/src/index.ts", import.meta.url)),
-      "@ek-aiot/3d-editor-react": fileURLToPath(new URL("../../packages/react/src/index.ts", import.meta.url))
-    }
+    alias: [
+      {
+        find: "@ek-aiot/3d-editor-react/styles.css",
+        replacement: fileURLToPath(new URL("../../packages/react/src/styles.css", import.meta.url))
+      },
+      {
+        find: "@ek-aiot/3d-editor-core",
+        replacement: fileURLToPath(new URL("../../packages/core/src/index.ts", import.meta.url))
+      },
+      {
+        find: "@ek-aiot/3d-editor-react",
+        replacement: fileURLToPath(new URL("../../packages/react/src/index.ts", import.meta.url))
+      }
+    ]
   }
 });

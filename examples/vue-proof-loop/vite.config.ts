@@ -5,9 +5,19 @@ import vue from "@vitejs/plugin-vue";
 export default defineConfig({
   plugins: [vue()],
   resolve: {
-    alias: {
-      "@ek-aiot/3d-editor-core": fileURLToPath(new URL("../../packages/core/src/index.ts", import.meta.url)),
-      "@ek-aiot/3d-editor-vue": fileURLToPath(new URL("../../packages/vue/src/index.ts", import.meta.url))
-    }
+    alias: [
+      {
+        find: "@ek-aiot/3d-editor-vue/styles.css",
+        replacement: fileURLToPath(new URL("../../packages/vue/src/styles.css", import.meta.url))
+      },
+      {
+        find: "@ek-aiot/3d-editor-core",
+        replacement: fileURLToPath(new URL("../../packages/core/src/index.ts", import.meta.url))
+      },
+      {
+        find: "@ek-aiot/3d-editor-vue",
+        replacement: fileURLToPath(new URL("../../packages/vue/src/index.ts", import.meta.url))
+      }
+    ]
   }
 });

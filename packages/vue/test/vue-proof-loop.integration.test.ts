@@ -64,70 +64,80 @@ describe("Vue proof-loop parity", () => {
     vue.dispose();
   });
 
-  it("renders the same local hierarchy, asset, and checklist validation surface", async () => {
-    const wrapper = mount(VueProofLoopApp, {
-      props: {
-        rendererFactory: fakeRenderer
-      }
-    });
-    await nextTick();
-    await nextTick();
+  it("uses the package default workbench as the local starter proof", async () => {
+    const restoreDownloadCapture = installDownloadCapture();
+    try {
+      const wrapper = mount(VueProofLoopApp, {
+        props: {
+          rendererFactory: fakeRenderer
+        }
+      });
+      await nextTick();
+      await nextTick();
 
-    expect(wrapper.get('[data-testid="demo-hierarchy"]').text()).toContain("Simple box");
-    expect(wrapper.get('[data-testid="demo-hierarchy"]').text()).toContain("simple-box");
-    expect(wrapper.get('[data-testid="demo-hierarchy"]').text()).toContain("Recoverable asset");
-    expect(wrapper.get('[data-testid="demo-hierarchy"]').text()).toContain("Ambient light");
-    expect(wrapper.get('[data-testid="demo-hierarchy"]').find('[data-node-kind="light"][data-light-id="fill"]').exists()).toBe(true);
-    expect(wrapper.get('[data-testid="demo-selection-count"]').text()).toContain("Simple box (1)");
-    expect(wrapper.get('[data-testid="demo-assets"]').text()).toContain("recoverable-box");
+      const toolbar = wrapper.get('[aria-label="Editor controls"]');
+      expect(buttonByText(toolbar, "Export").exists()).toBe(true);
+      expect(buttonByText(toolbar, "Move").attributes("aria-pressed")).toBe("true");
+      expect((buttonByText(toolbar, "Duplicate").element as HTMLButtonElement).disabled).toBe(false);
 
-    await clickButton(wrapper, "Nudge primary");
-    expect(checklistItem(wrapper, "Transform command changed history").attributes("data-complete")).toBe("true");
-    expect(checklistItem(wrapper, "Undo is available").attributes("data-complete")).toBe("true");
+      const projectPanel = wrapper.get('[aria-label="Project panel"]');
+      const hierarchy = projectPanel.get('[aria-label="Hierarchy"]');
+      expect(hierarchy.text()).toContain("Simple box");
+      expect(hierarchy.text()).toContain("Recoverable asset");
+      expect(hierarchy.text()).toContain("Ambient light");
+      const assets = projectPanel.get('[aria-label="Assets"]');
+      expect(assets.text()).toContain("Recoverable asset");
+      expect(assets.text()).toContain("glb · referenced");
+      expect(wrapper.get('[data-testid="starter-overlay"]').text()).toContain("3 objects");
+      expect(wrapper.text()).toContain("Selection Simple box");
 
-    await clickButton(wrapper, "Undo");
-    expect(checklistItem(wrapper, "Redo is available").attributes("data-complete")).toBe("true");
-    await clickButton(wrapper, "Redo");
+      await clickButton(wrapper, "Snap move");
+      expect(buttonByText(toolbar, "Snap move").attributes("aria-pressed")).toBe("true");
 
-    await clickButton(wrapper, "Frame selected");
-    expect(checklistItem(wrapper, "Camera helper used").attributes("data-complete")).toBe("true");
+      const positionX = fieldInput(wrapper, "Position X");
+      await positionX.setValue("2");
+      await positionX.trigger("blur");
+      await nextTick();
+      await waitForVue(() => expect(wrapper.text()).toContain("Undo 1"));
 
-    await clickButton(wrapper, "Snap move");
-    expect(checklistItem(wrapper, "Snap/mode status visible").attributes("data-complete")).toBe("true");
+      await clickButton(wrapper, "Undo");
+      expect(wrapper.text()).toContain("Redo 1");
+      await clickButton(wrapper, "Redo");
 
-    const baseColorInput = wrapper.findAll("label").find((candidate) => candidate.text().includes("Base color"))?.find('input[type="color"]');
-    expect(baseColorInput, "Expected Base color material input").toBeTruthy();
-    await baseColorInput!.setValue("#00aa88");
-    await nextTick();
-    expect(checklistItem(wrapper, "Material inspector changed runtime").attributes("data-complete")).toBe("true");
+      const baseColorInput = fieldInput(wrapper, "Base color");
+      await baseColorInput.setValue("#00aa88");
+      await nextTick();
+      await waitForVue(() => expect(wrapper.text()).toContain("Dirty"));
 
-    await clickButton(wrapper, "Duplicate");
-    expect(checklistItem(wrapper, "Copy/paste or duplicate ran").attributes("data-complete")).toBe("true");
+      await clickButton(wrapper, "Duplicate");
+      await waitForVue(() => expect(projectPanel.text()).toContain("Objects4"));
 
-    await clickButton(wrapper, "Group demo");
-    expect(checklistItem(wrapper, "Hierarchy operation changed nesting").attributes("data-complete")).toBe("true");
+      await clickButton(wrapper, "Export partial");
+      expect(wrapper.text()).toContain("Exported partial project");
+      await waitForVue(() => expect(window.__lastDownloadedProject).toBeInstanceOf(Uint8Array));
+      expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("asset-unresolved");
 
-    await clickButton(wrapper, "Export project");
-    expect(checklistItem(wrapper, "Project exported").attributes("data-complete")).toBe("true");
+      const bytes = window.__lastDownloadedProject;
+      expect(bytes).toBeInstanceOf(Uint8Array);
+      const openInput = toolbar.find('input[type="file"]');
+      await uploadFile(openInput.element as HTMLInputElement, new File([copyBytes(bytes!)], "starter.ek3d", { type: "application/octet-stream" }));
+      await waitForVue(() => expect(wrapper.text()).toContain("Opened starter.ek3d"));
 
-    await clickButton(wrapper, "Reopen package");
-    expect(checklistItem(wrapper, "Project reopened").attributes("data-complete")).toBe("true");
-    expect(wrapper.get('[data-testid="demo-status"]').text()).not.toContain("OK");
+      await waitForVue(() => expect(projectPanel.text()).toContain("Replace asset"));
+      expect(projectPanel.text()).toContain("1 problems");
 
-    await waitForVue(() => {
-      expect(checklistItem(wrapper, "Missing asset surfaced").attributes("data-complete")).toBe("true");
-      expect(wrapper.get('[data-testid="demo-problem-badge"]').text()).toContain("1 problems");
-    });
-    expect(wrapper.get('[data-testid="demo-status"]').text()).not.toContain("asset-unresolved");
+      const recoveryInput = projectPanel.find('[aria-label="Missing asset recovery"] input[type="file"]');
+      expect(recoveryInput.exists()).toBe(true);
+      await uploadFile(recoveryInput.element as HTMLInputElement, new File([new Uint8Array([1, 2, 3, 4])], "recovered.glb", { type: "model/gltf-binary" }));
+      await waitForVue(() => expect(projectPanel.text()).not.toContain("Replace asset"));
+      await waitForVue(() => expect(wrapper.text()).toContain("Problems 0"));
+      expect(projectPanel.text()).toContain("Recoverable asset");
+      expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("Blob");
 
-    await clickButton(wrapper, "Replace missing asset");
-    await waitForVue(() => {
-      expect(checklistItem(wrapper, "Missing asset recovered").attributes("data-complete")).toBe("true");
-      expect(wrapper.get('[data-testid="demo-problem-badge"]').text()).toContain("0 problems");
-    });
-    expect(wrapper.get('[data-testid="demo-assets"]').text()).toContain("recoverable-box");
-
-    wrapper.unmount();
+      wrapper.unmount();
+    } finally {
+      restoreDownloadCapture();
+    }
   }, 10000);
 });
 
@@ -139,15 +149,21 @@ async function clickButton(wrapper: ReturnType<typeof mount>, text: string): Pro
   await nextTick();
 }
 
-function checklistItem(wrapper: ReturnType<typeof mount>, label: string) {
-  const item = wrapper.findAll('[data-testid="demo-checklist"] li').find((candidate) => candidate.text().includes(label));
-  expect(item, `Expected checklist item ${label}`).toBeTruthy();
-  return item!;
+function buttonByText(wrapper: ReturnType<typeof mount> | ReturnType<ReturnType<typeof mount>["get"]>, text: string) {
+  const button = wrapper.findAll("button").find((candidate) => candidate.text() === text);
+  expect(button, `Expected button ${text}`).toBeTruthy();
+  return button!;
+}
+
+function fieldInput(wrapper: ReturnType<typeof mount>, label: string) {
+  const input = wrapper.findAll("label").find((candidate) => candidate.text().includes(label))?.find("input");
+  expect(input, `Expected input for ${label}`).toBeTruthy();
+  return input!;
 }
 
 async function waitForVue(assertion: () => void): Promise<void> {
   let lastError: unknown;
-  for (let index = 0; index < 10; index += 1) {
+  for (let index = 0; index < 20; index += 1) {
     try {
       assertion();
       return;
@@ -167,4 +183,47 @@ function fakeRenderer(container: HTMLElement): RendererLike {
     render() {},
     dispose() {}
   };
+}
+
+function installDownloadCapture(): () => void {
+  const originalCreateObjectURL = URL.createObjectURL;
+  const originalRevokeObjectURL = URL.revokeObjectURL;
+  const originalAnchorClick = HTMLAnchorElement.prototype.click;
+  URL.createObjectURL = ((blob: Blob) => {
+    void blob.arrayBuffer().then((buffer) => {
+      window.__lastDownloadedProject = new Uint8Array(buffer);
+    });
+    return "blob:starter-project";
+  }) as typeof URL.createObjectURL;
+  URL.revokeObjectURL = (() => undefined) as typeof URL.revokeObjectURL;
+  HTMLAnchorElement.prototype.click = () => undefined;
+
+  return () => {
+    URL.createObjectURL = originalCreateObjectURL;
+    URL.revokeObjectURL = originalRevokeObjectURL;
+    HTMLAnchorElement.prototype.click = originalAnchorClick;
+    delete window.__lastDownloadedProject;
+  };
+}
+
+async function uploadFile(input: HTMLInputElement, file: File): Promise<void> {
+  Object.defineProperty(input, "files", {
+    configurable: true,
+    value: [file]
+  });
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  await nextTick();
+  await nextTick();
+}
+
+function copyBytes(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
+declare global {
+  interface Window {
+    __lastDownloadedProject?: Uint8Array;
+  }
 }
