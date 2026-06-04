@@ -129,6 +129,45 @@ describe("Vue EditorWorkbench", () => {
     wrapper.unmount();
   });
 
+  it("routes default project open and export controls through core project APIs", async () => {
+    const source = markRaw(createEditor());
+    source.dispatch({
+      type: "import-glb",
+      objectId: "restored-object",
+      name: "Restored robot",
+      asset: { id: "restored-asset", label: "restored.glb", source: new Uint8Array([1, 2, 3]) }
+    });
+    const packageBytes = source.exportProject().packageBytes as Uint8Array;
+    const editor = markRaw(createEditor());
+    const importProject = vi.spyOn(editor, "importProject");
+    const exportProject = vi.spyOn(editor, "exportProject");
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer }
+    });
+
+    const fileInput = wrapper.find(".ek-workbench__file-input").element as HTMLInputElement;
+    const file = new File([packageBytes], "restored.ek3d", { type: "application/octet-stream" });
+    Object.defineProperty(fileInput, "files", {
+      configurable: true,
+      value: [file]
+    });
+    await wrapper.find(".ek-workbench__file-input").trigger("change");
+    await nextTick();
+
+    expect(wrapper.text()).toContain("Opened restored.ek3d");
+    expect(importProject.mock.calls[0]?.[0]).toBeInstanceOf(Uint8Array);
+    expect(wrapper.text()).toContain("Restored robot");
+
+    await wrapper.find('[title="Export complete project"]').trigger("click");
+    await nextTick();
+
+    expect(exportProject).toHaveBeenLastCalledWith({ partial: false });
+    expect(wrapper.text()).toContain("Exported project");
+    wrapper.unmount();
+  });
+
   it("renders the install-ready default shell when no slots are provided", async () => {
     const editor = markRaw(createEditor());
     editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Robot arm", asset: { id: "asset-a", label: "robot.glb" } });
@@ -148,12 +187,32 @@ describe("Vue EditorWorkbench", () => {
     expect(wrapper.text()).toContain("Project");
     expect(wrapper.text()).toContain("Robot arm");
     expect(wrapper.text()).toContain("robot.glb");
+    expect(wrapper.text()).toContain("Project Ready");
     expect(wrapper.text()).toContain("Selection none");
 
     await wrapper.find('[title="Select all"]').trigger("click");
     await nextTick();
 
     expect(wrapper.text()).toContain("Selection 2 nodes");
+    wrapper.unmount();
+  });
+
+  it("selects hierarchy rows through core node selection and updates inspector and status", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "create-group", nodeId: "group-a", name: "Assembly" });
+    editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Robot arm", asset: { id: "asset-a", label: "robot.glb" }, parentId: "group-a" });
+
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer }
+    });
+
+    await wrapper.findAll(".ek-workbench__tree-row").find((button) => button.text().includes("Robot arm"))!.trigger("click");
+    await nextTick();
+
+    expect(editor.getSnapshot().selection.nodeId).toBe("object-a");
+    expect(wrapper.text()).toContain("Selection Robot arm");
+    const transformSection = wrapper.findAll(".ek-inspector-section").find((section) => section.text().includes("Transform"));
+    expect(transformSection?.text()).toContain("Position X");
     wrapper.unmount();
   });
 
@@ -377,6 +436,44 @@ describe("Vue EditorWorkbench", () => {
     wrapper.unmount();
   });
 
+  it("surfaces missing asset recovery in the default left panel", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a", label: "Missing box" } });
+    const replaceAsset = vi.spyOn(editor, "replaceAsset");
+    const wrapper = mount(EditorWorkbench, {
+      props: {
+        editor,
+        resolver: new AssetResolverBridge(() => null),
+        rendererFactory: fakeRenderer
+      }
+    });
+
+    await editor.getRuntime()?.project();
+    await nextTick();
+
+    expect(wrapper.find('[aria-label="Missing asset recovery"]').exists()).toBe(true);
+    const input = wrapper.find('[aria-label="Missing asset recovery"] input').element as HTMLInputElement;
+    const file = new File([new Uint8Array([1, 2, 3])], "recovered.glb", { type: "model/gltf-binary" });
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [file]
+    });
+    await wrapper.find('[aria-label="Missing asset recovery"] input').trigger("change");
+    await waitForAssertion(() => {
+      expect(wrapper.find('[aria-label="Missing asset recovery"]').exists()).toBe(false);
+      expect(wrapper.text()).toContain("Problems 0");
+    });
+
+    expect(replaceAsset).toHaveBeenCalledWith({
+      assetId: "asset-a",
+      source: file,
+      label: "recovered.glb",
+      mimeType: "model/gltf-binary"
+    });
+    expect(editor.exportProject().ok).toBe(true);
+    wrapper.unmount();
+  });
+
   it("does not dispose a host-owned editor on unmount", () => {
     const editor = markRaw(createEditor());
     const wrapper = mount(EditorWorkbench, { props: { editor, rendererFactory: fakeRenderer } });
@@ -460,4 +557,26 @@ function fakeRenderer(container: HTMLElement): RendererLike {
     render() {},
     dispose() {}
   };
+}
+
+async function flushPromises(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await nextTick();
+}
+
+async function waitForAssertion(assertion: () => void, timeout = 1000): Promise<void> {
+  const started = Date.now();
+  let lastError: unknown;
+  while (Date.now() - started < timeout) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      await flushPromises();
+    }
+  }
+  throw lastError;
 }
