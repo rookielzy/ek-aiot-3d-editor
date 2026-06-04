@@ -6,6 +6,8 @@ import {
   type EditorOptions,
   type EditorRuntime,
   type AdvancedEditorOperations,
+  type WorkbenchModel,
+  type WorkbenchProblemItem,
   type HistoryState,
   type InspectorModel,
   type Problem,
@@ -21,7 +23,7 @@ import {
   type SnapSettings,
   type TransformMode
 } from "@ek-aiot/3d-editor-core";
-import { executeEditorAction } from "@ek-aiot/3d-editor-core";
+import { buildWorkbenchModel, executeEditorAction } from "@ek-aiot/3d-editor-core";
 import { useEditor } from "./use-editor";
 import { useInspector } from "./use-inspector";
 
@@ -63,7 +65,7 @@ export interface WorkbenchAssetContext {
 }
 
 export interface WorkbenchProblemsContext {
-  items: InspectorModel["problems"]["problems"];
+  items: WorkbenchProblemItem[];
   runtime: Problem[];
   authoredCount: number;
   runtimeCount: number;
@@ -73,6 +75,7 @@ export interface WorkbenchProblemsContext {
 
 export interface WorkbenchContext {
   editor: Editor;
+  model: WorkbenchModel;
   snapshot: SceneSnapshot;
   inspector: InspectorModel;
   selection: WorkbenchSelectionContext;
@@ -160,13 +163,21 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     }
   }, [editor, ownsEditor]);
   const historyState = editor.getHistoryState();
-  const selectedNodeId = inspector.inspector.selection.nodeId;
-  const selectedNodeIds = inspector.inspector.selection.nodeIds;
-  const selectedNodeKind = inspector.inspector.selection.nodeKind;
-  const selectedObjectId = inspector.inspector.selection.objectId;
-  const selectedObjectIds = inspector.inspector.selection.objectIds;
-  const selectedLightId = inspector.inspector.selection.lightId;
-  const selectionCount = inspector.inspector.selection.count;
+  const model = buildWorkbenchModel(inspector.snapshot, {
+    inspector: inspector.inspector,
+    runtimeProblems: inspector.runtimeProblems,
+    history: historyState,
+    snap,
+    transformMode,
+    runtimeReady: runtime !== null
+  });
+  const selectedNodeId = model.selection.nodeId;
+  const selectedNodeIds = model.selection.nodeIds;
+  const selectedNodeKind = model.selection.nodeKind;
+  const selectedObjectId = model.selection.objectId;
+  const selectedObjectIds = model.selection.objectIds;
+  const selectedLightId = model.selection.lightId;
+  const selectionCount = model.selection.count;
   const selection: WorkbenchSelectionContext = {
     count: selectionCount,
     nodeId: selectedNodeId,
@@ -195,19 +206,18 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   const assets: WorkbenchAssetContext = {
     replaceAsset
   };
-  const authoredProblems = inspector.inspector.problems.problems;
-  const authoredProblemCount = authoredProblems.filter((problem) => !problem.runtime).length;
   const problems: WorkbenchProblemsContext = {
-    items: authoredProblems,
+    items: model.problems.items,
     runtime: inspector.runtimeProblems,
-    authoredCount: authoredProblemCount,
-    runtimeCount: inspector.runtimeProblems.length,
-    totalCount: authoredProblems.length,
+    authoredCount: model.problems.authoredCount,
+    runtimeCount: model.problems.runtimeCount,
+    totalCount: model.problems.totalCount,
     refresh: inspector.refreshProblems
   };
 
   return {
     editor,
+    model,
     snapshot: inspector.snapshot,
     inspector: inspector.inspector,
     selection,

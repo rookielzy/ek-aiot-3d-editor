@@ -9,6 +9,7 @@ import {
   createNodeClipboardPayload,
   createEmptySnapshot,
   buildInspectorModel,
+  buildWorkbenchModel,
   buildSetTransformCommand,
   resolveEditorShortcut,
   snapNumber,
@@ -34,6 +35,7 @@ import {
   type AuthoredProblemState,
   type AssetOption,
   type BuildInspectorModelOptions,
+  type BuildWorkbenchModelOptions,
   type ClipboardSceneNode,
   type EditorNodeClipboardPayload,
   type EditorObjectClipboardPayload,
@@ -64,7 +66,8 @@ import {
   type TransformMode,
   type TransformVectorName,
   type UngroupNodesCommand,
-  type UpdateLightCommand
+  type UpdateLightCommand,
+  type WorkbenchModel
 } from "./index";
 
 describe("core public API", () => {
@@ -245,9 +248,13 @@ describe("core public API", () => {
     const snapshot = createEmptySnapshot("scene-a");
     const inspector: InspectorModel = buildInspectorModel(snapshot);
     const command: InspectorCommandResult = buildSetTransformCommand(snapshot, "position.x", 1);
+    const workbenchOptions: BuildWorkbenchModelOptions = { inspector };
+    const workbench: WorkbenchModel = buildWorkbenchModel(snapshot, workbenchOptions);
 
     expect(inspector.environment.enabled).toBe(true);
     expect(command.ok).toBe(false);
+    expect(workbench.project.sceneId).toBe("scene-a");
+    expect(workbench.hierarchy.empty).toBe(true);
   });
 
   it("exports advanced operation, clipboard, shortcut, and snap helpers", () => {
