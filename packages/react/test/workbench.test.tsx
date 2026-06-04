@@ -29,9 +29,10 @@ describe("React EditorWorkbench", () => {
 
     expect(screen.getByText("Objects 1")).toBeTruthy();
     expect(screen.getByText("Problems 0")).toBeTruthy();
-    expect(screen.getByText("Transform")).toBeTruthy();
-    expect(screen.getByText("Material")).toBeTruthy();
-    expect(screen.getByText("Lights")).toBeTruthy();
+    const inspectorPanel = screen.getByLabelText("Inspector panel");
+    expect(inspectorPanel.textContent).toContain("Transform");
+    expect(inspectorPanel.textContent).toContain("Material");
+    expect(inspectorPanel.textContent).toContain("Lights");
   });
 
   it("lets render-prop extensions dispatch core commands and observe the shared snapshot", () => {
@@ -122,6 +123,69 @@ describe("React EditorWorkbench", () => {
     expect(duplicate).toHaveBeenCalledTimes(1);
   });
 
+  it("renders the install-ready default shell when no regions are provided", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Robot arm", asset: { id: "asset-a", label: "robot.glb" } });
+    editor.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
+
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+
+    expect(screen.getByLabelText("Editor controls")).toBeTruthy();
+    expect(screen.getByLabelText("Project panel")).toBeTruthy();
+    expect(screen.getByLabelText("3D viewport")).toBeTruthy();
+    expect(screen.getByLabelText("Inspector panel")).toBeTruthy();
+    expect(screen.getByLabelText("Editor status")).toBeTruthy();
+    expect(screen.getByText("Hierarchy")).toBeTruthy();
+    expect(screen.getByText("Assets")).toBeTruthy();
+    expect(screen.getByText("Project")).toBeTruthy();
+    expect(screen.getByText("Robot arm")).toBeTruthy();
+    expect(screen.getByText("robot.glb")).toBeTruthy();
+    expect(screen.getByText("Selection none")).toBeTruthy();
+
+    fireEvent.click(screen.getByTitle("Select all"));
+
+    expect(screen.getByText("Selection 2 nodes")).toBeTruthy();
+  });
+
+  it("supports explicit left/right region overrides while keeping sidePanel compatible", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+
+    const { rerender } = render(
+      <EditorWorkbench
+        editor={editor}
+        rendererFactory={fakeRenderer}
+        leftPanel={({ assets, project, snapshot }) => (
+          <span>
+            Left {Object.keys(snapshot.assets).length}:{project.exportProject().ok ? "exportable" : "blocked"}:{typeof assets.replaceAsset}
+          </span>
+        )}
+        rightPanel={({ inspector }) => <span>Right {inspector.selection.count}</span>}
+      />
+    );
+
+    expect(screen.getByText("Left 1:blocked:function")).toBeTruthy();
+    expect(screen.getByText("Right 0")).toBeTruthy();
+    expect(screen.queryByText("Hierarchy")).toBeNull();
+    expect(screen.queryByText("Transform")).toBeNull();
+
+    rerender(
+      <EditorWorkbench
+        editor={editor}
+        rendererFactory={fakeRenderer}
+        sidePanel={({ selection, history, transform, camera, problems }) => (
+          <span>
+            Side {selection.count}:{history.undoCount}:{transform.mode}:{camera.ready ? "ready" : "missing"}:{problems.totalCount}
+          </span>
+        )}
+        rightPanel={({ editor }) => <span>Custom right {editor.disposed ? "disposed" : "usable"}</span>}
+      />
+    );
+
+    expect(screen.getByText("Side 0:1:translate:ready:0")).toBeTruthy();
+    expect(screen.getByText("Custom right usable")).toBeTruthy();
+  });
+
   it("can hide the default toolbar while preserving extension regions", () => {
     const editor = createEditor();
 
@@ -135,7 +199,7 @@ describe("React EditorWorkbench", () => {
     );
 
     expect(screen.queryByTitle("Move mode")).toBeNull();
-    expect(screen.getByText("Runtime ready")).toBeTruthy();
+    expect(screen.getAllByText("Runtime ready").length).toBeGreaterThan(0);
   });
 
   it("routes light list choices through node selection and exposes node-aware context", () => {
@@ -159,7 +223,9 @@ describe("React EditorWorkbench", () => {
 
     expect(screen.getByText(/Active none .* Node object-a:object .* Object object-a .* Light none/)).toBeTruthy();
 
-    fireEvent.click(screen.getByText("Point light"));
+    const pointLightButton = screen.getByLabelText("Inspector panel").querySelector('[data-node-id="light-b"]');
+    expect(pointLightButton).toBeTruthy();
+    fireEvent.click(pointLightButton as HTMLElement);
 
     expect(editor.getSnapshot().selection).toMatchObject({
       nodeId: "light-b",
@@ -237,7 +303,7 @@ describe("React EditorWorkbench", () => {
 
     expect(mountRuntime).toHaveBeenCalledWith(expect.objectContaining({ interactions }));
     expect(runtimeReady).toHaveBeenCalledWith(expect.objectContaining({ disposed: false }));
-    expect(screen.getByText("Runtime ready")).toBeTruthy();
+    expect(screen.getAllByText("Runtime ready").length).toBeGreaterThan(0);
 
     unmount();
 
@@ -263,7 +329,7 @@ describe("React EditorWorkbench", () => {
     });
 
     expect(await screen.findByText("Runtime problems 1")).toBeTruthy();
-    expect(screen.getByText("Asset could not be resolved")).toBeTruthy();
+    expect(screen.getAllByText("Asset could not be resolved").length).toBeGreaterThan(0);
     expect(JSON.stringify(editor.serialize())).not.toContain("asset-unresolved");
   });
 

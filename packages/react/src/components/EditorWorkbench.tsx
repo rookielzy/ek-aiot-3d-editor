@@ -1,11 +1,12 @@
 import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
-import { executeEditorAction, resolveEditorShortcut, type AssetResolverBridge, type EditorRuntime, type EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
+import { executeEditorAction, resolveEditorShortcut, type AssetResolverBridge, type EditorRuntime, type EditorRuntimeOptions, type SceneNode } from "@ek-aiot/3d-editor-core";
 import { useWorkbench, type UseWorkbenchOptions, type WorkbenchContext } from "../hooks/use-workbench";
 import { EditorViewport } from "./EditorViewport";
 import { InspectorView } from "./InspectorView";
 import "./workbench.css";
 
 export type WorkbenchRenderRegion = (context: WorkbenchContext) => ReactNode;
+export type WorkbenchRegionName = "toolbar" | "leftPanel" | "sidePanel" | "viewportOverlay" | "rightPanel" | "status";
 
 const DEFAULT_WORKBENCH_INTERACTIONS = {
   camera: true,
@@ -27,7 +28,12 @@ export interface EditorWorkbenchProps extends UseWorkbenchOptions {
   viewportClassName?: string;
   inspectorClassName?: string;
   toolbar?: WorkbenchRenderRegion;
+  leftPanel?: WorkbenchRenderRegion;
+  /**
+   * @deprecated Use leftPanel for the install-ready workbench's left project panel.
+   */
   sidePanel?: WorkbenchRenderRegion;
+  rightPanel?: WorkbenchRenderRegion;
   viewportOverlay?: WorkbenchRenderRegion;
   status?: WorkbenchRenderRegion;
 }
@@ -46,7 +52,9 @@ export function EditorWorkbench({
   viewportClassName,
   inspectorClassName,
   toolbar,
+  leftPanel,
   sidePanel,
+  rightPanel,
   viewportOverlay,
   status
 }: EditorWorkbenchProps) {
@@ -107,6 +115,7 @@ export function EditorWorkbench({
 
   const rootClassName = className ? `ek-workbench ${className}` : "ek-workbench";
   const hasToolbar = showDefaultToolbar || toolbar;
+  const renderLeftPanel = leftPanel ?? sidePanel;
 
   return (
     <main ref={rootRef} className={rootClassName} style={style} tabIndex={0}>
@@ -128,18 +137,26 @@ export function EditorWorkbench({
         />
         {viewportOverlay ? <div className="ek-workbench__overlay">{viewportOverlay(workbench)}</div> : null}
       </section>
-      {sidePanel ? <aside className="ek-workbench__side-panel">{sidePanel(workbench)}</aside> : null}
-      <InspectorView
-        editor={workbench.editor}
-        snapshot={workbench.snapshot}
-        inspector={workbench.inspector}
-        setActiveLightId={workbench.setActiveLightId}
-        onReplaceAsset={(assetId, file) => {
-          void workbench.replaceAsset({ assetId, source: file, label: file.name, mimeType: file.type });
-        }}
-        className={inspectorClassName}
-      />
-      {status ? <footer className="ek-workbench__status">{status(workbench)}</footer> : null}
+      <aside className="ek-workbench__side-panel" aria-label="Project panel">
+        {renderLeftPanel ? renderLeftPanel(workbench) : <DefaultWorkbenchLeftPanel context={workbench} />}
+      </aside>
+      <aside className="ek-workbench__right-panel" aria-label="Inspector panel">
+        {rightPanel ? rightPanel(workbench) : (
+          <InspectorView
+            editor={workbench.editor}
+            snapshot={workbench.snapshot}
+            inspector={workbench.inspector}
+            setActiveLightId={workbench.setActiveLightId}
+            onReplaceAsset={(assetId, file) => {
+              void workbench.replaceAsset({ assetId, source: file, label: file.name, mimeType: file.type });
+            }}
+            className={inspectorClassName}
+          />
+        )}
+      </aside>
+      <footer className="ek-workbench__status" aria-label="Editor status">
+        {status ? status(workbench) : <DefaultWorkbenchStatus context={workbench} />}
+      </footer>
     </main>
   );
 }
@@ -223,4 +240,132 @@ function DefaultWorkbenchToolbar({ context }: { context: WorkbenchContext }) {
 
 function isSnapEnabled(value: number | null | undefined): boolean {
   return value !== null && value !== undefined;
+}
+
+function DefaultWorkbenchLeftPanel({ context }: { context: WorkbenchContext }) {
+  const roots = context.snapshot.rootNodeIds
+    .map((nodeId) => context.snapshot.nodes[nodeId])
+    .filter((node): node is SceneNode => Boolean(node));
+  const assets = Object.values(context.snapshot.assets);
+  const problemItems = context.problems.items;
+
+  return (
+    <div className="ek-workbench__default-left-panel">
+      <section className="ek-workbench__panel-section" aria-label="Hierarchy">
+        <div className="ek-workbench__section-header">
+          <h2>Hierarchy</h2>
+          <span>{Object.keys(context.snapshot.nodes).length}</span>
+        </div>
+        {roots.length > 0 ? (
+          <ul className="ek-workbench__tree">
+            {roots.map((node) => (
+              <WorkbenchNodeRow key={node.id} context={context} node={node} depth={0} />
+            ))}
+          </ul>
+        ) : (
+          <p className="ek-workbench__empty">No scene nodes.</p>
+        )}
+      </section>
+      <section className="ek-workbench__panel-section" aria-label="Assets">
+        <div className="ek-workbench__section-header">
+          <h2>Assets</h2>
+          <span>{assets.length}</span>
+        </div>
+        {assets.length > 0 ? (
+          <ul className="ek-workbench__asset-list">
+            {assets.map((asset) => (
+              <li key={asset.id}>
+                <span>{asset.label ?? asset.id}</span>
+                <small>{asset.kind}</small>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="ek-workbench__empty">No registered assets.</p>
+        )}
+      </section>
+      <section className="ek-workbench__panel-section" aria-label="Project">
+        <div className="ek-workbench__section-header">
+          <h2>Project</h2>
+          <span>{problemItems.length === 0 ? "Ready" : `${problemItems.length} problems`}</span>
+        </div>
+        <dl className="ek-workbench__summary-list">
+          <div>
+            <dt>Scene</dt>
+            <dd>{context.snapshot.scene.name}</dd>
+          </div>
+          <div>
+            <dt>Objects</dt>
+            <dd>{Object.keys(context.snapshot.objects).length}</dd>
+          </div>
+          <div>
+            <dt>Lights</dt>
+            <dd>{Object.keys(context.snapshot.lights).length}</dd>
+          </div>
+        </dl>
+        {problemItems.length > 0 ? (
+          <ul className="ek-workbench__problem-list" aria-label="Project problems">
+            {problemItems.slice(0, 3).map((problem) => (
+              <li key={problem.id} data-severity={problem.severity}>
+                <span>{problem.title}</span>
+                {problem.actionLabel ? <small>{problem.actionLabel}</small> : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
+    </div>
+  );
+}
+
+function WorkbenchNodeRow({ context, node, depth }: { context: WorkbenchContext; node: SceneNode; depth: number }) {
+  const selected = context.selectedNodeIds.includes(node.id);
+  const children = node.children
+    .map((childId) => context.snapshot.nodes[childId])
+    .filter((child): child is SceneNode => Boolean(child));
+
+  return (
+    <li>
+      <button
+        type="button"
+        className="ek-workbench__tree-row"
+        data-selected={selected ? "true" : undefined}
+        onClick={() => context.dispatch({ type: "select-node", nodeId: node.id })}
+        style={{ "--ek-workbench-tree-depth": depth } as CSSProperties}
+      >
+        <span>{node.name}</span>
+        <small>{node.kind}</small>
+      </button>
+      {children.length > 0 ? (
+        <ul>
+          {children.map((child) => (
+            <WorkbenchNodeRow key={child.id} context={context} node={child} depth={depth + 1} />
+          ))}
+        </ul>
+      ) : null}
+    </li>
+  );
+}
+
+function DefaultWorkbenchStatus({ context }: { context: WorkbenchContext }) {
+  return (
+    <div className="ek-workbench__default-status">
+      <span>Selection {formatSelection(context)}</span>
+      <span>Undo {context.historyState.undoCount}</span>
+      <span>Redo {context.historyState.redoCount}</span>
+      <span>Runtime {context.runtimeReady ? "ready" : "missing"}</span>
+      <span>Problems {context.problems.totalCount}</span>
+    </div>
+  );
+}
+
+function formatSelection(context: WorkbenchContext): string {
+  if (context.selectionCount === 0) {
+    return "none";
+  }
+  const node = context.selectedNodeId ? context.snapshot.nodes[context.selectedNodeId] : undefined;
+  if (context.selectionCount === 1 && node) {
+    return node.name;
+  }
+  return `${context.selectionCount} nodes`;
 }

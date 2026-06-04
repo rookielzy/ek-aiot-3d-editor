@@ -22,37 +22,42 @@
       </div>
     </section>
 
-    <aside v-if="$slots.sidePanel" class="ek-workbench__side-panel">
-      <slot name="sidePanel" v-bind="context" />
+    <aside class="ek-workbench__side-panel" aria-label="Project panel">
+      <slot v-if="$slots.leftPanel" name="leftPanel" v-bind="context" />
+      <slot v-else-if="$slots.sidePanel" name="sidePanel" v-bind="context" />
+      <DefaultWorkbenchLeftPanel v-else :context="context" />
     </aside>
 
-    <InspectorView
-      :editor="workbench.editor"
-      :snapshot="currentSnapshot"
-      :inspector="currentInspector"
-      :class="inspectorClassName"
-      @update:active-light-id="workbench.setActiveLightId"
-      @replace-asset="replaceAsset"
-    />
+    <aside class="ek-workbench__right-panel" aria-label="Inspector panel">
+      <slot v-if="$slots.rightPanel" name="rightPanel" v-bind="context" />
+      <InspectorView
+        v-else
+        :editor="workbench.editor"
+        :snapshot="currentSnapshot"
+        :inspector="currentInspector"
+        :class="inspectorClassName"
+        @update:active-light-id="workbench.setActiveLightId"
+        @replace-asset="replaceAsset"
+      />
+    </aside>
 
-    <footer v-if="$slots.status" class="ek-workbench__status">
-      <slot name="status" v-bind="context" />
+    <footer class="ek-workbench__status" aria-label="Editor status">
+      <slot v-if="$slots.status" name="status" v-bind="context" />
+      <DefaultWorkbenchStatus v-else :context="context" />
     </footer>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, onBeforeUnmount, onMounted, ref, toRef, type PropType } from "vue";
+import { computed, defineComponent, h, onBeforeUnmount, onMounted, ref, toRef, type PropType, type VNode } from "vue";
 import {
   executeEditorAction,
   resolveEditorShortcut,
-  type AssetResolverBridge,
-  type Editor,
-  type EditorOptions,
-  type EditorRuntime,
-  type EditorRuntimeOptions
+  type EditorRuntimeOptions,
+  type SceneNode
 } from "@ek-aiot/3d-editor-core";
 import { useWorkbench, type WorkbenchContext } from "../composables/use-workbench";
+import type { EditorWorkbenchEmits, EditorWorkbenchProps, EditorWorkbenchSlots } from "./EditorWorkbench.types";
 import EditorViewport from "./EditorViewport.vue";
 import InspectorView from "./InspectorView.vue";
 import "./workbench.css";
@@ -65,24 +70,12 @@ const DEFAULT_WORKBENCH_INTERACTIONS = {
   transform: true
 } satisfies EditorRuntimeOptions["interactions"];
 
-const props = withDefaults(defineProps<{
-  editor?: Editor;
-  snapshot?: EditorOptions["snapshot"];
-  resolver?: AssetResolverBridge;
-  loader?: EditorRuntimeOptions["loader"];
-  rendererFactory?: EditorRuntimeOptions["rendererFactory"];
-  interactions?: EditorRuntimeOptions["interactions"];
-  showDefaultToolbar?: boolean;
-  class?: string;
-  viewportClassName?: string;
-  inspectorClassName?: string;
-}>(), {
+const props = withDefaults(defineProps<EditorWorkbenchProps>(), {
   showDefaultToolbar: true
 });
 
-const emit = defineEmits<{
-  runtimeReady: [runtime: EditorRuntime | null];
-}>();
+const emit = defineEmits<EditorWorkbenchEmits>();
+defineSlots<EditorWorkbenchSlots>();
 
 const workbench = useWorkbench({
   editor: toRef(props, "editor"),
@@ -173,4 +166,124 @@ const DefaultWorkbenchToolbar = defineComponent({
     ]);
   }
 });
+
+const DefaultWorkbenchLeftPanel = defineComponent({
+  props: {
+    context: {
+      type: Object as PropType<WorkbenchContext>,
+      required: true
+    }
+  },
+  setup(props) {
+    return () => {
+      const roots = props.context.snapshot.rootNodeIds
+        .map((nodeId) => props.context.snapshot.nodes[nodeId])
+        .filter((node): node is SceneNode => Boolean(node));
+      const assets = Object.values(props.context.snapshot.assets);
+      const problemItems = props.context.problems.items;
+
+      return h("div", { class: "ek-workbench__default-left-panel" }, [
+        h("section", { class: "ek-workbench__panel-section", "aria-label": "Hierarchy" }, [
+          h("div", { class: "ek-workbench__section-header" }, [
+            h("h2", "Hierarchy"),
+            h("span", Object.keys(props.context.snapshot.nodes).length)
+          ]),
+          roots.length > 0
+            ? h("ul", { class: "ek-workbench__tree" }, roots.map((node) => renderNodeRow(props.context, node, 0)))
+            : h("p", { class: "ek-workbench__empty" }, "No scene nodes.")
+        ]),
+        h("section", { class: "ek-workbench__panel-section", "aria-label": "Assets" }, [
+          h("div", { class: "ek-workbench__section-header" }, [
+            h("h2", "Assets"),
+            h("span", assets.length)
+          ]),
+          assets.length > 0
+            ? h("ul", { class: "ek-workbench__asset-list" }, assets.map((asset) =>
+              h("li", { key: asset.id }, [
+                h("span", asset.label ?? asset.id),
+                h("small", asset.kind)
+              ])
+            ))
+            : h("p", { class: "ek-workbench__empty" }, "No registered assets.")
+        ]),
+        h("section", { class: "ek-workbench__panel-section", "aria-label": "Project" }, [
+          h("div", { class: "ek-workbench__section-header" }, [
+            h("h2", "Project"),
+            h("span", problemItems.length === 0 ? "Ready" : `${problemItems.length} problems`)
+          ]),
+          h("dl", { class: "ek-workbench__summary-list" }, [
+            renderSummaryTerm("Scene", props.context.snapshot.scene.name),
+            renderSummaryTerm("Objects", Object.keys(props.context.snapshot.objects).length),
+            renderSummaryTerm("Lights", Object.keys(props.context.snapshot.lights).length)
+          ]),
+          problemItems.length > 0
+            ? h("ul", { class: "ek-workbench__problem-list", "aria-label": "Project problems" }, problemItems.slice(0, 3).map((problem) =>
+              h("li", { key: problem.id, "data-severity": problem.severity }, [
+                h("span", problem.title),
+                problem.actionLabel ? h("small", problem.actionLabel) : null
+              ])
+            ))
+            : null
+        ])
+      ]);
+    };
+  }
+});
+
+const DefaultWorkbenchStatus = defineComponent({
+  props: {
+    context: {
+      type: Object as PropType<WorkbenchContext>,
+      required: true
+    }
+  },
+  setup(props) {
+    return () => h("div", { class: "ek-workbench__default-status" }, [
+      h("span", `Selection ${formatSelection(props.context)}`),
+      h("span", `Undo ${props.context.historyState.undoCount}`),
+      h("span", `Redo ${props.context.historyState.redoCount}`),
+      h("span", `Runtime ${props.context.runtimeReady ? "ready" : "missing"}`),
+      h("span", `Problems ${props.context.problems.totalCount}`)
+    ]);
+  }
+});
+
+function renderNodeRow(context: WorkbenchContext, node: SceneNode, depth: number): VNode {
+  const selected = context.selectedNodeIds.includes(node.id);
+  const children = node.children
+    .map((childId) => context.snapshot.nodes[childId])
+    .filter((child): child is SceneNode => Boolean(child));
+
+  return h("li", { key: node.id }, [
+    h("button", {
+      type: "button",
+      class: "ek-workbench__tree-row",
+      "data-selected": selected ? "true" : undefined,
+      style: { "--ek-workbench-tree-depth": depth },
+      onClick: () => context.dispatch({ type: "select-node", nodeId: node.id })
+    }, [
+      h("span", node.name),
+      h("small", node.kind)
+    ]),
+    children.length > 0 ? h("ul", children.map((child) => renderNodeRow(context, child, depth + 1))) : null
+  ]);
+}
+
+function renderSummaryTerm(label: string, value: string | number): VNode {
+  return h("div", [
+    h("dt", label),
+    h("dd", String(value))
+  ]);
+}
+
+function formatSelection(context: WorkbenchContext): string {
+  if (context.selectionCount === 0) {
+    return "none";
+  }
+  const node = context.selectedNodeId ? context.snapshot.nodes[context.selectedNodeId] : undefined;
+  if (context.selectionCount === 1 && node) {
+    return node.name;
+  }
+  return `${context.selectionCount} nodes`;
+}
 </script>

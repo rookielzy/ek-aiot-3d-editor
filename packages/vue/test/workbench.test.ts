@@ -129,6 +129,70 @@ describe("Vue EditorWorkbench", () => {
     wrapper.unmount();
   });
 
+  it("renders the install-ready default shell when no slots are provided", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Robot arm", asset: { id: "asset-a", label: "robot.glb" } });
+    editor.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
+
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer }
+    });
+
+    expect(wrapper.find('[aria-label="Editor controls"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="Project panel"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="3D viewport"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="Inspector panel"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="Editor status"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain("Hierarchy");
+    expect(wrapper.text()).toContain("Assets");
+    expect(wrapper.text()).toContain("Project");
+    expect(wrapper.text()).toContain("Robot arm");
+    expect(wrapper.text()).toContain("robot.glb");
+    expect(wrapper.text()).toContain("Selection none");
+
+    await wrapper.find('[title="Select all"]').trigger("click");
+    await nextTick();
+
+    expect(wrapper.text()).toContain("Selection 2 nodes");
+    wrapper.unmount();
+  });
+
+  it("supports explicit left/right slot overrides while keeping sidePanel compatible", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer },
+      slots: {
+        leftPanel: ({ assets, project, snapshot }) =>
+          h("span", `Left ${Object.keys(snapshot.assets).length}:${project.exportProject().ok ? "exportable" : "blocked"}:${typeof assets.replaceAsset}`),
+        rightPanel: ({ inspector }) => h("span", `Right ${inspector.selection.count}`)
+      }
+    });
+
+    expect(wrapper.text()).toContain("Left 1:blocked:function");
+    expect(wrapper.text()).toContain("Right 0");
+    expect(wrapper.text()).not.toContain("Hierarchy");
+    expect(wrapper.text()).not.toContain("Transform");
+
+    wrapper.unmount();
+
+    const compatible = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer },
+      slots: {
+        sidePanel: ({ selection, history, transform, camera, problems }) =>
+          h("span", `Side ${selection.count}:${history.undoCount}:${transform.mode}:${camera.ready ? "ready" : "missing"}:${problems.totalCount}`),
+        rightPanel: ({ editor }) => h("span", `Custom right ${editor.disposed ? "disposed" : "usable"}`)
+      }
+    });
+
+    await nextTick();
+
+    expect(compatible.text()).toContain("Side 0:1:translate:ready:0");
+    expect(compatible.text()).toContain("Custom right usable");
+    compatible.unmount();
+  });
+
   it("can hide the default toolbar while preserving scoped slots", async () => {
     const editor = markRaw(createEditor());
     const wrapper = mount(EditorWorkbench, {
