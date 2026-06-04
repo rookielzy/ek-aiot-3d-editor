@@ -128,10 +128,10 @@ Core 输出框架无关 inspector model 和 command builder。React/Vue 分别�
 
 ## D11. Default workbench UI stays package-owned
 
-React 默认 Workbench shell 暂不引入第三方 React UI 组件库。Toolbar、left panel、status bar 和相关控件由包内组件与稳定 `ek-` CSS class 实现。
+React 和 Vue 默认 Workbench shell 暂不引入第三方 UI 组件库。Toolbar、left panel、status bar 和相关控件由各框架包内组件与稳定 `ek-` CSS class 实现。
 
 原因：
 
 - 安装即用路径不应要求宿主配置、主题化或类型依赖第三方 UI library。
-- 当前 shell 需要的是编辑器专用的紧凑布局、状态按钮、文件输入和问题恢复入口，包内组件足够覆盖。
+- 当前 shell 需要的是编辑器专用的紧凑布局、状态按钮、文件输入和问题恢复入口，React/Vue 包内组件足够覆盖并能保持行为等价。
 - 后续如果引入菜单、tooltip、dockable layout 或复杂 tree 控件，依赖必须先包在内部组件后面，不能泄漏到 public props/types。
