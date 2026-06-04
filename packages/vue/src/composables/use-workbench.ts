@@ -29,10 +29,59 @@ export interface UseWorkbenchOptions extends EditorOptions {
   editor?: Editor | Ref<Editor | undefined>;
 }
 
+export interface WorkbenchSelectionContext {
+  count: number;
+  nodeId: string | null;
+  nodeIds: string[];
+  nodeKind: InspectorModel["selection"]["nodeKind"];
+  objectId: string | null;
+  objectIds: string[];
+  lightId: string | null;
+}
+
+export interface WorkbenchTransformContext {
+  mode: TransformMode;
+  snap: SnapSettings;
+  setMode(mode: TransformMode): void;
+  toggleSnap(channel: SnapChannel, increment?: number): SnapSettings;
+}
+
+export interface WorkbenchCameraContext {
+  ready: boolean;
+  reset(): void;
+  frameSelected(options?: RuntimeCameraFrameOptions): boolean;
+  frameAll(options?: RuntimeCameraFrameOptions): boolean;
+}
+
+export interface WorkbenchProjectContext {
+  importProject(packageBytes: Uint8Array, options?: ProjectImportOptions): ProjectImportResult;
+  exportProject(options?: ProjectExportOptions): ProjectExportResult;
+}
+
+export interface WorkbenchAssetContext {
+  replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
+}
+
+export interface WorkbenchProblemsContext {
+  items: InspectorModel["problems"]["problems"];
+  runtime: Problem[];
+  authoredCount: number;
+  runtimeCount: number;
+  totalCount: number;
+  refresh(): void;
+}
+
 export interface WorkbenchContext {
   editor: Editor;
   snapshot: SceneSnapshot;
   inspector: InspectorModel;
+  selection: WorkbenchSelectionContext;
+  history: HistoryState;
+  transform: WorkbenchTransformContext;
+  camera: WorkbenchCameraContext;
+  project: WorkbenchProjectContext;
+  assets: WorkbenchAssetContext;
+  problems: WorkbenchProblemsContext;
   runtimeProblems: Problem[];
   runtime: EditorRuntime | null;
   runtimeReady: boolean;
@@ -252,6 +301,43 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     editor: currentEditor.value,
     snapshot: snapshot.value,
     inspector: inspector.value,
+    selection: {
+      count: inspector.value.selection.count,
+      nodeId: inspector.value.selection.nodeId,
+      nodeIds: inspector.value.selection.nodeIds,
+      nodeKind: inspector.value.selection.nodeKind,
+      objectId: inspector.value.selection.objectId,
+      objectIds: inspector.value.selection.objectIds,
+      lightId: inspector.value.selection.lightId
+    },
+    history: currentEditor.value.getHistoryState(),
+    transform: {
+      mode: transformMode.value,
+      snap: snap.value,
+      setMode: setTransformMode,
+      toggleSnap
+    },
+    camera: {
+      ready: runtime.value !== null,
+      reset: resetCamera,
+      frameSelected,
+      frameAll
+    },
+    project: {
+      importProject,
+      exportProject
+    },
+    assets: {
+      replaceAsset
+    },
+    problems: {
+      items: inspector.value.problems.problems,
+      runtime: runtimeProblems.value,
+      authoredCount: inspector.value.problems.problems.filter((problem) => !problem.runtime).length,
+      runtimeCount: runtimeProblems.value.length,
+      totalCount: inspector.value.problems.problems.length,
+      refresh: subscribeRuntimeProblems
+    },
     runtimeProblems: runtimeProblems.value,
     runtime: runtime.value,
     runtimeReady: runtime.value !== null,
