@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -323,11 +323,43 @@ async function verifyConsumerInstall(tarballsByPackage) {
       assert(privateImportOutput.includes(specifier), `private subpath type check did not mention ${specifier}`);
     }
     const viteBin = join(tempDir, "node_modules/vite/bin/vite.js");
-    run("node", [viteBin, "build", "--config", "vite.config.ts"], { cwd: join(tempDir, "react-vite") });
-    run("node", [viteBin, "build", "--config", "vite.config.ts"], { cwd: join(tempDir, "vue-vite") });
+    await verifyViteConsumerFixture({
+      dir: join(tempDir, "react-vite"),
+      viteBin,
+      entry: "src/main.tsx",
+      packageName: "@ek-aiot/3d-editor-react",
+      cssImport: "@ek-aiot/3d-editor-react/styles.css"
+    });
+    await verifyViteConsumerFixture({
+      dir: join(tempDir, "vue-vite"),
+      viteBin,
+      entry: "src/main.ts",
+      packageName: "@ek-aiot/3d-editor-vue",
+      cssImport: "@ek-aiot/3d-editor-vue/styles.css"
+    });
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
+}
+
+async function verifyViteConsumerFixture({ dir, viteBin, entry, packageName, cssImport }) {
+  const source = await readFile(join(dir, entry), "utf8");
+  assert(source.includes(`import { EditorWorkbench } from "${packageName}"`), `${packageName} fixture must import EditorWorkbench from the package root`);
+  assert(source.includes(`import "${cssImport}"`), `${packageName} fixture must import the documented CSS subpath`);
+
+  run("node", [viteBin, "build", "--config", "vite.config.ts"], { cwd: dir });
+
+  const assetsDir = join(dir, "dist/assets");
+  const assets = await readdir(assetsDir);
+  const jsAssets = assets.filter((asset) => asset.endsWith(".js"));
+  const cssAssets = assets.filter((asset) => asset.endsWith(".css"));
+  assert(jsAssets.length > 0, `${packageName} Vite fixture must emit JavaScript assets`);
+  assert(cssAssets.length > 0, `${packageName} Vite fixture must emit CSS assets from styles.css`);
+
+  const jsOutput = (await Promise.all(jsAssets.map((asset) => readFile(join(assetsDir, asset), "utf8")))).join("\n");
+  const cssOutput = (await Promise.all(cssAssets.map((asset) => readFile(join(assetsDir, asset), "utf8")))).join("\n");
+  assert(jsOutput.includes("ek-workbench"), `${packageName} Vite fixture must include the default Workbench shell`);
+  assert(cssOutput.includes(".ek-workbench"), `${packageName} Vite fixture must include Workbench CSS from the public subpath`);
 }
 
 function runtimeCheckSource() {

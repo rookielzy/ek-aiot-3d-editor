@@ -45,7 +45,7 @@ When the release PR is merged and no changesets remain, the same workflow runs `
 - tarball file-list checks for required dist, README, license, and changelog content
 - exclusion checks for sources, tests, fixtures, `.tsbuildinfo`, examples, and JavaScript source maps
 - temporary consumer install/import checks from the packed tarballs
-- fresh Vite React and Vite Vue consumer builds that import the package root API plus the documented `styles.css` CSS subpath and mount `EditorWorkbench`
+- fresh Vite React and Vite Vue consumer builds that import the package root API plus the documented `styles.css` CSS subpath, mount `EditorWorkbench`, and emit Workbench JS/CSS assets
 - private subpath import checks through package `exports`
 
 React and Vue packages intentionally expose only the package root and CSS subpath:
