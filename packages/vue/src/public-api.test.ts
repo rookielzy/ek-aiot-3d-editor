@@ -22,10 +22,10 @@ describe("vue public API", () => {
       inspectorClassName: "host-inspector"
     };
     const slots: EditorWorkbenchSlots = {
-      leftPanel: (context: WorkbenchContext) => context.selection.count,
+      leftPanel: (context: WorkbenchContext) => context.model.hierarchy.totalCount,
       rightPanel: (context) => context.problems.totalCount,
       sidePanel: (context) => context.history.undoCount,
-      status: (context) => context.project.exportProject().ok
+      status: (context) => context.model.status.problemCount === 0 && context.project.exportProject().ok
     };
 
     expect(regionName).toBe("leftPanel");
