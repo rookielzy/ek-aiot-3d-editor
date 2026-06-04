@@ -5,6 +5,7 @@
     "types": ["vite/client"],
     "paths": {
       "@ek-aiot/3d-editor-core": ["../../packages/core/src/index.ts"],
+      "@ek-aiot/3d-editor-vue/styles.css": ["../../packages/vue/src/styles.css"],
       "@ek-aiot/3d-editor-vue": ["../../packages/vue/src/index.ts"]
     }
   },

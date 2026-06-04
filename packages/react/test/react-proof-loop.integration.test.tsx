@@ -59,66 +59,88 @@ describe("React proof-loop parity", () => {
     expect(JSON.stringify(restored.serialize())).not.toContain("environment-asset-unresolved");
   });
 
-  it("turns the local proof-loop app into a hierarchy, asset, and checklist validation surface", async () => {
-    render(<ReactProofLoopApp rendererFactory={fakeRenderer} />);
-    await act(async () => undefined);
+  it("uses the package default workbench as the local starter proof", async () => {
+    const restoreDownloadCapture = installDownloadCapture();
+    try {
+      render(<ReactProofLoopApp rendererFactory={fakeRenderer} />);
+      await act(async () => undefined);
 
-    const hierarchy = await screen.findByTestId("demo-hierarchy");
-    expect(within(hierarchy).getByText("Simple box")).toBeTruthy();
-    expect(within(hierarchy).getByText("simple-box")).toBeTruthy();
-    expect(within(hierarchy).getByText("Recoverable asset")).toBeTruthy();
-    expect(within(hierarchy).getByText("Ambient light")).toBeTruthy();
-    expect(hierarchy.querySelector('[data-node-kind="light"][data-light-id="fill"]')).toBeTruthy();
-    expect(screen.getByTestId("demo-selection-count").textContent).toContain("Simple box (1)");
-    expect(screen.getByTestId("demo-assets").textContent).toContain("recoverable-box");
+      const toolbar = screen.getByLabelText("Editor controls");
+      expect(within(toolbar).getByRole("button", { name: "Export" })).toBeTruthy();
+      expect(within(toolbar).getByRole("button", { name: "Move" }).getAttribute("aria-pressed")).toBe("true");
+      expect((within(toolbar).getByRole("button", { name: "Duplicate" }) as HTMLButtonElement).disabled).toBe(false);
 
-    await act(async () => {
-      await clickButton("Nudge primary");
-    });
-    expect(screen.getByText("Transform command changed history").closest("li")?.dataset.complete).toBe("true");
-    expect(screen.getByText("Undo is available").closest("li")?.dataset.complete).toBe("true");
+      const projectPanel = screen.getByLabelText("Project panel");
+      const hierarchy = within(projectPanel).getByLabelText("Hierarchy");
+      expect(within(hierarchy).getByText("Simple box")).toBeTruthy();
+      expect(within(hierarchy).getByText("Recoverable asset")).toBeTruthy();
+      expect(within(hierarchy).getByText("Ambient light")).toBeTruthy();
+      const assets = within(projectPanel).getByLabelText("Assets");
+      expect(assets.textContent).toContain("Recoverable asset");
+      expect(assets.textContent).toContain("glb · referenced");
+      expect(screen.getByTestId("starter-overlay").textContent).toContain("3 objects");
+      expect(screen.getByText("Selection Simple box")).toBeTruthy();
 
-    await clickButton("Undo");
-    expect(screen.getByText("Redo is available").closest("li")?.dataset.complete).toBe("true");
-    await clickButton("Redo");
+      await act(async () => {
+        await clickButton("Snap move");
+      });
+      expect(within(toolbar).getByRole("button", { name: "Snap move" }).getAttribute("aria-pressed")).toBe("true");
 
-    await clickButton("Frame selected");
-    expect(screen.getByText("Camera helper used").closest("li")?.dataset.complete).toBe("true");
+      const positionX = getFieldInput("Position X") as HTMLInputElement;
+      fireEvent.change(positionX, { target: { value: "2" } });
+      fireEvent.blur(positionX);
+      await act(async () => undefined);
+      await waitFor(() => expect(screen.getByText("Undo 1")).toBeTruthy());
 
-    await clickButton("Snap move");
-    expect(screen.getByText("Snap/mode status visible").closest("li")?.dataset.complete).toBe("true");
+      await act(async () => {
+        await clickButton("Undo");
+      });
+      expect(screen.getByText("Redo 1")).toBeTruthy();
+      await act(async () => {
+        await clickButton("Redo");
+      });
 
-    const baseColorInput = screen.getByLabelText("Base color") as HTMLInputElement;
-    fireEvent.change(baseColorInput, { target: { value: "#00aa88" } });
-    await act(async () => undefined);
-    expect(screen.getByText("Material inspector changed runtime").closest("li")?.dataset.complete).toBe("true");
+      const baseColorInput = getFieldInput("Base color") as HTMLInputElement;
+      fireEvent.change(baseColorInput, { target: { value: "#00aa88" } });
+      await act(async () => undefined);
+      await waitFor(() => expect(screen.getByText("Dirty")).toBeTruthy());
 
-    await clickButton("Duplicate");
-    expect(screen.getByText("Copy/paste or duplicate ran").closest("li")?.dataset.complete).toBe("true");
+      await act(async () => {
+        await clickButton("Duplicate");
+      });
+      await waitFor(() => expect(projectPanel.textContent).toContain("Objects4"));
 
-    await clickButton("Group demo");
-    expect(screen.getByText("Hierarchy operation changed nesting").closest("li")?.dataset.complete).toBe("true");
+      await act(async () => {
+        await clickButton("Export partial");
+      });
+      expect(screen.getByText(/Exported partial project/)).toBeTruthy();
+      await waitFor(() => expect(window.__lastDownloadedProject).toBeInstanceOf(Uint8Array));
+      expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("asset-unresolved");
 
-    await clickButton("Export project");
-    expect(screen.getByText("Project exported").closest("li")?.dataset.complete).toBe("true");
+      await act(async () => {
+        const bytes = window.__lastDownloadedProject;
+        expect(bytes).toBeInstanceOf(Uint8Array);
+        const openInput = toolbar.querySelector('input[type="file"]') as HTMLInputElement;
+        const file = new File([copyBytes(bytes!)], "starter.ek3d", { type: "application/octet-stream" });
+        fireEvent.change(openInput, { target: { files: [file] } });
+      });
+      await waitFor(() => expect(screen.getByText("Opened starter.ek3d")).toBeTruthy());
 
-    await clickButton("Reopen package");
-    expect(screen.getByText("Project reopened").closest("li")?.dataset.complete).toBe("true");
-    expect(screen.getByTestId("demo-status").textContent).not.toContain("OK");
+      await waitFor(() => expect(projectPanel.textContent).toContain("Replace asset"));
+      expect(projectPanel.textContent).toContain("1 problems");
 
-    await waitFor(() => {
-      expect(screen.getByText("Missing asset surfaced").closest("li")?.dataset.complete).toBe("true");
-      expect(screen.getByTestId("demo-problem-badge").textContent).toContain("1 problems");
-    });
-    expect(screen.getByTestId("demo-status").textContent).not.toContain("asset-unresolved");
-
-    await act(async () => {
-      await clickButton("Replace missing asset");
-    });
-    expect(await screen.findByText("Missing asset recovered")).toBeTruthy();
-    expect(screen.getByText("Missing asset recovered").closest("li")?.dataset.complete).toBe("true");
-    expect(screen.getByTestId("demo-problem-badge").textContent).toContain("0 problems");
-    expect(screen.getByTestId("demo-assets").textContent).toContain("recoverable-box");
+      await act(async () => {
+        const recoveryInput = within(projectPanel).getByLabelText(/Replace asset.*Recoverable asset/s) as HTMLInputElement;
+        const file = new File([new Uint8Array([1, 2, 3, 4])], "recovered.glb", { type: "model/gltf-binary" });
+        fireEvent.change(recoveryInput, { target: { files: [file] } });
+      });
+      await waitFor(() => expect(projectPanel.textContent).not.toContain("Replace asset"));
+      await waitFor(() => expect(screen.getByText("Problems 0")).toBeTruthy());
+      expect(projectPanel.textContent).toContain("Recoverable asset");
+      expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("Blob");
+    } finally {
+      restoreDownloadCapture();
+    }
   }, 10000);
 });
 
@@ -129,6 +151,12 @@ async function clickButton(name: string): Promise<void> {
   await act(async () => undefined);
 }
 
+function getFieldInput(label: string): HTMLInputElement {
+  const field = screen.getAllByText(label).at(-1)?.closest("label")?.querySelector("input");
+  expect(field, `Expected input for ${label}`).toBeTruthy();
+  return field as HTMLInputElement;
+}
+
 function fakeRenderer(container: HTMLElement): RendererLike {
   return {
     domElement: container.ownerDocument.createElement("canvas"),
@@ -136,4 +164,37 @@ function fakeRenderer(container: HTMLElement): RendererLike {
     render() {},
     dispose() {}
   };
+}
+
+function installDownloadCapture(): () => void {
+  const originalCreateObjectURL = URL.createObjectURL;
+  const originalRevokeObjectURL = URL.revokeObjectURL;
+  const originalAnchorClick = HTMLAnchorElement.prototype.click;
+  URL.createObjectURL = ((blob: Blob) => {
+    void blob.arrayBuffer().then((buffer) => {
+      window.__lastDownloadedProject = new Uint8Array(buffer);
+    });
+    return "blob:starter-project";
+  }) as typeof URL.createObjectURL;
+  URL.revokeObjectURL = (() => undefined) as typeof URL.revokeObjectURL;
+  HTMLAnchorElement.prototype.click = () => undefined;
+
+  return () => {
+    URL.createObjectURL = originalCreateObjectURL;
+    URL.revokeObjectURL = originalRevokeObjectURL;
+    HTMLAnchorElement.prototype.click = originalAnchorClick;
+    delete window.__lastDownloadedProject;
+  };
+}
+
+function copyBytes(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
+declare global {
+  interface Window {
+    __lastDownloadedProject?: Uint8Array;
+  }
 }

@@ -1,6 +1,6 @@
 # 集成指南：React
 
-`@ek-aiot/3d-editor-react` 是 `@ek-aiot/3d-editor-core` 的薄适配层，提供 hooks、viewport、inspector 和 workbench shell。
+`@ek-aiot/3d-editor-react` 是 `@ek-aiot/3d-editor-core` 的 React 适配层。默认路径是安装包、导入 CSS、渲染 `EditorWorkbench`，它会直接给出完整 editor shell：顶部工具栏、左侧 hierarchy/assets/project 面板、中心 3D viewport、右侧 inspector/problems 面板和底部状态栏。
 
 ## 安装
 
@@ -40,29 +40,12 @@ export function EditorPage() {
     <EditorWorkbench
       editor={editor}
       resolver={resolver}
-      toolbar={({ dispatch }) => (
-        <button
-          type="button"
-          onClick={() =>
-            dispatch({
-              type: "set-node-transform",
-              nodeId: "box",
-              transform: { position: [1, 0, 0] }
-            })
-          }
-        >
-          Move
-        </button>
-      )}
-      status={({ snapshot, runtimeProblems }) => (
-        <span>
-          Snapshot v{snapshot.version} · {runtimeProblems.length} runtime problems
-        </span>
-      )}
     />
   );
 }
 ```
+
+不传 `toolbar`、`leftPanel`、`rightPanel` 或 `status` 时，Workbench 会使用 package-owned 默认 UI。默认 toolbar 已包含 open/export、undo/redo、transform mode、snap、camera、copy/paste/duplicate/delete/group/ungroup/select controls；默认左栏会显示 hierarchy、assets、project summary、project/runtime problems 和缺失资产恢复入口。
 
 ## 初始化场景
 
@@ -84,6 +67,12 @@ useEffect(() => {
 ```
 
 React StrictMode 下 effect 可能在开发环境重复执行，因此初始化逻辑应检查对象是否已经存在。
+
+## 宿主状态和 Store
+
+React app store 可以镜像可序列化的项目 metadata、当前 route、最近保存的 `SceneSnapshot` 或 `.ek3d` bytes。不要把 `Editor`、`EditorRuntime`、Three.js 对象、`File`、`Blob`、object URL、resolver 输出或 runtime problem 对象写进 durable store；这些对象应保持在 client-owned editor/runtime 边界内。
+
+如果需要把编辑状态同步给宿主 UI，优先通过 `useWorkbench()` 或 `EditorWorkbench` render props 读取派生 context，再把必要的 serializable projection 写入宿主 store。持久化变更仍通过 core commands、project import/export 和 snapshot/project package API 完成。
 
 ## Primitive 组件
 
@@ -109,8 +98,10 @@ function CustomEditor() {
 React workbench 支持 render prop：
 
 - `toolbar`
-- `sidePanel`
+- `leftPanel`
+- `sidePanel`（兼容旧名称，推荐新代码使用 `leftPanel`）
 - `viewportOverlay`
+- `rightPanel`
 - `status`
 
 每个 render prop 接收同一个 `WorkbenchContext`：
@@ -159,9 +150,9 @@ interface WorkbenchContext {
 pnpm --filter @ek-aiot/react-proof-loop dev
 ```
 
-示例首屏就是可操作 workbench，不是 landing page。侧栏从 `SceneSnapshot.rootNodeIds` / `nodes` 派生 object/group/light 层级、资产列表和 proof checklist；toolbar 通过 `runAction()`、camera helpers 和 core operations 触发 transform mode、snap、undo/redo、copy/paste/duplicate/delete/group/ungroup、export/reopen 等验证动作。Inspector 可编辑 selected node transform、object-only material、environment 和 selected light 字段，其中 material override 会通过 runtime 投影到支持的 `MeshStandardMaterial` 对象。
+示例首屏就是可操作 workbench，不是 landing page。示例代码只保留真实宿主通常需要拥有的部分：创建 editor、初始化 starter snapshot、配置 resolver/loader、选择可选 renderer factory，以及一个很薄的 viewport overlay。toolbar、hierarchy、assets、project status、missing-asset recovery、inspector 和 status 都来自 `@ek-aiot/3d-editor-react` 默认 Workbench。
 
-Demo checklist 只用于本地验证。它不会写入 snapshot、`.ek3d` 项目包或 React state 之外的 durable editor 数据。缺失资产恢复按钮使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem。
+默认 UI 可以完成 starter flow：选择 hierarchy row、编辑 Transform/Material inspector、切换 snap/transform、undo/redo、duplicate、export partial package、通过 Open 重新载入 `.ek3d`、以及从左栏恢复缺失资产。缺失资产恢复使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem。
 
 浏览器证据通过仓库根目录命令运行：
 
@@ -169,7 +160,7 @@ Demo checklist 只用于本地验证。它不会写入 snapshot、`.ek3d` 项目
 pnpm test:browser
 ```
 
-该命令使用 headless Chromium 验证 React demo 的 hierarchy、selection、camera helper、transform/history、material inspector smoke、project export/reopen、missing-asset recovery、problem badge 和 canvas 非空渲染状态。它不是端到端托管发布测试，也不承诺完整资产库、外部 paste、数据绑定或事件编排能力。
+该命令使用 headless Chromium 验证 React starter 的默认 workbench 区域、selection、transform/history、material inspector smoke、project export/open、missing-asset recovery、problem status 和 canvas 非空渲染状态。它不是端到端托管发布测试，也不承诺完整资产库、外部 paste、数据绑定或事件编排能力。
 
 ## 宿主拥有 editor 生命周期
 
