@@ -65,9 +65,10 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
 
     const positionX = findFieldInput(host, "Position X", 'input[type="number"]') as HTMLInputElement | null;
     expect(positionX, "Expected transform Position X input").toBeTruthy();
+    positionX!.focus();
     positionX!.value = "2";
     positionX!.dispatchEvent(new Event("input", { bubbles: true }));
-    positionX!.dispatchEvent(new FocusEvent("blur", { bubbles: true }));
+    positionX!.blur();
     await waitFor(() => {
       expect(text(host)).toContain("Undo 1");
       expect(text(host)).toContain("Dirty");
