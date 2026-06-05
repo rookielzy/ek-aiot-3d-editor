@@ -98,6 +98,8 @@ Snapshot 只保存资产引用，不保存资产 payload。真实二进制来源
 - transient project asset store
 - `.ek3d` 的 `assets/*` payload
 
+资产 workspace row、引用位置、payload availability、package readiness 和问题摘要都是 core 派生 projection，不是新的 Snapshot 字段。引用位置用于解释 asset 被哪里使用：GLB object、material texture slot、environment background 或 environment lighting source。它们必须保持 JSON-compatible，方便 UI 渲染和调试序列化，但不应写回 durable scene state。
+
 ## SceneNode
 
 ```ts

@@ -114,6 +114,8 @@ interface WorkbenchContext {
 }
 ```
 
+资产面板应优先读取 `workbench.model.assets.workspace`。该 workspace 已经合并 Snapshot asset registry、对象/材质/环境引用位置、项目包 payload 摘要和资产问题，并提供 core 统一的搜索/过滤/排序 helper。`replaceAsset()` 这类 payload-only 更新不会改变 Snapshot，但 Vue composable 会订阅 core asset workspace 版本并重新计算 model；宿主不需要也不应该读取 transient project store、`Blob` 或 object URL。
+
 ## 本地 proof-loop demo
 
 本仓库的 Vue demo 可通过以下命令启动：

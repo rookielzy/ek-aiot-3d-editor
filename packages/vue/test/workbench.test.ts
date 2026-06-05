@@ -520,6 +520,26 @@ describe("Vue EditorWorkbench", () => {
     expect(editor.disposed).toBe(false);
   });
 
+  it("refreshes useWorkbench asset workspace after payload-only replacement", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    let workbench!: ReturnType<typeof useWorkbench>;
+    const Harness = defineComponent({
+      setup() {
+        workbench = useWorkbench({ editor });
+        return () => null;
+      }
+    });
+    const wrapper = mount(Harness);
+
+    expect(workbench.model.value.assets.workspace.items.find((asset) => asset.id === "asset-a")?.payloadStatus).toBe("missing");
+    await editor.replaceAsset({ assetId: "asset-a", source: new Uint8Array([1, 2, 3]) });
+    await nextTick();
+
+    expect(workbench.model.value.assets.workspace.items.find((asset) => asset.id === "asset-a")?.payloadStatus).toBe("available");
+    wrapper.unmount();
+  });
+
   it("keeps activeLightId as a writable compatibility selector for light nodes only", async () => {
     const editor = markRaw(createEditor());
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });

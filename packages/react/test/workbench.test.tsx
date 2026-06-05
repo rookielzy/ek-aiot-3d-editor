@@ -529,6 +529,20 @@ describe("React EditorWorkbench", () => {
     unmount();
     expect(editor.disposed).toBe(false);
   });
+
+  it("refreshes useWorkbench asset workspace after payload-only replacement", async () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    const { result, unmount } = renderHookWithResult(() => useWorkbench({ editor }));
+
+    expect(result().model.assets.workspace.items.find((asset) => asset.id === "asset-a")?.payloadStatus).toBe("missing");
+    await act(async () => {
+      await editor.replaceAsset({ assetId: "asset-a", source: new Uint8Array([1, 2, 3]) });
+    });
+
+    expect(result().model.assets.workspace.items.find((asset) => asset.id === "asset-a")?.payloadStatus).toBe("available");
+    unmount();
+  });
 });
 
 function fakeRenderer(container: HTMLElement, dispose: () => void = () => {}): RendererLike {

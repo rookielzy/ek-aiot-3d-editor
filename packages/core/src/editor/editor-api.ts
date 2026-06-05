@@ -1,4 +1,5 @@
 import type { AssetReference } from "../assets/types";
+import type { AssetWorkspacePayloadSummary } from "../assets/workspace";
 import type { Command, CommandResult } from "../commands/types";
 import type { AdvancedEditorOperations, EditorClipboard } from "./operations";
 import type { EditorSnapState, SnapSubscriber } from "./snap-state";
@@ -10,6 +11,7 @@ import type { SceneSnapshot, SerializedSceneSnapshot } from "../snapshot/types";
 
 export type SnapshotSubscriber = (snapshot: SceneSnapshot) => void;
 export type RuntimeSubscriber = (runtime: EditorRuntime | null) => void;
+export type AssetWorkspaceSubscriber = (version: number) => void;
 
 export interface EditorOptions {
   snapshot?: SerializedSceneSnapshot;
@@ -33,6 +35,9 @@ export interface Editor {
   serialize(): SerializedSceneSnapshot;
   restore(snapshot: SerializedSceneSnapshot): SceneSnapshot;
   registerAsset(asset: Parameters<import("../assets/registry").AssetRegistry["register"]>[0]): AssetReference;
+  getAssetWorkspacePayloads(): AssetWorkspacePayloadSummary[];
+  getAssetWorkspaceVersion(): number;
+  subscribeAssetWorkspace(subscriber: AssetWorkspaceSubscriber): () => void;
   importProject(packageBytes: Uint8Array, options?: ProjectImportOptions): ProjectImportResult;
   exportProject(options?: ProjectExportOptions): ProjectExportResult;
   replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;

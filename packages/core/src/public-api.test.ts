@@ -8,13 +8,19 @@ import {
   createClipboardPayload,
   createNodeClipboardPayload,
   createEmptySnapshot,
+  buildAssetWorkspaceModel,
   buildInspectorModel,
   buildWorkbenchModel,
+  filterAssetWorkspaceItems,
+  sortAssetWorkspaceItems,
   buildSetTransformCommand,
   resolveEditorShortcut,
   snapNumber,
   validateSceneSnapshot,
   type AdvancedEditorOperations,
+  type AssetWorkspacePayloadSummary,
+  type AssetWorkspaceReferenceKind,
+  type AssetWorkspaceStatus,
   type BatchCommand,
   type CreateGroupCommand,
   type DeleteNodesCommand,
@@ -122,6 +128,9 @@ describe("core public API", () => {
     expect(publicApi).not.toHaveProperty("SceneProjector");
     expect(publicApi).not.toHaveProperty("ThreeNodeMap");
     expect(publicApi).not.toHaveProperty("ThreeObjectMap");
+    expect(publicApi).not.toHaveProperty("ProjectAssetStore");
+    expect(publicApi).not.toHaveProperty("defaultArchiveAdapter");
+    expect(publicApi).not.toHaveProperty("exportProjectPackage");
   });
 
   it("exports expanded schema and command contracts from the package root", () => {
@@ -198,6 +207,15 @@ describe("core public API", () => {
     };
     const sceneNode: SceneNode = objectNode;
     const clipboardNode: ClipboardSceneNode = { ...objectNode, originalId: "object-a" };
+    const workspacePayload: AssetWorkspacePayloadSummary = {
+      assetId: "asset-a",
+      kind: "glb",
+      available: true,
+      exportable: true,
+      byteSize: 1
+    };
+    const workspaceKind: AssetWorkspaceReferenceKind = "object-glb";
+    const workspaceStatus: AssetWorkspaceStatus = "ready";
 
     expect(command.type).toBe("set-material");
     expect(registerAsset.asset.kind).toBe("texture");
@@ -242,6 +260,9 @@ describe("core public API", () => {
     expect(environment.mode).toBe("none");
     expect(light.kind).toBe("ambient");
     expect(problem.target).toEqual({ kind: "object", objectId: "object-a" });
+    expect(workspacePayload.exportable).toBe(true);
+    expect(workspaceKind).toBe("object-glb");
+    expect(workspaceStatus).toBe("ready");
   });
 
   it("exports shared inspector contracts without exposing runtime internals", () => {
@@ -249,10 +270,13 @@ describe("core public API", () => {
     const inspector: InspectorModel = buildInspectorModel(snapshot);
     const command: InspectorCommandResult = buildSetTransformCommand(snapshot, "position.x", 1);
     const workbenchOptions: BuildWorkbenchModelOptions = { inspector };
+    const workspace = buildAssetWorkspaceModel(snapshot);
     const workbench: WorkbenchModel = buildWorkbenchModel(snapshot, workbenchOptions);
 
     expect(inspector.environment.enabled).toBe(true);
     expect(command.ok).toBe(false);
+    expect(filterAssetWorkspaceItems(workspace.items, { query: "missing" })).toEqual([]);
+    expect(sortAssetWorkspaceItems(workspace.items)).toEqual([]);
     expect(workbench.project.sceneId).toBe("scene-a");
     expect(workbench.hierarchy.empty).toBe(true);
   });

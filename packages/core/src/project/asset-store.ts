@@ -1,4 +1,5 @@
 import type { ResolvedAsset } from "../assets/types";
+import type { AssetWorkspacePayloadSummary } from "../assets/workspace";
 import { isJsonCompatible } from "../snapshot/validation";
 import type { AssetKind, AssetReference, JsonValue } from "../snapshot/types";
 import { copyBytes } from "./archive-adapter";
@@ -127,6 +128,12 @@ export class ProjectAssetStore {
     };
   }
 
+  summaries(): AssetWorkspacePayloadSummary[] {
+    return [...this.#assets.values()]
+      .map((asset) => toPayloadSummary(asset))
+      .sort((left, right) => left.assetId.localeCompare(right.assetId));
+  }
+
   entries(): IterableIterator<[string, StoredProjectAsset]> {
     return this.#assets.entries();
   }
@@ -241,6 +248,22 @@ function toResolvedAsset(stored: StoredProjectAsset, uri: string): ResolvedAsset
       byteSize: stored.byteSize ?? stored.bytes?.byteLength ?? 0,
       checksum: stored.checksum ?? (stored.bytes ? checksumBytes(stored.bytes) : "")
     }
+  };
+}
+
+function toPayloadSummary(stored: StoredProjectAsset): AssetWorkspacePayloadSummary {
+  const exportable = Boolean(stored.bytes || stored.blob);
+  const byteSize = stored.byteSize ?? stored.bytes?.byteLength ?? stored.blob?.size;
+  return {
+    assetId: stored.assetId,
+    kind: stored.kind,
+    available: exportable,
+    exportable,
+    ...(stored.label ? { label: stored.label } : {}),
+    ...(stored.mimeType ? { mimeType: stored.mimeType } : {}),
+    ...(byteSize !== undefined ? { byteSize } : {}),
+    ...(stored.checksum ?? stored.bytes ? { checksum: stored.checksum ?? checksumBytes(stored.bytes!) } : {}),
+    ...(stored.metadata ? { metadata: { ...stored.metadata } } : {})
   };
 }
 

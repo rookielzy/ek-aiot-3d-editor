@@ -3,6 +3,7 @@ import { createMissingAssetProblem } from "../assets/problems";
 import { createEditor } from "../editor/create-editor";
 import { buildInspectorModel } from "../inspector/selection";
 import { createEnvironmentAssetUnresolvedProblem } from "../runtime/problems";
+import { filterAssetWorkspaceItems, sortAssetWorkspaceItems } from "../assets/workspace";
 import type { Problem } from "../problems/types";
 import { buildWorkbenchModel } from "./workbench-model";
 
@@ -105,6 +106,89 @@ describe("workbench model", () => {
     ]);
     expect(JSON.stringify(model)).not.toContain("blob:");
     expect(JSON.stringify(model)).not.toContain("uri");
+  });
+
+  it("uses asset workspace payload summaries while preserving legacy asset item fields", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a", label: "Known" } });
+    editor.dispatch({ type: "register-asset", asset: { id: "texture-a", kind: "texture", label: "Texture" } });
+    editor.dispatch({
+      type: "set-material",
+      target: { kind: "object", objectId: "object-a" },
+      material: { textures: { map: { assetId: "texture-a" } } }
+    });
+    const snapshot = editor.getSnapshot();
+
+    const model = buildWorkbenchModel(snapshot, {
+      inspector: buildInspectorModel(snapshot),
+      assetPayloads: [{
+        assetId: "asset-a",
+        kind: "glb",
+        available: true,
+        exportable: true,
+        byteSize: 3,
+        mimeType: "model/gltf-binary"
+      }],
+      runtimeProblems: [],
+      history: editor.getHistoryState(),
+      snap: editor.snap.get(),
+      transformMode: editor.transformMode.get(),
+      runtimeReady: false
+    });
+
+    expect(model.assets.items).toEqual([
+      expect.objectContaining({
+        id: "asset-a",
+        referenced: true,
+        missing: false
+      }),
+      expect.objectContaining({
+        id: "texture-a",
+        referenced: true,
+        missing: false
+      })
+    ]);
+    expect(model.assets.workspace.items.map((asset) => [asset.id, asset.payloadStatus])).toEqual([
+      ["asset-a", "available"],
+      ["texture-a", "missing"]
+    ]);
+    expect(model.assets.missing).toEqual([]);
+    expect(JSON.stringify(model.assets.workspace)).not.toContain("blob:");
+    expect(JSON.stringify(model.assets.workspace)).not.toContain("\"bytes\"");
+  });
+
+  it("exposes core asset workspace filter and sort behavior through the workbench model", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Pump", asset: { id: "pump-a", label: "Pump GLB" } });
+    editor.dispatch({ type: "register-asset", asset: { id: "texture-a", kind: "texture", label: "Pump Texture" } });
+    editor.dispatch({
+      type: "set-material",
+      target: { kind: "object", objectId: "object-a" },
+      material: { textures: { map: { assetId: "texture-a" } } }
+    });
+    const snapshot = editor.getSnapshot();
+    const model = buildWorkbenchModel(snapshot, {
+      inspector: buildInspectorModel(snapshot),
+      assetPayloads: [{
+        assetId: "pump-a",
+        kind: "glb",
+        available: true,
+        exportable: true
+      }],
+      runtimeProblems: [],
+      history: editor.getHistoryState(),
+      snap: editor.snap.get(),
+      transformMode: editor.transformMode.get(),
+      runtimeReady: false
+    });
+
+    expect(filterAssetWorkspaceItems(model.assets.workspace.items, { query: "pump texture", missing: true }).map((item) => item.id)).toEqual([
+      "texture-a"
+    ]);
+    expect(sortAssetWorkspaceItems(model.assets.workspace.items, { key: "payload" }).map((item) => item.id)).toEqual([
+      "pump-a",
+      "texture-a"
+    ]);
   });
 
   it("derives deterministic toolbar and status affordances from editor state", () => {

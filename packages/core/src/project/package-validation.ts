@@ -111,12 +111,14 @@ export function validateProjectManifest(value: unknown, problems: ProjectProblem
 }
 
 export function createProjectProblem(code: string, message: string, metadata?: Record<string, unknown>): ProjectProblem {
+  const assetId = typeof metadata?.assetId === "string" ? metadata.assetId : undefined;
   return {
     id: `project:${code}`,
     severity: "error",
     code,
     source: "validation",
-    target: { kind: "scene", sceneId: "project" },
+    target: assetId ? { kind: "asset", assetId } : { kind: "scene", sceneId: "project" },
+    ...(assetId ? { assetId } : {}),
     recoverability: "user-action",
     message,
     display: {

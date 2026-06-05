@@ -6,6 +6,7 @@ import {
   type EditorOptions,
   type EditorRuntime,
   type AdvancedEditorOperations,
+  type AssetWorkspacePayloadSummary,
   type WorkbenchModel,
   type WorkbenchProblemItem,
   type HistoryState,
@@ -61,6 +62,8 @@ export interface WorkbenchProjectContext {
 }
 
 export interface WorkbenchAssetContext {
+  payloads: AssetWorkspacePayloadSummary[];
+  workspaceVersion: number;
   replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
 }
 
@@ -137,6 +140,11 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     () => editor.getRuntime(),
     () => editor.getRuntime()
   );
+  const assetWorkspaceVersion = useSyncExternalStore(
+    (listener) => editor.subscribeAssetWorkspace(listener),
+    () => editor.getAssetWorkspaceVersion(),
+    () => editor.getAssetWorkspaceVersion()
+  );
   const inspector = useInspector({ editor });
   const ownsEditor = !options.editor;
   const dispatch = useCallback((command: Command) => editor.dispatch(command), [editor]);
@@ -163,9 +171,11 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     }
   }, [editor, ownsEditor]);
   const historyState = editor.getHistoryState();
+  const assetPayloads = editor.getAssetWorkspacePayloads();
   const model = buildWorkbenchModel(inspector.snapshot, {
     inspector: inspector.inspector,
     runtimeProblems: inspector.runtimeProblems,
+    assetPayloads,
     history: historyState,
     snap,
     transformMode,
@@ -204,6 +214,8 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     exportProject
   };
   const assets: WorkbenchAssetContext = {
+    payloads: assetPayloads,
+    workspaceVersion: assetWorkspaceVersion,
     replaceAsset
   };
   const problems: WorkbenchProblemsContext = {

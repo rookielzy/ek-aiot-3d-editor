@@ -98,6 +98,14 @@ if (!result.ok) {
 
 导入成功会替换 editor state，并把 payload 注册到 transient project asset store。Snapshot 仍然只保存 asset reference。
 
+## 本地资产 workspace
+
+Core 会从 `SceneSnapshot.assets`、对象/材质/环境中的 asset references、项目包 payload 摘要和资产问题派生本地资产 workspace。workspace row 只包含 JSON-compatible projection：asset ID、kind、label、引用位置、payload 是否可用、byte size、MIME type、checksum、metadata、问题摘要和 package readiness。
+
+workspace 不保存也不暴露 payload bytes、`Blob`、`File`、object URL、resolver 输出、loaded texture、PMREM 或 Three.js 对象。宿主可以把 workspace rows 镜像到 UI state，但 durable storage 仍只应该保存 `editor.serialize()` 的 Snapshot 或 `editor.exportProject()` 产生的 `.ek3d` bytes。
+
+payload-only 变化也会更新 workspace。例如 `replaceAsset()` 成功后，稳定 asset ID 不变，Snapshot 不一定变化，但 `editor.subscribeAssetWorkspace()` 会通知消费者重新读取 `editor.getAssetWorkspacePayloads()` 并重建 Workbench/workspace model。
+
 ## 替换缺失资产
 
 如果导入后某个资产 payload 缺失或 runtime resolver 失败，UI 可以让用户选择新文件，然后用原 asset ID 替换 transient payload：

@@ -1,6 +1,22 @@
 export { AssetResolverBridge } from "./assets/resolver";
 export type { AssetInput, AssetReference, AssetResolver, RegisteredAsset, ResolvedAsset } from "./assets/types";
 export type {
+  AssetReferenceLocation,
+  AssetWorkspaceItem,
+  AssetWorkspaceModel,
+  AssetWorkspacePackageStatus,
+  AssetWorkspacePayloadStatus,
+  AssetWorkspacePayloadSummary,
+  AssetWorkspaceProblemSummary,
+  AssetWorkspaceReadiness,
+  AssetWorkspaceReferenceKind,
+  AssetWorkspaceSortKey,
+  AssetWorkspaceStatus,
+  BuildAssetWorkspaceOptions,
+  FilterAssetWorkspaceOptions,
+  SortAssetWorkspaceOptions
+} from "./assets/workspace";
+export type {
   AddLightCommand,
   BatchCommand,
   Command,
@@ -30,7 +46,7 @@ export type {
   UngroupObjectsCommand,
   UpdateLightCommand
 } from "./commands/types";
-export type { Editor, EditorOptions, MountRuntimeOptions, RuntimeSubscriber, SnapshotSubscriber } from "./editor/editor-api";
+export type { AssetWorkspaceSubscriber, Editor, EditorOptions, MountRuntimeOptions, RuntimeSubscriber, SnapshotSubscriber } from "./editor/editor-api";
 export type { AdvancedEditorOperations, EditorClipboard } from "./editor/operations";
 export type { SnapChannel, SnapSubscriber } from "./editor/snap-state";
 export type {
@@ -194,6 +210,12 @@ export {
   buildInspectorModel,
   getInspectorSelection
 } from "./inspector/selection";
+export {
+  buildAssetWorkspaceModel,
+  collectAssetReferenceLocations,
+  filterAssetWorkspaceItems,
+  sortAssetWorkspaceItems
+} from "./assets/workspace";
 export {
   buildWorkbenchModel
 } from "./workbench/workbench-model";
