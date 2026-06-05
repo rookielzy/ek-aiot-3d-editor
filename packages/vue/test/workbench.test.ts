@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AssetResolverBridge,
   createEditor,
+  ThreeGltfLoaderAdapter,
   type EditorRuntimeOptions,
   type RendererLike
 } from "@ek-aiot/3d-editor-core";
@@ -125,6 +126,19 @@ describe("Vue EditorWorkbench", () => {
 
     await wrapper.find('[title="Duplicate selection"]').trigger("click");
     expect(duplicate).toHaveBeenCalledTimes(1);
+
+    wrapper.unmount();
+  });
+
+  it("passes decoder-aware loader adapters through to the core runtime", () => {
+    const editor = markRaw(createEditor());
+    const mountRuntime = vi.spyOn(editor, "mountRuntime");
+    const loader = new ThreeGltfLoaderAdapter({ decoders: {} });
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, loader, rendererFactory: fakeRenderer }
+    });
+
+    expect(mountRuntime).toHaveBeenCalledWith(expect.objectContaining({ loader }));
 
     wrapper.unmount();
   });
