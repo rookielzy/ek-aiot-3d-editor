@@ -80,6 +80,49 @@ describe("editor lifecycle", () => {
     expect(editor.exportProject().problems).toMatchObject([{ code: "project-export-payload-missing" }]);
   });
 
+  it("notifies asset workspace subscribers for snapshot and payload-only changes", async () => {
+    const editor = createEditor();
+    const versions: number[] = [];
+    editor.subscribeAssetWorkspace((version) => {
+      versions.push(version);
+    });
+
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    const missingVersion = editor.getAssetWorkspaceVersion();
+    const replaced = await editor.replaceAsset({ assetId: "asset-a", source: new Uint8Array([1, 2, 3]) });
+    const payloadVersion = editor.getAssetWorkspaceVersion();
+
+    expect(replaced.ok).toBe(true);
+    expect(payloadVersion).toBeGreaterThan(missingVersion);
+    expect(versions).toEqual([0, 1, 2]);
+    expect(editor.getAssetWorkspacePayloads()).toEqual([expect.objectContaining({
+      assetId: "asset-a",
+      available: true,
+      exportable: true,
+      byteSize: 3
+    })]);
+    expect(JSON.stringify(editor.getAssetWorkspacePayloads())).not.toContain("bytes");
+    expect(JSON.stringify(editor.getAssetWorkspacePayloads())).not.toContain("blob:");
+  });
+
+  it("notifies asset workspace subscribers when project import or restore replaces payloads", () => {
+    const source = createEditor();
+    source.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a", source: new Uint8Array([1]) } });
+    const exported = source.exportProject();
+    const editor = createEditor();
+    const versions: number[] = [];
+    editor.subscribeAssetWorkspace((version) => {
+      versions.push(version);
+    });
+
+    const imported = editor.importProject(exported.packageBytes as Uint8Array);
+    editor.restore(editor.serialize());
+
+    expect(imported.ok).toBe(true);
+    expect(versions).toEqual([0, 1, 2]);
+    expect(editor.getAssetWorkspacePayloads()).toEqual([]);
+  });
+
   it("keeps durable command results when transient payload registration fails", () => {
     const editor = createEditor();
     const result = editor.dispatch({

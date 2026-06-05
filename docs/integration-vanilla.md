@@ -80,6 +80,21 @@ const unsubscribeProblems = runtime.subscribeProblems(({ problems }) => {
 
 runtime problem 是派生状态，不属于 durable Snapshot。
 
+## 本地资产 workspace
+
+Core-only host 可以直接构建资产 workspace：
+
+```ts
+import { buildAssetWorkspaceModel } from "@ek-aiot/3d-editor-core";
+
+const workspace = buildAssetWorkspaceModel(editor.getSnapshot(), {
+  payloads: editor.getAssetWorkspacePayloads(),
+  problems: runtime.getProblems()
+});
+```
+
+如果只替换 payload，Snapshot 可能不会变化。用 `editor.subscribeAssetWorkspace()` 监听 workspace 版本，并在回调中重新读取 `editor.getAssetWorkspacePayloads()`。workspace rows 是 JSON-compatible UI projection；不要把 transient project store、`File`、`Blob`、object URL 或 resolver 输出保存成 durable state。
+
 ## 自定义 loader 或 renderer
 
 测试或宿主环境可以传入自定义 loader / renderer factory：

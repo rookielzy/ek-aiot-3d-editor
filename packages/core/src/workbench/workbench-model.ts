@@ -1,3 +1,8 @@
+import {
+  buildAssetWorkspaceModel,
+  type AssetWorkspaceModel,
+  type AssetWorkspacePayloadSummary
+} from "../assets/workspace";
 import { buildInspectorModel } from "../inspector/selection";
 import type { InspectorModel, InspectorProblemItem } from "../inspector/types";
 import type { HistoryState } from "../history/history";
@@ -16,6 +21,8 @@ export interface BuildWorkbenchModelOptions {
   runtimeProblems?: readonly Problem[];
   projectProblems?: readonly (ProjectProblem | Problem)[];
   projectCompleteness?: ProjectCompleteness;
+  assetPayloads?: readonly AssetWorkspacePayloadSummary[];
+  assetWorkspace?: AssetWorkspaceModel;
   dirty?: boolean;
 }
 
@@ -45,6 +52,7 @@ export interface WorkbenchHierarchyRow {
 }
 
 export interface WorkbenchAssetModel {
+  workspace?: AssetWorkspaceModel;
   items: WorkbenchAssetItem[];
   missing: WorkbenchMissingAssetItem[];
   totalCount: number;
@@ -169,11 +177,16 @@ export function buildWorkbenchModel(snapshot: SceneSnapshot, options: BuildWorkb
   const transformMode = options.transformMode ?? "translate";
   const runtimeReady = options.runtimeReady ?? false;
   const projectProblems = options.projectProblems ?? [];
-  const projectCompleteness = options.projectCompleteness ?? (projectProblems.length > 0 ? "partial" : "complete");
   const problems = buildWorkbenchProblems(inspector, projectProblems);
   const selection = buildWorkbenchSelection(snapshot, inspector);
   const hierarchy = buildWorkbenchHierarchy(snapshot, inspector, problems.items);
-  const assets = buildWorkbenchAssets(snapshot, problems.items);
+  const assetWorkspace = options.assetWorkspace ?? buildAssetWorkspaceModel(snapshot, {
+    payloads: options.assetPayloads,
+    problems: problems.items,
+    ...(options.projectCompleteness ? { projectCompleteness: options.projectCompleteness } : {})
+  });
+  const projectCompleteness = options.projectCompleteness ?? assetWorkspace.readiness.completeness;
+  const assets = buildWorkbenchAssets(snapshot, assetWorkspace);
   const toolbar = buildWorkbenchToolbar(snapshot, inspector, {
     history,
     snap,
@@ -333,36 +346,37 @@ function createHierarchyRow(
   };
 }
 
-function buildWorkbenchAssets(snapshot: SceneSnapshot, problems: readonly WorkbenchProblemItem[]): WorkbenchAssetModel {
-  const referencedAssetIds = collectReferencedAssetIds(snapshot);
-  const items = Object.values(snapshot.assets).map((asset) => {
-    const assetProblems = problems.filter((problem) => problemMatchesAsset(asset.id, problem));
-
-    return {
+function buildWorkbenchAssets(snapshot: SceneSnapshot, workspace: AssetWorkspaceModel): WorkbenchAssetModel {
+  const items = workspace.items
+    .filter((asset) => asset.registered)
+    .map((asset) => ({
       id: asset.id,
-      label: asset.label ?? asset.id,
+      label: asset.label,
       kind: asset.kind,
-      referenced: referencedAssetIds.has(asset.id),
-      missing: assetProblems.some(isMissingAssetProblem),
-      problemCount: assetProblems.length,
-      problemIds: assetProblems.map((problem) => problem.id),
-      highestProblemSeverity: highestSeverity(assetProblems)
-    };
-  });
-  const missing = problems
-    .filter((problem) => problem.assetId && isMissingAssetProblem(problem))
-    .map((problem) => ({
-      problemId: problem.id,
-      assetId: problem.assetId!,
-      objectId: problem.objectId,
-      label: snapshot.assets[problem.assetId!]?.label ?? problem.assetId!,
-      title: problem.title,
-      detail: problem.detail,
-      severity: problem.severity,
-      actionLabel: problem.actionLabel
+      referenced: asset.referenced,
+      missing: asset.problems.some((problem) => isMissingAssetProblem(problem)),
+      problemCount: asset.problemCount,
+      problemIds: [...asset.problemIds],
+      highestProblemSeverity: asset.highestProblemSeverity
     }));
+  const missing: WorkbenchMissingAssetItem[] = workspace.items
+    .filter((asset) => asset.problems.some((problem) => isMissingAssetProblem(problem)))
+    .flatMap((asset): WorkbenchMissingAssetItem[] => {
+      const missingProblems = asset.problems.filter((problem) => isMissingAssetProblem(problem));
+      return missingProblems.map((problem) => ({
+        problemId: problem.id,
+        assetId: asset.id,
+        objectId: problem.objectId,
+        label: snapshot.assets[asset.id]?.label ?? asset.label,
+        title: problem.title,
+        detail: problem.detail,
+        severity: problem.severity,
+        actionLabel: problem.actionLabel
+      }));
+    });
 
   return {
+    workspace,
     items,
     missing,
     totalCount: items.length,
@@ -501,33 +515,10 @@ function problemMatchesAsset(assetId: string, problem: WorkbenchProblemItem): bo
     (problem.target.kind === "texture-slot" && problem.target.assetId === assetId);
 }
 
-function isMissingAssetProblem(problem: WorkbenchProblemItem): boolean {
+function isMissingAssetProblem(problem: Pick<WorkbenchProblemItem, "recoverability" | "assetId" | "code" | "actionLabel">): boolean {
   return problem.recoverability === "user-action" &&
     Boolean(problem.assetId) &&
     (problem.code.includes("unresolved") || problem.code.includes("missing") || Boolean(problem.actionLabel));
-}
-
-function collectReferencedAssetIds(snapshot: SceneSnapshot): Set<string> {
-  const ids = new Set<string>();
-
-  for (const object of Object.values(snapshot.objects)) {
-    ids.add(object.asset.id);
-  }
-  for (const material of Object.values(snapshot.materials.definitions)) {
-    for (const texture of Object.values(material.override.textures ?? {})) {
-      if (texture?.assetId) {
-        ids.add(texture.assetId);
-      }
-    }
-  }
-  if (snapshot.environment.background.assetId) {
-    ids.add(snapshot.environment.background.assetId);
-  }
-  if (snapshot.environment.environment.assetId) {
-    ids.add(snapshot.environment.environment.assetId);
-  }
-
-  return ids;
 }
 
 function highestSeverity(problems: readonly Pick<WorkbenchProblemItem, "severity">[]): ProblemSeverity | null {

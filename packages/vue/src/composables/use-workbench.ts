@@ -5,6 +5,7 @@ import {
   createEditor,
   executeEditorAction,
   type AdvancedEditorOperations,
+  type AssetWorkspacePayloadSummary,
   type Command,
   type Editor,
   type EditorAction,
@@ -62,6 +63,8 @@ export interface WorkbenchProjectContext {
 }
 
 export interface WorkbenchAssetContext {
+  payloads?: AssetWorkspacePayloadSummary[];
+  workspaceVersion?: number;
   replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
 }
 
@@ -153,9 +156,11 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   const transformMode = ref<TransformMode>(currentEditor.value.transformMode.get());
   const runtime = shallowRef<EditorRuntime | null>(markRuntimeRaw(currentEditor.value.getRuntime()));
   const runtimeProblems = shallowRef<Problem[]>(currentEditor.value.getRuntime()?.getProblems() ?? []);
+  const assetWorkspaceVersion = shallowRef(getAssetWorkspaceVersion(currentEditor.value));
   let unsubscribeSnapshot: (() => void) | null = null;
   let unsubscribeRuntime: (() => void) | null = null;
   let unsubscribeProblems: (() => void) | null = null;
+  let unsubscribeAssetWorkspace: (() => void) | null = null;
   let unsubscribeSnap: (() => void) | null = null;
   let unsubscribeTransformMode: (() => void) | null = null;
   let disposed = false;
@@ -170,6 +175,9 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
       runtime.value = markRuntimeRaw(nextEditor.getRuntime());
       subscribeRuntimeProblems();
     });
+    unsubscribeAssetWorkspace = nextEditor.subscribeAssetWorkspace?.((version) => {
+      assetWorkspaceVersion.value = version;
+    }) ?? null;
     unsubscribeSnap = nextEditor.subscribeSnap((nextSnap) => {
       snap.value = nextSnap;
     });
@@ -197,6 +205,8 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     unsubscribeRuntime = null;
     unsubscribeProblems?.();
     unsubscribeProblems = null;
+    unsubscribeAssetWorkspace?.();
+    unsubscribeAssetWorkspace = null;
     unsubscribeSnap?.();
     unsubscribeSnap = null;
     unsubscribeTransformMode?.();
@@ -298,16 +308,18 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
       runtimeProblems: runtimeProblems.value
     })
   );
-  const model = computed(() =>
-    buildWorkbenchModel(snapshot.value, {
+  const model = computed(() => {
+    assetWorkspaceVersion.value;
+    return buildWorkbenchModel(snapshot.value, {
       inspector: inspector.value,
       runtimeProblems: runtimeProblems.value,
+      assetPayloads: getAssetWorkspacePayloads(currentEditor.value),
       history: currentEditor.value.getHistoryState(),
       snap: snap.value,
       transformMode: transformMode.value,
       runtimeReady: runtime.value !== null
-    })
-  );
+    });
+  });
   const activeLightId = computed({
     get: () => inspector.value.lights.activeLightId,
     set: setActiveLightId
@@ -344,6 +356,8 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
       exportProject
     },
     assets: {
+      payloads: getAssetWorkspacePayloads(currentEditor.value),
+      workspaceVersion: assetWorkspaceVersion.value,
       replaceAsset
     },
     problems: {
@@ -439,4 +453,12 @@ function defaultSnapIncrement(channel: SnapChannel): number {
 
 function markRuntimeRaw(runtime: EditorRuntime | null): EditorRuntime | null {
   return runtime ? markRaw(runtime) : null;
+}
+
+function getAssetWorkspacePayloads(editor: Editor): AssetWorkspacePayloadSummary[] {
+  return editor.getAssetWorkspacePayloads?.() ?? [];
+}
+
+function getAssetWorkspaceVersion(editor: Editor): number {
+  return editor.getAssetWorkspaceVersion?.() ?? 0;
 }

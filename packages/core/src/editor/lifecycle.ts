@@ -9,7 +9,7 @@ import { ProjectAssetStore } from "../project/asset-store";
 import { exportProjectPackage } from "../project/export-project";
 import { importProjectAssets } from "../project/import-project";
 import { replaceProjectAsset } from "../project/replace-asset";
-import type { ProjectAssetSourceInput } from "../project/project-api";
+import type { ProjectAssetPayloadSummary, ProjectAssetSourceInput } from "../project/project-api";
 import type { ProjectExportOptions, ProjectExportResult, ProjectImportOptions, ProjectImportResult, ReplaceAssetInput, ReplaceAssetResult } from "../project/project-api";
 import { ThreeEditorRuntime, type EditorRuntime } from "../runtime/editor-runtime";
 import { EditorTransformModeState, type TransformModeSubscriber } from "../runtime/transform/transform-mode";
@@ -18,7 +18,7 @@ import { createAdvancedEditorOperations, createMemoryClipboard, type AdvancedEdi
 import { EditorSnapState, type SnapSubscriber } from "./snap-state";
 import { restoreSnapshot, serializeSnapshot } from "./serialization";
 import { EditorStore } from "./store";
-import type { Editor, EditorOptions, MountRuntimeOptions, RuntimeSubscriber, SnapshotSubscriber } from "./editor-api";
+import type { AssetWorkspaceSubscriber, Editor, EditorOptions, MountRuntimeOptions, RuntimeSubscriber, SnapshotSubscriber } from "./editor-api";
 
 export class CoreEditor implements Editor {
   readonly assets = new AssetRegistry();
@@ -32,6 +32,8 @@ export class CoreEditor implements Editor {
   readonly transformMode = new EditorTransformModeState();
   #runtime: EditorRuntime | null = null;
   #runtimeSubscribers = new Set<RuntimeSubscriber>();
+  #assetWorkspaceSubscribers = new Set<AssetWorkspaceSubscriber>();
+  #assetWorkspaceVersion = 0;
   #resolver = new AssetResolverBridge(undefined, this.projectAssets);
   #disposed = false;
 
@@ -67,16 +69,25 @@ export class CoreEditor implements Editor {
       } catch {
         // Transient payload registration must not change durable command results.
       }
+      this.#notifyAssetWorkspaceSubscribers();
     }
     return result;
   }
 
   undo(): CommandResult {
-    return this.dispatcher.undo();
+    const result = this.dispatcher.undo();
+    if (result.ok) {
+      this.#notifyAssetWorkspaceSubscribers();
+    }
+    return result;
   }
 
   redo(): CommandResult {
-    return this.dispatcher.redo();
+    const result = this.dispatcher.redo();
+    if (result.ok) {
+      this.#notifyAssetWorkspaceSubscribers();
+    }
+    return result;
   }
 
   getHistoryState(): HistoryState {
@@ -94,7 +105,9 @@ export class CoreEditor implements Editor {
     this.clipboard.clear();
     this.snap.set({});
     this.transformMode.reset();
-    return this.store.replaceSnapshot(restored);
+    const nextSnapshot = this.store.replaceSnapshot(restored);
+    this.#notifyAssetWorkspaceSubscribers();
+    return nextSnapshot;
   }
 
   registerAsset(asset: AssetInput) {
@@ -102,8 +115,29 @@ export class CoreEditor implements Editor {
     const source = asset.source;
     if (isProjectAssetSource(source)) {
       this.projectAssets.register({ asset: reference, source });
+      this.#notifyAssetWorkspaceSubscribers();
     }
     return reference;
+  }
+
+  getAssetWorkspacePayloads(): ProjectAssetPayloadSummary[] {
+    this.#assertActive();
+    return this.projectAssets.summaries();
+  }
+
+  getAssetWorkspaceVersion(): number {
+    this.#assertActive();
+    return this.#assetWorkspaceVersion;
+  }
+
+  subscribeAssetWorkspace(subscriber: AssetWorkspaceSubscriber): () => void {
+    this.#assertActive();
+    this.#assetWorkspaceSubscribers.add(subscriber);
+    subscriber(this.getAssetWorkspaceVersion());
+
+    return () => {
+      this.#assetWorkspaceSubscribers.delete(subscriber);
+    };
   }
 
   importProject(packageBytes: Uint8Array, options: ProjectImportOptions = {}): ProjectImportResult {
@@ -115,6 +149,7 @@ export class CoreEditor implements Editor {
     });
     if (!result.ok) {
       this.projectAssets.replaceAll(previousAssets);
+      this.#notifyAssetWorkspaceSubscribers();
       return {
         ...result,
         snapshot: this.store.getSnapshot()
@@ -123,6 +158,7 @@ export class CoreEditor implements Editor {
 
     this.history.clear();
     const snapshot = this.store.replaceSnapshot(result.snapshot);
+    this.#notifyAssetWorkspaceSubscribers();
     void this.#runtime?.project(snapshot);
     return {
       ...result,
@@ -139,6 +175,7 @@ export class CoreEditor implements Editor {
     this.#assertActive();
     const result = await replaceProjectAsset(this.store.getSnapshot(), this.projectAssets, input);
     if (result.ok) {
+      this.#notifyAssetWorkspaceSubscribers();
       void this.#runtime?.project(this.store.getSnapshot());
     }
     return result;
@@ -189,6 +226,7 @@ export class CoreEditor implements Editor {
     this.#runtime = null;
     this.#notifyRuntimeSubscribers();
     this.#runtimeSubscribers.clear();
+    this.#assetWorkspaceSubscribers.clear();
     this.assets.clear();
     this.projectAssets.clear();
     this.clipboard.clear();
@@ -211,6 +249,13 @@ export class CoreEditor implements Editor {
     const runtime = this.getRuntime();
     for (const subscriber of [...this.#runtimeSubscribers]) {
       subscriber(runtime);
+    }
+  }
+
+  #notifyAssetWorkspaceSubscribers(): void {
+    this.#assetWorkspaceVersion += 1;
+    for (const subscriber of [...this.#assetWorkspaceSubscribers]) {
+      subscriber(this.#assetWorkspaceVersion);
     }
   }
 

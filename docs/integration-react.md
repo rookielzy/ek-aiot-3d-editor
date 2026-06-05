@@ -74,6 +74,8 @@ React app store 可以镜像可序列化的项目 metadata、当前 route、最�
 
 如果需要把编辑状态同步给宿主 UI，优先通过 `useWorkbench()` 或 `EditorWorkbench` render props 读取派生 context，再把必要的 serializable projection 写入宿主 store。持久化变更仍通过 core commands、project import/export 和 snapshot/project package API 完成。
 
+资产面板应优先读取 `workbench.model.assets.workspace`。该 workspace 已经合并 Snapshot asset registry、对象/材质/环境引用位置、项目包 payload 摘要和资产问题，并提供 core 统一的搜索/过滤/排序 helper。`replaceAsset()` 这类 payload-only 更新不会改变 Snapshot，但 React hook 会订阅 core asset workspace 版本并重新计算 model；宿主不需要也不应该读取 transient project store、`Blob` 或 object URL。
+
 ## Primitive 组件
 
 如果不使用 `EditorWorkbench`，可以直接组合：

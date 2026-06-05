@@ -170,7 +170,7 @@ describe("React EditorWorkbench", () => {
     expect(screen.getByText("Project")).toBeTruthy();
     expect(screen.getByText("Robot arm")).toBeTruthy();
     expect(screen.getByText("robot.glb")).toBeTruthy();
-    expect(screen.getByText("Project Ready")).toBeTruthy();
+    expect(screen.getByText("Project Partial")).toBeTruthy();
     expect(screen.getByText("Selection none")).toBeTruthy();
 
     fireEvent.click(screen.getByTitle("Select all"));
@@ -528,6 +528,20 @@ describe("React EditorWorkbench", () => {
 
     unmount();
     expect(editor.disposed).toBe(false);
+  });
+
+  it("refreshes useWorkbench asset workspace after payload-only replacement", async () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    const { result, unmount } = renderHookWithResult(() => useWorkbench({ editor }));
+
+    expect(result().model.assets.workspace!.items.find((asset) => asset.id === "asset-a")?.payloadStatus).toBe("missing");
+    await act(async () => {
+      await editor.replaceAsset({ assetId: "asset-a", source: new Uint8Array([1, 2, 3]) });
+    });
+
+    expect(result().model.assets.workspace!.items.find((asset) => asset.id === "asset-a")?.payloadStatus).toBe("available");
+    unmount();
   });
 });
 
