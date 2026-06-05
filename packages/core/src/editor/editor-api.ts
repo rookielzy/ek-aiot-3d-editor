@@ -1,4 +1,5 @@
-import type { AssetReference } from "../assets/types";
+import type { AssetInput, AssetReference } from "../assets/types";
+import type { GlbImportDiagnostic, GlbImportManifest } from "../assets/import-pipeline";
 import type { Command, CommandResult } from "../commands/types";
 import type { AdvancedEditorOperations, EditorClipboard } from "./operations";
 import type { EditorSnapState, SnapSubscriber } from "./snap-state";
@@ -17,6 +18,25 @@ export interface EditorOptions {
 }
 
 export interface MountRuntimeOptions extends Omit<EditorRuntimeOptions, "store" | "dispatcher"> {}
+
+export interface ImportGlbAssetOptions {
+  asset: AssetInput;
+  loader?: EditorRuntimeOptions["loader"];
+  objectId?: string;
+  name?: string;
+  parentId?: string | null;
+  transform?: Partial<SceneSnapshot["objects"][string]["transform"]>;
+  commit?: boolean;
+}
+
+export interface ImportGlbAssetResult {
+  ok: boolean;
+  manifest?: GlbImportManifest;
+  diagnostics: GlbImportDiagnostic[];
+  commandResult?: CommandResult;
+  snapshot: SceneSnapshot;
+  committed: boolean;
+}
 
 export interface Editor {
   getSnapshot(): SceneSnapshot;
@@ -45,4 +65,8 @@ export interface Editor {
   getRuntime(): EditorRuntime | null;
   dispose(): void;
   readonly disposed: boolean;
+}
+
+export interface EditorWithGlbImport extends Editor {
+  importGlbAsset(options: ImportGlbAssetOptions): Promise<ImportGlbAssetResult>;
 }

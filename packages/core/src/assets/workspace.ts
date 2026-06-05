@@ -3,6 +3,12 @@ import type { Problem, ProblemSeverity } from "../problems/types";
 import type { ProjectCompleteness, ProjectProblem } from "../project/package-types";
 import { findObjectNodeId } from "../snapshot/nodes";
 import type { AssetKind, AssetReference, JsonValue, SceneSnapshot } from "../snapshot/types";
+import {
+  getGlbImportManifestFromMetadata,
+  resolveGlbImportStatus,
+  type GlbImportManifest,
+  type GlbImportStatus
+} from "./import-pipeline";
 
 export type AssetWorkspaceReferenceKind =
   | "object-glb"
@@ -96,6 +102,9 @@ export interface AssetWorkspaceItem {
   payloadStatus: AssetWorkspacePayloadStatus;
   packageStatus: AssetWorkspacePackageStatus;
   packageBlocking: boolean;
+  importStatus?: GlbImportStatus;
+  importManifest?: GlbImportManifest | null;
+  importDiagnostics?: AssetWorkspaceProblemSummary[];
   problems: AssetWorkspaceProblemSummary[];
   problemIds: string[];
   problemCount: number;
@@ -325,6 +334,23 @@ function buildAssetWorkspaceItem(
   const snapshotAsset = snapshot.assets[assetId];
   const kind = snapshotAsset?.kind ?? payload?.kind ?? inferKindFromReferences(references);
   const metadata = mergeMetadata(snapshotAsset?.metadata, payload?.metadata);
+  const importManifest = getGlbImportManifestFromMetadata(metadata);
+  const importDiagnostics = (importManifest?.diagnostics ?? [])
+    .map((diagnostic): AssetWorkspaceProblemSummary => ({
+      id: `glb-import:${assetId}:${diagnostic.id}`,
+      severity: diagnostic.severity,
+      code: diagnostic.code,
+      source: "runtime",
+      title: diagnostic.display.title,
+      detail: diagnostic.display.detail ?? diagnostic.message,
+      recoverability: diagnostic.recoverability,
+      ...(diagnostic.display.actionLabel ? { actionLabel: diagnostic.display.actionLabel } : {}),
+      assetId,
+      target: { kind: "asset", assetId },
+      project: false
+    }))
+    .filter((diagnostic) => !problems.some((problem) => isEquivalentWorkspaceProblem(problem, diagnostic)));
+  const allProblems = [...problems, ...importDiagnostics].sort((left, right) => compareStrings(left.id, right.id));
   const referenced = references.length > 0;
   const registered = Boolean(snapshotAsset);
   const missingReference = referenced && !registered;
@@ -340,14 +366,14 @@ function buildAssetWorkspaceItem(
         : !referenced
           ? "not-referenced"
           : "partial";
-  const highestProblemSeverity = highestSeverity(problems);
-  const missing = missingReference || (referenced && payloadStatus === "missing") || problems.some(isMissingProblem);
-  const recoverableProblem = problems.find((problem) => problem.actionLabel || problem.recoverability === "user-action");
+  const highestProblemSeverity = highestSeverity(allProblems);
+  const missing = missingReference || (referenced && payloadStatus === "missing") || allProblems.some(isMissingProblem);
+  const recoverableProblem = allProblems.find((problem) => problem.actionLabel || problem.recoverability === "user-action");
   const status = missingReference
     ? "missing-reference"
     : referenced && (payloadStatus === "missing" || payloadStatus === "kind-mismatch")
       ? "missing-payload"
-      : problems.length > 0
+      : allProblems.length > 0
         ? "has-problems"
         : referenced
           ? "ready"
@@ -368,12 +394,15 @@ function buildAssetWorkspaceItem(
     payloadStatus,
     packageStatus,
     packageBlocking,
-    problems,
-    problemIds: problems.map((problem) => problem.id),
-    problemCount: problems.length,
+    importStatus: resolveGlbImportStatus(kind, importManifest),
+    importManifest,
+    importDiagnostics,
+    problems: allProblems,
+    problemIds: allProblems.map((problem) => problem.id),
+    problemCount: allProblems.length,
     highestProblemSeverity,
     missing,
-    recoverable: problems.some((problem) => problem.recoverability === "user-action"),
+    recoverable: allProblems.some((problem) => problem.recoverability === "user-action"),
     ...(recoverableProblem?.actionLabel ? { actionLabel: recoverableProblem.actionLabel } : {}),
     status,
     searchText: ""
@@ -408,6 +437,13 @@ function normalizeProblemSummary(problem: Problem | ProjectProblem | AssetWorksp
     target: { ...problem.target },
     project: problem.source === "validation" && problem.id.startsWith("project:")
   };
+}
+
+function isEquivalentWorkspaceProblem(left: AssetWorkspaceProblemSummary, right: AssetWorkspaceProblemSummary): boolean {
+  return left.assetId === right.assetId &&
+    left.code === right.code &&
+    left.title === right.title &&
+    (left.detail ?? "") === (right.detail ?? "");
 }
 
 function isAssetWorkspaceProblemSummary(problem: Problem | ProjectProblem | AssetWorkspaceProblemSummary): problem is AssetWorkspaceProblemSummary {
@@ -533,6 +569,7 @@ function createSearchText(item: AssetWorkspaceItem): string {
     item.status,
     item.payloadStatus,
     item.packageStatus,
+    item.importStatus,
     ...item.references.map((reference) => reference.label),
     ...item.problems.flatMap((problem) => [problem.code, problem.title, problem.detail ?? "", problem.actionLabel ?? ""])
   ].join(" "));

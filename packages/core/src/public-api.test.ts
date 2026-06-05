@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import { Group } from "three";
 import { describe, expect, it } from "vitest";
 import {
   createEditor,
@@ -12,8 +13,10 @@ import {
   buildInspectorModel,
   buildWorkbenchModel,
   filterAssetWorkspaceItems,
+  GLB_IMPORT_MANIFEST_METADATA_KEY,
   sortAssetWorkspaceItems,
   buildSetTransformCommand,
+  ThreeGltfLoaderAdapter,
   resolveEditorShortcut,
   snapNumber,
   validateSceneSnapshot,
@@ -28,10 +31,18 @@ import {
   type DuplicateObjectsCommand,
   type EditorAction,
   type EditorClipboardPayload,
+  type Editor,
+  type EditorWithGlbImport,
+  type GlbImportDiagnostic,
+  type GlbImportManifest,
+  type GltfDecoderConfiguration,
+  type GltfLoaderAdapter,
   type GroupNodesCommand,
   type GroupObjectsCommand,
   type InspectorModel,
   type InspectorCommandResult,
+  type ImportGlbAssetOptions,
+  type ImportGlbAssetResult,
   type LightDefinition,
   type Problem,
   PROJECT_PACKAGE_VERSION,
@@ -127,6 +138,12 @@ describe("core public API", () => {
     expect(publicApi).not.toHaveProperty("RuntimeSelectionVisuals");
     expect(publicApi).not.toHaveProperty("createOrbitViewportCameraControls");
     expect(publicApi).not.toHaveProperty("SceneProjector");
+    expect(publicApi).toHaveProperty("ThreeGltfLoaderAdapter");
+    expect(publicApi).not.toHaveProperty("GlbImportError");
+    expect(publicApi).not.toHaveProperty("configureGltfLoader");
+    expect(publicApi).not.toHaveProperty("normalizeGltfLoaderOutput");
+    expect(publicApi).not.toHaveProperty("glbImportDiagnosticToProblem");
+    expect(publicApi).not.toHaveProperty("createGlbImportDiagnosticsFromError");
     expect(publicApi).not.toHaveProperty("ThreeNodeMap");
     expect(publicApi).not.toHaveProperty("ThreeObjectMap");
     expect(publicApi).not.toHaveProperty("ProjectAssetStore");
@@ -218,6 +235,29 @@ describe("core public API", () => {
     const projectPayload: ProjectAssetPayloadSummary = workspacePayload;
     const workspaceKind: AssetWorkspaceReferenceKind = "object-glb";
     const workspaceStatus: AssetWorkspaceStatus = "ready";
+    const importDiagnostic: GlbImportDiagnostic = {
+      id: "glb-decoder-missing:KHR_texture_basisu",
+      severity: "error",
+      code: "glb-decoder-missing",
+      target: { kind: "extension", extension: "KHR_texture_basisu" },
+      message: "Missing KTX2.",
+      recoverability: "user-action",
+      display: { title: "KTX2 decoder is not configured" }
+    };
+    const importManifest: GlbImportManifest = createImportManifest([importDiagnostic]);
+    const decoderConfig: GltfDecoderConfiguration = {};
+    const loaderAdapter: GltfLoaderAdapter = new ThreeGltfLoaderAdapter({ decoders: decoderConfig });
+    const legacyLoaderAdapter: GltfLoaderAdapter = { load: async () => new Group() };
+    const importOptions: ImportGlbAssetOptions = { asset: { id: "asset-a", source: new Uint8Array([1]) }, loader: loaderAdapter };
+    const importResult: ImportGlbAssetResult = {
+      ok: false,
+      manifest: importManifest,
+      diagnostics: importManifest.diagnostics,
+      snapshot: createEmptySnapshot("scene-import"),
+      committed: false
+    };
+    const editorWithImport: EditorWithGlbImport = createEditor();
+    const baseEditor: Editor = editorWithImport;
 
     expect(command.type).toBe("set-material");
     expect(registerAsset.asset.kind).toBe("texture");
@@ -266,6 +306,14 @@ describe("core public API", () => {
     expect(projectPayload.available).toBe(true);
     expect(workspaceKind).toBe("object-glb");
     expect(workspaceStatus).toBe("ready");
+    expect(importManifest.version).toBe(1);
+    expect(GLB_IMPORT_MANIFEST_METADATA_KEY).toBe("glbImportManifest");
+    expect(importOptions.loader).toBe(loaderAdapter);
+    expect(importResult.committed).toBe(false);
+    expect(legacyLoaderAdapter.analyze).toBeUndefined();
+    expect(typeof editorWithImport.importGlbAsset).toBe("function");
+    expect(baseEditor.getSnapshot()).toMatchObject({ scene: { id: expect.any(String) } });
+    editorWithImport.dispose();
   });
 
   it("exports shared inspector contracts without exposing runtime internals", () => {
@@ -301,3 +349,37 @@ describe("core public API", () => {
     expect(snapNumber(0.74, 0.5)).toBe(0.5);
   });
 });
+
+function createImportManifest(diagnostics: GlbImportDiagnostic[]): GlbImportManifest {
+  return {
+    version: 1,
+    asset: {},
+    source: {},
+    counts: {
+      scenes: 0,
+      nodes: 0,
+      meshes: 0,
+      primitives: 0,
+      materials: 0,
+      textures: 0,
+      images: 0,
+      cameras: 0,
+      animations: 0,
+      skins: 0
+    },
+    extensions: {
+      used: [],
+      required: [],
+      unsupportedRequired: []
+    },
+    scenes: [],
+    nodes: [],
+    meshes: [],
+    materials: [],
+    textures: [],
+    images: [],
+    cameras: [],
+    animations: [],
+    diagnostics
+  };
+}

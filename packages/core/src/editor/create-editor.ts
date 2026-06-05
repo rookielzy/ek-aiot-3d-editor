@@ -1,6 +1,6 @@
-import type { Editor, EditorOptions } from "./editor-api";
+import type { EditorOptions, EditorWithGlbImport } from "./editor-api";
 import { CoreEditor } from "./lifecycle";
 
-export function createEditor(options: EditorOptions = {}): Editor {
+export function createEditor(options: EditorOptions = {}): EditorWithGlbImport {
   return new CoreEditor(options);
 }

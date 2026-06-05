@@ -1,10 +1,11 @@
 import { BoxGeometry, Group, Mesh, MeshBasicMaterial, Object3D, Scene } from "three";
+import { glbImportDiagnosticToProblem, normalizeGltfLoaderOutput, type GlbImportDiagnostic } from "../assets/import-pipeline";
 import { AssetResolverBridge } from "../assets/resolver";
 import { createMissingAssetProblem, type Problem } from "../assets/problems";
 import type { SceneLightNode, SceneNode, SceneObject, SceneObjectNode, SceneSnapshot } from "../snapshot/types";
 import { EnvironmentProjector } from "./environment-projector";
 import type { GltfLoaderAdapter } from "./gltf-loader-adapter";
-import { PlaceholderGltfLoaderAdapter } from "./gltf-loader-adapter";
+import { GlbImportError, PlaceholderGltfLoaderAdapter } from "./gltf-loader-adapter";
 import { LightProjector } from "./light-projector";
 import { MaterialProjector } from "./material-projector";
 import type { RuntimePmremAdapter } from "./pmrem-adapter";
@@ -354,15 +355,26 @@ export class SceneProjector {
     }
 
     try {
-      const loaded = await this.#loader.load(resolved);
+      const loadResult = this.#loader.analyze
+        ? await this.#loader.analyze(resolved)
+        : normalizeGltfLoaderOutput(await this.#loader.load(resolved));
       if (!this.#isActive(generation) || this.#loadTokens.get(object.id) !== token) {
-        disposeObjectTree(loaded);
+        disposeObjectTree(loadResult.scene);
         return null;
       }
-      return loaded;
+      for (const diagnostic of mergeGlbDiagnostics(loadResult.diagnostics ?? [], loadResult.manifest?.diagnostics ?? [])) {
+        this.#addProblem(glbImportDiagnosticToProblem(diagnostic, object.asset, object.id));
+      }
+      return loadResult.scene;
     } catch (error) {
       if (!this.#isActive(generation)) {
         return null;
+      }
+      if (error instanceof GlbImportError) {
+        for (const diagnostic of error.diagnostics) {
+          this.#addProblem(glbImportDiagnosticToProblem(diagnostic, object.asset, object.id));
+        }
+        return createProblemPlaceholder(object.id);
       }
       this.#addProblem({
         id: `asset-load-failed:${object.asset.id}:${object.id}`,
@@ -467,6 +479,17 @@ export class SceneProjector {
     }
     return false;
   }
+}
+
+function mergeGlbDiagnostics(
+  left: readonly GlbImportDiagnostic[],
+  right: readonly GlbImportDiagnostic[]
+): GlbImportDiagnostic[] {
+  const diagnostics = new Map<string, GlbImportDiagnostic>();
+  for (const diagnostic of [...left, ...right]) {
+    diagnostics.set(diagnostic.id, diagnostic);
+  }
+  return [...diagnostics.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
 export { applyTransform, readTransform } from "./transform";

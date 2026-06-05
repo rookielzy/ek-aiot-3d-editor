@@ -1,6 +1,22 @@
 export { AssetResolverBridge } from "./assets/resolver";
 export type { AssetInput, AssetReference, AssetResolver, RegisteredAsset, ResolvedAsset } from "./assets/types";
 export type {
+  GlbAnimationDescriptor,
+  GlbImageDescriptor,
+  GlbImportDescriptor,
+  GlbImportDiagnostic,
+  GlbImportDiagnosticCode,
+  GlbImportManifest,
+  GlbImportPipelineResult,
+  GlbImportStatus,
+  GlbImportTarget,
+  GlbMeshDescriptor,
+  GlbMeshPrimitiveDescriptor,
+  GlbNodeDescriptor,
+  GlbTextureDescriptor,
+  GltfLoaderResult
+} from "./assets/import-pipeline";
+export type {
   AssetReferenceLocation,
   AssetWorkspaceItem,
   AssetWorkspaceModel,
@@ -46,7 +62,7 @@ export type {
   UngroupObjectsCommand,
   UpdateLightCommand
 } from "./commands/types";
-export type { AssetWorkspaceSubscriber, Editor, EditorOptions, MountRuntimeOptions, RuntimeSubscriber, SnapshotSubscriber } from "./editor/editor-api";
+export type { AssetWorkspaceSubscriber, Editor, EditorOptions, EditorWithGlbImport, ImportGlbAssetOptions, ImportGlbAssetResult, MountRuntimeOptions, RuntimeSubscriber, SnapshotSubscriber } from "./editor/editor-api";
 export type { AdvancedEditorOperations, EditorClipboard } from "./editor/operations";
 export type { SnapChannel, SnapSubscriber } from "./editor/snap-state";
 export type {
@@ -158,6 +174,13 @@ export type {
   RuntimeProblemSubscriber
 } from "./runtime/editor-runtime";
 export type {
+  GltfDecoderConfiguration,
+  GltfDecoderProvider,
+  GltfLoaderAdapter,
+  GltfLoaderFactory,
+  ThreeGltfLoaderAdapterOptions
+} from "./runtime/gltf-loader-adapter";
+export type {
   RuntimeCameraControlsOptions,
   RuntimeCameraFrameOptions,
   RuntimeInteractionOptions,
@@ -217,6 +240,18 @@ export {
   filterAssetWorkspaceItems,
   sortAssetWorkspaceItems
 } from "./assets/workspace";
+export {
+  GLB_IMPORT_MANIFEST_METADATA_KEY,
+  GLB_IMPORT_MANIFEST_VERSION,
+  attachGlbImportManifestMetadata,
+  createGlbImportManifest,
+  getGlbImportManifestFromMetadata,
+  resolveGlbImportStatus,
+  validateGlbImportManifest
+} from "./assets/import-pipeline";
+export {
+  ThreeGltfLoaderAdapter
+} from "./runtime/gltf-loader-adapter";
 export {
   buildWorkbenchModel
 } from "./workbench/workbench-model";

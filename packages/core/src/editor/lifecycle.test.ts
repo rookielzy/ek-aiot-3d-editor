@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { createEditor } from "./create-editor";
+import { createGlbImportDiagnosticsFromError, createGlbImportManifest } from "../assets/import-pipeline";
+import { buildWorkbenchModel } from "../workbench/workbench-model";
+import { buildInspectorModel } from "../inspector/selection";
+import { GlbImportError } from "../runtime/gltf-loader-adapter";
 import type { RendererLike } from "../runtime/editor-runtime";
+import { BoxGeometry, Group, Mesh, MeshBasicMaterial } from "three";
+import { defaultArchiveAdapter, decodeArchiveJson } from "../project/archive-adapter";
+import { PROJECT_MANIFEST_PATH, PROJECT_SCENE_PATH } from "../project/package-types";
 
 describe("editor lifecycle", () => {
   it("mounts runtime and disposes runtime plus store subscriptions idempotently", () => {
@@ -138,6 +145,228 @@ describe("editor lifecycle", () => {
     expect(editor.getSnapshot().objects["object-a"].asset.id).toBe("asset-a");
     expect(editor.exportProject().ok).toBe(false);
   });
+
+  it("analyzes and commits GLB imports through the async operation without serializing runtime state", async () => {
+    const editor = createEditor();
+    const urls = mockObjectUrls();
+    const scene = new Group();
+    scene.name = "Analyzed GLB";
+    const loader = {
+      load: vi.fn(async () => scene),
+      analyze: vi.fn(async () => ({
+        scene,
+        manifest: createGlbImportManifest({
+          scene,
+          resolved: { uri: "blob:runtime-only", mimeType: "model/gltf-binary", metadata: { byteSize: 3 } }
+        })
+      }))
+    };
+
+    const result = await editor.importGlbAsset({
+      objectId: "object-a",
+      name: "Machine",
+      asset: {
+        id: "asset-a",
+        label: "machine.glb",
+        source: { bytes: new Uint8Array([1, 2, 3]), mimeType: "model/gltf-binary" }
+      },
+      loader
+    });
+    urls.restore();
+
+    expect(result.ok).toBe(true);
+    expect(result.committed).toBe(true);
+    expect(loader.load).not.toHaveBeenCalled();
+    expect(loader.analyze).toHaveBeenCalledWith(expect.objectContaining({
+      uri: "blob:import-0",
+      mimeType: "model/gltf-binary"
+    }));
+    expect(urls.revokeObjectURL).toHaveBeenCalledWith("blob:import-0");
+    expect(editor.getSnapshot().objects["object-a"]).toMatchObject({
+      name: "Machine",
+      asset: { id: "asset-a", kind: "glb" }
+    });
+    expect(editor.getSnapshot().assets["asset-a"].metadata?.glbImportManifest).toEqual(result.manifest);
+    expect(editor.getAssetWorkspacePayloads()).toEqual([expect.objectContaining({
+      assetId: "asset-a",
+      byteSize: 3,
+      available: true
+    })]);
+    expect(JSON.stringify(editor.serialize())).not.toContain("isObject3D");
+    expect(JSON.stringify(editor.exportProject({ partial: true }).manifest)).not.toContain("blob:");
+    const exported = editor.exportProject();
+    expect(exported.ok).toBe(true);
+    const entries = defaultArchiveAdapter.read(exported.packageBytes as Uint8Array);
+    const manifestEntry = entries.find((entry) => entry.path === PROJECT_MANIFEST_PATH);
+    const sceneEntry = entries.find((entry) => entry.path === PROJECT_SCENE_PATH);
+    expect(decodeArchiveJson(manifestEntry!.bytes)).toMatchObject({
+      assets: {
+        "asset-a": { id: "asset-a", byteSize: 3 }
+      }
+    });
+    expect(JSON.stringify(decodeArchiveJson(sceneEntry!.bytes))).toContain("glbImportManifest");
+    expect(JSON.stringify(decodeArchiveJson(sceneEntry!.bytes))).not.toContain("blob:");
+  });
+
+  it("disposes transient GLB analysis scenes after import operations finish", async () => {
+    const editor = createEditor();
+    const urls = mockObjectUrls();
+    const geometry = new BoxGeometry();
+    const material = new MeshBasicMaterial();
+    const disposeGeometry = vi.spyOn(geometry, "dispose");
+    const disposeMaterial = vi.spyOn(material, "dispose");
+    const scene = new Group();
+    scene.add(new Mesh(geometry, material));
+
+    const result = await editor.importGlbAsset({
+      objectId: "object-a",
+      asset: { id: "asset-a", source: new Uint8Array([1, 2, 3]) },
+      loader: {
+        load: async () => scene,
+        analyze: async () => ({
+          scene,
+          manifest: createGlbImportManifest({ scene })
+        })
+      }
+    });
+    urls.restore();
+
+    expect(result.ok).toBe(true);
+    expect(disposeGeometry).toHaveBeenCalledTimes(1);
+    expect(disposeMaterial).toHaveBeenCalledTimes(1);
+    expect(scene.parent).toBeNull();
+    expect(urls.revokeObjectURL).toHaveBeenCalledWith("blob:import-0");
+  });
+
+  it("returns diagnostics and leaves snapshot unchanged when import analysis fails", async () => {
+    const editor = createEditor();
+    const urls = mockObjectUrls();
+    const diagnostics = createGlbImportDiagnosticsFromError(new Error("THREE.GLTFLoader: No DRACOLoader instance provided."));
+    const before = editor.getSnapshot();
+
+    const result = await editor.importGlbAsset({
+      objectId: "object-a",
+      asset: { id: "asset-a", source: new Uint8Array([1, 2, 3]) },
+      loader: {
+        load: async () => {
+          throw new GlbImportError("missing draco", diagnostics);
+        }
+      }
+    });
+    urls.restore();
+
+    expect(result.ok).toBe(false);
+    expect(result.committed).toBe(false);
+    expect(result.diagnostics).toMatchObject([{ code: "glb-decoder-missing" }]);
+    expect(editor.getSnapshot()).toBe(before);
+    expect(editor.getSnapshot().assets["asset-a"]).toBeUndefined();
+    expect(urls.revokeObjectURL).toHaveBeenCalledWith("blob:import-0");
+  });
+
+  it("rejects non-GLB import operation inputs before registering assets", async () => {
+    const editor = createEditor();
+
+    const result = await editor.importGlbAsset({
+      objectId: "object-a",
+      asset: { id: "texture-a", kind: "texture", source: new Uint8Array([1]) }
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics).toMatchObject([{ code: "glb-source-invalid" }]);
+    expect(editor.getSnapshot().assets["texture-a"]).toBeUndefined();
+  });
+
+  it("can analyze without committing and exposes manifest diagnostics through workbench after commit", async () => {
+    const editor = createEditor();
+    const urls = mockObjectUrls();
+    const diagnostics = createGlbImportDiagnosticsFromError(
+      new Error("THREE.GLTFLoader: setKTX2Loader must be called before loading KTX2 textures")
+    );
+    const loader = {
+      load: async () => new Group(),
+      analyze: async () => ({
+        scene: new Group(),
+        manifest: createGlbImportManifest({ diagnostics }),
+        diagnostics
+      })
+    };
+    const before = editor.getSnapshot();
+    const beforeHistory = editor.getHistoryState();
+
+    const analysis = await editor.importGlbAsset({
+      asset: { id: "asset-a", source: new Uint8Array([1, 2, 3]) },
+      loader,
+      commit: false
+    });
+    expect(analysis.ok).toBe(false);
+    expect(analysis.committed).toBe(false);
+    expect(analysis.snapshot).toBe(before);
+    expect(editor.getSnapshot()).toBe(before);
+    expect(editor.getHistoryState()).toEqual(beforeHistory);
+    expect(editor.getSnapshot().assets["asset-a"]).toBeUndefined();
+
+    const committed = await editor.importGlbAsset({
+      objectId: "object-a",
+      asset: { id: "asset-a", source: new Uint8Array([1, 2, 3]) },
+      loader: {
+        load: async () => new Group(),
+        analyze: async () => ({
+          scene: new Group(),
+          manifest: createGlbImportManifest()
+        })
+      }
+    });
+
+    expect(editor.getSnapshot().assets["asset-a"]).toBeDefined();
+    expect(committed.ok).toBe(true);
+    urls.restore();
+    const model = buildWorkbenchModel(editor.getSnapshot(), {
+      inspector: buildInspectorModel(editor.getSnapshot()),
+      assetPayloads: editor.getAssetWorkspacePayloads()
+    });
+    expect(model.assets.workspace?.items.find((item) => item.id === "asset-a")).toMatchObject({
+      importStatus: "analyzed"
+    });
+    expect(urls.revokeObjectURL).toHaveBeenCalledTimes(2);
+  });
+
+  it("rolls back transient payloads and analysis scenes when the import command fails", async () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    const urls = mockObjectUrls();
+    const geometry = new BoxGeometry();
+    const material = new MeshBasicMaterial();
+    const disposeGeometry = vi.spyOn(geometry, "dispose");
+    const disposeMaterial = vi.spyOn(material, "dispose");
+    const scene = new Group();
+    scene.add(new Mesh(geometry, material));
+    const before = editor.getSnapshot();
+    const beforeHistory = editor.getHistoryState();
+
+    const result = await editor.importGlbAsset({
+      objectId: "object-a",
+      asset: { id: "asset-b", source: new Uint8Array([1, 2, 3]) },
+      loader: {
+        load: async () => scene,
+        analyze: async () => ({
+          scene,
+          manifest: createGlbImportManifest({ scene })
+        })
+      }
+    });
+    urls.restore();
+
+    expect(result.ok).toBe(false);
+    expect(result.committed).toBe(false);
+    expect(result.commandResult?.ok).toBe(false);
+    expect(editor.getSnapshot()).toBe(before);
+    expect(editor.getSnapshot().assets["asset-b"]).toBeUndefined();
+    expect(editor.getHistoryState()).toEqual(beforeHistory);
+    expect(editor.getAssetWorkspacePayloads().some((payload) => payload.assetId === "asset-b")).toBe(false);
+    expect(disposeGeometry).toHaveBeenCalledTimes(1);
+    expect(disposeMaterial).toHaveBeenCalledTimes(1);
+    expect(urls.revokeObjectURL).toHaveBeenCalledWith("blob:import-0");
+  });
 });
 
 function createFakeRenderer(container: HTMLElement): RendererLike {
@@ -146,5 +375,27 @@ function createFakeRenderer(container: HTMLElement): RendererLike {
     setSize() {},
     render() {},
     dispose() {}
+  };
+}
+
+function mockObjectUrls(): {
+  createObjectURL: ReturnType<typeof vi.fn>;
+  revokeObjectURL: ReturnType<typeof vi.fn>;
+  restore(): void;
+} {
+  let count = 0;
+  const originalCreate = URL.createObjectURL;
+  const originalRevoke = URL.revokeObjectURL;
+  const createObjectURL = vi.fn(() => `blob:import-${count++}`);
+  const revokeObjectURL = vi.fn();
+  URL.createObjectURL = createObjectURL;
+  URL.revokeObjectURL = revokeObjectURL;
+  return {
+    createObjectURL,
+    revokeObjectURL,
+    restore() {
+      URL.createObjectURL = originalCreate;
+      URL.revokeObjectURL = originalRevoke;
+    }
   };
 }
