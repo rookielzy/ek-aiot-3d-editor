@@ -52,7 +52,7 @@ export interface WorkbenchHierarchyRow {
 }
 
 export interface WorkbenchAssetModel {
-  workspace: AssetWorkspaceModel;
+  workspace?: AssetWorkspaceModel;
   items: WorkbenchAssetItem[];
   missing: WorkbenchMissingAssetItem[];
   totalCount: number;
@@ -177,15 +177,15 @@ export function buildWorkbenchModel(snapshot: SceneSnapshot, options: BuildWorkb
   const transformMode = options.transformMode ?? "translate";
   const runtimeReady = options.runtimeReady ?? false;
   const projectProblems = options.projectProblems ?? [];
-  const projectCompleteness = options.projectCompleteness ?? (projectProblems.length > 0 ? "partial" : "complete");
   const problems = buildWorkbenchProblems(inspector, projectProblems);
   const selection = buildWorkbenchSelection(snapshot, inspector);
   const hierarchy = buildWorkbenchHierarchy(snapshot, inspector, problems.items);
   const assetWorkspace = options.assetWorkspace ?? buildAssetWorkspaceModel(snapshot, {
     payloads: options.assetPayloads,
     problems: problems.items,
-    projectCompleteness
+    ...(options.projectCompleteness ? { projectCompleteness: options.projectCompleteness } : {})
   });
+  const projectCompleteness = options.projectCompleteness ?? assetWorkspace.readiness.completeness;
   const assets = buildWorkbenchAssets(snapshot, assetWorkspace);
   const toolbar = buildWorkbenchToolbar(snapshot, inspector, {
     history,

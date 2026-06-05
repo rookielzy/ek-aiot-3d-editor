@@ -120,6 +120,7 @@ export type {
 } from "./problems/types";
 export type {
   ProjectAssetManifestRecord,
+  ProjectAssetPayloadSummary,
   ProjectAssetSourceInput,
   ProjectCompleteness,
   ProjectExportOptions,

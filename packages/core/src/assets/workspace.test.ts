@@ -34,6 +34,30 @@ describe("asset workspace", () => {
     expect(JSON.parse(JSON.stringify(locations))).toEqual(locations);
   });
 
+  it("uses the scene node id for object references when it differs from the object id", () => {
+    const snapshot = createWorkspaceSnapshot();
+    const renamedNode: SceneSnapshot = {
+      ...snapshot,
+      nodes: {
+        ...snapshot.nodes,
+        "node-object-a": {
+          ...snapshot.nodes["object-a"],
+          id: "node-object-a"
+        }
+      },
+      rootNodeIds: snapshot.rootNodeIds.map((nodeId) => nodeId === "object-a" ? "node-object-a" : nodeId)
+    };
+    delete renamedNode.nodes["object-a"];
+
+    const location = collectAssetReferenceLocations(renamedNode)
+      .find((candidate) => candidate.kind === "object-glb" && candidate.assetId === "glb-a");
+
+    expect(location).toMatchObject({
+      objectId: "object-a",
+      nodeId: "node-object-a"
+    });
+  });
+
   it("keeps every material assignment when a texture material is reused", () => {
     const snapshot = createWorkspaceSnapshot();
     const reused: SceneSnapshot = {
@@ -79,6 +103,28 @@ describe("asset workspace", () => {
     ]);
   });
 
+  it("keeps material definition texture references even when the material is not assigned", () => {
+    const snapshot = createWorkspaceSnapshot();
+    const unassigned: SceneSnapshot = {
+      ...snapshot,
+      materials: {
+        ...snapshot.materials,
+        assignments: {}
+      }
+    };
+
+    const location = collectAssetReferenceLocations(unassigned)
+      .find((candidate) => candidate.kind === "material-texture" && candidate.assetId === "texture-a");
+
+    expect(location).toMatchObject({
+      kind: "material-texture",
+      materialId: "mat-a",
+      slot: "map"
+    });
+    expect(location && "assignmentId" in location).toBe(false);
+    expect(location && "objectId" in location).toBe(false);
+  });
+
   it("builds rows for registered, unreferenced, payload-backed, and missing referenced assets", () => {
     const snapshot = createWorkspaceSnapshot();
     const payloads: AssetWorkspacePayloadSummary[] = [
@@ -109,13 +155,13 @@ describe("asset workspace", () => {
       ["hdr-a", "missing-payload", "missing", "blocked"],
       ["missing-texture", "missing-reference", "missing", "blocked"],
       ["texture-a", "ready", "available", "complete"],
-      ["unused-a", "unreferenced", "not-required", "not-referenced"]
+      ["unused-a", "unreferenced", "missing", "blocked"]
     ]);
     expect(workspace.readiness).toMatchObject({
       completeness: "partial",
       ready: false,
-      blockingAssetIds: ["hdr-a", "missing-texture"],
-      missingPayloadAssetIds: ["hdr-a", "missing-texture"],
+      blockingAssetIds: ["hdr-a", "missing-texture", "unused-a"],
+      missingPayloadAssetIds: ["hdr-a", "missing-texture", "unused-a"],
       missingReferenceAssetIds: ["missing-texture"]
     });
     expect(workspace.items.find((item) => item.id === "unused-a")).toMatchObject({
@@ -123,6 +169,39 @@ describe("asset workspace", () => {
       registered: true,
       missing: false
     });
+  });
+
+  it("blocks package readiness for unavailable, unexportable, and kind-mismatched payloads", () => {
+    const workspace = buildAssetWorkspaceModel(createWorkspaceSnapshot(), {
+      payloads: [
+        { assetId: "glb-a", kind: "texture", available: true, exportable: true },
+        { assetId: "texture-a", kind: "texture", available: false, exportable: true },
+        { assetId: "hdr-a", kind: "hdr", available: true, exportable: false },
+        { assetId: "unused-a", kind: "image", available: true, exportable: false }
+      ]
+    });
+
+    expect(workspace.items.map((item) => [item.id, item.payloadStatus, item.packageStatus, item.packageBlocking])).toEqual([
+      ["glb-a", "kind-mismatch", "blocked", true],
+      ["hdr-a", "missing", "blocked", true],
+      ["missing-texture", "missing", "blocked", true],
+      ["texture-a", "missing", "blocked", true],
+      ["unused-a", "missing", "blocked", true]
+    ]);
+    expect(workspace.readiness.blockingAssetIds).toEqual([
+      "glb-a",
+      "hdr-a",
+      "missing-texture",
+      "texture-a",
+      "unused-a"
+    ]);
+    expect(workspace.readiness.missingPayloadAssetIds).toEqual([
+      "glb-a",
+      "hdr-a",
+      "missing-texture",
+      "texture-a",
+      "unused-a"
+    ]);
   });
 
   it("attaches runtime and project asset problems with replacement affordance metadata", () => {
@@ -166,6 +245,28 @@ describe("asset workspace", () => {
       project: true,
       assetId: "hdr-a",
       title: "Project Export Payload Missing"
+    });
+  });
+
+  it("attaches normalized asset problem summaries from target asset ids", () => {
+    const workspace = buildAssetWorkspaceModel(createWorkspaceSnapshot(), {
+      problems: [{
+        id: "normalized:glb-a",
+        severity: "error",
+        code: "payload-missing",
+        source: "validation",
+        title: "Payload missing",
+        recoverability: "user-action",
+        actionLabel: "Replace asset",
+        target: { kind: "asset", assetId: "glb-a" },
+        project: true
+      }]
+    });
+
+    expect(workspace.items.find((item) => item.id === "glb-a")).toMatchObject({
+      problemIds: ["normalized:glb-a"],
+      problemCount: 1,
+      actionLabel: "Replace asset"
     });
   });
 

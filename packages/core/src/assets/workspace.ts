@@ -1,6 +1,7 @@
 import type { MaterialAssignment, TextureSlotName } from "../materials/types";
 import type { Problem, ProblemSeverity } from "../problems/types";
 import type { ProjectCompleteness, ProjectProblem } from "../project/package-types";
+import { findObjectNodeId } from "../snapshot/nodes";
 import type { AssetKind, AssetReference, JsonValue, SceneSnapshot } from "../snapshot/types";
 
 export type AssetWorkspaceReferenceKind =
@@ -163,11 +164,12 @@ export function collectAssetReferenceLocations(snapshot: SceneSnapshot): AssetRe
   const locations: AssetReferenceLocation[] = [];
 
   for (const object of Object.values(snapshot.objects).sort(byId)) {
+    const nodeId = findObjectNodeId(snapshot, object.id);
     locations.push({
       kind: "object-glb",
       assetId: object.asset.id,
       objectId: object.id,
-      ...(snapshot.nodes[object.id] ? { nodeId: object.id } : {}),
+      ...(nodeId ? { nodeId } : {}),
       objectName: object.name,
       label: `Object ${object.name}`
     });
@@ -232,7 +234,9 @@ export function buildAssetWorkspaceModel(snapshot: SceneSnapshot, options: Build
   const items = [...assetIds].sort(compareStrings).map((assetId) =>
     buildAssetWorkspaceItem(snapshot, assetId, referencesByAsset.get(assetId) ?? [], payloadsByAsset.get(assetId), problemsByAsset.get(assetId) ?? [])
   );
-  const missingPayloadAssetIds = items.filter((item) => item.payloadStatus === "missing" && item.referenced).map((item) => item.id);
+  const missingPayloadAssetIds = items
+    .filter((item) => item.packageBlocking && (item.payloadStatus === "missing" || item.payloadStatus === "kind-mismatch"))
+    .map((item) => item.id);
   const missingReferenceAssetIds = items.filter((item) => item.missingReference).map((item) => item.id);
   const problemAssetIds = items.filter((item) => item.problemCount > 0).map((item) => item.id);
   const blockingAssetIds = uniqueSorted([
@@ -324,21 +328,24 @@ function buildAssetWorkspaceItem(
   const referenced = references.length > 0;
   const registered = Boolean(snapshotAsset);
   const missingReference = referenced && !registered;
-  const payloadStatus = resolvePayloadStatus(snapshotAsset, payload, referenced);
-  const packageBlocking = referenced && (missingReference || payloadStatus === "missing" || payloadStatus === "kind-mismatch");
-  const packageStatus = !referenced
-    ? "not-referenced"
-    : packageBlocking
-      ? "blocked"
+  const packageRequired = referenced || registered;
+  const payloadStatus = resolvePayloadStatus(snapshotAsset, payload, packageRequired);
+  const packageBlocking = packageRequired && (missingReference || payloadStatus === "missing" || payloadStatus === "kind-mismatch");
+  const packageStatus = packageBlocking
+    ? "blocked"
+    : !packageRequired
+      ? "not-referenced"
       : payloadStatus === "available"
         ? "complete"
-        : "partial";
+        : !referenced
+          ? "not-referenced"
+          : "partial";
   const highestProblemSeverity = highestSeverity(problems);
-  const missing = missingReference || payloadStatus === "missing" || problems.some(isMissingProblem);
+  const missing = missingReference || (referenced && payloadStatus === "missing") || problems.some(isMissingProblem);
   const recoverableProblem = problems.find((problem) => problem.actionLabel || problem.recoverability === "user-action");
   const status = missingReference
     ? "missing-reference"
-    : payloadStatus === "missing" || payloadStatus === "kind-mismatch"
+    : referenced && (payloadStatus === "missing" || payloadStatus === "kind-mismatch")
       ? "missing-payload"
       : problems.length > 0
         ? "has-problems"
@@ -377,8 +384,10 @@ function buildAssetWorkspaceItem(
 
 function normalizeProblemSummary(problem: Problem | ProjectProblem | AssetWorkspaceProblemSummary): AssetWorkspaceProblemSummary {
   if (isAssetWorkspaceProblemSummary(problem)) {
+    const assetId = problem.assetId ?? extractProblemTargetAssetId(problem.target);
     return {
       ...problem,
+      ...(assetId ? { assetId } : {}),
       target: { ...problem.target }
     };
   }
@@ -409,11 +418,19 @@ function extractProblemAssetId(problem: Problem | ProjectProblem): string {
   if (problem.assetId) {
     return problem.assetId;
   }
-  if (problem.target.kind === "asset" || problem.target.kind === "environment" || problem.target.kind === "texture-slot") {
-    return problem.target.assetId ?? "";
+  const targetAssetId = extractProblemTargetAssetId(problem.target);
+  if (targetAssetId) {
+    return targetAssetId;
   }
   const metadataAssetId = problem.metadata?.assetId;
   return typeof metadataAssetId === "string" ? metadataAssetId : "";
+}
+
+function extractProblemTargetAssetId(target: Problem["target"]): string {
+  if (target.kind === "asset" || target.kind === "environment" || target.kind === "texture-slot") {
+    return target.assetId ?? "";
+  }
+  return "";
 }
 
 function groupReferencesByAsset(locations: readonly AssetReferenceLocation[]): Map<string, AssetReferenceLocation[]> {

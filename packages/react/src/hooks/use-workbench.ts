@@ -62,8 +62,8 @@ export interface WorkbenchProjectContext {
 }
 
 export interface WorkbenchAssetContext {
-  payloads: AssetWorkspacePayloadSummary[];
-  workspaceVersion: number;
+  payloads?: AssetWorkspacePayloadSummary[];
+  workspaceVersion?: number;
   replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
 }
 
@@ -141,9 +141,9 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     () => editor.getRuntime()
   );
   const assetWorkspaceVersion = useSyncExternalStore(
-    (listener) => editor.subscribeAssetWorkspace(listener),
-    () => editor.getAssetWorkspaceVersion(),
-    () => editor.getAssetWorkspaceVersion()
+    (listener) => editor.subscribeAssetWorkspace?.(listener) ?? (() => {}),
+    () => getAssetWorkspaceVersion(editor),
+    () => getAssetWorkspaceVersion(editor)
   );
   const inspector = useInspector({ editor });
   const ownsEditor = !options.editor;
@@ -171,7 +171,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     }
   }, [editor, ownsEditor]);
   const historyState = editor.getHistoryState();
-  const assetPayloads = editor.getAssetWorkspacePayloads();
+  const assetPayloads = getAssetWorkspacePayloads(editor);
   const model = buildWorkbenchModel(inspector.snapshot, {
     inspector: inspector.inspector,
     runtimeProblems: inspector.runtimeProblems,
@@ -277,4 +277,12 @@ function defaultSnapIncrement(channel: SnapChannel): number {
     return Math.PI / 12;
   }
   return channel === "scale" ? 0.1 : 0.5;
+}
+
+function getAssetWorkspacePayloads(editor: Editor): AssetWorkspacePayloadSummary[] {
+  return editor.getAssetWorkspacePayloads?.() ?? [];
+}
+
+function getAssetWorkspaceVersion(editor: Editor): number {
+  return editor.getAssetWorkspaceVersion?.() ?? 0;
 }

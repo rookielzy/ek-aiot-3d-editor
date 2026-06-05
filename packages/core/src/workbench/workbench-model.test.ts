@@ -148,7 +148,7 @@ describe("workbench model", () => {
         missing: false
       })
     ]);
-    expect(model.assets.workspace.items.map((asset) => [asset.id, asset.payloadStatus])).toEqual([
+    expect(model.assets.workspace!.items.map((asset) => [asset.id, asset.payloadStatus])).toEqual([
       ["asset-a", "available"],
       ["texture-a", "missing"]
     ]);
@@ -182,10 +182,10 @@ describe("workbench model", () => {
       runtimeReady: false
     });
 
-    expect(filterAssetWorkspaceItems(model.assets.workspace.items, { query: "pump texture", missing: true }).map((item) => item.id)).toEqual([
+    expect(filterAssetWorkspaceItems(model.assets.workspace!.items, { query: "pump texture", missing: true }).map((item) => item.id)).toEqual([
       "texture-a"
     ]);
-    expect(sortAssetWorkspaceItems(model.assets.workspace.items, { key: "payload" }).map((item) => item.id)).toEqual([
+    expect(sortAssetWorkspaceItems(model.assets.workspace!.items, { key: "payload" }).map((item) => item.id)).toEqual([
       "pump-a",
       "texture-a"
     ]);
@@ -234,8 +234,62 @@ describe("workbench model", () => {
       redoCount: 0,
       runtimeReady: true,
       dirty: true,
-      projectCompleteness: "complete",
+      projectCompleteness: "partial",
       problemCount: 0
+    });
+  });
+
+  it("aligns asset workspace readiness with project export payload availability", async () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+
+    const blockedModel = buildWorkbenchModel(editor.getSnapshot(), {
+      inspector: buildInspectorModel(editor.getSnapshot()),
+      assetPayloads: editor.getAssetWorkspacePayloads(),
+      runtimeProblems: [],
+      history: editor.getHistoryState(),
+      snap: editor.snap.get(),
+      transformMode: editor.transformMode.get(),
+      runtimeReady: true
+    });
+
+    expect(editor.exportProject().ok).toBe(false);
+    expect(blockedModel.assets.workspace!.readiness).toMatchObject({
+      completeness: "partial",
+      ready: false,
+      blockingAssetIds: ["asset-a"]
+    });
+    expect(blockedModel.project).toMatchObject({
+      ready: false,
+      statusLabel: "Partial"
+    });
+
+    await editor.replaceAsset({
+      assetId: "asset-a",
+      source: new Uint8Array([1, 2, 3]),
+      kind: "glb",
+      mimeType: "model/gltf-binary"
+    });
+
+    const readyModel = buildWorkbenchModel(editor.getSnapshot(), {
+      inspector: buildInspectorModel(editor.getSnapshot()),
+      assetPayloads: editor.getAssetWorkspacePayloads(),
+      runtimeProblems: [],
+      history: editor.getHistoryState(),
+      snap: editor.snap.get(),
+      transformMode: editor.transformMode.get(),
+      runtimeReady: true
+    });
+
+    expect(editor.exportProject().ok).toBe(true);
+    expect(readyModel.assets.workspace!.readiness).toMatchObject({
+      completeness: "complete",
+      ready: true,
+      blockingAssetIds: []
+    });
+    expect(readyModel.project).toMatchObject({
+      ready: true,
+      statusLabel: "Ready"
     });
   });
 

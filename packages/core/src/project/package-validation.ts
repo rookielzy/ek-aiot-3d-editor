@@ -1,3 +1,4 @@
+import { collectAssetReferenceLocations } from "../assets/workspace";
 import { isSupportedAssetKind } from "../snapshot/primitives";
 import type { AssetReference, SceneSnapshot } from "../snapshot/types";
 import { isJsonCompatible, validateSceneSnapshot } from "../snapshot/validation";
@@ -152,28 +153,10 @@ export function normalizeProjectPath(path: string): string | null {
 }
 
 export function collectSnapshotAssetReferences(snapshot: SceneSnapshot): Set<string> {
-  const ids = new Set(Object.keys(snapshot.assets));
-
-  for (const object of Object.values(snapshot.objects)) {
-    ids.add(object.asset.id);
-  }
-  for (const material of Object.values(snapshot.materials.definitions)) {
-    for (const slot of Object.values(material.override.textures ?? {})) {
-      if (slot) {
-        ids.add(slot.assetId);
-      }
-    }
-  }
-  if (snapshot.environment.background.mode === "texture" || snapshot.environment.background.mode === "hdr") {
-    if (snapshot.environment.background.assetId) {
-      ids.add(snapshot.environment.background.assetId);
-    }
-  }
-  if ((snapshot.environment.mode === "texture" || snapshot.environment.mode === "hdr") && snapshot.environment.environment.assetId) {
-    ids.add(snapshot.environment.environment.assetId);
-  }
-
-  return ids;
+  return new Set([
+    ...Object.keys(snapshot.assets),
+    ...collectAssetReferenceLocations(snapshot).map((location) => location.assetId)
+  ]);
 }
 
 export function normalizeLimits(limits: Partial<ProjectPackageLimits> | undefined): ProjectPackageLimits {

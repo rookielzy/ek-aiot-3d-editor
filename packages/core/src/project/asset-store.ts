@@ -1,9 +1,8 @@
 import type { ResolvedAsset } from "../assets/types";
-import type { AssetWorkspacePayloadSummary } from "../assets/workspace";
 import { isJsonCompatible } from "../snapshot/validation";
 import type { AssetKind, AssetReference, JsonValue } from "../snapshot/types";
 import { copyBytes } from "./archive-adapter";
-import type { ProjectAssetManifestRecord, ProjectAssetSourceInput } from "./package-types";
+import type { ProjectAssetManifestRecord, ProjectAssetPayloadSummary, ProjectAssetSourceInput } from "./package-types";
 
 export interface StoredProjectAsset {
   assetId: string;
@@ -128,7 +127,7 @@ export class ProjectAssetStore {
     };
   }
 
-  summaries(): AssetWorkspacePayloadSummary[] {
+  summaries(): ProjectAssetPayloadSummary[] {
     return [...this.#assets.values()]
       .map((asset) => toPayloadSummary(asset))
       .sort((left, right) => left.assetId.localeCompare(right.assetId));
@@ -251,7 +250,7 @@ function toResolvedAsset(stored: StoredProjectAsset, uri: string): ResolvedAsset
   };
 }
 
-function toPayloadSummary(stored: StoredProjectAsset): AssetWorkspacePayloadSummary {
+function toPayloadSummary(stored: StoredProjectAsset): ProjectAssetPayloadSummary {
   const exportable = Boolean(stored.bytes || stored.blob);
   const byteSize = stored.byteSize ?? stored.bytes?.byteLength ?? stored.blob?.size;
   return {

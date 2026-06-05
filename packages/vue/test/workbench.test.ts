@@ -187,7 +187,7 @@ describe("Vue EditorWorkbench", () => {
     expect(wrapper.text()).toContain("Project");
     expect(wrapper.text()).toContain("Robot arm");
     expect(wrapper.text()).toContain("robot.glb");
-    expect(wrapper.text()).toContain("Project Ready");
+    expect(wrapper.text()).toContain("Project Partial");
     expect(wrapper.text()).toContain("Selection none");
 
     await wrapper.find('[title="Select all"]').trigger("click");
@@ -532,11 +532,11 @@ describe("Vue EditorWorkbench", () => {
     });
     const wrapper = mount(Harness);
 
-    expect(workbench.model.value.assets.workspace.items.find((asset) => asset.id === "asset-a")?.payloadStatus).toBe("missing");
+    expect(workbench.model.value.assets.workspace!.items.find((asset) => asset.id === "asset-a")?.payloadStatus).toBe("missing");
     await editor.replaceAsset({ assetId: "asset-a", source: new Uint8Array([1, 2, 3]) });
     await nextTick();
 
-    expect(workbench.model.value.assets.workspace.items.find((asset) => asset.id === "asset-a")?.payloadStatus).toBe("available");
+    expect(workbench.model.value.assets.workspace!.items.find((asset) => asset.id === "asset-a")?.payloadStatus).toBe("available");
     wrapper.unmount();
   });
 

@@ -63,8 +63,8 @@ export interface WorkbenchProjectContext {
 }
 
 export interface WorkbenchAssetContext {
-  payloads: AssetWorkspacePayloadSummary[];
-  workspaceVersion: number;
+  payloads?: AssetWorkspacePayloadSummary[];
+  workspaceVersion?: number;
   replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
 }
 
@@ -156,7 +156,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   const transformMode = ref<TransformMode>(currentEditor.value.transformMode.get());
   const runtime = shallowRef<EditorRuntime | null>(markRuntimeRaw(currentEditor.value.getRuntime()));
   const runtimeProblems = shallowRef<Problem[]>(currentEditor.value.getRuntime()?.getProblems() ?? []);
-  const assetWorkspaceVersion = shallowRef(currentEditor.value.getAssetWorkspaceVersion());
+  const assetWorkspaceVersion = shallowRef(getAssetWorkspaceVersion(currentEditor.value));
   let unsubscribeSnapshot: (() => void) | null = null;
   let unsubscribeRuntime: (() => void) | null = null;
   let unsubscribeProblems: (() => void) | null = null;
@@ -175,9 +175,9 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
       runtime.value = markRuntimeRaw(nextEditor.getRuntime());
       subscribeRuntimeProblems();
     });
-    unsubscribeAssetWorkspace = nextEditor.subscribeAssetWorkspace((version) => {
+    unsubscribeAssetWorkspace = nextEditor.subscribeAssetWorkspace?.((version) => {
       assetWorkspaceVersion.value = version;
-    });
+    }) ?? null;
     unsubscribeSnap = nextEditor.subscribeSnap((nextSnap) => {
       snap.value = nextSnap;
     });
@@ -313,7 +313,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     return buildWorkbenchModel(snapshot.value, {
       inspector: inspector.value,
       runtimeProblems: runtimeProblems.value,
-      assetPayloads: currentEditor.value.getAssetWorkspacePayloads(),
+      assetPayloads: getAssetWorkspacePayloads(currentEditor.value),
       history: currentEditor.value.getHistoryState(),
       snap: snap.value,
       transformMode: transformMode.value,
@@ -356,7 +356,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
       exportProject
     },
     assets: {
-      payloads: currentEditor.value.getAssetWorkspacePayloads(),
+      payloads: getAssetWorkspacePayloads(currentEditor.value),
       workspaceVersion: assetWorkspaceVersion.value,
       replaceAsset
     },
@@ -453,4 +453,12 @@ function defaultSnapIncrement(channel: SnapChannel): number {
 
 function markRuntimeRaw(runtime: EditorRuntime | null): EditorRuntime | null {
   return runtime ? markRaw(runtime) : null;
+}
+
+function getAssetWorkspacePayloads(editor: Editor): AssetWorkspacePayloadSummary[] {
+  return editor.getAssetWorkspacePayloads?.() ?? [];
+}
+
+function getAssetWorkspaceVersion(editor: Editor): number {
+  return editor.getAssetWorkspaceVersion?.() ?? 0;
 }

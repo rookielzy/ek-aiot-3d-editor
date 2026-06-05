@@ -35,6 +35,7 @@ import {
   type LightDefinition,
   type Problem,
   PROJECT_PACKAGE_VERSION,
+  type ProjectAssetPayloadSummary,
   type SceneEnvironment,
   type SetMaterialCommand,
   type AddLightCommand,
@@ -214,6 +215,7 @@ describe("core public API", () => {
       exportable: true,
       byteSize: 1
     };
+    const projectPayload: ProjectAssetPayloadSummary = workspacePayload;
     const workspaceKind: AssetWorkspaceReferenceKind = "object-glb";
     const workspaceStatus: AssetWorkspaceStatus = "ready";
 
@@ -261,6 +263,7 @@ describe("core public API", () => {
     expect(light.kind).toBe("ambient");
     expect(problem.target).toEqual({ kind: "object", objectId: "object-a" });
     expect(workspacePayload.exportable).toBe(true);
+    expect(projectPayload.available).toBe(true);
     expect(workspaceKind).toBe("object-glb");
     expect(workspaceStatus).toBe("ready");
   });

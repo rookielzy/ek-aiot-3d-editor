@@ -92,6 +92,7 @@ export type {
   ProblemSource,
   ProblemTarget,
   ProjectAssetManifestRecord,
+  ProjectAssetPayloadSummary,
   ProjectAssetSourceInput,
   ProjectCompleteness,
   ProjectExportOptions,

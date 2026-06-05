@@ -1,7 +1,6 @@
 import { AssetRegistry } from "../assets/registry";
 import { AssetResolverBridge } from "../assets/resolver";
 import type { AssetInput } from "../assets/types";
-import type { AssetWorkspacePayloadSummary } from "../assets/workspace";
 import { CommandDispatcher } from "../commands/dispatcher";
 import type { Command, CommandResult } from "../commands/types";
 import { CommandHistory, type HistoryState } from "../history/history";
@@ -10,7 +9,7 @@ import { ProjectAssetStore } from "../project/asset-store";
 import { exportProjectPackage } from "../project/export-project";
 import { importProjectAssets } from "../project/import-project";
 import { replaceProjectAsset } from "../project/replace-asset";
-import type { ProjectAssetSourceInput } from "../project/project-api";
+import type { ProjectAssetPayloadSummary, ProjectAssetSourceInput } from "../project/project-api";
 import type { ProjectExportOptions, ProjectExportResult, ProjectImportOptions, ProjectImportResult, ReplaceAssetInput, ReplaceAssetResult } from "../project/project-api";
 import { ThreeEditorRuntime, type EditorRuntime } from "../runtime/editor-runtime";
 import { EditorTransformModeState, type TransformModeSubscriber } from "../runtime/transform/transform-mode";
@@ -121,7 +120,7 @@ export class CoreEditor implements Editor {
     return reference;
   }
 
-  getAssetWorkspacePayloads(): AssetWorkspacePayloadSummary[] {
+  getAssetWorkspacePayloads(): ProjectAssetPayloadSummary[] {
     this.#assertActive();
     return this.projectAssets.summaries();
   }
@@ -260,22 +259,21 @@ export class CoreEditor implements Editor {
     }
   }
 
-  #registerCommandProjectAsset(command: Command, snapshot: SceneSnapshot): boolean {
+  #registerCommandProjectAsset(command: Command, snapshot: SceneSnapshot): void {
     if (command.type === "batch") {
-      let changed = false;
       for (const childCommand of command.commands) {
-        changed = this.#registerCommandProjectAsset(childCommand, snapshot) || changed;
+        this.#registerCommandProjectAsset(childCommand, snapshot);
       }
-      return changed;
+      return;
     }
 
     if ((command.type !== "import-glb" && command.type !== "register-asset") || !isProjectAssetSource(command.asset.source)) {
-      return false;
+      return;
     }
     const assetId = command.asset.id;
     const reference = assetId ? snapshot.assets[assetId] : [...Object.values(snapshot.assets)].at(-1);
     if (!reference) {
-      return false;
+      return;
     }
     this.projectAssets.register({
       asset: reference,
@@ -283,7 +281,6 @@ export class CoreEditor implements Editor {
       ...(command.asset.label ? { label: command.asset.label } : {}),
       ...(command.asset.metadata ? { metadata: command.asset.metadata } : {})
     });
-    return true;
   }
 }
 

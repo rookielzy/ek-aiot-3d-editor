@@ -86,4 +86,29 @@ describe("project asset store", () => {
     expect(JSON.stringify(summaries)).not.toContain("bytes");
     expect(JSON.stringify(summaries)).not.toContain("Blob");
   });
+
+  it("returns safe blob payload summaries without leaking blobs or object urls", async () => {
+    const store = new ProjectAssetStore({ createObjectUrl: () => "blob:texture-a" });
+    await store.register({
+      asset: { id: "texture-a", kind: "texture", label: "Texture" },
+      source: { blob: new Blob([new Uint8Array([1, 2, 3, 4])], { type: "image/png" }), label: "Local Texture" }
+    });
+    store.resolve({ id: "texture-a", kind: "texture" });
+
+    const summaries = store.summaries();
+
+    expect(summaries).toEqual([{
+      assetId: "texture-a",
+      kind: "texture",
+      available: true,
+      exportable: true,
+      label: "Local Texture",
+      mimeType: "image/png",
+      byteSize: 4
+    }]);
+    expect(JSON.stringify(summaries)).not.toContain("blob:");
+    expect(JSON.stringify(summaries)).not.toContain("bytes");
+    expect(JSON.stringify(summaries)).not.toContain("Blob");
+    expect(JSON.stringify(summaries)).not.toContain("\"uri\"");
+  });
 });

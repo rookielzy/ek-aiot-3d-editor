@@ -20,6 +20,18 @@ export interface ProjectAssetManifestRecord {
   metadata?: Record<string, JsonValue>;
 }
 
+export interface ProjectAssetPayloadSummary {
+  assetId: string;
+  kind: AssetKind;
+  available: boolean;
+  exportable: boolean;
+  label?: string;
+  mimeType?: string;
+  byteSize?: number;
+  checksum?: string;
+  metadata?: Record<string, JsonValue>;
+}
+
 export interface ProjectPackageManifest {
   version: ProjectPackageVersion;
   scenePath: typeof PROJECT_SCENE_PATH;
