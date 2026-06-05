@@ -33,6 +33,8 @@ assets/
 - `scene.json`：普通 `SceneSnapshot`。当前导出是 v4 node graph；导入旧 v1/v2/v3 scene 会先迁移到当前 schema。
 - `assets/*`：资产 payload bytes。
 
+GLB import analysis 产生的 `glbImportManifest` 属于 `scene.json` 中 asset metadata 的 JSON-compatible authoring data。它不改变 ZIP 布局，也不在 `assets/*` 下创建额外记录。
+
 ## project.json
 
 ```ts
@@ -104,6 +106,8 @@ Core 会从 `SceneSnapshot.assets`、对象/材质/环境中的 asset references
 
 workspace 不保存也不暴露 payload bytes、`Blob`、`File`、object URL、resolver 输出、loaded texture、PMREM 或 Three.js 对象。宿主可以把 workspace rows 镜像到 UI state，但 durable storage 仍只应该保存 `editor.serialize()` 的 Snapshot 或 `editor.exportProject()` 产生的 `.ek3d` bytes。
 
+如果 asset metadata 包含 `glbImportManifest`，workspace row 会投影 `importStatus`、`importManifest` 和 `importDiagnostics`。这些字段仍是 JSON-compatible projection；它们不得包含 `GLTFLoader`、parser、Three.js scene/material/texture、decoder 对象或 object URL。
+
 payload-only 变化也会更新 workspace。例如 `replaceAsset()` 成功后，稳定 asset ID 不变，Snapshot 不一定变化，但 `editor.subscribeAssetWorkspace()` 会通知消费者重新读取 `editor.getAssetWorkspacePayloads()` 并重建 Workbench/workspace model。
 
 ## 替换缺失资产
@@ -139,6 +143,8 @@ Core runtime 可以从两类来源拿到资产：
 - project package 导入后的 transient payload store
 
 无论来源是什么，Snapshot 中都只保留 `AssetReference`。resolver 输出、object URL、loaded texture、loaded GLB scene 不写入 Snapshot。
+
+Decoder-aware GLB runtime 使用 host 提供的 loader adapter。Draco、KTX2、Meshopt decoder 实例和 loader factory 都是 runtime-only 配置，不写入 `.ek3d`。缺失 decoder 或 unsupported extension 会作为 import/runtime diagnostics 进入 manifest 或 runtime problem flow。
 
 ## 安全与兼容注意事项
 

@@ -100,6 +100,17 @@ Snapshot 只保存资产引用，不保存资产 payload。真实二进制来源
 
 资产 workspace row、引用位置、payload availability、package readiness 和问题摘要都是 core 派生 projection，不是新的 Snapshot 字段。引用位置用于解释 asset 被哪里使用：GLB object、material texture slot、environment background 或 environment lighting source。它们必须保持 JSON-compatible，方便 UI 渲染和调试序列化，但不应写回 durable scene state。
 
+### GLB import manifest metadata
+
+GLB import analysis 可以把 `glbImportManifest` 存入 `AssetReference.metadata`。这是 JSON-compatible authoring metadata，不是 loader result。Manifest 记录：
+
+- glTF asset summary、scene/node/mesh/material/texture/image/camera/animation descriptors。
+- resource counts、`extensionsUsed`、`extensionsRequired`、unsupported required extensions。
+- import diagnostics，包括 missing decoder、unsupported extension、source invalid、load failed 等稳定 code。
+- deterministic source paths，例如 `nodes/0`、`meshes/0/primitives/1`。
+
+Manifest 可进入 Snapshot 和 `.ek3d` 的 `scene.json`，但只能包含 string、number、boolean、null、array 和 plain object。禁止在 metadata 中保存 `GLTFLoader`、parser、Three.js `Object3D`、`Texture`、`Material`、`AnimationClip`、`Camera`、`File`、`Blob`、object URL、resolver 输出、decoder 实例、image bitmap 或 PMREM 输出。导入分析失败默认不提交 `import-glb` 命令，因此不会注册坏 asset/object。
+
 ## SceneNode
 
 ```ts
