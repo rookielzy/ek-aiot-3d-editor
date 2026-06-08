@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { Object3D } from "three";
 import { createEmptySnapshot, createTransform } from "./defaults";
-import type { SceneSnapshot } from "./types";
+import { migrateSerializedSnapshot } from "./migrations";
+import type { SceneSnapshot, V4SceneSnapshot } from "./types";
 import { isJsonCompatible, validateSceneSnapshot } from "./validation";
 
 describe("scene snapshot contract", () => {
   it("creates a versioned JSON-compatible empty snapshot", () => {
     const snapshot = createEmptySnapshot("scene-a");
 
-    expect(snapshot.version).toBe(4);
+    expect(snapshot.version).toBe(5);
     expect(snapshot.scene.id).toBe("scene-a");
     expect(snapshot.nodes).toEqual({});
     expect(snapshot.rootNodeIds).toEqual([]);
@@ -184,6 +185,133 @@ describe("scene snapshot contract", () => {
     expect(result.errors.join("\n")).toContain("label must be a string");
   });
 
+  it("migrates v4 snapshots without inventing imported targets", () => {
+    const v4: V4SceneSnapshot = {
+      ...createValidObjectSnapshot(),
+      version: 4,
+      nodes: {
+        "object-a": createValidObjectSnapshot().nodes["object-a"],
+        "object-b": createValidObjectSnapshot().nodes["object-b"]
+      }
+    };
+
+    const migrated = migrateSerializedSnapshot(v4);
+
+    expect(migrated.version).toBe(5);
+    expect(Object.values(migrated.nodes).some((node) => node.kind === "imported")).toBe(false);
+    expect(migrated.nodes["object-a"]).toEqual(v4.nodes["object-a"]);
+  });
+
+  it("accepts valid imported GLB target nodes owned by a GLB object", () => {
+    const snapshot: SceneSnapshot = {
+      ...createValidObjectSnapshot(),
+      nodes: {
+        ...createValidObjectSnapshot().nodes,
+        "object-a": {
+          ...createValidObjectSnapshot().nodes["object-a"],
+          children: ["imported-root"]
+        },
+        "imported-root": {
+          id: "imported-root",
+          kind: "imported",
+          name: "Panel",
+          ownerObjectId: "object-a",
+          importKey: "glb:object-a/node:nodes/0",
+          source: { kind: "node", path: "nodes/0", index: 0 },
+          parentId: "object-a",
+          children: [],
+          materialSlots: [{
+            slotKey: "glb:object-a/slot:meshes/0/primitives/0:material-0",
+            label: "Red",
+            source: {
+              kind: "material-slot",
+              path: "meshes/0/primitives/0",
+              meshIndex: 0,
+              primitiveIndex: 0,
+              materialIndex: 0
+            }
+          }],
+          remap: { status: "resolved", metadata: { fingerprint: "nodes/0" } },
+          metadata: { durable: true }
+        }
+      }
+    };
+
+    expect(validateSceneSnapshot(snapshot)).toEqual({ ok: true, errors: [] });
+  });
+
+  it.each([
+    ["missing owner", (snapshot: SceneSnapshot) => ({
+      ...snapshot,
+      nodes: { ...snapshot.nodes, "imported-root": { ...snapshot.nodes["imported-root"], ownerObjectId: "missing" } }
+    })],
+    ["duplicate import key", (snapshot: SceneSnapshot) => ({
+      ...snapshot,
+      nodes: {
+        ...snapshot.nodes,
+        "object-a": { ...snapshot.nodes["object-a"], children: ["imported-root", "imported-child"] },
+        "imported-child": {
+          ...snapshot.nodes["imported-root"],
+          id: "imported-child",
+          parentId: "object-a"
+        }
+      }
+    })],
+    ["regular child under imported", (snapshot: SceneSnapshot) => ({
+      ...snapshot,
+      nodes: {
+        ...snapshot.nodes,
+        "imported-root": { ...snapshot.nodes["imported-root"], children: ["object-b"] },
+        "object-b": { ...snapshot.nodes["object-b"], parentId: "imported-root" }
+      },
+      rootNodeIds: ["object-a"]
+    })],
+    ["runtime metadata", (snapshot: SceneSnapshot) => ({
+      ...snapshot,
+      nodes: {
+        ...snapshot.nodes,
+        "imported-root": { ...snapshot.nodes["imported-root"], metadata: { runtime: new Object3D() } }
+      }
+    })]
+  ])("rejects invalid imported node graph: %s", (_label, mutate) => {
+    const result = validateSceneSnapshot(mutate(createValidImportedSnapshot()));
+
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects duplicate imported material slot keys within one owner", () => {
+    const snapshot = createValidImportedSnapshot();
+    const slot = {
+      slotKey: "glb:object-a/slot:meshes/0/primitives/0:material-0",
+      label: "Red",
+      source: {
+        kind: "material-slot" as const,
+        path: "meshes/0/primitives/0"
+      }
+    };
+    const result = validateSceneSnapshot({
+      ...snapshot,
+      nodes: {
+        ...snapshot.nodes,
+        "object-a": { ...snapshot.nodes["object-a"], children: ["imported-root", "imported-child"] },
+        "imported-root": {
+          ...snapshot.nodes["imported-root"],
+          materialSlots: [slot]
+        },
+        "imported-child": {
+          ...snapshot.nodes["imported-root"],
+          id: "imported-child",
+          importKey: "glb:object-a/primitive:meshes/0/primitives/1",
+          parentId: "object-a",
+          materialSlots: [slot]
+        }
+      }
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.join("\n")).toContain("must be unique within owner object-a");
+  });
+
   it("normalizes missing transform fields to default vectors", () => {
     expect(createTransform({ position: [1, 2, 3] })).toEqual({
       position: [1, 2, 3],
@@ -243,5 +371,29 @@ function createValidObjectSnapshot(): SceneSnapshot {
       }
     },
     rootObjectIds: ["object-a", "object-b"]
+  };
+}
+
+function createValidImportedSnapshot(): SceneSnapshot {
+  const snapshot = createValidObjectSnapshot();
+  return {
+    ...snapshot,
+    nodes: {
+      ...snapshot.nodes,
+      "object-a": {
+        ...snapshot.nodes["object-a"],
+        children: ["imported-root"]
+      },
+      "imported-root": {
+        id: "imported-root",
+        kind: "imported",
+        name: "Panel",
+        ownerObjectId: "object-a",
+        importKey: "glb:object-a/node:nodes/0",
+        source: { kind: "node", path: "nodes/0", index: 0 },
+        parentId: "object-a",
+        children: []
+      }
+    }
   };
 }

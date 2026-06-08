@@ -12,6 +12,7 @@ export type Command =
 export type SingleCommand =
   | ImportGlbCommand
   | RegisterAssetCommand
+  | CreateImportedGlbTargetsCommand
   | SelectNodeCommand
   | SelectNodesCommand
   | CreateGroupCommand
@@ -42,6 +43,13 @@ export interface ImportGlbCommand {
   name?: string;
   parentId?: string | null;
   transform?: Partial<Transform>;
+  expandImportedTargets?: boolean;
+}
+
+export interface CreateImportedGlbTargetsCommand {
+  type: "create-imported-glb-targets";
+  ownerObjectId: string;
+  replaceExisting?: boolean;
 }
 
 export interface SelectObjectCommand {

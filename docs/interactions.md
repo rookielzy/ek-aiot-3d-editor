@@ -32,7 +32,7 @@ React 和 Vue proof-loop demo 的可见验证路径保持一致：
 
 ## 节点选择与多选
 
-当前 durable selection 使用 `NodeId`。GLB object、empty group、light 都可以成为选中目标；object-only API 仍保留为兼容路径，并从 node selection 派生 selected object IDs。
+当前 durable selection 使用 `NodeId`。GLB object、empty group、light 和 imported GLB target 都可以成为选中目标；object-only API 仍保留为兼容路径，并从 node selection 派生 selected object IDs。
 
 Core runtime 提供 node-aware picking；命中 GLB mesh 时会选择所属 object node，命中 light runtime target 时会选择对应 light node。兼容 API `pickObject(objectId, mode)` 仍可选择对象 payload 对应的 object node。默认内部 dispatch：
 
@@ -40,7 +40,7 @@ Core runtime 提供 node-aware picking；命中 GLB mesh 时会选择所属 obje
 { type: "select-node", nodeId }
 ```
 
-`mode` 也可使用 `toggle`、`add`、`remove`、`clear`、`all`，对应 `select-nodes` 命令。Snapshot 中 `selection.nodeId` 是 primary selection，`selection.nodeIds` 是有序多选集合。`selection.objectId/objectIds` 是当前兼容镜像，只包含选中 object node 的 object payload ID。Inspector 根据 selected node kind 显示 transform、material 或 light section 的可用状态，同时暴露 selection count 给 workbench。
+`mode` 也可使用 `toggle`、`add`、`remove`、`clear`、`all`，对应 `select-nodes` 命令。Snapshot 中 `selection.nodeId` 是 primary selection，`selection.nodeIds` 是有序多选集合。`selection.objectId/objectIds` 是当前兼容镜像，只包含选中 object node 的 object payload ID。选中 imported GLB target 时，`objectId/objectIds` 不会被 owner object 自动填充；这避免 object-only host code 把 GLB internal target 误当作整对象操作。Inspector 根据 selected node kind 显示 transform、material 或 light section 的可用状态，同时暴露 selection count 给 workbench。
 
 Raycaster picking 能从 client point 解析候选 node；React/Vue workbench 默认开启 viewport pointer selection，示例中也可以从层级面板按钮触发同一套 selection command。框选和 lasso selection 仍未实现。
 
@@ -59,7 +59,7 @@ Core 已提供 framework-neutral operation helper：
 
 这些操作都通过 core command 和 history 执行。默认无参数调用作用于当前 node selection；显式传入 object IDs 时，`copy`、`duplicate`、`delete`、`group`、`ungroup` 仍走 object-only 兼容语义。
 
-复制 payload 是 transient JSON editor data，不包含 browser/system clipboard 数据、`File`、`Blob`、object URL、Three.js 对象、resolver 结果或二进制资产 payload。v2 node clipboard 可以复制 group/object/light 子树，粘贴时生成新的 node/object/light IDs，共享 asset reference，并隔离复制对象的 material assignment。旧 v1 object clipboard payload 仍可粘贴到 v4 editor。
+复制 payload 是 transient JSON editor data，不包含 browser/system clipboard 数据、`File`、`Blob`、object URL、Three.js 对象、resolver 结果或二进制资产 payload。v2 node clipboard 可以复制 group/object/light/imported 子树，粘贴时生成新的 node/object/light IDs，共享 asset reference，并隔离复制对象的 material assignment。旧 v1 object clipboard payload 仍可粘贴到 current editor。
 
 分组是 node-native hierarchy grouping：`group-nodes` 会创建 empty group node，把 selected top-level nodes 挂到新 group 下；`ungroup-nodes` 把 group children 移回上一层。React/Vue proof-loop demo 现在提供一个紧凑层级面板，直接从 `snapshot.rootNodeIds` 和 `snapshot.nodes` 派生树形结构，并通过 core operations 执行 select/copy/paste/duplicate/delete/group/ungroup。
 
@@ -106,7 +106,7 @@ Runtime 内部有 transaction 结构：
 - `rotate`
 - `scale`
 
-设计目标是一段拖拽最终只产生一个 undoable command，而不是每次 pointer move 都写 history。当前 canonical transform command 是 `set-node-transform`；旧 `set-transform` 会映射到对应 object node。Object node、group node、directional/point/spot light node 支持 transform；ambient/hemisphere light node 可以被选择但不显示 transform 控件。React/Vue workbench 默认开启可视 transform control；proof-loop demo 的 toolbar 也提供 mode、snap、camera、undo/redo 和 nudge 按钮，用于验证同一套状态是否在层级、status 和 checklist 中同步。TransformControls、helper、drag preview 和 camera controls 都是 runtime/UI state，不进入 Snapshot。
+设计目标是一段拖拽最终只产生一个 undoable command，而不是每次 pointer move 都写 history。当前 canonical transform command 是 `set-node-transform`；旧 `set-transform` 会映射到对应 object node。Object node、group node、imported GLB target node、directional/point/spot light node 支持 transform；ambient/hemisphere light node 可以被选择但不显示 transform 控件。Imported GLB target transform 是 authored override，只保存在 imported node 上，不会同步到 `objects` payload。React/Vue workbench 默认开启可视 transform control；proof-loop demo 的 toolbar 也提供 mode、snap、camera、undo/redo 和 nudge 按钮，用于验证同一套状态是否在层级、status 和 checklist 中同步。TransformControls、helper、drag preview 和 camera controls 都是 runtime/UI state，不进入 Snapshot。
 
 多节点 transaction 会把多个 `set-node-transform` 子命令合成一个 `batch` command。`snap` 支持 translation、rotation、scale increment helper；吸附结果进入 durable transform，吸附设置本身仍是 editor/session state。
 
@@ -164,10 +164,12 @@ editor.dispatch({
 - 保存 selected object 的 `MeshStandardMaterial` override 子集。
 - 保存 texture slot 的 asset ID。
 - Runtime 会把 object-level assignment 投影到 GLB 对象下的 `MeshStandardMaterial` mesh，并隔离 shared source material。
+- Imported GLB target schema 可以保存 manifest-derived material slot key 和 descriptor；slot assignment 使用 `{ kind: "material-slot", objectId, slotId }`，其中 `slotId` 是 imported slot key。
+- Schema validation 不会因为 reimport 后 slot 暂时无法解析而删除 material-slot assignment；这类情况应作为 recoverable problem 暴露。
 - Texture slot 会通过 resolver/loader 加载为 transient texture；失败暴露为 runtime problem，不写回 Snapshot。
 - 保持 React/Vue inspector 行为一致。
 
-完整子网格发现、per-submesh 材质 assignment、复杂材质编辑、节点材质和 shader 编辑不在当前范围内。
+runtime slot-aware material projection、material slot inspector UI、复杂材质编辑、节点材质和 shader 编辑不在当前范围内。
 
 ## 项目导入/导出
 
@@ -201,6 +203,9 @@ Core 提供 `resolveEditorShortcut()` 和 `executeEditorAction()`。React/Vue wo
 以下能力不要在文档或产品承诺中描述为已完成：
 
 - 框选。
+- GLB internal runtime picking，以及 durable imported target row 之外的 Workbench hierarchy UI polish。
+- GLB reimport diff/remap command。
+- Imported material slot assignment 的 runtime projection。
 - 系统剪贴板集成和外部 paste 格式。
 - 网格渲染、对齐辅助线和可视 snap 控件。
 - 持久化快捷键配置和命令面板 UI。

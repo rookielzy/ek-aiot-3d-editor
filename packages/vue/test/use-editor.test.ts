@@ -31,7 +31,7 @@ describe("useEditor", () => {
   it("initializes legacy serialized snapshots through core migration", () => {
     const { snapshot, dispose } = useEditor({ snapshot: createLegacyProofLoopSnapshot() });
 
-    expect(snapshot.value.version).toBe(4);
+    expect(snapshot.value.version).toBe(5);
     expect(snapshot.value.nodes["object-a"]).toMatchObject({ kind: "object", objectId: "object-a" });
     expect(snapshot.value.objects["object-a"].asset.id).toBe("asset-a");
     dispose();

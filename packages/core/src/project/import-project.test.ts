@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { attachGlbImportManifestMetadata, createGlbImportManifest } from "../assets/import-pipeline";
 import { createEditor } from "../editor/create-editor";
 
 describe("project import", () => {
@@ -68,7 +69,7 @@ describe("project import", () => {
 
     expect(imported.ok).toBe(true);
     expect(imported.manifest?.version).toBe(1);
-    expect(fresh.getSnapshot().version).toBe(4);
+    expect(fresh.getSnapshot().version).toBe(5);
     expect(fresh.getSnapshot().nodes["group-a"]).toMatchObject({ kind: "group", children: ["object-a", "point-a"] });
     expect(fresh.getSnapshot().selection).toEqual({ nodeId: "group-a", nodeIds: ["group-a"], objectId: null, objectIds: [] });
     expect(fresh.getSnapshot().objects["object-a"].asset.id).toBe("asset-a");
@@ -78,4 +79,60 @@ describe("project import", () => {
     expect(fresh.getSnapshot().problems.acknowledged["missing-a"]).toBeTruthy();
     expect(fresh.exportProject().ok).toBe(true);
   });
+
+  it("round-trips imported GLB targets, slot assignments, and payloads through project import", () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: {
+        id: "asset-a",
+        source: new Uint8Array([1, 2, 3]),
+        metadata: attachGlbImportManifestMetadata(undefined, createImportManifest())
+      },
+      expandImportedTargets: true
+    });
+    const importedNode = Object.values(editor.getSnapshot().nodes)
+      .find((node) => node.kind === "imported" && node.importKey === "glb:object-a/primitive:meshes/0/primitives/0");
+    expect(importedNode?.kind).toBe("imported");
+    editor.dispatch({
+      type: "set-material",
+      target: {
+        kind: "material-slot",
+        objectId: "object-a",
+        slotId: "glb:object-a/slot:meshes/0/primitives/0:material-0"
+      },
+      material: { color: "#ff0000" }
+    });
+    const exported = editor.exportProject();
+    const fresh = createEditor();
+
+    const imported = fresh.importProject(exported.packageBytes as Uint8Array);
+
+    expect(imported.ok).toBe(true);
+    expect(Object.values(fresh.getSnapshot().nodes).find((node) => node.kind === "imported" && node.importKey === "glb:object-a/primitive:meshes/0/primitives/0")).toMatchObject({
+      kind: "imported",
+      ownerObjectId: "object-a",
+      materialSlots: [expect.objectContaining({ slotKey: "glb:object-a/slot:meshes/0/primitives/0:material-0" })]
+    });
+    expect(fresh.getSnapshot().materials.assignments["material-slot:object-a:glb:object-a/slot:meshes/0/primitives/0:material-0"]).toBeDefined();
+    expect(fresh.exportProject().ok).toBe(true);
+  });
 });
+
+function createImportManifest() {
+  return createGlbImportManifest({
+    gltf: {
+      parser: {
+        json: {
+          nodes: [{ name: "Root", mesh: 0 }],
+          meshes: [{
+            name: "Panel",
+            primitives: [{ attributes: { POSITION: 0 }, material: 0 }]
+          }],
+          materials: [{ name: "Red" }]
+        }
+      }
+    }
+  });
+}

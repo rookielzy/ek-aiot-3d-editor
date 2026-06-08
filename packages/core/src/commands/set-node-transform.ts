@@ -10,7 +10,7 @@ export function applySetNodeTransform(snapshot: SceneSnapshot, command: SetNodeT
   }
 
   const nextTransform = normalizeNodeTransformPatch(node, command.transform);
-  if (!node.transform || transformEquals(node.transform, nextTransform)) {
+  if (node.transform && transformEquals(node.transform, nextTransform)) {
     return snapshot;
   }
 

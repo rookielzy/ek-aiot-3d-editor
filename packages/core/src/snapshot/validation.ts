@@ -1,10 +1,11 @@
 import { validateSceneEnvironment } from "../environment/validation";
+import type { ImportedGlbMaterialSlotDescriptor, ImportedGlbSourceDescriptor } from "../imported-targets/types";
 import { validateLights } from "../lights/validation";
 import { validateMaterialState } from "../materials/validation";
 import { validateAuthoredProblemState } from "../problems/validation";
 import { isJsonCompatible as isJsonValueCompatible, isPlainRecord, type JsonValue } from "./json";
 import { isSupportedAssetKind, isVector } from "./primitives";
-import { SNAPSHOT_VERSION, type AssetReference, type SceneNode, type SceneObject, type SceneSnapshot } from "./types";
+import { SNAPSHOT_VERSION, type AssetReference, type SceneImportedGlbNode, type SceneNode, type SceneObject, type SceneSnapshot } from "./types";
 
 export interface ValidationResult {
   ok: boolean;
@@ -64,6 +65,7 @@ export function validateSceneSnapshot(value: unknown): ValidationResult {
   }
 
   validateNodeGraph(value.nodes, value.rootNodeIds, errors);
+  validateImportedNodeGraph(value.nodes, value.objects, value.rootNodeIds, errors);
   validateSelection(value.selection, value.nodes, value.objects, errors);
 
   if (!isPlainRecord(value.assets)) {
@@ -275,7 +277,7 @@ function validateNode(id: string, node: unknown, objects: unknown, lights: unkno
   if (sceneNode.id !== id) {
     errors.push(`Node ${id} must use a matching id field.`);
   }
-  if (sceneNode.kind !== "object" && sceneNode.kind !== "group" && sceneNode.kind !== "light") {
+  if (sceneNode.kind !== "object" && sceneNode.kind !== "group" && sceneNode.kind !== "light" && sceneNode.kind !== "imported") {
     errors.push(`Node ${id} kind is unsupported.`);
   }
   if (typeof sceneNode.name !== "string") {
@@ -317,6 +319,109 @@ function validateNode(id: string, node: unknown, objects: unknown, lights: unkno
       }
       validateLightNodeTransform(id, sceneNode, lights, errors);
       break;
+    case "imported":
+      validateImportedNode(id, sceneNode, errors);
+      break;
+  }
+}
+
+function validateImportedNode(id: string, node: Partial<SceneNode>, errors: string[]): void {
+  const imported = node as Partial<SceneImportedGlbNode>;
+  if (typeof imported.ownerObjectId !== "string") {
+    errors.push(`Imported node ${id} must reference an ownerObjectId.`);
+  }
+  if (typeof imported.importKey !== "string" || imported.importKey.length === 0) {
+    errors.push(`Imported node ${id} must include an importKey.`);
+  }
+  validateImportedSourceDescriptor(`Imported node ${id} source`, imported.source, errors);
+  if ("transform" in imported && imported.transform !== undefined && !isTransform(imported.transform)) {
+    errors.push(`Imported node ${id} transform must include position, rotation, and scale vectors.`);
+  }
+  if ("materialSlots" in imported) {
+    if (!Array.isArray(imported.materialSlots)) {
+      errors.push(`Imported node ${id} materialSlots must be an array.`);
+    } else {
+      validateUniqueIds(imported.materialSlots
+        .map((slot) => isPlainRecord(slot) ? slot.slotKey : undefined)
+        .filter((slotKey): slotKey is string => typeof slotKey === "string"), `Imported node ${id} material slot`, errors);
+      imported.materialSlots.forEach((slot, index) => validateImportedMaterialSlot(`Imported node ${id} material slot ${index}`, slot, errors));
+    }
+  }
+  if ("remap" in imported && imported.remap !== undefined) {
+    validateImportedRemapMetadata(`Imported node ${id} remap`, imported.remap, errors);
+  }
+}
+
+function validateImportedSourceDescriptor(label: string, value: unknown, errors: string[]): asserts value is ImportedGlbSourceDescriptor {
+  if (!isPlainRecord(value)) {
+    errors.push(`${label} must be a plain object.`);
+    return;
+  }
+  if (!["scene", "node", "mesh", "primitive", "material", "camera"].includes(String(value.kind))) {
+    errors.push(`${label} kind is unsupported.`);
+  }
+  if (typeof value.path !== "string" || value.path.length === 0) {
+    errors.push(`${label} path must be a non-empty string.`);
+  }
+  for (const key of ["index", "meshIndex", "primitiveIndex", "materialIndex", "cameraIndex"]) {
+    if (key in value && value[key] !== undefined && (!Number.isInteger(value[key]) || Number(value[key]) < 0)) {
+      errors.push(`${label} ${key} must be a non-negative integer.`);
+    }
+  }
+  if ("fingerprint" in value && value.fingerprint !== undefined && typeof value.fingerprint !== "string") {
+    errors.push(`${label} fingerprint must be a string.`);
+  }
+  if ("metadata" in value && value.metadata !== undefined && !isJsonCompatible(value.metadata)) {
+    errors.push(`${label} metadata must be JSON-compatible.`);
+  }
+}
+
+function validateImportedMaterialSlot(label: string, value: unknown, errors: string[]): asserts value is ImportedGlbMaterialSlotDescriptor {
+  if (!isPlainRecord(value)) {
+    errors.push(`${label} must be a plain object.`);
+    return;
+  }
+  if (typeof value.slotKey !== "string" || value.slotKey.length === 0) {
+    errors.push(`${label} slotKey must be a non-empty string.`);
+  }
+  if (typeof value.label !== "string") {
+    errors.push(`${label} label must be a string.`);
+  }
+  if (!isPlainRecord(value.source) || value.source.kind !== "material-slot" || typeof value.source.path !== "string") {
+    errors.push(`${label} source must describe a material slot path.`);
+  } else {
+    for (const key of ["meshIndex", "primitiveIndex", "materialIndex"]) {
+      if (key in value.source && value.source[key] !== undefined && (!Number.isInteger(value.source[key]) || Number(value.source[key]) < 0)) {
+        errors.push(`${label} source ${key} must be a non-negative integer.`);
+      }
+    }
+  }
+  if ("materialImportKey" in value && value.materialImportKey !== undefined && typeof value.materialImportKey !== "string") {
+    errors.push(`${label} materialImportKey must be a string.`);
+  }
+  if ("metadata" in value && value.metadata !== undefined && !isJsonCompatible(value.metadata)) {
+    errors.push(`${label} metadata must be JSON-compatible.`);
+  }
+}
+
+function validateImportedRemapMetadata(label: string, value: unknown, errors: string[]): void {
+  if (!isPlainRecord(value)) {
+    errors.push(`${label} must be a plain object.`);
+    return;
+  }
+  if ("status" in value && value.status !== undefined && !["resolved", "unresolved", "stale"].includes(String(value.status))) {
+    errors.push(`${label} status is unsupported.`);
+  }
+  if ("previousImportKey" in value && value.previousImportKey !== undefined && typeof value.previousImportKey !== "string") {
+    errors.push(`${label} previousImportKey must be a string.`);
+  }
+  if ("candidateImportKeys" in value && value.candidateImportKeys !== undefined) {
+    if (!Array.isArray(value.candidateImportKeys) || value.candidateImportKeys.some((entry) => typeof entry !== "string")) {
+      errors.push(`${label} candidateImportKeys must be a string array.`);
+    }
+  }
+  if ("metadata" in value && value.metadata !== undefined && !isJsonCompatible(value.metadata)) {
+    errors.push(`${label} metadata must be JSON-compatible.`);
   }
 }
 
@@ -489,6 +594,101 @@ function validateNodeGraph(nodes: unknown, rootNodeIds: unknown, errors: string[
 
   for (const nodeId of Object.keys(nodes)) {
     visit(nodeId);
+  }
+}
+
+function validateImportedNodeGraph(nodes: unknown, objects: unknown, rootNodeIds: unknown, errors: string[]): void {
+  if (!isPlainRecord(nodes) || !Array.isArray(rootNodeIds)) {
+    return;
+  }
+
+  const rootSet = new Set(rootNodeIds.filter((id): id is string => typeof id === "string"));
+  const ownerKeys = new Map<string, Set<string>>();
+  const ownerSlotKeys = new Map<string, Set<string>>();
+
+  for (const [nodeId, node] of Object.entries(nodes)) {
+    if (!isPlainRecord(node)) {
+      continue;
+    }
+
+    if (node.kind !== "imported") {
+      if (typeof node.parentId === "string") {
+        const parent = nodes[node.parentId];
+        if (isPlainRecord(parent) && parent.kind === "imported") {
+          errors.push(`Node ${nodeId} cannot be parented under imported node ${node.parentId}.`);
+        }
+      }
+      continue;
+    }
+
+    const ownerObjectId = typeof node.ownerObjectId === "string" ? node.ownerObjectId : null;
+    if (!ownerObjectId) {
+      continue;
+    }
+    if (!isPlainRecord(objects) || !isPlainRecord(objects[ownerObjectId])) {
+      errors.push(`Imported node ${nodeId} owner object ${ownerObjectId} must exist.`);
+    } else {
+      const owner = objects[ownerObjectId];
+      if (isPlainRecord(owner) && owner.kind !== "glb") {
+        errors.push(`Imported node ${nodeId} owner object ${ownerObjectId} must be GLB-backed.`);
+      }
+    }
+
+    if (rootSet.has(nodeId) || node.parentId === null) {
+      errors.push(`Imported node ${nodeId} must be parented under its owner object subtree.`);
+    }
+
+    const importKey = typeof node.importKey === "string" ? node.importKey : null;
+    if (importKey) {
+      const keys = ownerKeys.get(ownerObjectId) ?? new Set<string>();
+      if (keys.has(importKey)) {
+        errors.push(`Imported node ${nodeId} importKey ${importKey} must be unique within owner ${ownerObjectId}.`);
+      }
+      keys.add(importKey);
+      ownerKeys.set(ownerObjectId, keys);
+    }
+
+    if (Array.isArray(node.materialSlots)) {
+      for (const slot of node.materialSlots) {
+        if (!isPlainRecord(slot) || typeof slot.slotKey !== "string") {
+          continue;
+        }
+        const slotKeys = ownerSlotKeys.get(ownerObjectId) ?? new Set<string>();
+        if (slotKeys.has(slot.slotKey)) {
+          errors.push(`Imported material slot ${slot.slotKey} must be unique within owner ${ownerObjectId}.`);
+        }
+        slotKeys.add(slot.slotKey);
+        ownerSlotKeys.set(ownerObjectId, slotKeys);
+      }
+    }
+
+    if (typeof node.parentId === "string") {
+      const parent = nodes[node.parentId];
+      if (!isPlainRecord(parent)) {
+        continue;
+      }
+      if (parent.kind === "object") {
+        if (parent.objectId !== ownerObjectId) {
+          errors.push(`Imported node ${nodeId} parent object must match owner ${ownerObjectId}.`);
+        }
+      } else if (parent.kind === "imported") {
+        if (parent.ownerObjectId !== ownerObjectId) {
+          errors.push(`Imported node ${nodeId} parent imported node must share owner ${ownerObjectId}.`);
+        }
+      } else {
+        errors.push(`Imported node ${nodeId} parent ${node.parentId} must be its owner object or an imported node with the same owner.`);
+      }
+    }
+
+    for (const childId of Array.isArray(node.children) ? node.children : []) {
+      if (typeof childId !== "string") {
+        continue;
+      }
+      const child = nodes[childId];
+      if (isPlainRecord(child) && child.kind !== "imported") {
+        errors.push(`Imported node ${nodeId} cannot contain regular node ${childId}.`);
+      }
+    }
   }
 }
 

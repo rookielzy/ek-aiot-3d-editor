@@ -58,10 +58,14 @@ export function createAdvancedEditorOperations(editor: Editor, clipboard: Editor
     },
     duplicate(objectIds) {
       const snapshot = editor.getSnapshot();
-      if (objectIds || isObjectOnlySelection(snapshot)) {
+      if (objectIds) {
         return editor.dispatch({ type: "duplicate-objects", objectIds });
       }
-      const payload = createNodeClipboardPayload(snapshot);
+      const selectedNodeIds = getSelectedNodeIds(snapshot);
+      if (isObjectOnlySelection(snapshot, selectedNodeIds) && !objectSelectionContainsImportedDescendants(snapshot, selectedNodeIds)) {
+        return editor.dispatch({ type: "duplicate-objects", objectIds });
+      }
+      const payload = createNodeClipboardPayload(snapshot, selectedNodeIds);
       if (payload.rootNodeIds.length === 0) {
         return { ok: true, snapshot };
       }
@@ -110,7 +114,9 @@ function createClipboardPayloadForSelection(snapshot: SceneSnapshot): EditorClip
   const selectedNodeIds = getSelectedNodeIds(snapshot);
 
   return isObjectOnlySelection(snapshot, selectedNodeIds)
-    ? createClipboardPayload(snapshot)
+    ? objectSelectionContainsImportedDescendants(snapshot, selectedNodeIds)
+      ? createNodeClipboardPayload(snapshot, selectedNodeIds)
+      : createClipboardPayload(snapshot)
     : createNodeClipboardPayload(snapshot, selectedNodeIds);
 }
 
@@ -119,4 +125,23 @@ function isObjectOnlySelection(
   selectedNodeIds = getSelectedNodeIds(snapshot)
 ): boolean {
   return selectedNodeIds.every((nodeId) => snapshot.nodes[nodeId]?.kind === "object");
+}
+
+function objectSelectionContainsImportedDescendants(snapshot: SceneSnapshot, selectedNodeIds: readonly string[]): boolean {
+  const pending = [...selectedNodeIds];
+  while (pending.length > 0) {
+    const nodeId = pending.pop()!;
+    const node = snapshot.nodes[nodeId];
+    if (!node) {
+      continue;
+    }
+    for (const childId of node.children) {
+      const child = snapshot.nodes[childId];
+      if (child?.kind === "imported") {
+        return true;
+      }
+      pending.push(childId);
+    }
+  }
+  return false;
 }

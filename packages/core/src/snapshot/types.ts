@@ -1,11 +1,13 @@
 import type { SceneEnvironment } from "../environment/types";
+import type { ImportedGlbMaterialSlotDescriptor, ImportedGlbRemapMetadata, ImportedGlbSourceDescriptor } from "../imported-targets/types";
 import type { LightDefinition } from "../lights/types";
 import type { MaterialState } from "../materials/types";
 import type { AuthoredProblemState } from "../problems/types";
 import type { JsonPrimitive, JsonValue } from "./json";
 import type { ASSET_KINDS } from "./primitives";
 
-export const SNAPSHOT_VERSION = 4;
+export const SNAPSHOT_VERSION = 5;
+export const V4_SNAPSHOT_VERSION = 4;
 export const PREVIOUS_SNAPSHOT_VERSION = 2;
 export const LEGACY_SNAPSHOT_VERSION = 1;
 export const V3_SNAPSHOT_VERSION = 3;
@@ -43,7 +45,8 @@ export type NodeId = string;
 export type SceneNode =
   | SceneObjectNode
   | SceneGroupNode
-  | SceneLightNode;
+  | SceneLightNode
+  | SceneImportedGlbNode;
 
 interface BaseSceneNode {
   id: NodeId;
@@ -68,6 +71,16 @@ export interface SceneLightNode extends BaseSceneNode {
   kind: "light";
   lightId: string;
   transform?: Transform;
+}
+
+export interface SceneImportedGlbNode extends BaseSceneNode {
+  kind: "imported";
+  ownerObjectId: string;
+  importKey: string;
+  source: ImportedGlbSourceDescriptor;
+  transform?: Transform;
+  materialSlots?: ImportedGlbMaterialSlotDescriptor[];
+  remap?: ImportedGlbRemapMetadata;
 }
 
 export interface SceneSnapshot {
@@ -102,6 +115,11 @@ export interface SceneSnapshot {
   lights: Record<string, LightDefinition>;
   problems: AuthoredProblemState;
   metadata?: Record<string, JsonValue>;
+}
+
+export interface V4SceneSnapshot extends Omit<SceneSnapshot, "version" | "nodes"> {
+  version: typeof V4_SNAPSHOT_VERSION;
+  nodes: Record<NodeId, SceneObjectNode | SceneGroupNode | SceneLightNode>;
 }
 
 export interface V3SceneSnapshot {
@@ -176,4 +194,4 @@ export interface LegacySceneSnapshot {
   metadata?: Record<string, JsonValue>;
 }
 
-export type SerializedSceneSnapshot = SceneSnapshot | V3SceneSnapshot | PreviousSceneSnapshot | LegacySceneSnapshot;
+export type SerializedSceneSnapshot = SceneSnapshot | V4SceneSnapshot | V3SceneSnapshot | PreviousSceneSnapshot | LegacySceneSnapshot;

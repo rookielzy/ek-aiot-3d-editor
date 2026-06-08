@@ -3,7 +3,7 @@ import { cloneTransform, normalizeTransform } from "../snapshot/transforms";
 import type { SceneNode, SceneSnapshot, Transform } from "../snapshot/types";
 
 export function nodeSupportsTransform(snapshot: SceneSnapshot, node: SceneNode): boolean {
-  if (node.kind === "object" || node.kind === "group") {
+  if (node.kind === "object" || node.kind === "group" || node.kind === "imported") {
     return true;
   }
 
@@ -34,12 +34,19 @@ export function setNodeTransformInSnapshot(
 }
 
 export function normalizeNodeTransformPatch(node: SceneNode, transform: Partial<Transform>): Transform {
+  if (node.kind === "imported") {
+    return cloneTransform(normalizeTransform({
+      ...(node.transform ?? {}),
+      ...transform
+    }));
+  }
+
   if (!("transform" in node) || !node.transform) {
     throw new Error(`Node ${node.id} does not support transforms.`);
   }
 
   return cloneTransform(normalizeTransform({
-    ...node.transform,
+    ...(node.transform ?? {}),
     ...transform
   }));
 }
@@ -193,6 +200,7 @@ function withTransform(node: SceneNode, transform: Transform): SceneNode {
   switch (node.kind) {
     case "object":
     case "group":
+    case "imported":
       return {
         ...node,
         transform: cloneTransform(transform)

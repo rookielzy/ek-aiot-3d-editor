@@ -4,18 +4,19 @@ Scene Snapshot 是本项目的 durable editor state。它必须是 JSON-compatib
 
 当前版本：
 
-- `SceneSnapshot.version = 4`
+- `SceneSnapshot.version = 5`
+- `V4SceneSnapshot.version = 4`
 - `V3SceneSnapshot.version = 3`
 - `PreviousSceneSnapshot.version = 2`
 - `LegacySceneSnapshot.version = 1`
 
-Version 1/2/3 snapshot 会通过 migration 规范化为当前 schema。
+Version 1/2/3/4 snapshot 会通过 migration 规范化为当前 schema。v4 scene node graph 会原样升级到 v5；migration 不会根据已有 GLB object metadata 自动生成 imported targets。
 
 ## 顶层结构
 
 ```ts
 interface SceneSnapshot {
-  version: 4;
+  version: 5;
   scene: {
     id: string;
     name: string;
@@ -39,7 +40,7 @@ interface SceneSnapshot {
 }
 ```
 
-`nodes` / `rootNodeIds` 是 v4 的 canonical hierarchy 和 target layer。`objects`、`lights` 仍保存 payload；`rootObjectIds` 与 `selection.objectId/objectIds` 是当前兼容镜像，供旧 object-only API 使用，新的 durable target 应使用 `NodeId`。
+`nodes` / `rootNodeIds` 是 current canonical hierarchy 和 target layer。`objects`、`lights` 仍保存 payload；`rootObjectIds` 与 `selection.objectId/objectIds` 是当前兼容镜像，供旧 object-only API 使用，新的 durable target 应使用 `NodeId`。
 
 ## JSON-compatible 约束
 
@@ -145,16 +146,95 @@ type SceneNode =
       children: NodeId[];
       transform?: Transform;
       metadata?: Record<string, JsonValue>;
+    }
+  | {
+      id: NodeId;
+      kind: "imported";
+      name: string;
+      ownerObjectId: string;
+      importKey: string;
+      source: ImportedGlbSourceDescriptor;
+      parentId: NodeId | null;
+      children: NodeId[];
+      transform?: Transform;
+      materialSlots?: ImportedGlbMaterialSlotDescriptor[];
+      remap?: ImportedGlbRemapMetadata;
+      metadata?: Record<string, JsonValue>;
     };
 ```
 
-`SceneNode` 保存共同 authoring target 字段：稳定 ID、展示名称、类型、父子关系、可选 metadata，以及有意义时的 transform。object node 引用 `objects` payload，light node 引用 `lights` payload，group node 没有额外 payload。
+`SceneNode` 保存共同 authoring target 字段：稳定 ID、展示名称、类型、父子关系、可选 metadata，以及有意义时的 transform。object node 引用 `objects` payload，light node 引用 `lights` payload，group node 没有额外 payload，imported node 表示 GLB object 内部的 durable authoring target。
 
 迁移规则：
 
 - v3 object 默认迁移为同 ID 的 object node。
 - v3 light 默认迁移为同 ID 的 light node。
 - 如果 object ID 与 light ID 冲突，object node 保留 object ID，light payload ID 不变，light node ID 会稳定生成为类似 `light-a:light` 的 collision-safe ID。
+- v4 node graph 默认升级为 v5，不会为已有 GLB object 合成 imported node。
+
+## Imported GLB Targets
+
+Imported GLB target 是 v5 新增的 durable node kind，用来表示某个 GLB object 内部的 scene/node/mesh/primitive/camera 等可寻址目标。它只保存稳定 ID、manifest-derived source descriptor、owner 关系、可选 authored transform override、material slot descriptor 和 JSON-compatible remap metadata；不保存 glTF runtime graph。
+
+```ts
+interface ImportedGlbSourceDescriptor {
+  kind: "scene" | "node" | "mesh" | "primitive" | "material" | "camera";
+  path: string;          // e.g. "nodes/0", "meshes/0/primitives/1"
+  index?: number;
+  meshIndex?: number;
+  primitiveIndex?: number;
+  materialIndex?: number;
+  cameraIndex?: number;
+  fingerprint?: string;
+  metadata?: Record<string, JsonValue>;
+}
+
+interface ImportedGlbMaterialSlotDescriptor {
+  slotKey: string;       // stable owner-local slot key
+  label: string;
+  source: {
+    kind: "material-slot";
+    path: string;
+    meshIndex?: number;
+    primitiveIndex?: number;
+    materialIndex?: number;
+  };
+  materialImportKey?: string;
+  metadata?: Record<string, JsonValue>;
+}
+```
+
+Owner 约束：
+
+- imported node 必须有 `ownerObjectId`，且 owner 必须是 existing GLB-backed object。
+- imported node 不能是 root node。
+- imported node 的 parent 必须是 owner object node，或同一 owner 下的 imported node。
+- regular group/object/light node 不能挂到 imported node 下。
+- 同一 owner 下 `importKey` 必须唯一。
+
+`importKey` 是 GLB source identity，来自 `GlbImportManifest` descriptor path，例如 `glb:object-a/node:nodes/0`。`node.id` 是 editor identity，供 selection/history/commands 使用。首次展开导入时可以从 import key 派生 node ID；未来 reimport/remap 可以保留 node ID，同时更新 source/remap metadata。
+
+Imported target 创建是显式操作：
+
+```ts
+editor.dispatch({
+  type: "create-imported-glb-targets",
+  ownerObjectId: "object-a"
+});
+```
+
+或在 import 时 opt-in：
+
+```ts
+editor.dispatch({
+  type: "import-glb",
+  objectId: "object-a",
+  asset: { id: "asset-a", metadata },
+  expandImportedTargets: true
+});
+```
+
+默认 object-level GLB import 不创建 imported targets。
 
 ## SceneObject Payload
 
@@ -171,7 +251,7 @@ interface SceneObject {
 }
 ```
 
-当前对象类型只有 `glb`。v4 中对象 payload 仍保存 GLB asset reference 与兼容层级/transform 字段；canonical hierarchy、selection 和 target identity 属于 `SceneNode`。即使资产无法解析，对象 payload 也不应被删除。
+当前对象类型只有 `glb`。对象 payload 仍保存 GLB asset reference 与兼容层级/transform 字段；canonical hierarchy、selection 和 target identity 属于 `SceneNode`。即使资产无法解析，对象 payload 也不应被删除。
 
 ## Selection
 
@@ -192,6 +272,7 @@ Selection 是 durable state，因此可以序列化/恢复。`nodeId` 是 primar
 - `objectId` 要么为 `null`，要么存在于 `objects` 中。
 - 非空 `objectId` 必须包含在 `objectIds` 中。
 - `objectIds` 中所有对象都必须存在且不能重复。
+- imported node 可进入 `selection.nodeId/nodeIds`；它不会进入 `selection.objectId/objectIds`，除非同次 selection 里还选中了 object node。
 
 ## Materials
 
@@ -202,7 +283,9 @@ Selection 是 durable state，因此可以序列化/恢复。`nodeId` 是 primar
 - texture slot 只保存 asset reference；runtime 会解析并加载 `texture` / `image` 资产。
 - runtime 创建出来的 cloned Three.js material/texture 不进入 Snapshot。
 - resolver/loader 失败只产生 runtime problem，不删除 durable material assignment 或 texture slot。
-- 当前非目标包括完整子网格 material slot discovery、per-submesh assignment、复杂材质图、节点材质和 shader 编辑。
+- imported target 可以暴露 `materialSlots`，`MaterialAssignmentTarget` 仍使用 `{ kind: "material-slot"; objectId; slotId }` 引用 slot key。
+- validation 允许 material-slot assignment 指向当前不存在的 slot key，因为 reimport 后 slot 消失应该成为 recoverable problem，而不是 schema 层删除 durable assignment。
+- 当前非目标包括 runtime material slot projection、material slot inspector UI、复杂材质图、节点材质和 shader 编辑。
 
 ## Environment
 
@@ -247,7 +330,7 @@ type LightKind = "ambient" | "directional" | "hemisphere" | "point" | "spot";
 
 Runtime 会把这些定义投影为 Three.js light object，并在更新/删除时清理旧对象。
 
-v4 中每个 light payload 必须被一个 light node 引用。ambient 和 hemisphere light node 可被选择，但当前不暴露 transform capability；directional、point、spot light node 可以携带 transform。
+每个 light payload 必须被一个 light node 引用。ambient 和 hemisphere light node 可被选择，但当前不暴露 transform capability；directional、point、spot light node 可以携带 transform。
 
 ## Problems
 
@@ -270,6 +353,7 @@ type Command =
   | UngroupNodesCommand
   | ReparentNodeCommand
   | SetNodeTransformCommand
+  | CreateImportedGlbTargetsCommand
   | SelectObjectCommand
   | SelectObjectsCommand
   | DeleteObjectsCommand
@@ -296,7 +380,7 @@ editor.dispatch({
 });
 ```
 
-旧 object-only host code 可继续使用 `select-object`、`select-objects`、`set-transform` 等兼容命令；这些命令会解析 object payload ID 到对应 object node。
+旧 object-only host code 可继续使用 `select-object`、`select-objects`、`set-transform` 等兼容命令；这些命令会解析 object payload ID 到对应 object node。Imported node 使用 node-native 命令：`select-node`、`set-node-transform`、`delete-nodes` 和 `reparent-node`。
 
 ## Clipboard Payload
 
@@ -319,7 +403,7 @@ Clipboard payload 是 transient JSON editor data，不属于 durable Snapshot：
 
 ```json
 {
-  "version": 4,
+  "version": 5,
   "scene": {
     "id": "scene",
     "name": "Untitled scene"

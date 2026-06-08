@@ -1,4 +1,5 @@
 import type { LightDefinition } from "../lights/types";
+import { createTransform } from "../snapshot/defaults";
 import type { SceneNode, SceneSnapshot, Transform } from "../snapshot/types";
 
 export interface SelectedNodeTarget {
@@ -21,7 +22,7 @@ export function getSelectedNodeTarget(snapshot: SceneSnapshot): SelectedNodeTarg
     };
   }
 
-  const transform = "transform" in node ? node.transform ?? null : null;
+  const transform = "transform" in node ? node.transform ?? (node.kind === "imported" ? createTransform() : null) : null;
   if (transform) {
     return {
       node,

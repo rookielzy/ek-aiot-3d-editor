@@ -84,6 +84,7 @@ export function reparentNode(
     }
     ancestorId = nodes[ancestorId]?.parentId ?? null;
   }
+  assertImportedReparentAllowed(nodes, nodeId, nextParentId);
 
   const nextNodes = { ...nodes };
   let nextRootNodeIds = [...rootNodeIds];
@@ -118,6 +119,43 @@ export function reparentNode(
     nodes: nextNodes,
     rootNodeIds: nextRootNodeIds
   };
+}
+
+function assertImportedReparentAllowed(
+  nodes: SceneSnapshot["nodes"],
+  nodeId: string,
+  nextParentId: string | null
+): void {
+  const node = nodes[nodeId];
+  const parent = nextParentId ? nodes[nextParentId] : undefined;
+
+  if (parent?.kind === "imported" && node.kind !== "imported") {
+    throw new Error(`Node ${nodeId} cannot be parented under imported node ${nextParentId}.`);
+  }
+
+  if (node.kind !== "imported") {
+    return;
+  }
+
+  if (!nextParentId || !parent) {
+    throw new Error(`Imported node ${nodeId} must remain under its owner object.`);
+  }
+
+  if (parent.kind === "object") {
+    if (parent.objectId !== node.ownerObjectId) {
+      throw new Error(`Imported node ${nodeId} cannot be parented under a different owner object.`);
+    }
+    return;
+  }
+
+  if (parent.kind === "imported") {
+    if (parent.ownerObjectId !== node.ownerObjectId) {
+      throw new Error(`Imported node ${nodeId} cannot be parented under an imported node with a different owner.`);
+    }
+    return;
+  }
+
+  throw new Error(`Imported node ${nodeId} must be parented under its owner object or imported subtree.`);
 }
 
 export function collectObjectSubtreeIds(snapshot: SceneSnapshot, objectId: string): string[] {

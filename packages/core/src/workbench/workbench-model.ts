@@ -329,6 +329,7 @@ function createHierarchyRow(
   problems: readonly WorkbenchProblemItem[]
 ): WorkbenchHierarchyRow {
   const object = node.kind === "object" ? snapshot.objects[node.objectId] : undefined;
+  const ownerObject = node.kind === "imported" ? snapshot.objects[node.ownerObjectId] : undefined;
 
   return {
     id: node.id,
@@ -338,6 +339,7 @@ function createHierarchyRow(
     parentId: node.parentId,
     childIds: [...node.children],
     ...(node.kind === "object" ? { objectId: node.objectId, assetId: object?.asset.id } : {}),
+    ...(node.kind === "imported" ? { objectId: node.ownerObjectId, assetId: ownerObject?.asset.id } : {}),
     ...(node.kind === "light" ? { lightId: node.lightId } : {}),
     selected: selectedIds.has(node.id),
     problemCount: problems.length,
@@ -504,6 +506,12 @@ function problemMatchesNode(
   }
   if (node.kind === "light") {
     return problem.target.kind === "light" && problem.target.lightId === node.lightId;
+  }
+  if (node.kind === "imported") {
+    return problem.target.kind === "imported-target"
+      ? problem.target.nodeId === node.id || problem.target.importKey === node.importKey
+      : problem.target.kind === "imported-material-slot" &&
+        (problem.target.nodeId === node.id || problem.target.importKey === node.importKey);
   }
   return false;
 }

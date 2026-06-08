@@ -365,7 +365,7 @@ export function validateGlbImportManifest(value: unknown): { ok: boolean; errors
       errors.push(`GLB import manifest ${key} must be an array.`);
     } else if (key !== "diagnostics") {
       value[key].forEach((descriptor, index) => {
-        if (!isDescriptorLike(descriptor)) {
+        if (!isGlbImportManifestDescriptor(key, descriptor)) {
           errors.push(`GLB import manifest ${key} descriptor ${index} is invalid.`);
         }
       });
@@ -445,7 +445,7 @@ function isGlbImportTarget(value: unknown): value is GlbImportTarget {
   }
 }
 
-function isDescriptorLike(value: unknown): boolean {
+function isDescriptorLike(value: unknown): value is Record<string, unknown> {
   return isPlainRecord(value) &&
     typeof value.id === "string" &&
     typeof value.path === "string" &&
@@ -453,6 +453,69 @@ function isDescriptorLike(value: unknown): boolean {
     (!("name" in value) || value.name === undefined || typeof value.name === "string") &&
     (!("extensions" in value) || value.extensions === undefined || (Array.isArray(value.extensions) && value.extensions.every((entry) => typeof entry === "string"))) &&
     (!("extras" in value) || value.extras === undefined || isJsonCompatible(value.extras));
+}
+
+function isGlbImportManifestDescriptor(collection: string, value: unknown): boolean {
+  if (!isDescriptorLike(value)) {
+    return false;
+  }
+  switch (collection) {
+    case "nodes":
+      return isGlbNodeDescriptor(value);
+    case "meshes":
+      return isGlbMeshDescriptor(value);
+    case "textures":
+      return isGlbTextureDescriptor(value);
+    case "images":
+      return isGlbImageDescriptor(value);
+    case "animations":
+      return isGlbAnimationDescriptor(value);
+    default:
+      return true;
+  }
+}
+
+function isGlbNodeDescriptor(value: Record<string, unknown>): boolean {
+  return Array.isArray(value.childNodeIndices) &&
+    value.childNodeIndices.every(isNonNegativeInteger) &&
+    (!("meshIndex" in value) || value.meshIndex === undefined || isNonNegativeInteger(value.meshIndex)) &&
+    (!("cameraIndex" in value) || value.cameraIndex === undefined || isNonNegativeInteger(value.cameraIndex));
+}
+
+function isGlbMeshDescriptor(value: Record<string, unknown>): boolean {
+  return isNonNegativeInteger(value.primitiveCount) &&
+    Array.isArray(value.primitives) &&
+    value.primitives.every(isGlbMeshPrimitiveDescriptor);
+}
+
+function isGlbMeshPrimitiveDescriptor(value: unknown): boolean {
+  return isPlainRecord(value) &&
+    typeof value.id === "string" &&
+    isNonNegativeInteger(value.meshIndex) &&
+    isNonNegativeInteger(value.primitiveIndex) &&
+    typeof value.path === "string" &&
+    (!("materialIndex" in value) || value.materialIndex === undefined || isNonNegativeInteger(value.materialIndex)) &&
+    (!("mode" in value) || value.mode === undefined || isNonNegativeInteger(value.mode)) &&
+    Array.isArray(value.attributeNames) &&
+    value.attributeNames.every((entry) => typeof entry === "string") &&
+    (!("extensions" in value) || value.extensions === undefined || (Array.isArray(value.extensions) && value.extensions.every((entry) => typeof entry === "string"))) &&
+    (!("extras" in value) || value.extras === undefined || isJsonCompatible(value.extras));
+}
+
+function isGlbTextureDescriptor(value: Record<string, unknown>): boolean {
+  return (!("sourceImageIndex" in value) || value.sourceImageIndex === undefined || isNonNegativeInteger(value.sourceImageIndex)) &&
+    (!("samplerIndex" in value) || value.samplerIndex === undefined || isNonNegativeInteger(value.samplerIndex));
+}
+
+function isGlbImageDescriptor(value: Record<string, unknown>): boolean {
+  return (!("uri" in value) || value.uri === undefined || typeof value.uri === "string") &&
+    (!("mimeType" in value) || value.mimeType === undefined || typeof value.mimeType === "string") &&
+    (!("bufferViewIndex" in value) || value.bufferViewIndex === undefined || isNonNegativeInteger(value.bufferViewIndex));
+}
+
+function isGlbAnimationDescriptor(value: Record<string, unknown>): boolean {
+  return isNonNegativeInteger(value.channelCount) &&
+    isNonNegativeInteger(value.samplerCount);
 }
 
 export function createGlbImportDiagnosticsFromError(error: unknown): GlbImportDiagnostic[] {

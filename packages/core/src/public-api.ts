@@ -46,6 +46,7 @@ export type {
   Command,
   CommandResult,
   CreateGroupCommand,
+  CreateImportedGlbTargetsCommand,
   DeleteNodesCommand,
   DeleteObjectsCommand,
   DuplicateObjectsCommand,
@@ -108,6 +109,20 @@ export type {
   TransformFieldId,
   TransformVectorName
 } from "./inspector/types";
+export type {
+  ImportedGlbMaterialSlotDescriptor,
+  ImportedGlbProblemTarget,
+  ImportedGlbRemapMetadata,
+  ImportedGlbSourceDescriptor,
+  ImportedGlbSourceKind,
+  ImportedGlbTargetBindingDescriptor,
+  ImportedGlbTargetBuildOptions,
+  ImportedGlbTargetDescriptor
+} from "./imported-targets/types";
+export type {
+  ImportedGlbMaterialSlotLookup,
+  ImportedGlbMaterialSlotLookup as ImportedGlbSlotLookup
+} from "./imported-targets/slots";
 export type {
   AmbientLightDefinition,
   DirectionalLightDefinition,
@@ -208,6 +223,7 @@ export type {
   LegacySceneSnapshot,
   NodeId,
   SceneGroupNode,
+  SceneImportedGlbNode,
   SceneLightNode,
   SceneNode,
   SceneObject,
@@ -215,6 +231,7 @@ export type {
   SceneSnapshot,
   SerializedSceneSnapshot,
   Transform,
+  V4SceneSnapshot,
   V3SceneSnapshot
 } from "./snapshot/types";
 
@@ -264,6 +281,16 @@ export {
 export {
   ThreeGltfLoaderAdapter
 } from "./runtime/gltf-loader-adapter";
+export {
+  createImportedGlbImportKey,
+  createImportedGlbMaterialSlotKey,
+  createImportedGlbTargetDescriptors
+} from "./imported-targets/keys";
+export {
+  createImportedGlbBindingDescriptor,
+  findImportedGlbMaterialSlot,
+  isImportedGlbMaterialAssignmentTarget
+} from "./imported-targets/slots";
 export {
   buildWorkbenchModel
 } from "./workbench/workbench-model";

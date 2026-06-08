@@ -1,4 +1,5 @@
 import { getSelectedNodeIds, normalizeNodeSelection } from "../selection/selection";
+import { collectImportedGlbMaterialSlotTargets, createImportedGlbMaterialSlotTargetKey } from "../imported-targets/slots";
 import { collectNodeSubtreeIds, getTopLevelNodeIds, removeNodesFromHierarchy } from "../snapshot/hierarchy";
 import type { SceneSnapshot } from "../snapshot/types";
 import { syncPayloadsFromNodes } from "./node-state";
@@ -25,6 +26,7 @@ export function applyDeleteNodes(snapshot: SceneSnapshot, command: DeleteNodesCo
 
   const removedObjectIds = new Set<string>();
   const removedLightIds = new Set<string>();
+  const removedImportedNodeIds = new Set<string>();
   for (const nodeId of removedNodeIds) {
     const node = snapshot.nodes[nodeId];
     if (node?.kind === "object") {
@@ -33,7 +35,11 @@ export function applyDeleteNodes(snapshot: SceneSnapshot, command: DeleteNodesCo
     if (node?.kind === "light") {
       removedLightIds.add(node.lightId);
     }
+    if (node?.kind === "imported") {
+      removedImportedNodeIds.add(nodeId);
+    }
   }
+  const removedImportedSlotTargets = collectImportedGlbMaterialSlotTargets(snapshot, removedImportedNodeIds);
 
   const { nodes, rootNodeIds } = removeNodesFromHierarchy(snapshot, removedNodeIds);
   const objects = Object.fromEntries(
@@ -43,7 +49,13 @@ export function applyDeleteNodes(snapshot: SceneSnapshot, command: DeleteNodesCo
     Object.entries(snapshot.lights).filter(([lightId]) => !removedLightIds.has(lightId))
   );
   const assignments = Object.fromEntries(
-    Object.entries(snapshot.materials.assignments).filter(([, assignment]) => !removedObjectIds.has(assignment.target.objectId))
+    Object.entries(snapshot.materials.assignments).filter(([, assignment]) => {
+      if (removedObjectIds.has(assignment.target.objectId)) {
+        return false;
+      }
+      return assignment.target.kind !== "material-slot" ||
+        !removedImportedSlotTargets.has(createImportedGlbMaterialSlotTargetKey(assignment.target.objectId, assignment.target.slotId));
+    })
   );
 
   const nextSnapshot = syncPayloadsFromNodes({

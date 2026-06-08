@@ -1,5 +1,7 @@
 import { getSelectedNodeIds, getSelectedObjectIds, getTopLevelSelectedObjectIds } from "../selection/selection";
+import { cloneImportedGlbNode } from "../imported-targets/create";
 import { collectNodeSubtreeIds, collectObjectSubtreeIds, getTopLevelNodeIds } from "../snapshot/hierarchy";
+import { findObjectNodeId } from "../snapshot/nodes";
 import { cloneTransform } from "../snapshot/transforms";
 import type { LightDefinition } from "../lights/types";
 import type { SceneNode, SceneSnapshot } from "../snapshot/types";
@@ -33,7 +35,7 @@ export function createClipboardPayload(snapshot: SceneSnapshot, objectIds = getS
       : null, object.children.filter((childId) => copiedObjectIds.has(childId)));
   }
 
-  const materials = collectMaterialClipboardState(snapshot, copiedObjectIds);
+  const materials = collectMaterialClipboardState(snapshot, copiedObjectIds, { includeImportedSlots: false });
 
   const payload: EditorObjectClipboardPayload = {
     kind: "ek-aiot-3d-editor-objects",
@@ -105,7 +107,7 @@ export function createNodeClipboardPayload(snapshot: SceneSnapshot, nodeIds = ge
     nodes,
     objects,
     lights,
-    materials: collectMaterialClipboardState(snapshot, copiedObjectIds),
+    materials: collectMaterialClipboardState(snapshot, copiedObjectIds, { includeImportedSlots: true }),
     assetIds: [...assetIds]
   };
 
@@ -161,6 +163,13 @@ function cloneClipboardNode(
         ...(node.transform ? { transform: cloneTransform(node.transform) } : {}),
         ...(node.metadata ? { metadata: { ...node.metadata } } : {})
       };
+    case "imported":
+      return {
+        ...cloneImportedGlbNode(node),
+        originalId: node.id,
+        parentId,
+        children: [...children]
+      };
     default:
       return assertNever(node);
   }
@@ -210,12 +219,22 @@ function cloneClipboardLight(light: LightDefinition): ClipboardLightDefinition {
 
 function collectMaterialClipboardState(
   snapshot: SceneSnapshot,
-  copiedObjectIds: Set<string>
+  copiedObjectIds: Set<string>,
+  options: { includeImportedSlots: boolean }
 ): EditorObjectClipboardPayload["materials"] {
+  const copiedImportedSlotTargets = options.includeImportedSlots
+    ? collectCopiedImportedSlotTargets(snapshot, copiedObjectIds)
+    : new Set<string>();
   const materialIds = new Set<string>();
   const assignments = Object.fromEntries(
     Object.entries(snapshot.materials.assignments)
-      .filter(([, assignment]) => copiedObjectIds.has(assignment.target.objectId))
+      .filter(([, assignment]) => {
+        if (!copiedObjectIds.has(assignment.target.objectId)) {
+          return false;
+        }
+        return assignment.target.kind === "object" ||
+          (options.includeImportedSlots && copiedImportedSlotTargets.has(`${assignment.target.objectId}\0${assignment.target.slotId}`));
+      })
       .map(([assignmentId, assignment]) => {
         materialIds.add(assignment.materialId);
         return [assignmentId, { ...assignment, target: { ...assignment.target } }];
@@ -239,6 +258,31 @@ function collectMaterialClipboardState(
     definitions,
     assignments
   };
+}
+
+function collectCopiedImportedSlotTargets(snapshot: SceneSnapshot, copiedObjectIds: Set<string>): Set<string> {
+  const copiedNodeIds = new Set<string>();
+  for (const objectId of copiedObjectIds) {
+    const nodeId = findObjectNodeId(snapshot, objectId);
+    if (!nodeId) {
+      continue;
+    }
+    for (const subtreeNodeId of collectNodeSubtreeIds(snapshot, nodeId)) {
+      copiedNodeIds.add(subtreeNodeId);
+    }
+  }
+
+  const slotTargets = new Set<string>();
+  for (const nodeId of copiedNodeIds) {
+    const node = snapshot.nodes[nodeId];
+    if (node?.kind !== "imported" || !copiedObjectIds.has(node.ownerObjectId)) {
+      continue;
+    }
+    for (const slot of node.materialSlots ?? []) {
+      slotTargets.add(`${node.ownerObjectId}\0${slot.slotKey}`);
+    }
+  }
+  return slotTargets;
 }
 
 function assertClipboardPayload<T extends EditorObjectClipboardPayload | EditorNodeClipboardPayload>(payload: T): T {

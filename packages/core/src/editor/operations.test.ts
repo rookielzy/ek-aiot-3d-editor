@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { attachGlbImportManifestMetadata, createGlbImportManifest } from "../assets/import-pipeline";
 import { createEditor } from "./create-editor";
 
 describe("advanced editor operations", () => {
@@ -97,5 +98,41 @@ describe("advanced editor operations", () => {
     expect(groupId ? editor.getSnapshot().nodes[groupId] : undefined).toBeUndefined();
     expect(editor.getSnapshot().objects["object-a"]).toBeUndefined();
     expect(editor.getSnapshot().lights["point-a"]).toBeUndefined();
+  });
+
+  it("uses node clipboard semantics for object selections with imported descendants", () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: {
+        id: "asset-a",
+        metadata: attachGlbImportManifestMetadata(undefined, createGlbImportManifest({
+          gltf: {
+            parser: {
+              json: {
+                nodes: [{ mesh: 0 }],
+                meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }]
+              }
+            }
+          }
+        }))
+      },
+      expandImportedTargets: true
+    });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+
+    const payload = editor.operations.copy();
+    const duplicated = editor.operations.duplicate();
+    const duplicatedObjectId = duplicated.snapshot.selection.objectId;
+
+    expect(payload?.kind).toBe("ek-aiot-3d-editor-nodes");
+    expect(duplicated.ok).toBe(true);
+    expect(duplicatedObjectId).not.toBeNull();
+    expect(Object.values(duplicated.snapshot.nodes).some((node) =>
+      node.kind === "imported" &&
+      node.ownerObjectId === duplicatedObjectId &&
+      node.importKey.startsWith(`glb:${duplicatedObjectId}/`)
+    )).toBe(true);
   });
 });

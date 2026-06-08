@@ -2,7 +2,7 @@ import { BoxGeometry, Group, Mesh, MeshBasicMaterial, Object3D, Scene } from "th
 import { glbImportDiagnosticToProblem, normalizeGltfLoaderOutput, type GlbImportDiagnostic } from "../assets/import-pipeline";
 import { AssetResolverBridge } from "../assets/resolver";
 import { createMissingAssetProblem, type Problem } from "../assets/problems";
-import type { SceneLightNode, SceneNode, SceneObject, SceneObjectNode, SceneSnapshot } from "../snapshot/types";
+import type { SceneImportedGlbNode, SceneLightNode, SceneNode, SceneObject, SceneObjectNode, SceneSnapshot } from "../snapshot/types";
 import { EnvironmentProjector } from "./environment-projector";
 import type { GltfLoaderAdapter } from "./gltf-loader-adapter";
 import { GlbImportError, PlaceholderGltfLoaderAdapter } from "./gltf-loader-adapter";
@@ -129,6 +129,9 @@ export class SceneProjector {
       case "light":
         runtimeObject = this.#projectLightNode(node, snapshot, parent, activeLightIds);
         break;
+      case "imported":
+        runtimeObject = this.#projectImportedNode(node, snapshot);
+        break;
       default:
         return assertNever(node);
     }
@@ -234,6 +237,31 @@ export class SceneProjector {
       ...runtimeObject.userData,
       sceneNodeId: node.id,
       nodeKind: node.kind,
+      selected: snapshot.selection.nodeIds.includes(node.id),
+      primarySelected: snapshot.selection.nodeId === node.id
+    };
+    return runtimeObject;
+  }
+
+  #projectImportedNode(node: SceneImportedGlbNode, snapshot: SceneSnapshot): Object3D {
+    let runtimeObject = this.objects.get(node.id);
+    if (!runtimeObject) {
+      runtimeObject = new Group();
+      this.objects.set(node.id, runtimeObject, {
+        kind: "imported",
+        transformable: true,
+        pickable: false
+      });
+    }
+
+    applyTransform(runtimeObject, node.transform ?? { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] });
+    runtimeObject.name = node.name;
+    runtimeObject.userData = {
+      ...runtimeObject.userData,
+      sceneNodeId: node.id,
+      nodeKind: node.kind,
+      ownerObjectId: node.ownerObjectId,
+      importKey: node.importKey,
       selected: snapshot.selection.nodeIds.includes(node.id),
       primarySelected: snapshot.selection.nodeId === node.id
     };
@@ -463,6 +491,8 @@ export class SceneProjector {
         return true;
       case "light":
         return target.lightId === node.lightId && Boolean(snapshot.lights[node.lightId]);
+      case "imported":
+        return target.kind === "imported" && Boolean(snapshot.objects[node.ownerObjectId]);
       default:
         return assertNever(node);
     }

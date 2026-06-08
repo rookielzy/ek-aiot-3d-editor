@@ -1,4 +1,5 @@
 import type { AssetRegistry } from "../assets/registry";
+import { applyCreateImportedGlbTargets } from "./create-imported-glb-targets";
 import { createId } from "../snapshot/defaults";
 import { reparentNode } from "../snapshot/hierarchy";
 import { cloneTransform, normalizeTransform } from "../snapshot/transforms";
@@ -81,9 +82,12 @@ export function applyImportGlb(snapshot: SceneSnapshot, command: ImportGlbComman
   const nodeState = parentId
     ? reparentNode(nextSnapshot.nodes, nextSnapshot.rootNodeIds, objectId, parentId)
     : { nodes: nextSnapshot.nodes, rootNodeIds: nextSnapshot.rootNodeIds };
-  return syncPayloadsFromNodes({
+  const imported = syncPayloadsFromNodes({
     ...nextSnapshot,
     nodes: nodeState.nodes,
     rootNodeIds: nodeState.rootNodeIds
   });
+  return command.expandImportedTargets
+    ? applyCreateImportedGlbTargets(imported, { type: "create-imported-glb-targets", ownerObjectId: objectId })
+    : imported;
 }

@@ -12,6 +12,8 @@ export type ProblemTarget =
   | { kind: "texture-slot"; materialId: string; slot: string; assetId?: string }
   | { kind: "environment"; assetId?: string }
   | { kind: "light"; lightId: string }
+  | { kind: "imported-target"; objectId: string; nodeId: string; importKey: string }
+  | { kind: "imported-material-slot"; objectId: string; nodeId: string; importKey: string; slotId: string }
   | { kind: "command"; commandType: string };
 
 export interface ProblemDisplay {
