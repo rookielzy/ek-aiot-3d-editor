@@ -14,7 +14,7 @@
 6. 恢复 Snapshot。
 7. runtime 重新投影等价场景。
 8. 可选导出/导入 `.ek3d` 项目包。
-9. React/Vue 本地 proof-loop demo 中通过层级面板、资产/问题面板、material inspector 和 proof checklist 验证这些状态。
+9. React/Vue 本地 proof-loop demo 中通过层级面板、资产工作区、问题面板、material inspector 和 proof checklist 验证这些状态。
 
 ## 本地 demo 浏览器验证
 
@@ -184,11 +184,11 @@ Workbench context 暴露：
 React 和 Vue proof-loop demo 的侧栏包含：
 
 - Scene hierarchy：显示 object/group/light node 名称、payload 辅助信息、selected/primary 标记和 problem badge。
-- Node operations：通过 core operations 触发 select all、copy、paste、duplicate、delete、group、ungroup。
-- Assets and problems：列出 snapshot asset references，并提供一个 demo 级缺失 GLB 资产替换按钮。
+- Node operations：默认 toolbar 通过 core operations 触发 select all、copy、paste、duplicate、delete、group、ungroup。
+- Asset workspace：默认左栏支持多文件本地导入、raster image/texture intent、搜索、kind/status filter、sort、reference summary、payload/package status、GLB import diagnostics 和 stable-ID missing payload replacement。
 - Proof checklist：从当前 selection、material assignment、history、transform mode、snap、runtime problems 和本次 demo session 派生验证进度。
 
-Checklist 不是 durable project state。导出 `.ek3d`、导入 `.ek3d` 或序列化 Scene Snapshot 时，不会保存 checklist 进度、camera/control 状态、runtime problems、`File`、`Blob`、object URL 或 resolver 结果。
+Checklist 和 asset import queue 都不是 durable project state。导出 `.ek3d`、导入 `.ek3d` 或序列化 Scene Snapshot 时，不会保存 checklist 进度、camera/control 状态、runtime problems、drag hover、file input value、queue row、`File`、`Blob`、object URL 或 resolver 结果。
 
 ## 快捷键
 

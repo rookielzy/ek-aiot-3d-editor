@@ -4,7 +4,9 @@ import { Group } from "three";
 import { describe, expect, it, vi } from "vitest";
 import {
   AssetResolverBridge,
+  buildAssetWorkspaceModel,
   createEditor,
+  filterAssetWorkspaceItems,
   ThreeGltfLoaderAdapter,
   type EditorRuntimeOptions,
   type RendererLike
@@ -140,6 +142,93 @@ describe("Vue EditorWorkbench", () => {
 
     expect(mountRuntime).toHaveBeenCalledWith(expect.objectContaining({ loader }));
 
+    wrapper.unmount();
+  });
+
+  it("imports GLB files through the default asset workspace using the Workbench loader", async () => {
+    const editor = markRaw(createEditor());
+    const scene = new Group();
+    const loader: EditorRuntimeOptions["loader"] = {
+      load: vi.fn(async () => scene),
+      analyze: vi.fn(async () => ({ scene }))
+    };
+    const urls = mockObjectUrls();
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, loader, rendererFactory: fakeRenderer }
+    });
+
+    const input = wrapper.find('[aria-label="Import assets"]').element as HTMLInputElement;
+    const file = new File([new Uint8Array([1, 2, 3])], "robot.glb", { type: "model/gltf-binary" });
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [file]
+    });
+    await wrapper.find('[aria-label="Import assets"]').trigger("change");
+    await waitForAssertion(() => {
+      expect(wrapper.find('[aria-label="Asset import queue"]').text()).toContain("Imported asset-");
+    });
+
+    expect(loader.analyze).toHaveBeenCalledWith(expect.objectContaining({
+      uri: "blob:vue-workbench-0",
+      mimeType: "model/gltf-binary"
+    }));
+    expect(wrapper.find('[aria-label="Asset workspace rows"]').text()).toContain("robot.glb");
+    expect(wrapper.find('[aria-label="Asset workspace rows"]').text()).toContain("glb");
+    expect(Object.values(editor.getSnapshot().objects)[0]).toMatchObject({
+      name: "robot",
+      asset: { kind: "glb", label: "robot.glb" }
+    });
+    urls.restore();
+    wrapper.unmount();
+  });
+
+  it("keeps failed import queue rows visible while committing successful batch assets", async () => {
+    const editor = markRaw(createEditor());
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer }
+    });
+    const input = wrapper.find('[aria-label="Import assets"]').element as HTMLInputElement;
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [
+        new File([new Uint8Array([1])], "paint.png", { type: "image/png" }),
+        new File([new Uint8Array([2])], "notes.txt", { type: "text/plain" })
+      ]
+    });
+
+    await wrapper.find('[aria-label="Import assets"]').trigger("change");
+    await waitForAssertion(() => {
+      expect(Object.values(editor.getSnapshot().assets)).toEqual([
+        expect.objectContaining({ kind: "texture", label: "paint.png" })
+      ]);
+    });
+
+    expect(wrapper.find('[aria-label="Asset import queue"]').text()).toContain("paint.png");
+    expect(wrapper.find('[aria-label="Asset import queue"]').text()).toContain("Unsupported asset type");
+    expect(wrapper.find('[aria-label="Asset workspace rows"]').text()).toContain("texture");
+    wrapper.unmount();
+  });
+
+  it("filters asset rows using core workspace search semantics", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "register-asset", asset: { id: "texture-a", kind: "texture", label: "Panel paint", source: new Uint8Array([1]) } });
+    editor.dispatch({ type: "register-asset", asset: { id: "image-a", kind: "image", label: "Manual label", source: new Uint8Array([2]) } });
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer }
+    });
+    const expectedIds = filterAssetWorkspaceItems(
+      buildAssetWorkspaceModel(editor.getSnapshot(), {
+        payloads: editor.getAssetWorkspacePayloads()
+      }).items,
+      { query: "manual" }
+    ).map((item) => item.id);
+
+    await wrapper.find('[aria-label="Search assets"]').setValue("manual");
+    await nextTick();
+
+    expect(expectedIds).toEqual(["image-a"]);
+    expect(wrapper.find('[aria-label="Asset workspace rows"]').text()).toContain("Manual label");
+    expect(wrapper.find('[aria-label="Asset workspace rows"]').text()).not.toContain("Panel paint");
     wrapper.unmount();
   });
 
@@ -613,4 +702,26 @@ async function waitForAssertion(assertion: () => void, timeout = 1000): Promise<
     }
   }
   throw lastError;
+}
+
+function mockObjectUrls(): {
+  createObjectURL: ReturnType<typeof vi.fn>;
+  revokeObjectURL: ReturnType<typeof vi.fn>;
+  restore(): void;
+} {
+  let count = 0;
+  const originalCreate = URL.createObjectURL;
+  const originalRevoke = URL.revokeObjectURL;
+  const createObjectURL = vi.fn(() => `blob:vue-workbench-${count++}`);
+  const revokeObjectURL = vi.fn();
+  URL.createObjectURL = createObjectURL;
+  URL.revokeObjectURL = revokeObjectURL;
+  return {
+    createObjectURL,
+    revokeObjectURL,
+    restore() {
+      URL.createObjectURL = originalCreate;
+      URL.revokeObjectURL = originalRevoke;
+    }
+  };
 }

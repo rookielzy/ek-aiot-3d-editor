@@ -58,7 +58,7 @@ export function EditorPage() {
 }
 ```
 
-不传 `toolbar`、`leftPanel`、`rightPanel` 或 `status` 时，Workbench 会使用 package-owned 默认 UI。默认 toolbar 已包含 open/export、undo/redo、transform mode、snap、camera、copy/paste/duplicate/delete/group/ungroup/select controls；默认左栏会显示 hierarchy、assets、project summary、project/runtime problems 和缺失资产恢复入口。
+不传 `toolbar`、`leftPanel`、`rightPanel` 或 `status` 时，Workbench 会使用 package-owned 默认 UI。默认 toolbar 已包含 open/export、undo/redo、transform mode、snap、camera、copy/paste/duplicate/delete/group/ungroup/select controls；默认左栏会显示 hierarchy、可批量导入的 asset workspace、project summary、project/runtime problems 和缺失资产恢复入口。
 
 ## 初始化场景
 
@@ -87,7 +87,22 @@ React app store 可以镜像可序列化的项目 metadata、当前 route、最�
 
 如果需要把编辑状态同步给宿主 UI，优先通过 `useWorkbench()` 或 `EditorWorkbench` render props 读取派生 context，再把必要的 serializable projection 写入宿主 store。持久化变更仍通过 core commands、project import/export 和 snapshot/project package API 完成。
 
-资产面板应优先读取 `workbench.model.assets.workspace`。该 workspace 已经合并 Snapshot asset registry、对象/材质/环境引用位置、项目包 payload 摘要和资产问题，并提供 core 统一的搜索/过滤/排序 helper。`replaceAsset()` 这类 payload-only 更新不会改变 Snapshot，但 React hook 会订阅 core asset workspace 版本并重新计算 model；宿主不需要也不应该读取 transient project store、`Blob` 或 object URL。
+资产面板应优先读取 `workbench.model.assets.workspace`。该 workspace 已经合并 Snapshot asset registry、对象/材质/环境引用位置、项目包 payload 摘要、GLB import manifest diagnostics 和资产问题，并提供 core 统一的搜索/过滤/排序 helper。`replaceAsset()` 这类 payload-only 更新不会改变 Snapshot，但 React hook 会订阅 core asset workspace 版本并重新计算 model；宿主不需要也不应该读取 transient project store、`Blob` 或 object URL。
+
+默认左栏的资产区支持多文件选择和拖放。`.glb` 会通过 `context.assets.importFiles()` 调用 core 的 decoder-aware GLB import bridge，并使用传给 `EditorWorkbench` 的同一个 `loader` prop；`.hdr` 会注册为 HDR asset；PNG/JPG/WebP/SVG 等 raster 文件需要用户在 UI 中显式选择 `texture` 或 `image` intent。导入队列、drag hover、file input value 和失败提示是 React transient state，不进入 `SceneSnapshot` 或 `.ek3d` JSON。
+
+自定义 left panel 也可以调用同一个 core-owned 入口：
+
+```tsx
+await context.assets.importFiles({
+  rasterKind: "texture",
+  files: [
+    { name: file.name, mimeType: file.type, source: file }
+  ]
+});
+```
+
+该调用返回每个文件的 label、kind、status、asset ID/object ID、manifest 和可显示 diagnostics；返回值本身不包含 `File`、`Blob`、object URL、Three.js scene 或 decoder 对象。
 
 ## Decoder-aware GLB
 
@@ -129,7 +144,7 @@ React workbench 支持 render prop：
 
 ```ts
 interface WorkbenchContext {
-  editor: Editor;
+  editor: EditorWithGlbImport;
   snapshot: SceneSnapshot;
   inspector: InspectorModel;
   runtimeProblems: Problem[];
@@ -159,6 +174,7 @@ interface WorkbenchContext {
   dispatch(command: Command): CommandResult;
   importProject(packageBytes: Uint8Array, options?: ProjectImportOptions): ProjectImportResult;
   exportProject(options?: ProjectExportOptions): ProjectExportResult;
+  importAssetFiles(options: WorkbenchAssetImportOptions): Promise<WorkbenchAssetImportResult[]>;
   replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
 }
 ```

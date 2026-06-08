@@ -33,6 +33,14 @@ export type {
   SortAssetWorkspaceOptions
 } from "./assets/workspace";
 export type {
+  WorkbenchAssetImportDiagnostic,
+  WorkbenchAssetImportFile,
+  WorkbenchAssetImportOptions,
+  WorkbenchAssetImportResult,
+  WorkbenchImportStatus,
+  WorkbenchRasterImportKind
+} from "./assets/workspace-import";
+export type {
   AddLightCommand,
   BatchCommand,
   Command,
@@ -240,6 +248,10 @@ export {
   filterAssetWorkspaceItems,
   sortAssetWorkspaceItems
 } from "./assets/workspace";
+export {
+  classifyWorkbenchAssetImportFile,
+  importWorkbenchAssets
+} from "./assets/workspace-import";
 export {
   GLB_IMPORT_MANIFEST_METADATA_KEY,
   GLB_IMPORT_MANIFEST_VERSION,

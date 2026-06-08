@@ -1,5 +1,6 @@
 import type { AssetInput, AssetReference } from "../assets/types";
 import type { GlbImportDiagnostic, GlbImportManifest } from "../assets/import-pipeline";
+import type { WorkbenchAssetImportOptions, WorkbenchAssetImportResult } from "../assets/workspace-import";
 import type { Command, CommandResult } from "../commands/types";
 import type { AdvancedEditorOperations, EditorClipboard } from "./operations";
 import type { EditorSnapState, SnapSubscriber } from "./snap-state";
@@ -69,4 +70,5 @@ export interface Editor {
 
 export interface EditorWithGlbImport extends Editor {
   importGlbAsset(options: ImportGlbAssetOptions): Promise<ImportGlbAssetResult>;
+  importWorkbenchAssets(options: WorkbenchAssetImportOptions): Promise<WorkbenchAssetImportResult[]>;
 }

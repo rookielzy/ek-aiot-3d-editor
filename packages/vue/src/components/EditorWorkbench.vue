@@ -77,7 +77,8 @@ defineSlots<EditorWorkbenchSlots>();
 
 const workbench = useWorkbench({
   editor: toRef(props, "editor"),
-  snapshot: props.snapshot
+  snapshot: props.snapshot,
+  loader: toRef(props, "loader")
 });
 
 const context = computed(() => workbench.context.value);

@@ -7,6 +7,7 @@ export interface WorkbenchStatusBarProps {
 export function WorkbenchStatusBar({ context }: WorkbenchStatusBarProps) {
   const status = context.model.status;
   const project = context.model.project;
+  const workspace = context.model.assets.workspace;
 
   return (
     <div className="ek-workbench__default-status">
@@ -15,6 +16,11 @@ export function WorkbenchStatusBar({ context }: WorkbenchStatusBarProps) {
       <span>Redo {status.redoCount}</span>
       <span>Runtime {status.runtimeReady ? "ready" : "missing"}</span>
       <span>Project {project.statusLabel}</span>
+      {workspace ? (
+        <span>
+          Assets {workspace.totalCount} · missing {workspace.missingPayloadCount + workspace.missingReferenceCount} · blocked {workspace.readiness.blockingAssetIds.length}
+        </span>
+      ) : null}
       <span>{status.dirty ? "Dirty" : "Saved"}</span>
       <span>Problems {status.problemCount}</span>
       {status.problemCount > 0 ? (
