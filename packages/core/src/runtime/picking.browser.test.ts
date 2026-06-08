@@ -1,4 +1,4 @@
-import { BoxGeometry, Mesh, MeshBasicMaterial, PerspectiveCamera } from "three";
+import { BoxGeometry, Group, Mesh, MeshBasicMaterial, PerspectiveCamera } from "three";
 import { describe, expect, it, vi } from "vitest";
 import { AssetRegistry } from "../assets/registry";
 import { CommandDispatcher } from "../commands/dispatcher";
@@ -115,7 +115,7 @@ describe("object picking", () => {
     camera.position.set(0, 0, 5);
     camera.lookAt(0, 0, 0);
     const objects = new ThreeObjectMap();
-    const owner = new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial());
+    const owner = new Group();
     const child = new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial());
     owner.add(child);
     objects.set("object-a", owner, { kind: "object", objectId: "object-a", pickable: true });
