@@ -1,11 +1,15 @@
 import { BoxGeometry, Group, Mesh, MeshBasicMaterial, Object3D, Scene } from "three";
-import { glbImportDiagnosticToProblem, normalizeGltfLoaderOutput, type GlbImportDiagnostic } from "../assets/import-pipeline";
+import { getGlbImportManifestFromMetadata, glbImportDiagnosticToProblem, normalizeGltfLoaderOutput, type GlbImportDiagnostic, type GlbImportManifest } from "../assets/import-pipeline";
 import { AssetResolverBridge } from "../assets/resolver";
 import { createMissingAssetProblem, type Problem } from "../assets/problems";
+import type { ResolvedAsset } from "../assets/types";
+import type { AssetReference } from "../snapshot/types";
 import type { SceneImportedGlbNode, SceneLightNode, SceneNode, SceneObject, SceneObjectNode, SceneSnapshot } from "../snapshot/types";
+import { cloneTransform } from "../snapshot/transforms";
 import { EnvironmentProjector } from "./environment-projector";
 import type { GltfLoaderAdapter } from "./gltf-loader-adapter";
 import { GlbImportError, PlaceholderGltfLoaderAdapter } from "./gltf-loader-adapter";
+import { resolveImportedGlbTargets, type RuntimeImportedTargetMatch } from "./imported-target-resolver";
 import { LightProjector } from "./light-projector";
 import { MaterialProjector } from "./material-projector";
 import type { RuntimePmremAdapter } from "./pmrem-adapter";
@@ -13,6 +17,11 @@ import { disposeObjectTree } from "./disposal";
 import { applyTransform, readTransform } from "./transform";
 import { ThreeObjectMap } from "./three-object-map";
 import type { RuntimeTextureLoaderAdapter } from "./texture-loader-adapter";
+import {
+  createImportedTargetAmbiguousProblem,
+  createImportedTargetMissingProblem,
+  createImportedTargetNonTransformableProblem
+} from "./problems";
 
 export interface SceneProjectorOptions {
   scene?: Scene;
@@ -21,6 +30,12 @@ export interface SceneProjectorOptions {
   textureLoader?: RuntimeTextureLoaderAdapter;
   hdrLoader?: RuntimeTextureLoaderAdapter;
   pmrem?: RuntimePmremAdapter;
+}
+
+interface RuntimeAssetResolution {
+  resolved: ResolvedAsset | null;
+  signature: string;
+  error?: unknown;
 }
 
 export class SceneProjector {
@@ -33,6 +48,8 @@ export class SceneProjector {
   #materials: MaterialProjector;
   #problems: Problem[] = [];
   #loadTokens = new Map<string, number>();
+  #loadedManifests = new Map<string, GlbImportManifest>();
+  #runtimeObjectAssetSignatures = new Map<string, string>();
   #projectionGeneration = 0;
   #disposed = false;
 
@@ -140,9 +157,17 @@ export class SceneProjector {
       return null;
     }
     if (!runtimeObject) {
+      if (node.kind === "imported") {
+        for (const childId of node.children) {
+          await this.#projectNode(childId, snapshot, parent, generation, activeLightIds);
+          if (!this.#isActive(generation)) {
+            return null;
+          }
+        }
+      }
       return null;
     }
-    if (runtimeObject.parent !== parent) {
+    if (node.kind !== "imported" && runtimeObject.parent !== parent) {
       parent.add(runtimeObject);
     }
 
@@ -166,43 +191,73 @@ export class SceneProjector {
       return null;
     }
 
+    const assetResolution = await this.#resolveRuntimeAsset(object);
+    if (!this.#isActive(generation)) {
+      return null;
+    }
+
     let runtimeObject: Object3D | null | undefined = this.objects.get(node.id);
-    if (runtimeObject?.userData.problem) {
-      const replacement = await this.#createRuntimeObject(object, generation);
+    const shouldReload = Boolean(
+      runtimeObject &&
+      !runtimeObject.userData.problem &&
+      this.#runtimeObjectAssetSignatures.get(object.id) !== assetResolution.signature
+    );
+    if (runtimeObject && (runtimeObject.userData.problem || shouldReload)) {
+      const previousRuntimeObject = runtimeObject;
+      const replacement = await this.#createRuntimeObject(object, generation, assetResolution);
       if (!this.#isActive(generation)) {
-        replacement && disposeObjectTree(replacement);
+        replacement && disposeObjectTree(replacement.object);
         return null;
       }
       if (!replacement) {
         return null;
       }
-      this.objects.set(node.id, replacement, {
+      this.#releaseImportedTargetsForOwner(object.id, new Set());
+      this.#setLoadedManifest(object, replacement.manifest);
+      this.#runtimeObjectAssetSignatures.set(object.id, replacement.assetSignature);
+      this.objects.set(node.id, replacement.object, {
         kind: "object",
         objectId: object.id,
         transformable: true,
-        pickable: true
+        pickable: true,
+        selected: snapshot.selection.nodeIds.includes(node.id),
+        primarySelected: snapshot.selection.nodeId === node.id
       });
-      if (runtimeObject.parent) {
-        runtimeObject.parent.add(replacement);
+      if (previousRuntimeObject.parent) {
+        previousRuntimeObject.parent.add(replacement.object);
       } else {
-        this.scene.add(replacement);
+        this.scene.add(replacement.object);
       }
-      disposeObjectTree(runtimeObject);
-      runtimeObject = replacement;
+      disposeObjectTree(previousRuntimeObject);
+      runtimeObject = replacement.object;
     } else if (!runtimeObject) {
-      runtimeObject = await this.#createRuntimeObject(object, generation);
+      const created = await this.#createRuntimeObject(object, generation, assetResolution);
       if (!this.#isActive(generation)) {
-        runtimeObject && disposeObjectTree(runtimeObject);
+        created && disposeObjectTree(created.object);
         return null;
       }
-      if (!runtimeObject) {
+      if (!created) {
         return null;
       }
+      this.#setLoadedManifest(object, created.manifest);
+      this.#runtimeObjectAssetSignatures.set(object.id, created.assetSignature);
+      runtimeObject = created.object;
       this.objects.set(node.id, runtimeObject, {
         kind: "object",
         objectId: object.id,
         transformable: true,
-        pickable: true
+        pickable: true,
+        selected: snapshot.selection.nodeIds.includes(node.id),
+        primarySelected: snapshot.selection.nodeId === node.id
+      });
+    } else {
+      this.objects.set(node.id, runtimeObject, {
+        kind: "object",
+        objectId: object.id,
+        transformable: true,
+        pickable: true,
+        selected: snapshot.selection.nodeIds.includes(node.id),
+        primarySelected: snapshot.selection.nodeId === node.id
       });
     }
 
@@ -217,6 +272,8 @@ export class SceneProjector {
       primarySelected: snapshot.selection.nodeId === node.id
     };
 
+    this.#projectImportedTargetsForOwner(object, snapshot, runtimeObject);
+
     return runtimeObject;
   }
 
@@ -227,7 +284,17 @@ export class SceneProjector {
       this.objects.set(node.id, runtimeObject, {
         kind: "group",
         transformable: true,
-        pickable: true
+        pickable: true,
+        selected: snapshot.selection.nodeIds.includes(node.id),
+        primarySelected: snapshot.selection.nodeId === node.id
+      });
+    } else {
+      this.objects.set(node.id, runtimeObject, {
+        kind: "group",
+        transformable: true,
+        pickable: true,
+        selected: snapshot.selection.nodeIds.includes(node.id),
+        primarySelected: snapshot.selection.nodeId === node.id
       });
     }
 
@@ -243,18 +310,13 @@ export class SceneProjector {
     return runtimeObject;
   }
 
-  #projectImportedNode(node: SceneImportedGlbNode, snapshot: SceneSnapshot): Object3D {
-    let runtimeObject = this.objects.get(node.id);
-    if (!runtimeObject) {
-      runtimeObject = new Group();
-      this.objects.set(node.id, runtimeObject, {
-        kind: "imported",
-        transformable: true,
-        pickable: false
-      });
+  #projectImportedNode(node: SceneImportedGlbNode, snapshot: SceneSnapshot): Object3D | null {
+    const target = this.objects.getTarget(node.id);
+    if (!target || target.kind !== "imported") {
+      return null;
     }
 
-    applyTransform(runtimeObject, node.transform ?? { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] });
+    const runtimeObject = target.object;
     runtimeObject.name = node.name;
     runtimeObject.userData = {
       ...runtimeObject.userData,
@@ -262,6 +324,8 @@ export class SceneProjector {
       nodeKind: node.kind,
       ownerObjectId: node.ownerObjectId,
       importKey: node.importKey,
+      importedTargetMatchStatus: target.matchStatus,
+      importedTargetTransformable: target.transformable,
       selected: snapshot.selection.nodeIds.includes(node.id),
       primarySelected: snapshot.selection.nodeId === node.id
     };
@@ -288,7 +352,9 @@ export class SceneProjector {
       kind: "light",
       lightId: light.id,
       transformable: Boolean(node.transform),
-      pickable: true
+      pickable: true,
+      selected: snapshot.selection.nodeIds.includes(node.id),
+      primarySelected: snapshot.selection.nodeId === node.id
     });
     projected.light.userData = {
       ...projected.light.userData,
@@ -299,6 +365,7 @@ export class SceneProjector {
       primarySelected: snapshot.selection.nodeId === node.id
     };
     if (projected.target) {
+      this.objects.markRuntimeOnly(projected.target);
       projected.target.userData = {
         ...projected.target.userData,
         runtimeOnly: true,
@@ -309,6 +376,7 @@ export class SceneProjector {
     }
     if (projected.pickProxy) {
       this.objects.link(node.id, projected.pickProxy);
+      this.objects.markRuntimeOnly(projected.pickProxy);
       projected.pickProxy.userData = {
         ...projected.pickProxy.userData,
         runtimeOnly: true,
@@ -327,10 +395,10 @@ export class SceneProjector {
 
     this.#disposed = true;
     this.#projectionGeneration += 1;
-    const roots = [...this.objects.targetEntries()]
+    const roots = [...new Set([...this.objects.targetEntries()]
       .filter(([, target]) => target.kind !== "light")
       .map(([, target]) => target.object)
-      .filter((object) => !this.#hasMappedAncestor(object));
+      .filter((object) => !this.#hasMappedAncestor(object)))];
 
     this.#materials.dispose();
     for (const object of roots) {
@@ -341,19 +409,26 @@ export class SceneProjector {
     this.#lights.dispose();
     this.#problems = [];
     this.#loadTokens.clear();
+    this.#loadedManifests.clear();
+    this.#runtimeObjectAssetSignatures.clear();
   }
 
-  async #createRuntimeObject(object: SceneObject, generation: number): Promise<Object3D | null> {
+  async #createRuntimeObject(
+    object: SceneObject,
+    generation: number,
+    resolution?: RuntimeAssetResolution
+  ): Promise<{ object: Object3D; manifest?: GlbImportManifest; assetSignature: string } | null> {
     if (!this.#isActive(generation)) {
       return null;
     }
 
     const token = (this.#loadTokens.get(object.id) ?? 0) + 1;
     this.#loadTokens.set(object.id, token);
-    let resolved;
-    try {
-      resolved = await this.#resolver.resolve(object.asset);
-    } catch (error) {
+    resolution = resolution ?? await this.#resolveRuntimeAsset(object);
+    if (!this.#isActive(generation)) {
+      return null;
+    }
+    if (resolution.error) {
       if (!this.#isActive(generation)) {
         return null;
       }
@@ -366,26 +441,25 @@ export class SceneProjector {
         source: "runtime",
         target: { kind: "object", objectId: object.id },
         recoverability: "user-action",
-        message: error instanceof Error ? error.message : String(error),
+        message: resolution.error instanceof Error ? resolution.error.message : String(resolution.error),
         display: {
           title: "Asset failed to resolve"
         }
       });
-      return createProblemPlaceholder(object.id);
-    }
-    if (!this.#isActive(generation)) {
-      return null;
+      this.#loadedManifests.delete(object.id);
+      return { object: createProblemPlaceholder(object.id), assetSignature: resolution.signature };
     }
 
-    if (!resolved) {
+    if (!resolution.resolved) {
       this.#addProblem(createMissingAssetProblem(object.asset.id, object.id));
-      return createProblemPlaceholder(object.id);
+      this.#loadedManifests.delete(object.id);
+      return { object: createProblemPlaceholder(object.id), assetSignature: resolution.signature };
     }
 
     try {
       const loadResult = this.#loader.analyze
-        ? await this.#loader.analyze(resolved)
-        : normalizeGltfLoaderOutput(await this.#loader.load(resolved));
+        ? await this.#loader.analyze(resolution.resolved)
+        : normalizeGltfLoaderOutput(await this.#loader.load(resolution.resolved));
       if (!this.#isActive(generation) || this.#loadTokens.get(object.id) !== token) {
         disposeObjectTree(loadResult.scene);
         return null;
@@ -393,7 +467,11 @@ export class SceneProjector {
       for (const diagnostic of mergeGlbDiagnostics(loadResult.diagnostics ?? [], loadResult.manifest?.diagnostics ?? [])) {
         this.#addProblem(glbImportDiagnosticToProblem(diagnostic, object.asset, object.id));
       }
-      return loadResult.scene;
+      return {
+        object: loadResult.scene,
+        ...(loadResult.manifest ? { manifest: loadResult.manifest } : {}),
+        assetSignature: resolution.signature
+      };
     } catch (error) {
       if (!this.#isActive(generation)) {
         return null;
@@ -402,7 +480,12 @@ export class SceneProjector {
         for (const diagnostic of error.diagnostics) {
           this.#addProblem(glbImportDiagnosticToProblem(diagnostic, object.asset, object.id));
         }
-        return createProblemPlaceholder(object.id);
+        this.#setLoadedManifest(object, error.manifest);
+        return {
+          object: createProblemPlaceholder(object.id),
+          ...(error.manifest ? { manifest: error.manifest } : {}),
+          assetSignature: resolution.signature
+        };
       }
       this.#addProblem({
         id: `asset-load-failed:${object.asset.id}:${object.id}`,
@@ -418,8 +501,137 @@ export class SceneProjector {
           title: "Asset failed to load"
         }
       });
-      return createProblemPlaceholder(object.id);
+      this.#loadedManifests.delete(object.id);
+      return { object: createProblemPlaceholder(object.id), assetSignature: resolution.signature };
     }
+  }
+
+  async #resolveRuntimeAsset(object: SceneObject): Promise<RuntimeAssetResolution> {
+    try {
+      const resolved = await this.#resolver.resolve(object.asset);
+      return {
+        resolved,
+        signature: createRuntimeAssetSignature(object.asset, resolved)
+      };
+    } catch (error) {
+      return {
+        resolved: null,
+        error,
+        signature: createRuntimeAssetSignature(object.asset, null, error)
+      };
+    }
+  }
+
+  #setLoadedManifest(object: SceneObject, manifest: GlbImportManifest | undefined): void {
+    if (manifest) {
+      this.#loadedManifests.set(object.id, manifest);
+      return;
+    }
+    const storedManifest = getGlbImportManifestFromMetadata(object.asset.metadata);
+    if (storedManifest) {
+      this.#loadedManifests.set(object.id, storedManifest);
+      return;
+    }
+    this.#loadedManifests.delete(object.id);
+  }
+
+  #projectImportedTargetsForOwner(object: SceneObject, snapshot: SceneSnapshot, ownerRoot: Object3D): void {
+    const importedNodes = Object.values(snapshot.nodes)
+      .filter((node): node is SceneImportedGlbNode => node.kind === "imported" && node.ownerObjectId === object.id)
+      .sort((a, b) => a.id.localeCompare(b.id));
+    if (importedNodes.length === 0 || ownerRoot.userData.problem) {
+      this.#releaseImportedTargetsForOwner(object.id, new Set());
+      return;
+    }
+
+    const matches = resolveImportedGlbTargets({
+      ownerObjectId: object.id,
+      ownerRoot,
+      importedNodes,
+      manifest: this.#loadedManifests.get(object.id) ?? getGlbImportManifestFromMetadata(object.asset.metadata)
+    });
+    const activeMatches = matches.filter((match) => match.object && match.status !== "missing" && match.status !== "ambiguous");
+    const matchedNodeIds = new Set(activeMatches.map((match) => match.node.id));
+    this.#releaseImportedTargetsForOwner(object.id, matchedNodeIds);
+
+    for (const match of matches) {
+      if (!match.object || match.status === "missing") {
+        this.#addProblem(createImportedTargetMissingProblem(match));
+        continue;
+      }
+      if (match.status === "ambiguous") {
+        this.#addProblem(createImportedTargetAmbiguousProblem(match));
+        continue;
+      }
+
+      const baseTransform = this.#baseTransformForMatch(match);
+      if (match.transformable && match.node.transform) {
+        applyTransform(match.object, match.node.transform);
+      } else {
+        applyTransform(match.object, baseTransform);
+      }
+      if (!match.transformable) {
+        this.#addProblem(createImportedTargetNonTransformableProblem(match));
+      }
+
+      this.objects.set(match.node.id, match.object, {
+        kind: "imported",
+        ownerObjectId: match.ownerObjectId,
+        importKey: match.importKey,
+        source: match.source,
+        matchStatus: match.status,
+        aliasNodeIds: match.aliasNodeIds,
+        pickPriority: match.pickPriority,
+        transformable: match.transformable,
+        pickable: match.pickable,
+        selected: snapshot.selection.nodeIds.includes(match.node.id),
+        primarySelected: snapshot.selection.nodeId === match.node.id
+      });
+      match.object.userData = {
+        ...match.object.userData,
+        sceneNodeId: match.node.id,
+        nodeKind: "imported",
+        ownerObjectId: match.ownerObjectId,
+        importKey: match.importKey,
+        importedTargetMatchStatus: match.status,
+        importedTargetTransformable: match.transformable,
+        selected: snapshot.selection.nodeIds.includes(match.node.id),
+        primarySelected: snapshot.selection.nodeId === match.node.id
+      };
+    }
+  }
+
+  #baseTransformForMatch(match: RuntimeImportedTargetMatch) {
+    const object = match.object;
+    if (!object) {
+      throw new Error(`Imported target ${match.node.id} does not have a runtime object.`);
+    }
+    const previousTarget = this.objects.getTarget(match.node.id);
+    if (previousTarget && previousTarget.object === object) {
+      const previousBase = object.userData.importedTargetBaseTransform;
+      if (isRuntimeTransform(previousBase)) {
+        return cloneTransform(previousBase);
+      }
+    }
+    const baseTransform = cloneTransform(match.baseTransform ?? readTransform(object));
+    object.userData.importedTargetBaseTransform = cloneTransform(baseTransform);
+    return baseTransform;
+  }
+
+  #releaseImportedTargetsForOwner(ownerObjectId: string, activeNodeIds: ReadonlySet<string>): void {
+    for (const [nodeId, target] of [...this.objects.targetEntries()]) {
+      if (target.kind === "imported" && target.ownerObjectId === ownerObjectId && !activeNodeIds.has(nodeId)) {
+        this.#releaseImportedTarget(nodeId);
+      }
+    }
+  }
+
+  #releaseImportedTarget(nodeId: string): void {
+    const target = this.objects.getTarget(nodeId);
+    if (target?.kind === "imported") {
+      restoreImportedTargetBaseTransform(target.object);
+    }
+    this.objects.delete(nodeId);
   }
 
   #addProblem(problem: Problem): void {
@@ -455,12 +667,21 @@ export class SceneProjector {
       if (!removedNodeIds.has(nodeId)) {
         continue;
       }
-      if (target.kind !== "light" && !this.#hasMappedAncestor(target.object, removedNodeIds)) {
+      if (target.kind !== "light" && target.kind !== "imported" && !this.#hasMappedAncestor(target.object, removedNodeIds)) {
         disposeObjectTree(target.object);
       }
     }
 
     for (const nodeId of removedNodeIds) {
+      const target = this.objects.getTarget(nodeId);
+      if (target?.kind === "imported") {
+        this.#releaseImportedTarget(nodeId);
+        continue;
+      }
+      if (target?.kind === "object" && target.objectId) {
+        this.#loadedManifests.delete(target.objectId);
+        this.#runtimeObjectAssetSignatures.delete(target.objectId);
+      }
       this.objects.delete(nodeId);
     }
 
@@ -468,6 +689,14 @@ export class SceneProjector {
       const target = this.objects.getTarget(nodeId);
       const node = snapshot.nodes[nodeId];
       if (target && node && target.kind !== node.kind) {
+        if (target.kind === "imported") {
+          this.#releaseImportedTarget(nodeId);
+          continue;
+        }
+        if (target.kind === "object" && target.objectId) {
+          this.#loadedManifests.delete(target.objectId);
+          this.#runtimeObjectAssetSignatures.delete(target.objectId);
+        }
         if (target.kind !== "light") {
           disposeObjectTree(target.object);
         }
@@ -501,14 +730,65 @@ export class SceneProjector {
   #hasMappedAncestor(object: Object3D, limitedToNodeIds?: Set<string>): boolean {
     let parent = object.parent;
     while (parent) {
-      const nodeId = this.objects.getId(parent);
-      if (nodeId && (!limitedToNodeIds || limitedToNodeIds.has(nodeId))) {
-        return true;
+      for (const nodeId of this.objects.getLinkedNodeIds(parent)) {
+        if (!limitedToNodeIds || limitedToNodeIds.has(nodeId)) {
+          return true;
+        }
       }
       parent = parent.parent;
     }
     return false;
   }
+}
+
+function isRuntimeTransform(value: unknown): value is ReturnType<typeof readTransform> {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const transform = value as Partial<ReturnType<typeof readTransform>>;
+  return isVector3(transform.position) && isVector3(transform.rotation) && isVector3(transform.scale);
+}
+
+function isVector3(value: unknown): value is [number, number, number] {
+  return Array.isArray(value) && value.length === 3 && value.every((entry) => typeof entry === "number" && Number.isFinite(entry));
+}
+
+function restoreImportedTargetBaseTransform(object: Object3D): void {
+  const baseTransform = object.userData.importedTargetBaseTransform;
+  if (isRuntimeTransform(baseTransform)) {
+    applyTransform(object, baseTransform);
+  }
+  delete object.userData.importedTargetBaseTransform;
+}
+
+function createRuntimeAssetSignature(asset: AssetReference, resolved: ResolvedAsset | null, error?: unknown): string {
+  return JSON.stringify({
+    asset: {
+      id: asset.id,
+      kind: asset.kind,
+      label: asset.label ?? null,
+      metadata: asset.metadata ?? null
+    },
+    resolved: resolved
+      ? {
+          uri: resolved.uri,
+          mimeType: resolved.mimeType ?? null,
+          byteSize: numberMetadata(resolved.metadata, "byteSize"),
+          checksum: stringMetadata(resolved.metadata, "checksum")
+        }
+      : null,
+    error: error ? error instanceof Error ? error.message : String(error) : null
+  });
+}
+
+function stringMetadata(metadata: Record<string, unknown> | undefined, key: string): string | null {
+  const value = metadata?.[key];
+  return typeof value === "string" ? value : null;
+}
+
+function numberMetadata(metadata: Record<string, unknown> | undefined, key: string): number | null {
+  const value = metadata?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function mergeGlbDiagnostics(

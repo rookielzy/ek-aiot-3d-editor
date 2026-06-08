@@ -95,10 +95,11 @@ Runtime 保存或派生：
 - renderer / camera / scene
 - resolver output
 - recoverable runtime problem
+- imported target match records linking durable imported nodes to loaded GLB descendants
 
 Runtime 派生结果不得写回 Snapshot。
 
-Imported GLB target 是 durable target identity，不是 runtime traversal cache。Core 可以把 imported node 投影为轻量 transform target，但不会把 loaded glTF scene graph、Three.js `Object3D`、material/texture、loader parser 或 resolver result 写回 Snapshot。后续 runtime picking、reimport remap 和 slot-aware material projection 必须从 v5 imported target key/slot key contract 派生，而不是重新发明一套 runtime-only ID。
+Imported GLB target 是 durable target identity，不是 runtime traversal cache。Runtime projector 会把 imported node 解析成 loaded owner GLB scene 内的 descendant link，并把该 link 注册到 `ThreeObjectMap`。Pointer picking、selection bounds、camera framing 和 TransformControls 都复用这张 runtime target map。Core 不会把 loaded glTF scene graph、Three.js `Object3D`、material/texture、loader parser、resolver result、base transform cache 或 runtime problem 写回 Snapshot。后续 reimport remap 和 slot-aware material projection 必须从 v5 imported target key/slot key contract 派生，而不是重新发明一套 runtime-only ID。
 
 ## Asset 解析边界
 

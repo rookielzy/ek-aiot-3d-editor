@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { attachGlbImportManifestMetadata, createGlbImportManifest } from "../assets/import-pipeline";
 import { createMissingAssetProblem } from "../assets/problems";
 import { createEditor } from "../editor/create-editor";
 import { buildInspectorModel } from "../inspector/selection";
-import { createEnvironmentAssetUnresolvedProblem } from "../runtime/problems";
+import { createEnvironmentAssetUnresolvedProblem, createImportedTargetMissingProblem } from "../runtime/problems";
 import { filterAssetWorkspaceItems, sortAssetWorkspaceItems } from "../assets/workspace";
 import type { Problem } from "../problems/types";
 import { buildWorkbenchModel } from "./workbench-model";
@@ -106,6 +107,57 @@ describe("workbench model", () => {
     ]);
     expect(JSON.stringify(model)).not.toContain("blob:");
     expect(JSON.stringify(model)).not.toContain("uri");
+  });
+
+  it("attributes imported target runtime problems to hierarchy rows", () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      name: "Machine",
+      asset: { id: "asset-a", label: "Machine GLB", metadata: createImportedManifestMetadata() },
+      expandImportedTargets: true
+    });
+    const importedNode = Object.values(editor.getSnapshot().nodes)
+      .find((node) => node.kind === "imported" && node.importKey === "glb:object-a/node:nodes/0");
+    expect(importedNode?.kind).toBe("imported");
+    editor.dispatch({ type: "select-node", nodeId: importedNode!.id });
+    const runtimeProblems = [createImportedTargetMissingProblem({
+      node: importedNode!,
+      ownerObjectId: "object-a",
+      importKey: importedNode!.importKey,
+      source: importedNode!.source,
+      status: "missing",
+      pickable: false,
+      transformable: false,
+      pickPriority: 30,
+      aliasNodeIds: []
+    })];
+    const snapshot = editor.getSnapshot();
+
+    const model = buildWorkbenchModel(snapshot, {
+      inspector: buildInspectorModel(snapshot, { runtimeProblems }),
+      runtimeProblems,
+      history: editor.getHistoryState(),
+      snap: editor.snap.get(),
+      transformMode: editor.transformMode.get(),
+      runtimeReady: true
+    });
+
+    expect(model.selection).toMatchObject({
+      nodeId: importedNode!.id,
+      nodeKind: "imported",
+      objectId: null
+    });
+    expect(model.hierarchy.rows.find((row) => row.id === importedNode!.id)).toMatchObject({
+      kind: "imported",
+      objectId: "object-a",
+      assetId: "asset-a",
+      selected: true,
+      problemCount: 1,
+      highestProblemSeverity: "warning"
+    });
+    expect(JSON.stringify(model)).not.toContain("Object3D");
   });
 
   it("uses asset workspace payload summaries while preserving legacy asset item fields", () => {
@@ -376,3 +428,16 @@ describe("workbench model", () => {
     }).toEqual(before);
   });
 });
+
+function createImportedManifestMetadata() {
+  return attachGlbImportManifestMetadata(undefined, createGlbImportManifest({
+    gltf: {
+      parser: {
+        json: {
+          nodes: [{ name: "Panel" }],
+          meshes: []
+        }
+      }
+    }
+  }));
+}

@@ -1,6 +1,6 @@
 import { AmbientLight, BoxGeometry, Group, Mesh, MeshStandardMaterial, PointLight, Texture } from "three";
 import { describe, expect, it, vi } from "vitest";
-import { createGlbImportDiagnosticsFromError, createGlbImportManifest } from "../assets/import-pipeline";
+import { attachGlbImportManifestMetadata, createGlbImportDiagnosticsFromError, createGlbImportManifest } from "../assets/import-pipeline";
 import { AssetResolverBridge } from "../assets/resolver";
 import { AssetRegistry } from "../assets/registry";
 import { CommandDispatcher } from "../commands/dispatcher";
@@ -117,6 +117,52 @@ describe("scene projector", () => {
     await projector.project(store.getSnapshot());
     await projector.project(store.getSnapshot());
 
+    expect(projector.objects.get("object-a")?.userData.problem).toBe(true);
+    expect(projector.problems).toMatchObject([{ code: "asset-unresolved", target: { kind: "object", objectId: "object-a" } }]);
+  });
+
+  it("reloads cached GLB objects when the resolved asset signature changes", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    const first = new Group();
+    const second = new Group();
+    let checksum = "first";
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb", metadata: { checksum } })),
+      loader: {
+        load: vi
+          .fn()
+          .mockResolvedValueOnce(first)
+          .mockResolvedValueOnce(second)
+      }
+    });
+
+    await projector.project(store.getSnapshot());
+    checksum = "second";
+    await projector.project(store.getSnapshot());
+
+    expect(projector.objects.get("object-a")).toBe(second);
+    expect(first.parent).toBeNull();
+    expect(second.parent).toBe(projector.scene);
+  });
+
+  it("replaces cached GLB objects with problem placeholders when assets become unresolved", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    const loaded = new Group();
+    let resolved = true;
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => resolved ? { uri: "/box.glb", metadata: { checksum: "same" } } : null),
+      loader: { load: async () => loaded }
+    });
+
+    await projector.project(store.getSnapshot());
+    resolved = false;
+    await projector.project(store.getSnapshot());
+
+    expect(projector.objects.get("object-a")).not.toBe(loaded);
     expect(projector.objects.get("object-a")?.userData.problem).toBe(true);
     expect(projector.problems).toMatchObject([{ code: "asset-unresolved", target: { kind: "object", objectId: "object-a" } }]);
   });
@@ -418,6 +464,306 @@ describe("scene projector", () => {
     expect((runtimeObject.material as MeshStandardMaterial).color.getHexString()).toBe("336699");
   });
 
+  it("links imported GLB nodes to loaded descendants without reparenting them", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: { id: "asset-a", metadata: createRuntimeImportManifestMetadata() },
+      expandImportedTargets: true
+    });
+    const loadedScene = new Group();
+    const loadedMesh = new Mesh(new BoxGeometry(), new MeshStandardMaterial());
+    loadedMesh.name = "Panel";
+    loadedScene.add(loadedMesh);
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: {
+        analyze: async () => ({
+          scene: loadedScene,
+          manifest: createGlbImportManifest({
+            gltf: {
+              parser: {
+                json: {
+                  nodes: [{ name: "Panel", mesh: 0 }],
+                  meshes: [{ name: "Panel", primitives: [{ attributes: { POSITION: 0 } }] }]
+                }
+              }
+            }
+          })
+        }),
+        load: async () => loadedScene
+      }
+    });
+
+    await projector.project(store.getSnapshot());
+
+    const nodeTargetId = findImportedNodeIdByKey(store.getSnapshot(), "glb:object-a/node:nodes/0")!;
+    const primitiveTargetId = findImportedNodeIdByKey(store.getSnapshot(), "glb:object-a/primitive:meshes/0/primitives/0")!;
+    expect(projector.objects.get(nodeTargetId)).toBe(loadedMesh);
+    expect(projector.objects.get(primitiveTargetId)).toBe(loadedMesh);
+    expect(loadedMesh.parent).toBe(loadedScene);
+    expect(projector.objects.getTarget(primitiveTargetId)).toMatchObject({
+      kind: "imported",
+      ownerObjectId: "object-a",
+      importKey: "glb:object-a/primitive:meshes/0/primitives/0",
+      matchStatus: "aliased",
+      transformable: false
+    });
+    expect(projector.problems).toContainEqual(expect.objectContaining({
+      code: "imported-target-non-transformable",
+      target: { kind: "imported-target", objectId: "object-a", nodeId: primitiveTargetId, importKey: "glb:object-a/primitive:meshes/0/primitives/0" }
+    }));
+  });
+
+  it("tracks selected imported aliases on target metadata even when they share one runtime object", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: { id: "asset-a", metadata: createRuntimeImportManifestMetadata() },
+      expandImportedTargets: true
+    });
+    const nodeTargetId = findImportedNodeIdByKey(store.getSnapshot(), "glb:object-a/node:nodes/0")!;
+    dispatcher.dispatch({ type: "select-node", nodeId: nodeTargetId });
+    const loadedScene = new Group();
+    const loadedMesh = new Mesh(new BoxGeometry(), new MeshStandardMaterial());
+    loadedScene.add(loadedMesh);
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: {
+        analyze: async () => ({
+          scene: loadedScene,
+          manifest: createGlbImportManifest({
+            gltf: {
+              parser: {
+                json: {
+                  nodes: [{ name: "Panel", mesh: 0 }],
+                  meshes: [{ name: "Panel", primitives: [{ attributes: { POSITION: 0 } }] }]
+                }
+              }
+            }
+          })
+        }),
+        load: async () => loadedScene
+      }
+    });
+
+    await projector.project(store.getSnapshot());
+
+    expect(projector.objects.getTarget(nodeTargetId)).toMatchObject({
+      selected: true,
+      primarySelected: true
+    });
+    expect(projector.objects.get(nodeTargetId)).toBe(loadedMesh);
+  });
+
+  it("applies imported target transforms and restores loaded base transforms when overrides are removed", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: { id: "asset-a", metadata: createRuntimeImportManifestMetadata("node-only") },
+      expandImportedTargets: true
+    });
+    const importedNodeId = findImportedNodeIdByKey(store.getSnapshot(), "glb:object-a/node:nodes/0")!;
+    dispatcher.dispatch({
+      type: "set-node-transform",
+      nodeId: importedNodeId,
+      transform: { position: [4, 5, 6] }
+    });
+    const loadedScene = new Group();
+    const loadedPivot = new Group();
+    loadedPivot.position.set(1, 2, 3);
+    loadedScene.add(loadedPivot);
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: {
+        analyze: async () => ({
+          scene: loadedScene,
+          manifest: createGlbImportManifest({
+            gltf: {
+              parser: {
+                json: {
+                  nodes: [{ name: "Panel", mesh: 0 }],
+                  meshes: []
+                }
+              }
+            }
+          })
+        }),
+        load: async () => loadedScene
+      }
+    });
+
+    await projector.project(store.getSnapshot());
+    expect(loadedPivot.position.toArray()).toEqual([4, 5, 6]);
+
+    const snapshotWithoutOverride = {
+      ...store.getSnapshot(),
+      nodes: {
+        ...store.getSnapshot().nodes,
+        [importedNodeId]: omitTransform(store.getSnapshot().nodes[importedNodeId])
+      }
+    };
+    await projector.project(snapshotWithoutOverride);
+
+    expect(loadedPivot.position.toArray()).toEqual([1, 2, 3]);
+  });
+
+  it("releases stale imported runtime targets and restores loaded base transforms", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: { id: "asset-a", metadata: createRuntimeImportManifestMetadata("node-only") },
+      expandImportedTargets: true
+    });
+    const importedNodeId = findImportedNodeIdByKey(store.getSnapshot(), "glb:object-a/node:nodes/0")!;
+    dispatcher.dispatch({
+      type: "set-node-transform",
+      nodeId: importedNodeId,
+      transform: { position: [4, 5, 6] }
+    });
+    const loadedScene = new Group();
+    const loadedPivot = new Group();
+    loadedPivot.position.set(1, 2, 3);
+    loadedScene.add(loadedPivot);
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: {
+        analyze: async () => ({
+          scene: loadedScene,
+          manifest: createGlbImportManifest({
+            gltf: {
+              parser: {
+                json: {
+                  nodes: [{ name: "Panel" }],
+                  meshes: []
+                }
+              }
+            }
+          })
+        }),
+        load: async () => loadedScene
+      }
+    });
+
+    await projector.project(store.getSnapshot());
+    expect(loadedPivot.position.toArray()).toEqual([4, 5, 6]);
+
+    dispatcher.dispatch({ type: "delete-nodes", nodeIds: [importedNodeId] });
+    await projector.project(store.getSnapshot());
+
+    expect(projector.objects.get(importedNodeId)).toBeUndefined();
+    expect(projector.objects.getObject("object-a")).toBe(loadedScene);
+    expect(loadedPivot.position.toArray()).toEqual([1, 2, 3]);
+    expect(loadedPivot.userData.importedTargetBaseTransform).toBeUndefined();
+  });
+
+  it("keeps active alias transforms when releasing stale imported aliases", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: { id: "asset-a", metadata: createRuntimeImportManifestMetadata() },
+      expandImportedTargets: true
+    });
+    const nodeTargetId = findImportedNodeIdByKey(store.getSnapshot(), "glb:object-a/node:nodes/0")!;
+    const meshTargetId = findImportedNodeIdByKey(store.getSnapshot(), "glb:object-a/mesh:meshes/0")!;
+    const primitiveTargetId = findImportedNodeIdByKey(store.getSnapshot(), "glb:object-a/primitive:meshes/0/primitives/0")!;
+    dispatcher.dispatch({
+      type: "set-node-transform",
+      nodeId: nodeTargetId,
+      transform: { position: [4, 5, 6] }
+    });
+    const loadedScene = new Group();
+    const loadedMesh = new Mesh(new BoxGeometry(), new MeshStandardMaterial());
+    loadedMesh.position.set(1, 2, 3);
+    loadedScene.add(loadedMesh);
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: {
+        analyze: async () => ({
+          scene: loadedScene,
+          manifest: createGlbImportManifest({
+            gltf: {
+              parser: {
+                json: {
+                  nodes: [{ name: "Panel", mesh: 0 }],
+                  meshes: [{ name: "Panel", primitives: [{ attributes: { POSITION: 0 } }] }]
+                }
+              }
+            }
+          })
+        }),
+        load: async () => loadedScene
+      }
+    });
+
+    await projector.project(store.getSnapshot());
+    expect(loadedMesh.position.toArray()).toEqual([1, 2, 3]);
+
+    dispatcher.dispatch({ type: "delete-nodes", nodeIds: [meshTargetId, primitiveTargetId] });
+    await projector.project(store.getSnapshot());
+
+    expect(projector.objects.get(meshTargetId)).toBeUndefined();
+    expect(projector.objects.get(primitiveTargetId)).toBeUndefined();
+    expect(projector.objects.get(nodeTargetId)).toBe(loadedMesh);
+    expect(loadedMesh.position.toArray()).toEqual([4, 5, 6]);
+  });
+
+  it("emits imported target runtime problems without deleting durable imported nodes", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: { id: "asset-a", metadata: createRuntimeImportManifestMetadata() },
+      expandImportedTargets: true
+    });
+    const importedNodeId = findImportedNodeIdByKey(store.getSnapshot(), "glb:object-a/node:nodes/0")!;
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: {
+        analyze: async () => ({
+          scene: new Group(),
+          manifest: createGlbImportManifest({
+            gltf: {
+              parser: {
+                json: {
+                  nodes: [],
+                  meshes: []
+                }
+              }
+            }
+          })
+        }),
+        load: async () => new Group()
+      }
+    });
+
+    await projector.project(store.getSnapshot());
+
+    expect(projector.objects.get(importedNodeId)).toBeUndefined();
+    expect(store.getSnapshot().nodes[importedNodeId]).toBeDefined();
+    expect(projector.problems).toContainEqual(expect.objectContaining({
+      code: "imported-target-missing",
+      target: {
+        kind: "imported-target",
+        objectId: "object-a",
+        nodeId: importedNodeId,
+        importKey: "glb:object-a/node:nodes/0"
+      }
+    }));
+    expect(JSON.stringify(store.getSnapshot())).not.toContain("Object3D");
+  });
+
   it("reapplies material overrides after project export/import restores durable references", async () => {
     const texture = new Texture();
     const store = new EditorStore();
@@ -502,4 +848,29 @@ function createFakeGltfLoader() {
       });
     }
   };
+}
+
+function createRuntimeImportManifestMetadata(variant: "mesh" | "node-only" = "mesh") {
+  return attachGlbImportManifestMetadata(undefined, createGlbImportManifest({
+    gltf: {
+      parser: {
+        json: variant === "node-only" ? {
+          nodes: [{ name: "Panel" }],
+          meshes: []
+        } : {
+          nodes: [{ name: "Panel", mesh: 0 }],
+          meshes: [{ name: "Panel", primitives: [{ attributes: { POSITION: 0 } }] }]
+        }
+      }
+    }
+  }));
+}
+
+function findImportedNodeIdByKey(snapshot: ReturnType<EditorStore["getSnapshot"]>, importKey: string): string | null {
+  return Object.values(snapshot.nodes).find((node) => node.kind === "imported" && node.importKey === importKey)?.id ?? null;
+}
+
+function omitTransform<T extends { transform?: unknown }>(node: T): Omit<T, "transform"> {
+  const { transform: _transform, ...rest } = node;
+  return rest;
 }

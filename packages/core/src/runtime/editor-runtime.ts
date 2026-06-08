@@ -278,10 +278,10 @@ export class ThreeEditorRuntime implements EditorRuntime {
     const selected = snapshot.selection.nodeIds.length > 0
       ? snapshot.selection.nodeIds
       : snapshot.selection.nodeId ? [snapshot.selection.nodeId] : [];
-    const targets = selected
+    const targets = uniqueObjects(selected
       .map((nodeId) => this.projector.objects.getTarget(nodeId))
-      .filter(isTransformableTarget)
-      .map((target) => target.object);
+      .filter(isFrameableTarget)
+      .map((target) => target.object));
     const framed = frameCameraToObjects(this.camera, targets, this.#controls ?? undefined, options);
     if (framed) {
       this.invalidateRender();
@@ -293,9 +293,9 @@ export class ThreeEditorRuntime implements EditorRuntime {
     this.#assertActive();
     const framed = frameCameraToObjects(
       this.camera,
-      [...this.projector.objects.targetEntries()]
-        .filter(([, target]) => target.transformable)
-        .map(([, target]) => target.object),
+      uniqueObjects([...this.projector.objects.targetEntries()]
+        .filter(([, target]) => target.pickable)
+        .map(([, target]) => target.object)),
       this.#controls ?? undefined,
       options
     );
@@ -483,6 +483,10 @@ function isObject3D(object: Object3D | undefined): object is Object3D {
   return Boolean(object);
 }
 
-function isTransformableTarget(target: RuntimeNodeTarget | undefined): target is RuntimeNodeTarget {
-  return Boolean(target?.transformable);
+function isFrameableTarget(target: RuntimeNodeTarget | undefined): target is RuntimeNodeTarget {
+  return Boolean(target?.pickable && (target.kind !== "light" || target.transformable));
+}
+
+function uniqueObjects(objects: Object3D[]): Object3D[] {
+  return [...new Set(objects)];
 }

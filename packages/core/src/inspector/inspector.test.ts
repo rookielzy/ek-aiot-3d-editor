@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { attachGlbImportManifestMetadata, createGlbImportManifest } from "../assets/import-pipeline";
 import { createEditor } from "../editor/create-editor";
+import { createImportedTargetMissingProblem } from "../runtime/problems";
 import { EditorStore } from "../editor/store";
 import { createLightDefinition } from "../lights/defaults";
 import { createEmptySnapshot, createLightNode, createTransform } from "../snapshot/defaults";
@@ -58,6 +60,47 @@ describe("inspector model", () => {
     expect(model.selection.transformAvailable).toBe(true);
     expect(model.transform.enabled).toBe(true);
     expect(model.material.enabled).toBe(false);
+  });
+
+  it("describes selected imported targets and their runtime problems without runtime objects", () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: { id: "asset-a", metadata: createImportedManifestMetadata() },
+      expandImportedTargets: true
+    });
+    const importedNode = Object.values(editor.getSnapshot().nodes)
+      .find((node) => node.kind === "imported" && node.importKey === "glb:object-a/node:nodes/0");
+    expect(importedNode?.kind).toBe("imported");
+    editor.dispatch({ type: "select-node", nodeId: importedNode!.id });
+
+    const model = buildInspectorModel(editor.getSnapshot(), {
+      runtimeProblems: [createImportedTargetMissingProblem({
+        node: importedNode!,
+        ownerObjectId: "object-a",
+        importKey: importedNode!.importKey,
+        source: importedNode!.source,
+        status: "missing",
+        pickable: false,
+        transformable: false,
+        pickPriority: 30,
+        aliasNodeIds: []
+      })]
+    });
+
+    expect(model.selection).toMatchObject({
+      nodeId: importedNode!.id,
+      nodeKind: "imported",
+      objectId: null,
+      transformAvailable: true
+    });
+    expect(model.problems.problems).toContainEqual(expect.objectContaining({
+      code: "imported-target-missing",
+      target: { kind: "imported-target", objectId: "object-a", nodeId: importedNode!.id, importKey: importedNode!.importKey },
+      runtime: true
+    }));
+    expect(JSON.stringify(model)).not.toContain("Object3D");
   });
 
   it("describes selected non-spatial lights as selected but not transformable", () => {
@@ -159,4 +202,17 @@ function createGroupSnapshot(): SceneSnapshot {
       acknowledged: {}
     }
   };
+}
+
+function createImportedManifestMetadata() {
+  return attachGlbImportManifestMetadata(undefined, createGlbImportManifest({
+    gltf: {
+      parser: {
+        json: {
+          nodes: [{ name: "Panel" }],
+          meshes: []
+        }
+      }
+    }
+  }));
 }

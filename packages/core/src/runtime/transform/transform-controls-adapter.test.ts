@@ -1,5 +1,6 @@
 import { Object3D, Scene, Vector3 } from "three";
 import { describe, expect, it, vi } from "vitest";
+import { attachGlbImportManifestMetadata, createGlbImportManifest } from "../../assets/import-pipeline";
 import { AssetRegistry } from "../../assets/registry";
 import { CommandDispatcher } from "../../commands/dispatcher";
 import { EditorStore } from "../../editor/store";
@@ -153,6 +154,79 @@ describe("transform controls adapter", () => {
     expect(setup.store.getSnapshot().nodes["ambient-a"].transform).toBeUndefined();
   });
 
+  it("commits imported target transforms through set-node-transform without changing the owner object", () => {
+    const setup = createAdapterHarness();
+    const dispatchSpy = vi.spyOn(setup.dispatcher, "dispatch");
+    const imported = new Object3D();
+    setup.dispatcher.dispatch({
+      type: "batch",
+      commands: [{
+        type: "create-imported-glb-targets",
+        ownerObjectId: "object-a"
+      }]
+    });
+    const snapshot = setup.store.getSnapshot();
+    const importedNodeId = Object.values(snapshot.nodes)
+      .find((node) => node.kind === "imported" && node.source.kind === "node")?.id;
+    expect(importedNodeId).toBeTruthy();
+    setup.dispatcher.dispatch({ type: "select-node", nodeId: importedNodeId! });
+    setup.objects.set(importedNodeId!, imported, {
+      kind: "imported",
+      ownerObjectId: "object-a",
+      importKey: "glb:object-a/node:nodes/0",
+      source: { kind: "node", path: "nodes/0", index: 0 },
+      transformable: true,
+      pickable: true
+    });
+    setup.adapter.sync(setup.store.getSnapshot());
+
+    setup.controls.emit("mouseDown");
+    imported.position.set(8, 9, 10);
+    setup.controls.emit("objectChange");
+    setup.controls.emit("mouseUp");
+
+    expect(dispatchSpy).toHaveBeenLastCalledWith({
+      type: "batch",
+      label: "Transform node",
+      commands: [{ type: "set-node-transform", nodeId: importedNodeId, transform: { position: [8, 9, 10] } }]
+    });
+    expect(setup.store.getSnapshot().nodes[importedNodeId!]).toMatchObject({
+      transform: { position: [8, 9, 10], rotation: [0, 0, 0], scale: [1, 1, 1] }
+    });
+    expect(setup.store.getSnapshot().objects["object-a"].transform.position).toEqual([0, 0, 0]);
+  });
+
+  it("does not attach transform controls to non-transformable imported aliases", () => {
+    const setup = createAdapterHarness();
+    const imported = new Object3D();
+    setup.dispatcher.dispatch({
+      type: "batch",
+      commands: [{ type: "create-imported-glb-targets", ownerObjectId: "object-a" }]
+    });
+    const importedNodeId = Object.values(setup.store.getSnapshot().nodes)
+      .find((node) => node.kind === "imported" && node.source.kind === "primitive")?.id;
+    expect(importedNodeId).toBeTruthy();
+    setup.dispatcher.dispatch({ type: "select-node", nodeId: importedNodeId! });
+    setup.objects.set(importedNodeId!, imported, {
+      kind: "imported",
+      ownerObjectId: "object-a",
+      importKey: "glb:object-a/primitive:meshes/0/primitives/0",
+      source: { kind: "primitive", path: "meshes/0/primitives/0", meshIndex: 0, primitiveIndex: 0 },
+      transformable: false,
+      pickable: true
+    });
+
+    setup.adapter.sync(setup.store.getSnapshot());
+    setup.controls.emit("mouseDown");
+    imported.position.set(1, 2, 3);
+    setup.controls.emit("objectChange");
+    setup.controls.emit("mouseUp");
+
+    expect(setup.controls.attached).toBeNull();
+    expect(setup.adapter.attachedNodeId).toBeNull();
+    expect(setup.store.getSnapshot().nodes[importedNodeId!].transform).toBeUndefined();
+  });
+
   it("disables camera controls while dragging and restores them after commit or cancellation", () => {
     const cameraControls = createFakeCameraControls();
     const setup = createAdapterHarness({ cameraControls });
@@ -197,7 +271,7 @@ function createAdapterHarness(options: {
   const store = new EditorStore();
   const history = new CommandHistory();
   const dispatcher = new CommandDispatcher(store, history, new AssetRegistry());
-  dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+  dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a", metadata: createRuntimeImportManifestMetadata() } });
   dispatcher.dispatch({ type: "import-glb", objectId: "object-b", asset: { id: "asset-b" } });
   dispatcher.dispatch({ type: "select-object", objectId: "object-a" });
   const scene = new Scene();
@@ -228,6 +302,19 @@ function createAdapterHarness(options: {
     controls,
     adapter
   };
+}
+
+function createRuntimeImportManifestMetadata() {
+  return attachGlbImportManifestMetadata(undefined, createGlbImportManifest({
+    gltf: {
+      parser: {
+        json: {
+          nodes: [{ name: "Panel", mesh: 0 }],
+          meshes: [{ name: "Panel", primitives: [{ attributes: { POSITION: 0 } }] }]
+        }
+      }
+    }
+  }));
 }
 
 function createFakeTransformControls() {

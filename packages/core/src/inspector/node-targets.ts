@@ -22,7 +22,9 @@ export function getSelectedNodeTarget(snapshot: SceneSnapshot): SelectedNodeTarg
     };
   }
 
-  const transform = "transform" in node ? node.transform ?? (node.kind === "imported" ? createTransform() : null) : null;
+  const transform = node.kind === "imported"
+    ? node.transform ?? createTransform()
+    : "transform" in node ? node.transform ?? null : null;
   if (transform) {
     return {
       node,

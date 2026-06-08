@@ -33,7 +33,7 @@ assets/
 - `scene.json`：普通 `SceneSnapshot`。当前导出是 v5 node graph；导入旧 v1/v2/v3/v4 scene 会先迁移到当前 schema。
 - `assets/*`：资产 payload bytes。
 
-GLB import analysis 产生的 `glbImportManifest` 属于 `scene.json` 中 asset metadata 的 JSON-compatible authoring data。Imported GLB target node、source descriptor、slot key 和 remap metadata 也保存在 `scene.json`。它们不改变 ZIP 布局，也不在 `assets/*` 下创建额外记录。
+GLB import analysis 产生的 `glbImportManifest` 属于 `scene.json` 中 asset metadata 的 JSON-compatible authoring data。Imported GLB target node、source descriptor、slot key、authored transform override 和 remap metadata 也保存在 `scene.json`。它们不改变 ZIP 布局，也不在 `assets/*` 下创建额外记录。Runtime imported target links、base transform caches、selection helpers、loader results、resolver output 和 runtime problems 不会进入 `scene.json` 或 `project.json`。
 
 ## project.json
 
