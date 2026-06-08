@@ -60,11 +60,17 @@ export function syncNodesFromObjectHierarchy(snapshot: SceneSnapshot): Pick<Scen
 
   for (const object of Object.values(snapshot.objects)) {
     const nodeId = objectNodeIds.get(object.id)!;
+    const importedChildren = Object.values(snapshot.nodes)
+      .filter((node) => node.kind === "imported" && node.parentId === nodeId)
+      .map((node) => node.id);
     nodes[nodeId] = {
       ...createObjectNode(object),
       id: nodeId,
       parentId: object.parentId ? objectNodeIds.get(object.parentId) ?? object.parentId : null,
-      children: object.children.map((childId) => objectNodeIds.get(childId) ?? childId)
+      children: [
+        ...object.children.map((childId) => objectNodeIds.get(childId) ?? childId),
+        ...importedChildren
+      ]
     };
   }
 

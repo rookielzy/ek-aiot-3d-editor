@@ -584,7 +584,7 @@ describe("Vue EditorWorkbench", () => {
     wrapper.unmount();
 
     expect(editor.disposed).toBe(false);
-    expect(editor.getSnapshot().version).toBe(4);
+    expect(editor.getSnapshot().version).toBe(5);
   });
 
   it("disposes a shell-created editor on unmount", () => {

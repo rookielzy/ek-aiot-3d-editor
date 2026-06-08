@@ -76,6 +76,22 @@ describe("GLB import pipeline contract", () => {
     expect(JSON.stringify(attachGlbImportManifestMetadata(undefined, manifest))).not.toContain("runtime");
   });
 
+  it("rejects malformed stored manifests before expanded import uses per-kind fields", () => {
+    const manifest = createGlbImportManifest();
+    const malformed = {
+      ...manifest,
+      counts: { ...manifest.counts, nodes: 1, meshes: 1, primitives: 1 },
+      nodes: [{ id: "nodes/0", index: 0, path: "nodes/0" }],
+      meshes: [{ id: "meshes/0", index: 0, path: "meshes/0" }]
+    };
+
+    const result = validateGlbImportManifest(malformed);
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain("GLB import manifest nodes descriptor 0 is invalid.");
+    expect(result.errors).toContain("GLB import manifest meshes descriptor 0 is invalid.");
+  });
+
   it("flags unsupported required extensions and normalizes decoder errors", () => {
     const manifest = createGlbImportManifest({
       gltf: {

@@ -6,6 +6,7 @@ import type { SceneSnapshot } from "../snapshot/types";
 import { assertValidSceneSnapshot } from "../snapshot/validation";
 import { applyAddLight } from "./add-light";
 import { applyCreateGroup } from "./create-group";
+import { applyCreateImportedGlbTargets } from "./create-imported-glb-targets";
 import { applyDeleteNodes } from "./delete-nodes";
 import { applyDeleteObjects } from "./delete-objects";
 import { applyDuplicateObjects } from "./duplicate-objects";
@@ -111,6 +112,8 @@ export class CommandDispatcher {
         return applyImportGlb(snapshot, command, this.assets);
       case "register-asset":
         return applyRegisterAsset(snapshot, command, this.assets);
+      case "create-imported-glb-targets":
+        return applyCreateImportedGlbTargets(snapshot, command);
       case "select-node":
         return applySelectNode(snapshot, command);
       case "select-nodes":

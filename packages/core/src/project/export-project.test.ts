@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { attachGlbImportManifestMetadata, createGlbImportManifest } from "../assets/import-pipeline";
+import { decodeArchiveJson, defaultArchiveAdapter } from "./archive-adapter";
+import { PROJECT_SCENE_PATH } from "./package-types";
 import { createEditor } from "../editor/create-editor";
 
 describe("project export", () => {
@@ -86,4 +89,45 @@ describe("project export", () => {
     expect(result.manifest?.scenePath).toBe("scene.json");
     expect(result.manifest?.assets["asset-a"].payloadPath).toBe("assets/asset-a.glb");
   });
+
+  it("exports imported GLB target metadata in scene.json while keeping payload bytes under assets", () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: {
+        id: "asset-a",
+        source: new Uint8Array([1, 2, 3]),
+        metadata: attachGlbImportManifestMetadata(undefined, createImportManifest())
+      },
+      expandImportedTargets: true
+    });
+
+    const result = editor.exportProject();
+
+    expect(result.ok).toBe(true);
+    const archiveEntries = defaultArchiveAdapter.read(result.packageBytes as Uint8Array);
+    const scene = decodeArchiveJson(archiveEntries.find((entry) => entry.path === PROJECT_SCENE_PATH)!.bytes);
+
+    expect(JSON.stringify(scene)).toContain("\"kind\":\"imported\"");
+    expect(JSON.stringify(scene)).not.toContain("isObject3D");
+    expect(result.manifest?.assets["asset-a"].payloadPath).toBe("assets/asset-a.glb");
+  });
 });
+
+function createImportManifest() {
+  return createGlbImportManifest({
+    gltf: {
+      parser: {
+        json: {
+          nodes: [{ name: "Root", mesh: 0 }],
+          meshes: [{
+            name: "Panel",
+            primitives: [{ attributes: { POSITION: 0 }, material: 0 }]
+          }],
+          materials: [{ name: "Red" }]
+        }
+      }
+    }
+  });
+}

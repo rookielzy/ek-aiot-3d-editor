@@ -18,7 +18,10 @@ import {
   importWorkbenchAssets,
   sortAssetWorkspaceItems,
   buildSetTransformCommand,
+  createImportedGlbBindingDescriptor,
+  createImportedGlbTargetDescriptors,
   ThreeGltfLoaderAdapter,
+  findImportedGlbMaterialSlot,
   resolveEditorShortcut,
   snapNumber,
   validateSceneSnapshot,
@@ -28,6 +31,7 @@ import {
   type AssetWorkspaceStatus,
   type BatchCommand,
   type CreateGroupCommand,
+  type CreateImportedGlbTargetsCommand,
   type DeleteNodesCommand,
   type DeleteObjectsCommand,
   type DuplicateObjectsCommand,
@@ -45,6 +49,10 @@ import {
   type InspectorCommandResult,
   type ImportGlbAssetOptions,
   type ImportGlbAssetResult,
+  type ImportedGlbMaterialSlotDescriptor,
+  type ImportedGlbSourceDescriptor,
+  type ImportedGlbTargetBindingDescriptor,
+  type ImportedGlbTargetDescriptor,
   type LightDefinition,
   type Problem,
   PROJECT_PACKAGE_VERSION,
@@ -73,6 +81,7 @@ import {
   type RuntimeSelectionVisualOptions,
   type RuntimeTransformControlsOptions,
   type SceneEnvironmentPatch,
+  type SceneImportedGlbNode,
   type SceneNode,
   type SceneObjectNode,
   type SelectNodeCommand,
@@ -190,6 +199,7 @@ describe("core public API", () => {
     const selectNode: SelectNodeCommand = { type: "select-node", nodeId: "node-a" };
     const selectNodes: SelectNodesCommand = { type: "select-nodes", mode: "replace", nodeIds: ["node-a"], primaryNodeId: "node-a" };
     const createGroup: CreateGroupCommand = { type: "create-group", nodeId: "group-a" };
+    const createImportedTargets: CreateImportedGlbTargetsCommand = { type: "create-imported-glb-targets", ownerObjectId: "object-a" };
     const deleteNodes: DeleteNodesCommand = { type: "delete-nodes", nodeIds: ["node-a"] };
     const groupNodes: GroupNodesCommand = { type: "group-nodes", nodeIds: ["node-a"], nodeId: "group-a" };
     const ungroupNodes: UngroupNodesCommand = { type: "ungroup-nodes", nodeId: "group-a" };
@@ -228,6 +238,38 @@ describe("core public API", () => {
       children: [],
       transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }
     };
+    const importedSource: ImportedGlbSourceDescriptor = { kind: "node", path: "nodes/0", index: 0 };
+    const importedSlot: ImportedGlbMaterialSlotDescriptor = {
+      slotKey: "glb:object-a/slot:meshes/0/primitives/0:material-0",
+      label: "Red",
+      source: {
+        kind: "material-slot",
+        path: "meshes/0/primitives/0",
+        meshIndex: 0,
+        primitiveIndex: 0,
+        materialIndex: 0
+      }
+    };
+    const importedNode: SceneImportedGlbNode = {
+      id: "imported-a",
+      kind: "imported",
+      name: "Imported",
+      ownerObjectId: "object-a",
+      importKey: "glb:object-a/node:nodes/0",
+      source: importedSource,
+      parentId: "object-a",
+      children: [],
+      materialSlots: [importedSlot]
+    };
+    const importedDescriptor: ImportedGlbTargetDescriptor = {
+      id: "imported-a",
+      importKey: importedNode.importKey,
+      parentImportKey: null,
+      displayName: "Imported",
+      source: importedSource,
+      materialSlots: [importedSlot]
+    };
+    const bindingDescriptor: ImportedGlbTargetBindingDescriptor = createImportedGlbBindingDescriptor(importedNode, importedSlot.slotKey);
     const sceneNode: SceneNode = objectNode;
     const clipboardNode: ClipboardSceneNode = { ...objectNode, originalId: "object-a" };
     const workspacePayload: AssetWorkspacePayloadSummary = {
@@ -289,6 +331,7 @@ describe("core public API", () => {
     expect(selectNode.nodeId).toBe("node-a");
     expect(selectNodes.primaryNodeId).toBe("node-a");
     expect(createGroup.type).toBe("create-group");
+    expect(createImportedTargets.ownerObjectId).toBe("object-a");
     expect(deleteNodes.nodeIds).toEqual(["node-a"]);
     expect(groupNodes.nodeId).toBe("group-a");
     expect(ungroupNodes.nodeId).toBe("group-a");
@@ -317,6 +360,9 @@ describe("core public API", () => {
     expect(assetOption.kind).toBe("glb");
     expect(`${transformVector}.${transformAxis}`).toBe("position.x");
     expect(sceneNode.kind).toBe("object");
+    expect(importedNode.kind).toBe("imported");
+    expect(importedDescriptor.materialSlots?.[0]?.slotKey).toBe(importedSlot.slotKey);
+    expect(bindingDescriptor.slotKey).toBe(importedSlot.slotKey);
     expect(clipboardNode.originalId).toBe("object-a");
     expect(environment.mode).toBe("none");
     expect(light.kind).toBe("ambient");
@@ -339,6 +385,28 @@ describe("core public API", () => {
     });
     await expect(importWorkbenchAssets(editorWithImport, { files: [] })).resolves.toEqual([]);
     expect(baseEditor.getSnapshot()).toMatchObject({ scene: { id: expect.any(String) } });
+    expect(createImportedGlbTargetDescriptors({ ownerObjectId: "object-a", manifest: createImportManifest([]) })).toEqual([]);
+    expect(findImportedGlbMaterialSlot({
+      ...createEmptySnapshot("scene-a"),
+      assets: { "asset-a": { id: "asset-a", kind: "glb" } },
+      nodes: {
+        "object-a": { ...objectNode, children: ["imported-a"] },
+        "imported-a": importedNode
+      },
+      rootNodeIds: ["object-a"],
+      objects: {
+        "object-a": {
+          id: "object-a",
+          name: "Object",
+          kind: "glb",
+          parentId: null,
+          children: [],
+          asset: { id: "asset-a", kind: "glb" },
+          transform: objectNode.transform
+        }
+      },
+      rootObjectIds: ["object-a"]
+    }, "object-a", importedSlot.slotKey)?.slot.slotKey).toBe(importedSlot.slotKey);
     editorWithImport.dispose();
   });
 

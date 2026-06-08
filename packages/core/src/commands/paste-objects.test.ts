@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { attachGlbImportManifestMetadata, createGlbImportManifest } from "../assets/import-pipeline";
 import { createEditor } from "../editor/create-editor";
+import { createMaterialAssignmentId } from "../materials/defaults";
 import { createClipboardPayload, createNodeClipboardPayload } from "../clipboard/create-clipboard";
 
 describe("paste objects command", () => {
@@ -110,4 +112,86 @@ describe("paste objects command", () => {
     expect(result.snapshot.materials.assignments["object:object-copy-a"]).toBeTruthy();
     expect(result.snapshot.selection).toEqual({ nodeId: "copy:group-a", nodeIds: ["copy:group-a"], objectId: null, objectIds: [] });
   });
+
+  it("remaps imported owner-scoped keys and material slot assignments when pasting node payloads", () => {
+    const source = createExpandedGlbEditor();
+    const slotId = "glb:object-a/slot:meshes/0/primitives/0:material-0";
+    const copySlotId = "glb:object-copy-a/slot:meshes/0/primitives/0:material-0";
+    source.dispatch({
+      type: "set-material",
+      target: { kind: "material-slot", objectId: "object-a", slotId },
+      materialId: "material-a",
+      materialName: "Imported material",
+      material: { color: "#ff0000" }
+    });
+    source.dispatch({ type: "select-node", nodeId: "object-a" });
+    const payload = createNodeClipboardPayload(source.getSnapshot());
+
+    const result = source.dispatch({
+      type: "paste-objects",
+      payload,
+      objectIdMap: { "object-a": "object-copy-a" }
+    });
+    const copyPrimitive = Object.values(result.snapshot.nodes).find((node) =>
+      node.kind === "imported" && node.importKey === "glb:object-copy-a/primitive:meshes/0/primitives/0"
+    );
+
+    expect(result.ok).toBe(true);
+    expect(copyPrimitive).toMatchObject({
+      kind: "imported",
+      ownerObjectId: "object-copy-a",
+      materialSlots: [{
+        slotKey: copySlotId,
+        materialImportKey: "glb:object-copy-a/material:materials/0"
+      }]
+    });
+    expect(result.snapshot.materials.assignments[createMaterialAssignmentId({
+      kind: "material-slot",
+      objectId: "object-copy-a",
+      slotId: copySlotId
+    })]).toBeDefined();
+
+    const deletedCopy = source.dispatch({
+      type: "delete-nodes",
+      nodeIds: [copyPrimitive!.id]
+    });
+
+    expect(deletedCopy.ok).toBe(true);
+    expect(deletedCopy.snapshot.materials.assignments[createMaterialAssignmentId({
+      kind: "material-slot",
+      objectId: "object-a",
+      slotId
+    })]).toBeDefined();
+    expect(deletedCopy.snapshot.materials.assignments[createMaterialAssignmentId({
+      kind: "material-slot",
+      objectId: "object-copy-a",
+      slotId: copySlotId
+    })]).toBeUndefined();
+  });
 });
+
+function createExpandedGlbEditor() {
+  const editor = createEditor();
+  editor.dispatch({
+    type: "import-glb",
+    objectId: "object-a",
+    asset: {
+      id: "asset-a",
+      metadata: attachGlbImportManifestMetadata(undefined, createGlbImportManifest({
+        gltf: {
+          parser: {
+            json: {
+              nodes: [{ mesh: 0 }],
+              meshes: [{
+                primitives: [{ attributes: { POSITION: 0 }, material: 0 }]
+              }],
+              materials: [{ name: "Red" }]
+            }
+          }
+        }
+      }))
+    },
+    expandImportedTargets: true
+  });
+  return editor;
+}

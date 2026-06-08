@@ -81,6 +81,7 @@ Snapshot 保存：
 - material overrides
 - environment/background authoring intent
 - light definitions and their light node targets
+- imported GLB target identity, owner hierarchy constraints, source descriptors, optional transform overrides, and imported material slot descriptors
 - authored problem metadata
 - JSON-compatible metadata
 
@@ -96,6 +97,8 @@ Runtime 保存或派生：
 - recoverable runtime problem
 
 Runtime 派生结果不得写回 Snapshot。
+
+Imported GLB target 是 durable target identity，不是 runtime traversal cache。Core 可以把 imported node 投影为轻量 transform target，但不会把 loaded glTF scene graph、Three.js `Object3D`、material/texture、loader parser 或 resolver result 写回 Snapshot。后续 runtime picking、reimport remap 和 slot-aware material projection 必须从 v5 imported target key/slot key contract 派生，而不是重新发明一套 runtime-only ID。
 
 ## Asset 解析边界
 

@@ -250,6 +250,7 @@ export class CoreEditor implements EditorWithGlbImport {
         name: options.name,
         parentId: options.parentId,
         transform: options.transform,
+        expandImportedTargets: options.expandImportedTargets,
         asset: {
           ...options.asset,
           kind: "glb",

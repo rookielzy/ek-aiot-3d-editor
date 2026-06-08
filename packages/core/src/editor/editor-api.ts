@@ -28,6 +28,7 @@ export interface ImportGlbAssetOptions {
   parentId?: string | null;
   transform?: Partial<SceneSnapshot["objects"][string]["transform"]>;
   commit?: boolean;
+  expandImportedTargets?: boolean;
 }
 
 export interface ImportGlbAssetResult {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { attachGlbImportManifestMetadata, createGlbImportManifest } from "../assets/import-pipeline";
 import { createEditor } from "../editor/create-editor";
 import { isJsonCompatible } from "../snapshot/validation";
 import { createClipboardPayload, createNodeClipboardPayload } from "./create-clipboard";
@@ -43,5 +44,43 @@ describe("create clipboard payload", () => {
     expect(payload.materials.assignments["object:object-a"]).toBeTruthy();
     expect(isJsonCompatible(payload)).toBe(true);
     expect(JSON.stringify(payload)).not.toContain("runtime");
+  });
+
+  it("does not copy imported material slot assignments into legacy object payloads", () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: {
+        id: "asset-a",
+        metadata: attachGlbImportManifestMetadata(undefined, createGlbImportManifest({
+          gltf: {
+            parser: {
+              json: {
+                nodes: [{ mesh: 0 }],
+                meshes: [{ primitives: [{ attributes: { POSITION: 0 }, material: 0 }] }],
+                materials: [{ name: "Red" }]
+              }
+            }
+          }
+        }))
+      },
+      expandImportedTargets: true
+    });
+    editor.dispatch({
+      type: "set-material",
+      target: {
+        kind: "material-slot",
+        objectId: "object-a",
+        slotId: "glb:object-a/slot:meshes/0/primitives/0:material-0"
+      },
+      material: { color: "#ff0000" }
+    });
+
+    const objectPayload = createClipboardPayload(editor.getSnapshot(), ["object-a"]);
+    const nodePayload = createNodeClipboardPayload(editor.getSnapshot(), ["object-a"]);
+
+    expect(Object.values(objectPayload.materials.assignments)).toEqual([]);
+    expect(Object.values(nodePayload.materials.assignments)).toHaveLength(1);
   });
 });

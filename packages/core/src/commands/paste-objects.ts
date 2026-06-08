@@ -1,8 +1,9 @@
 import { createId } from "../snapshot/defaults";
+import { remapImportedGlbOwnerKey } from "../imported-targets/keys";
 import { cloneTransform } from "../snapshot/transforms";
 import type { LightDefinition } from "../lights/types";
 import type { MaterialAssignment, MaterialDefinition } from "../materials/types";
-import type { SceneNode, SceneObject, SceneSnapshot } from "../snapshot/types";
+import type { SceneImportedGlbNode, SceneNode, SceneObject, SceneSnapshot } from "../snapshot/types";
 import { normalizeNodeSelection } from "../selection/selection";
 import { syncPayloadsFromNodes } from "./node-state";
 import type { PasteObjectsCommand } from "./types";
@@ -249,7 +250,11 @@ function pasteMaterialState(
     }
     const target = assignment.target.kind === "object"
       ? { kind: "object" as const, objectId }
-      : { kind: "material-slot" as const, objectId, slotId: assignment.target.slotId };
+      : {
+        kind: "material-slot" as const,
+        objectId,
+        slotId: remapImportedGlbOwnerKey(assignment.target.slotId, assignment.target.objectId, objectId)
+      };
     const nextAssignmentId = target.kind === "object"
       ? `object:${target.objectId}`
       : `material-slot:${target.objectId}:${target.slotId}`;
@@ -369,9 +374,74 @@ function cloneNodePayload(
         ...(sourceNode.transform ? { transform: cloneTransform(sourceNode.transform) } : {}),
         ...(sourceNode.metadata ? { metadata: { ...sourceNode.metadata } } : {})
       };
+    case "imported":
+      return remapImportedNodeOwnerKeys({
+        id,
+        kind: "imported",
+        name: sourceNode.name,
+        importKey: sourceNode.importKey,
+        ownerObjectId: objectIdMap[sourceNode.ownerObjectId] ?? sourceNode.ownerObjectId,
+        parentId,
+        children,
+        source: {
+          ...sourceNode.source,
+          ...(sourceNode.source.metadata ? { metadata: { ...sourceNode.source.metadata } } : {})
+        },
+        ...(sourceNode.transform ? { transform: cloneTransform(sourceNode.transform) } : {}),
+        ...(sourceNode.materialSlots ? {
+          materialSlots: sourceNode.materialSlots.map((slot) => ({
+            ...slot,
+            source: { ...slot.source },
+            ...(slot.metadata ? { metadata: { ...slot.metadata } } : {})
+          }))
+        } : {}),
+        ...(sourceNode.remap ? {
+          remap: {
+            ...sourceNode.remap,
+            ...(sourceNode.remap.candidateImportKeys ? { candidateImportKeys: [...sourceNode.remap.candidateImportKeys] } : {}),
+            ...(sourceNode.remap.metadata ? { metadata: { ...sourceNode.remap.metadata } } : {})
+          }
+        } : {}),
+        ...(sourceNode.metadata ? { metadata: { ...sourceNode.metadata } } : {})
+      }, sourceNode.ownerObjectId);
     default:
       return assertNever(sourceNode);
   }
+}
+
+function remapImportedNodeOwnerKeys(node: SceneImportedGlbNode, sourceOwnerObjectId: string): SceneImportedGlbNode {
+  if (node.ownerObjectId === sourceOwnerObjectId) {
+    return node;
+  }
+
+  const remapped: SceneImportedGlbNode = {
+    ...node,
+    importKey: remapImportedGlbOwnerKey(node.importKey, sourceOwnerObjectId, node.ownerObjectId)
+  };
+
+  if (node.materialSlots) {
+    remapped.materialSlots = node.materialSlots.map((slot) => ({
+      ...slot,
+      slotKey: remapImportedGlbOwnerKey(slot.slotKey, sourceOwnerObjectId, node.ownerObjectId),
+      ...(slot.materialImportKey
+        ? { materialImportKey: remapImportedGlbOwnerKey(slot.materialImportKey, sourceOwnerObjectId, node.ownerObjectId) }
+        : {})
+    }));
+  }
+
+  if (node.remap) {
+    remapped.remap = {
+      ...node.remap,
+      ...(node.remap.previousImportKey
+        ? { previousImportKey: remapImportedGlbOwnerKey(node.remap.previousImportKey, sourceOwnerObjectId, node.ownerObjectId) }
+        : {}),
+      ...(node.remap.candidateImportKeys
+        ? { candidateImportKeys: node.remap.candidateImportKeys.map((importKey) => remapImportedGlbOwnerKey(importKey, sourceOwnerObjectId, node.ownerObjectId)) }
+        : {})
+    };
+  }
+
+  return remapped;
 }
 
 function assertNever(value: never): never {

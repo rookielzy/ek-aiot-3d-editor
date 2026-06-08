@@ -136,7 +136,7 @@ function createMixedNodeSnapshot(): SceneSnapshot {
 
   return {
     ...snapshot,
-    version: 4,
+    version: 5,
     scene: {
       id: "scene-a",
       name: "Scene"

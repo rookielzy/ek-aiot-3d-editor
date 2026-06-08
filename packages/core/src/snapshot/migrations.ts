@@ -10,6 +10,7 @@ import {
   type SceneNode,
   type SceneSnapshot,
   type SerializedSceneSnapshot,
+  type V4SceneSnapshot,
   type V3SceneSnapshot
 } from "./types";
 import { assertValidSceneSnapshot, type ValidationResult } from "./validation";
@@ -18,6 +19,12 @@ export function migrateSerializedSnapshot(serialized: SerializedSceneSnapshot): 
   if (serialized.version === SNAPSHOT_VERSION) {
     assertValidSceneSnapshot(serialized);
     return immutableClone(serialized);
+  }
+
+  if (serialized.version === 4) {
+    const migrated = migrateV4Snapshot(serialized);
+    assertValidSceneSnapshot(migrated);
+    return immutableClone(migrated);
   }
 
   if (serialized.version === 3) {
@@ -40,6 +47,13 @@ export function migrateSerializedSnapshot(serialized: SerializedSceneSnapshot): 
 
   const version = (serialized as { version?: unknown }).version;
   throw new Error(`Unsupported snapshot version: ${String(version)}.`);
+}
+
+export function migrateV4Snapshot(serialized: V4SceneSnapshot): SceneSnapshot {
+  return {
+    ...serialized,
+    version: SNAPSHOT_VERSION
+  };
 }
 
 export function migrateV1Snapshot(serialized: LegacySceneSnapshot): SceneSnapshot {

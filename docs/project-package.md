@@ -30,10 +30,10 @@ assets/
 固定路径：
 
 - `project.json`：项目包 manifest。
-- `scene.json`：普通 `SceneSnapshot`。当前导出是 v4 node graph；导入旧 v1/v2/v3 scene 会先迁移到当前 schema。
+- `scene.json`：普通 `SceneSnapshot`。当前导出是 v5 node graph；导入旧 v1/v2/v3/v4 scene 会先迁移到当前 schema。
 - `assets/*`：资产 payload bytes。
 
-GLB import analysis 产生的 `glbImportManifest` 属于 `scene.json` 中 asset metadata 的 JSON-compatible authoring data。它不改变 ZIP 布局，也不在 `assets/*` 下创建额外记录。
+GLB import analysis 产生的 `glbImportManifest` 属于 `scene.json` 中 asset metadata 的 JSON-compatible authoring data。Imported GLB target node、source descriptor、slot key 和 remap metadata 也保存在 `scene.json`。它们不改变 ZIP 布局，也不在 `assets/*` 下创建额外记录。
 
 ## project.json
 
@@ -94,7 +94,7 @@ if (!result.ok) {
 - ZIP 结构。
 - entry path 是否安全。
 - manifest version 和字段。
-- `scene.json` Snapshot，并通过 snapshot migration 归一化为当前 v4 node graph。
+- `scene.json` Snapshot，并通过 snapshot migration 归一化为当前 v5 node graph。
 - asset record 与 payload 引用。
 - size limits。
 
@@ -106,7 +106,7 @@ Core 会从 `SceneSnapshot.assets`、对象/材质/环境中的 asset references
 
 workspace 不保存也不暴露 payload bytes、`Blob`、`File`、object URL、resolver 输出、loaded texture、PMREM 或 Three.js 对象。宿主可以把 workspace rows 镜像到 UI state，但 durable storage 仍只应该保存 `editor.serialize()` 的 Snapshot 或 `editor.exportProject()` 产生的 `.ek3d` bytes。
 
-如果 asset metadata 包含 `glbImportManifest`，workspace row 会投影 `importStatus`、`importManifest` 和 `importDiagnostics`。这些字段仍是 JSON-compatible projection；它们不得包含 `GLTFLoader`、parser、Three.js scene/material/texture、decoder 对象或 object URL。
+如果 asset metadata 包含 `glbImportManifest`，workspace row 会投影 `importStatus`、`importManifest` 和 `importDiagnostics`。这些字段仍是 JSON-compatible projection；它们不得包含 `GLTFLoader`、parser、Three.js scene/material/texture、decoder 对象或 object URL。Imported GLB target 本身只引用 manifest-derived keys/path，不携带 asset payload 或 runtime object。
 
 payload-only 变化也会更新 workspace。例如 `replaceAsset()` 成功后，稳定 asset ID 不变，Snapshot 不一定变化，但 `editor.subscribeAssetWorkspace()` 会通知消费者重新读取 `editor.getAssetWorkspacePayloads()` 并重建 Workbench/workspace model。
 
@@ -153,5 +153,5 @@ Decoder-aware GLB runtime 使用 host 提供的 loader adapter。Draco、KTX2、
 - 不要信任外部 `.ek3d` 文件；导入前必须走 core validator。
 - 不要允许 ZIP entry path 跳出项目包范围。
 - 不要把 secret、tenant token、用户会话等运行时变量写入 manifest metadata。
-- project manifest 当前仍是 version 1；引入 v4 `SceneNode` 只改变 `scene.json` 的 snapshot schema，不改变 `.ek3d` 包布局。
+- project manifest 当前仍是 version 1；引入 v5 imported GLB target schema 只改变 `scene.json` 的 snapshot schema，不改变 `.ek3d` 包布局。
 - `.ek3d` 仍是实验性格式；在 `0.x` 阶段不保证长期兼容。
