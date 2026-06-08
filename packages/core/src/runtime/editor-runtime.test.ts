@@ -1,5 +1,6 @@
 import { AmbientLight, BoxGeometry, Group, Mesh, MeshBasicMaterial, PointLight, Texture, Vector3 } from "three";
 import { describe, expect, it, vi } from "vitest";
+import { attachGlbImportManifestMetadata, createGlbImportManifest } from "../assets/import-pipeline";
 import { AssetResolverBridge } from "../assets/resolver";
 import { AssetRegistry } from "../assets/registry";
 import { CommandDispatcher } from "../commands/dispatcher";
@@ -399,6 +400,142 @@ describe("editor runtime", () => {
     runtime.dispose();
   });
 
+  it("selects, frames, and transforms resolved imported GLB targets through runtime node targets", async () => {
+    const container = document.createElement("div");
+    Object.defineProperty(container, "clientWidth", { configurable: true, value: 200 });
+    Object.defineProperty(container, "clientHeight", { configurable: true, value: 200 });
+    container.getBoundingClientRect = () => ({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 200,
+      width: 200,
+      height: 200,
+      toJSON() {}
+    });
+    const frames = createFrameScheduler();
+    const controls = createFakeControls();
+    const transformControls = createFakeTransformControls();
+    const renderer = createFakeRenderer(container);
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const dispatchSpy = vi.spyOn(dispatcher, "dispatch");
+    const loadedScene = new Group();
+    const importedTarget = new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial());
+    loadedScene.add(importedTarget);
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      interactions: { camera: true, selectionVisuals: true, transform: true, pointerSelection: true },
+      resolver: new AssetResolverBridge(() => ({ uri: "/machine.glb" })),
+      loader: {
+        analyze: async () => ({
+          scene: loadedScene,
+          manifest: createNodeOnlyManifest()
+        }),
+        load: async () => loadedScene
+      },
+      rendererFactory: () => renderer,
+      cameraControlsFactory: () => controls,
+      transformControlsFactory: () => transformControls,
+      scheduleFrame: frames.schedule,
+      cancelFrame: frames.cancel
+    });
+    dispatcher.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: { id: "asset-a", metadata: attachGlbImportManifestMetadata(undefined, createNodeOnlyManifest()) },
+      expandImportedTargets: true
+    });
+    await runtime.project();
+    const importedNodeId = findImportedNodeIdByKey(store.getSnapshot(), "glb:object-a/node:nodes/0")!;
+
+    const picked = runtime.selectFromPointer({ clientX: 100, clientY: 100 });
+    await runtime.project();
+    frames.flush();
+
+    expect(picked.ok).toBe(true);
+    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-node", nodeId: importedNodeId });
+    expect(store.getSnapshot().selection).toMatchObject({
+      nodeId: importedNodeId,
+      objectId: null
+    });
+    expect(runtime.getNodeTarget(importedNodeId)).toBe(importedTarget);
+    expect(runtime.scene.children.find((object) => object.userData.selectionHelper)?.userData).toMatchObject({
+      runtimeOnly: true,
+      selectionHelper: true,
+      sceneNodeId: importedNodeId
+    });
+
+    expect(runtime.frameSelected()).toBe(true);
+    frames.flush();
+    expect(controls.target.x).toBeCloseTo(0);
+    expect(transformControls.attached).toBe(importedTarget);
+
+    transformControls.emit("mouseDown");
+    importedTarget.position.set(6, 0, 0);
+    transformControls.emit("objectChange");
+    transformControls.emit("mouseUp");
+
+    expect(store.getSnapshot().nodes[importedNodeId].transform?.position).toEqual([6, 0, 0]);
+    expect(store.getSnapshot().objects["object-a"].transform.position).toEqual([0, 0, 0]);
+    expect(JSON.stringify(store.getSnapshot())).not.toContain("Object3D");
+    runtime.dispose();
+  });
+
+  it("frames selected imported primitive targets even when they are not transformable", async () => {
+    const frames = createFrameScheduler();
+    const controls = createFakeControls();
+    const transformControls = createFakeTransformControls();
+    const renderer = createFakeRenderer(document.createElement("div"));
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const loadedScene = new Group();
+    const importedTarget = new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial());
+    importedTarget.position.set(4, 0, 0);
+    loadedScene.add(importedTarget);
+    const manifest = createNodeAndPrimitiveManifest();
+    const runtime = new ThreeEditorRuntime({
+      container: document.createElement("div"),
+      store,
+      dispatcher,
+      interactions: { camera: true, transform: true },
+      resolver: new AssetResolverBridge(() => ({ uri: "/machine.glb" })),
+      loader: {
+        analyze: async () => ({
+          scene: loadedScene,
+          manifest
+        }),
+        load: async () => loadedScene
+      },
+      rendererFactory: () => renderer,
+      cameraControlsFactory: () => controls,
+      transformControlsFactory: () => transformControls,
+      scheduleFrame: frames.schedule,
+      cancelFrame: frames.cancel
+    });
+    dispatcher.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: { id: "asset-a", metadata: attachGlbImportManifestMetadata(undefined, manifest) },
+      expandImportedTargets: true
+    });
+    await runtime.project();
+    const primitiveNodeId = findImportedNodeIdByKey(store.getSnapshot(), "glb:object-a/primitive:meshes/0/primitives/0")!;
+    dispatcher.dispatch({ type: "select-node", nodeId: primitiveNodeId });
+    await runtime.project();
+
+    expect(runtime.getNodeTarget(primitiveNodeId)).toBe(importedTarget);
+    expect(runtime.frameSelected()).toBe(true);
+    frames.flush();
+    expect(controls.target.x).toBeCloseTo(4);
+    expect(transformControls.attached).toBeNull();
+    runtime.dispose();
+  });
+
   it("is safe to dispose twice", () => {
     const renderer = createFakeRenderer(document.createElement("div"));
     const runtime = new ThreeEditorRuntime({
@@ -760,4 +897,34 @@ function createFakeTransformControls() {
     }
   };
   return controls;
+}
+
+function createNodeOnlyManifest() {
+  return createGlbImportManifest({
+    gltf: {
+      parser: {
+        json: {
+          nodes: [{ name: "Panel" }],
+          meshes: []
+        }
+      }
+    }
+  });
+}
+
+function createNodeAndPrimitiveManifest() {
+  return createGlbImportManifest({
+    gltf: {
+      parser: {
+        json: {
+          nodes: [{ name: "Panel", mesh: 0 }],
+          meshes: [{ name: "Panel", primitives: [{ attributes: { POSITION: 0 } }] }]
+        }
+      }
+    }
+  });
+}
+
+function findImportedNodeIdByKey(snapshot: ReturnType<EditorStore["getSnapshot"]>, importKey: string): string | null {
+  return Object.values(snapshot.nodes).find((node) => node.kind === "imported" && node.importKey === importKey)?.id ?? null;
 }

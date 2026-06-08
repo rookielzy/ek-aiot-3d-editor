@@ -113,6 +113,41 @@ describe("project export", () => {
     expect(JSON.stringify(scene)).not.toContain("isObject3D");
     expect(result.manifest?.assets["asset-a"].payloadPath).toBe("assets/asset-a.glb");
   });
+
+  it("does not export imported target runtime links or runtime problems", () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: {
+        id: "asset-a",
+        source: new Uint8Array([1, 2, 3]),
+        metadata: attachGlbImportManifestMetadata(undefined, createImportManifest())
+      },
+      expandImportedTargets: true
+    });
+    const importedNode = Object.values(editor.getSnapshot().nodes)
+      .find((node) => node.kind === "imported" && node.importKey === "glb:object-a/primitive:meshes/0/primitives/0");
+    expect(importedNode?.kind).toBe("imported");
+    editor.dispatch({
+      type: "set-node-transform",
+      nodeId: importedNode!.id,
+      transform: { position: [1, 2, 3] }
+    });
+
+    const result = editor.exportProject();
+
+    expect(result.ok).toBe(true);
+    const archiveEntries = defaultArchiveAdapter.read(result.packageBytes as Uint8Array);
+    const serializedScene = new TextDecoder().decode(archiveEntries.find((entry) => entry.path === PROJECT_SCENE_PATH)!.bytes);
+    const scene = JSON.parse(serializedScene);
+    expect(serializedScene).toContain(importedNode!.id);
+    expect(scene.nodes[importedNode!.id]).toMatchObject({ kind: "imported", transform: { position: [1, 2, 3] } });
+    expect(serializedScene).not.toContain("Object3D");
+    expect(serializedScene).not.toContain("importedTargetBaseTransform");
+    expect(serializedScene).not.toContain("runtimeOnly");
+    expect(serializedScene).not.toContain("imported-target-missing");
+  });
 });
 
 function createImportManifest() {

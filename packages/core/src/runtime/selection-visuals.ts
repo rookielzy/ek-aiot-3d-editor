@@ -24,12 +24,12 @@ export class RuntimeSelectionVisuals {
     const activeIds = new Set<string>();
     for (const [nodeId, target] of this.#objects.targetEntries()) {
       const object = target.object;
-      if (!object.userData.selected && !object.userData.primarySelected) {
+      if (!target.selected && !target.primarySelected) {
         continue;
       }
 
       activeIds.add(nodeId);
-      const color = object.userData.primarySelected
+      const color = target.primarySelected
         ? this.#options.primarySelectedColor
         : this.#options.selectedColor;
       const helper = this.#helpers.get(nodeId);
@@ -48,6 +48,7 @@ export class RuntimeSelectionVisuals {
       nextHelper.userData.runtimeOnly = true;
       nextHelper.userData.selectionHelper = true;
       nextHelper.userData.sceneNodeId = nodeId;
+      this.#objects.markRuntimeOnly(nextHelper);
       if (target.objectId) {
         nextHelper.userData.sceneObjectId = target.objectId;
       }

@@ -1,5 +1,6 @@
 import type { Problem } from "../problems/types";
 import type { TextureSlotName } from "../materials/types";
+import type { RuntimeImportedTargetMatch } from "./imported-target-resolver";
 
 export { createMissingAssetProblem } from "../assets/problems";
 export type { Problem } from "../problems/types";
@@ -166,6 +167,87 @@ export function createMaterialTextureAssetResolveProblem(input: MaterialTextureP
       detail: message
     },
     metadata: { slot: input.slot }
+  };
+}
+
+export function createImportedTargetMissingProblem(match: RuntimeImportedTargetMatch): Problem {
+  return {
+    id: `imported-target-missing:${match.ownerObjectId}:${match.node.id}:${match.importKey}`,
+    severity: "warning",
+    code: "imported-target-missing",
+    objectId: match.ownerObjectId,
+    source: "runtime",
+    target: {
+      kind: "imported-target",
+      objectId: match.ownerObjectId,
+      nodeId: match.node.id,
+      importKey: match.importKey
+    },
+    recoverability: "user-action",
+    message: match.message ?? `Imported target ${match.importKey} could not be matched in the loaded GLB.`,
+    display: {
+      title: "Imported target could not be matched",
+      detail: match.message ?? `The loaded GLB no longer exposes ${match.importKey}.`
+    },
+    metadata: {
+      importKey: match.importKey,
+      sourceKind: match.source.kind,
+      sourcePath: match.source.path
+    }
+  };
+}
+
+export function createImportedTargetAmbiguousProblem(match: RuntimeImportedTargetMatch): Problem {
+  return {
+    id: `imported-target-ambiguous:${match.ownerObjectId}:${match.node.id}:${match.importKey}`,
+    severity: "warning",
+    code: "imported-target-ambiguous",
+    objectId: match.ownerObjectId,
+    source: "runtime",
+    target: {
+      kind: "imported-target",
+      objectId: match.ownerObjectId,
+      nodeId: match.node.id,
+      importKey: match.importKey
+    },
+    recoverability: "user-action",
+    message: match.message ?? `Imported target ${match.importKey} matched multiple runtime objects.`,
+    display: {
+      title: "Imported target match is ambiguous",
+      detail: match.message ?? `The runtime could not choose one loaded GLB object for ${match.importKey}.`
+    },
+    metadata: {
+      importKey: match.importKey,
+      sourceKind: match.source.kind,
+      sourcePath: match.source.path
+    }
+  };
+}
+
+export function createImportedTargetNonTransformableProblem(match: RuntimeImportedTargetMatch): Problem {
+  return {
+    id: `imported-target-non-transformable:${match.ownerObjectId}:${match.node.id}:${match.importKey}`,
+    severity: "info",
+    code: "imported-target-non-transformable",
+    objectId: match.ownerObjectId,
+    source: "runtime",
+    target: {
+      kind: "imported-target",
+      objectId: match.ownerObjectId,
+      nodeId: match.node.id,
+      importKey: match.importKey
+    },
+    recoverability: "automatic",
+    message: `Imported target ${match.importKey} is linked to a shared runtime object and cannot be transformed independently.`,
+    display: {
+      title: "Imported target cannot be transformed independently"
+    },
+    metadata: {
+      importKey: match.importKey,
+      sourceKind: match.source.kind,
+      sourcePath: match.source.path,
+      aliasNodeIds: match.aliasNodeIds
+    }
   };
 }
 

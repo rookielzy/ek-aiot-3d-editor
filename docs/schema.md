@@ -223,6 +223,8 @@ editor.dispatch({
 });
 ```
 
+Runtime projection 会把这些 durable imported nodes 解析为 loaded GLB scene 内的 transient `Object3D` descendant，并把结果放入 runtime node target map。该映射只在运行时存在：`Object3D`、base transform cache、loader result、parser association、selection helper 和 runtime problem 都不会写入 Snapshot。若 loaded GLB 中找不到对应 `importKey/source`，runtime 会暴露 target 为 `{ kind: "imported-target" }` 的 recoverable problem，并保留 durable imported node 与已 authored 的 transform override。
+
 或在 import 时 opt-in：
 
 ```ts

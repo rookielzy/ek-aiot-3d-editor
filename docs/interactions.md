@@ -34,7 +34,7 @@ React 和 Vue proof-loop demo 的可见验证路径保持一致：
 
 当前 durable selection 使用 `NodeId`。GLB object、empty group、light 和 imported GLB target 都可以成为选中目标；object-only API 仍保留为兼容路径，并从 node selection 派生 selected object IDs。
 
-Core runtime 提供 node-aware picking；命中 GLB mesh 时会选择所属 object node，命中 light runtime target 时会选择对应 light node。兼容 API `pickObject(objectId, mode)` 仍可选择对象 payload 对应的 object node。默认内部 dispatch：
+Core runtime 提供 node-aware picking；命中普通 GLB object 时会选择所属 object node，命中已展开并成功解析的 GLB internal mesh/primitive 时会选择最具体的 imported target node，命中 light runtime target 时会选择对应 light node。没有 expanded imported target 或 target 无法匹配时，GLB child hit 会回退到 owner object node。兼容 API `pickObject(objectId, mode)` 仍可选择对象 payload 对应的 object node。默认内部 dispatch：
 
 ```ts
 { type: "select-node", nodeId }
@@ -107,6 +107,8 @@ Runtime 内部有 transaction 结构：
 - `scale`
 
 设计目标是一段拖拽最终只产生一个 undoable command，而不是每次 pointer move 都写 history。当前 canonical transform command 是 `set-node-transform`；旧 `set-transform` 会映射到对应 object node。Object node、group node、imported GLB target node、directional/point/spot light node 支持 transform；ambient/hemisphere light node 可以被选择但不显示 transform 控件。Imported GLB target transform 是 authored override，只保存在 imported node 上，不会同步到 `objects` payload。React/Vue workbench 默认开启可视 transform control；proof-loop demo 的 toolbar 也提供 mode、snap、camera、undo/redo 和 nudge 按钮，用于验证同一套状态是否在层级、status 和 checklist 中同步。TransformControls、helper、drag preview 和 camera controls 都是 runtime/UI state，不进入 Snapshot。
+
+Imported target TransformControls 只会附着到 runtime map 标记为可独立 transform 的 target。多个 imported nodes alias 同一个 loaded `Object3D`、primitive 只能映射到 mesh object、或 target 缺失时，runtime 会保持选择/问题可见，但不会提交含混的 transform mutation。移除 imported node 的 authored transform 后，runtime 会恢复 loaded GLB 的 base local transform。
 
 多节点 transaction 会把多个 `set-node-transform` 子命令合成一个 `batch` command。`snap` 支持 translation、rotation、scale increment helper；吸附结果进入 durable transform，吸附设置本身仍是 editor/session state。
 
@@ -203,7 +205,7 @@ Core 提供 `resolveEditorShortcut()` 和 `executeEditorAction()`。React/Vue wo
 以下能力不要在文档或产品承诺中描述为已完成：
 
 - 框选。
-- GLB internal runtime picking，以及 durable imported target row 之外的 Workbench hierarchy UI polish。
+- durable imported target row 之外的 Workbench hierarchy UI polish。
 - GLB reimport diff/remap command。
 - Imported material slot assignment 的 runtime projection。
 - 系统剪贴板集成和外部 paste 格式。

@@ -70,7 +70,13 @@ export class ObjectPicker {
       candidate.updateWorldMatrix(true, true);
     }
 
-    const hit = this.#raycaster.intersectObjects(candidates, true)[0];
-    return hit ? this.objects.getId(hit.object) ?? null : null;
+    const hits = this.#raycaster.intersectObjects(candidates, true);
+    for (const hit of hits) {
+      const target = this.objects.getTargetForObject(hit.object);
+      if (target) {
+        return target.nodeId;
+      }
+    }
+    return null;
   }
 }
