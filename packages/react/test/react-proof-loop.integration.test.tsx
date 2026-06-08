@@ -77,7 +77,9 @@ describe("React proof-loop parity", () => {
       expect(within(hierarchy).getByText("Ambient light")).toBeTruthy();
       const assets = within(projectPanel).getByLabelText("Assets");
       expect(assets.textContent).toContain("Recoverable asset");
-      expect(assets.textContent).toContain("glb · referenced");
+      expect(assets.textContent).toContain("glb");
+      expect(assets.textContent).toContain("missing payload");
+      expect(assets.textContent).toContain("1 refs");
       expect(screen.getByTestId("starter-overlay").textContent).toContain("3 objects");
       expect(screen.getByText("Selection Simple box")).toBeTruthy();
 

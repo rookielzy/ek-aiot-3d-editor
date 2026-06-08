@@ -44,7 +44,10 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
       expect(text(section(host, "Hierarchy"))).toContain("Ambient light");
     });
     expect(text(section(host, "Assets"))).toContain("Recoverable asset");
-    expect(text(section(host, "Assets"))).toContain("glb · referenced");
+    expect(text(section(host, "Assets"))).toContain("glb");
+    expect(text(section(host, "Assets"))).toContain("ready");
+    expect(text(section(host, "Assets"))).toContain("1 refs");
+    assertAssetWorkspaceLayout(host);
     expect(text(testId(host, "starter-overlay"))).toContain("3 objects");
     expect(text(host)).toContain("Selection Simple box");
 
@@ -111,6 +114,7 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
       expect(text(host)).toContain("Problems 0");
     });
     expect(text(section(host, "Assets"))).toContain("Recoverable asset");
+    expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("Import assets");
   } finally {
     restoreDownloadCapture();
   }
@@ -217,6 +221,34 @@ function testId(host: HTMLElement, id: string): HTMLElement {
 
 function text(element: Element): string {
   return element.textContent?.replace(/\s+/g, " ").trim() ?? "";
+}
+
+function assertAssetWorkspaceLayout(host: HTMLElement): void {
+  const assets = section(host, "Assets");
+  const originalWidth = host.style.width;
+  try {
+    for (const width of ["1280px", "390px"]) {
+      host.style.width = width;
+      window.dispatchEvent(new Event("resize"));
+      const panelRect = assets.getBoundingClientRect();
+      expect(panelRect.width).toBeGreaterThan(0);
+      for (const selector of [
+        ".ek-workbench__asset-import",
+        ".ek-workbench__asset-controls",
+        ".ek-workbench__asset-list",
+        ".ek-workbench__asset-row"
+      ]) {
+        const element = assets.querySelector(selector) as HTMLElement | null;
+        expect(element, `Expected ${selector} in Assets`).toBeTruthy();
+        const rect = element!.getBoundingClientRect();
+        expect(rect.left).toBeGreaterThanOrEqual(panelRect.left - 1);
+        expect(rect.right).toBeLessThanOrEqual(panelRect.right + 1);
+      }
+    }
+  } finally {
+    host.style.width = originalWidth;
+    window.dispatchEvent(new Event("resize"));
+  }
 }
 
 function findFieldInput(host: HTMLElement, label: string, selector: string): Element | null {

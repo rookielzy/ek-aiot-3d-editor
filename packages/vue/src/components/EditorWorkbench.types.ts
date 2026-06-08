@@ -1,10 +1,10 @@
-import type { AssetResolverBridge, Editor, EditorOptions, EditorRuntime, EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
+import type { AssetResolverBridge, EditorOptions, EditorRuntime, EditorRuntimeOptions, EditorWithGlbImport } from "@ek-aiot/3d-editor-core";
 import type { WorkbenchContext } from "../composables/use-workbench";
 
 export type WorkbenchRegionName = "toolbar" | "leftPanel" | "sidePanel" | "viewportOverlay" | "rightPanel" | "status";
 
 export interface EditorWorkbenchProps {
-  editor?: Editor;
+  editor?: EditorWithGlbImport;
   snapshot?: EditorOptions["snapshot"];
   resolver?: AssetResolverBridge;
   loader?: EditorRuntimeOptions["loader"];

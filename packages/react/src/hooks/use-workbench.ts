@@ -2,6 +2,7 @@ import { useCallback, useSyncExternalStore } from "react";
 import {
   type Command,
   type Editor,
+  type EditorWithGlbImport,
   type EditorAction,
   type EditorOptions,
   type EditorRuntime,
@@ -9,6 +10,8 @@ import {
   type AssetWorkspacePayloadSummary,
   type WorkbenchModel,
   type WorkbenchProblemItem,
+  type WorkbenchAssetImportOptions,
+  type WorkbenchAssetImportResult,
   type HistoryState,
   type InspectorModel,
   type Problem,
@@ -16,6 +19,7 @@ import {
   type ProjectExportResult,
   type ProjectImportOptions,
   type ProjectImportResult,
+  type EditorRuntimeOptions,
   type RuntimeCameraFrameOptions,
   type ReplaceAssetInput,
   type ReplaceAssetResult,
@@ -29,7 +33,8 @@ import { useEditor } from "./use-editor";
 import { useInspector } from "./use-inspector";
 
 export interface UseWorkbenchOptions extends EditorOptions {
-  editor?: Editor;
+  editor?: EditorWithGlbImport;
+  loader?: EditorRuntimeOptions["loader"];
 }
 
 export interface WorkbenchSelectionContext {
@@ -64,6 +69,7 @@ export interface WorkbenchProjectContext {
 export interface WorkbenchAssetContext {
   payloads?: AssetWorkspacePayloadSummary[];
   workspaceVersion?: number;
+  importFiles(options: Omit<WorkbenchAssetImportOptions, "loader"> & { loader?: WorkbenchAssetImportOptions["loader"] }): Promise<WorkbenchAssetImportResult[]>;
   replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
 }
 
@@ -77,7 +83,7 @@ export interface WorkbenchProblemsContext {
 }
 
 export interface WorkbenchContext {
-  editor: Editor;
+  editor: EditorWithGlbImport;
   model: WorkbenchModel;
   snapshot: SceneSnapshot;
   inspector: InspectorModel;
@@ -116,6 +122,7 @@ export interface WorkbenchContext {
   importProject(packageBytes: Uint8Array, options?: ProjectImportOptions): ProjectImportResult;
   exportProject(options?: ProjectExportOptions): ProjectExportResult;
   replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
+  importAssetFiles(options: Omit<WorkbenchAssetImportOptions, "loader"> & { loader?: WorkbenchAssetImportOptions["loader"] }): Promise<WorkbenchAssetImportResult[]>;
 }
 
 export interface UseWorkbenchResult extends WorkbenchContext {
@@ -124,7 +131,7 @@ export interface UseWorkbenchResult extends WorkbenchContext {
 }
 
 export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchResult {
-  const editor = useEditor(options);
+  const editor = useEditor(options) as EditorWithGlbImport;
   const snap = useSyncExternalStore(
     (listener) => editor.subscribeSnap(listener),
     () => editor.snap.get(),
@@ -165,6 +172,11 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     editor.importProject(packageBytes, projectOptions), [editor]);
   const exportProject = useCallback((projectOptions?: ProjectExportOptions) => editor.exportProject(projectOptions), [editor]);
   const replaceAsset = useCallback((input: ReplaceAssetInput) => editor.replaceAsset(input), [editor]);
+  const importAssetFiles = useCallback((assetOptions: Omit<WorkbenchAssetImportOptions, "loader"> & { loader?: WorkbenchAssetImportOptions["loader"] }) =>
+    editor.importWorkbenchAssets({
+      ...assetOptions,
+      loader: assetOptions.loader ?? options.loader
+    }), [editor, options.loader]);
   const dispose = useCallback(() => {
     if (ownsEditor) {
       editor.dispose();
@@ -216,6 +228,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   const assets: WorkbenchAssetContext = {
     payloads: assetPayloads,
     workspaceVersion: assetWorkspaceVersion,
+    importFiles: importAssetFiles,
     replaceAsset
   };
   const problems: WorkbenchProblemsContext = {
@@ -266,6 +279,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     dispatch,
     importProject,
     exportProject,
+    importAssetFiles,
     replaceAsset,
     ownsEditor,
     dispose

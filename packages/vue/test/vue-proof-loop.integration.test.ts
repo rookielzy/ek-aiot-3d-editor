@@ -87,7 +87,9 @@ describe("Vue proof-loop parity", () => {
       expect(hierarchy.text()).toContain("Ambient light");
       const assets = projectPanel.get('[aria-label="Assets"]');
       expect(assets.text()).toContain("Recoverable asset");
-      expect(assets.text()).toContain("glb · referenced");
+      expect(assets.text()).toContain("glb");
+      expect(assets.text()).toContain("missing payload");
+      expect(assets.text()).toContain("1 refs");
       expect(wrapper.get('[data-testid="starter-overlay"]').text()).toContain("3 objects");
       expect(wrapper.text()).toContain("Selection Simple box");
 

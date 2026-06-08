@@ -104,6 +104,22 @@ const workspace = buildAssetWorkspaceModel(editor.getSnapshot(), {
 
 如果只替换 payload，Snapshot 可能不会变化。用 `editor.subscribeAssetWorkspace()` 监听 workspace 版本，并在回调中重新读取 `editor.getAssetWorkspacePayloads()`。workspace rows 是 JSON-compatible UI projection；不要把 transient project store、`File`、`Blob`、object URL 或 resolver 输出保存成 durable state。
 
+Core-only host 可以复用和 React/Vue 默认 Workbench 相同的本地导入桥：
+
+```ts
+const results = await editor.importWorkbenchAssets({
+  loader,
+  rasterKind: "texture",
+  files: [
+    { name: file.name, mimeType: file.type, source: file }
+  ]
+});
+```
+
+`.glb` 会走 `editor.importGlbAsset({ commit: true })`，因此 decoder-aware manifest 和 diagnostics 会进入 workspace row；`.hdr` 会注册为 HDR asset；PNG/JPG/WebP/SVG 等 raster 文件需要 host 明确传入 `rasterKind: "texture"` 或 `"image"`，避免把 authoring intent 从 MIME type 硬猜出来。每个文件独立返回成功或失败，某个文件失败不会回滚同批次已提交的资产。
+
+`results` 是可显示的 transient operation result，不是 durable project data。不要把其中的 UI queue 状态、`File`、`Blob`、object URL、loader/parser、Three.js object 或 decoder 对象写入 Snapshot 或 `.ek3d`。
+
 ## 自定义 loader 或 renderer
 
 测试或宿主环境可以传入自定义 loader / renderer factory：

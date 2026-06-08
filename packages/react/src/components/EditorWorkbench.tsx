@@ -61,7 +61,7 @@ export function EditorWorkbench({
   viewportOverlay,
   status
 }: EditorWorkbenchProps) {
-  const workbench = useWorkbench({ editor: providedEditor, snapshot });
+  const workbench = useWorkbench({ editor: providedEditor, snapshot, loader });
   const pendingDisposeRef = useRef<{ dispose(): void; timer: ReturnType<typeof setTimeout> } | null>(null);
   const rootRef = useRef<HTMLElement | null>(null);
 

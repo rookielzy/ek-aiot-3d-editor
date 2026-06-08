@@ -1,6 +1,8 @@
 import { AssetRegistry } from "../assets/registry";
 import { AssetResolverBridge } from "../assets/resolver";
 import type { AssetInput } from "../assets/types";
+import { importWorkbenchAssets } from "../assets/workspace-import";
+import type { WorkbenchAssetImportOptions, WorkbenchAssetImportResult } from "../assets/workspace-import";
 import {
   attachGlbImportManifestMetadata,
   createGlbImportDiagnosticsFromError,
@@ -278,6 +280,11 @@ export class CoreEditor implements EditorWithGlbImport {
       }
       revoke?.();
     }
+  }
+
+  importWorkbenchAssets(options: WorkbenchAssetImportOptions): Promise<WorkbenchAssetImportResult[]> {
+    this.#assertActive();
+    return importWorkbenchAssets(this, options);
   }
 
   async replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult> {

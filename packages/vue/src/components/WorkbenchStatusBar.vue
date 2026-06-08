@@ -5,6 +5,9 @@
     <span>Redo {{ status.redoCount }}</span>
     <span>Runtime {{ status.runtimeReady ? "ready" : "missing" }}</span>
     <span>Project {{ project.statusLabel }}</span>
+    <span v-if="workspace">
+      Assets {{ workspace.totalCount }} · missing {{ workspace.missingPayloadCount + workspace.missingReferenceCount }} · blocked {{ workspace.readiness.blockingAssetIds.length }}
+    </span>
     <span>{{ status.dirty ? "Dirty" : "Saved" }}</span>
     <span>Problems {{ status.problemCount }}</span>
     <span v-if="status.problemCount > 0">
@@ -23,4 +26,5 @@ const props = defineProps<{
 
 const status = computed(() => props.context.model.status);
 const project = computed(() => props.context.model.project);
+const workspace = computed(() => props.context.model.assets.workspace);
 </script>

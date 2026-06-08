@@ -1,10 +1,12 @@
 import React, { StrictMode } from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Group } from "three";
 import { describe, expect, it, vi } from "vitest";
 import {
   AssetResolverBridge,
+  buildAssetWorkspaceModel,
   createEditor,
+  filterAssetWorkspaceItems,
   ThreeGltfLoaderAdapter,
   type EditorRuntimeOptions,
   type RendererLike
@@ -132,6 +134,88 @@ describe("React EditorWorkbench", () => {
     render(<EditorWorkbench editor={editor} loader={loader} rendererFactory={fakeRenderer} />);
 
     expect(mountRuntime).toHaveBeenCalledWith(expect.objectContaining({ loader }));
+  });
+
+  it("imports GLB files through the default asset workspace using the Workbench loader", async () => {
+    const editor = createEditor();
+    const scene = new Group();
+    const loader: EditorRuntimeOptions["loader"] = {
+      load: vi.fn(async () => scene),
+      analyze: vi.fn(async () => ({ scene }))
+    };
+    const urls = mockObjectUrls();
+
+    render(<EditorWorkbench editor={editor} loader={loader} rendererFactory={fakeRenderer} />);
+
+    const input = screen.getByLabelText("Import assets") as HTMLInputElement;
+    const file = new File([new Uint8Array([1, 2, 3])], "robot.glb", { type: "model/gltf-binary" });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    expect(await screen.findByText(/Imported asset-/)).toBeTruthy();
+    expect(loader.analyze).toHaveBeenCalledWith(expect.objectContaining({
+      uri: "blob:react-workbench-0",
+      mimeType: "model/gltf-binary"
+    }));
+    const rows = within(screen.getByLabelText("Asset workspace rows"));
+    expect(rows.getByText("robot.glb")).toBeTruthy();
+    expect(rows.getByText("glb")).toBeTruthy();
+    expect(Object.values(editor.getSnapshot().objects)[0]).toMatchObject({
+      name: "robot",
+      asset: { kind: "glb", label: "robot.glb" }
+    });
+    urls.restore();
+  });
+
+  it("keeps failed import queue rows visible while committing successful batch assets", async () => {
+    const editor = createEditor();
+    const urls = mockObjectUrls();
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+
+    const input = screen.getByLabelText("Import assets") as HTMLInputElement;
+    fireEvent.change(input, {
+      target: {
+        files: [
+          new File([new Uint8Array([1])], "paint.png", { type: "image/png" }),
+          new File([new Uint8Array([2])], "notes.txt", { type: "text/plain" })
+        ]
+      }
+    });
+
+    await waitFor(() => {
+      expect(Object.values(editor.getSnapshot().assets)).toEqual([
+        expect.objectContaining({ kind: "texture", label: "paint.png" })
+      ]);
+      expect(within(screen.getByLabelText("Asset import queue")).getAllByText(/Unsupported asset type/).length).toBeGreaterThan(0);
+    });
+    expect(within(screen.getByLabelText("Asset import queue")).getByText(/paint.png/)).toBeTruthy();
+    expect(Object.values(editor.getSnapshot().assets)).toEqual([
+      expect.objectContaining({ kind: "texture", label: "paint.png" })
+    ]);
+    expect(within(screen.getByLabelText("Asset workspace rows")).getByText("texture")).toBeTruthy();
+    urls.restore();
+  });
+
+  it("filters asset rows using core workspace search semantics", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "register-asset", asset: { id: "texture-a", kind: "texture", label: "Panel paint", source: new Uint8Array([1]) } });
+    editor.dispatch({ type: "register-asset", asset: { id: "image-a", kind: "image", label: "Manual label", source: new Uint8Array([2]) } });
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+
+    const expectedIds = filterAssetWorkspaceItems(
+      buildAssetWorkspaceModel(editor.getSnapshot(), {
+        payloads: editor.getAssetWorkspacePayloads()
+      }).items,
+      { query: "manual" }
+    ).map((item) => item.id);
+
+    act(() => {
+      fireEvent.change(screen.getByLabelText("Search assets"), { target: { value: "manual" } });
+    });
+
+    expect(expectedIds).toEqual(["image-a"]);
+    const rows = within(screen.getByLabelText("Asset workspace rows"));
+    expect(rows.getByText("Manual label")).toBeTruthy();
+    expect(rows.queryByText("Panel paint")).toBeNull();
   });
 
   it("routes default project open and export controls through core project APIs", async () => {
@@ -576,5 +660,27 @@ function renderHookWithResult<T>(callback: () => T) {
   return {
     ...view,
     result: () => value!
+  };
+}
+
+function mockObjectUrls(): {
+  createObjectURL: ReturnType<typeof vi.fn>;
+  revokeObjectURL: ReturnType<typeof vi.fn>;
+  restore(): void;
+} {
+  let count = 0;
+  const originalCreate = URL.createObjectURL;
+  const originalRevoke = URL.revokeObjectURL;
+  const createObjectURL = vi.fn(() => `blob:react-workbench-${count++}`);
+  const revokeObjectURL = vi.fn();
+  URL.createObjectURL = createObjectURL;
+  URL.revokeObjectURL = revokeObjectURL;
+  return {
+    createObjectURL,
+    revokeObjectURL,
+    restore() {
+      URL.createObjectURL = originalCreate;
+      URL.revokeObjectURL = originalRevoke;
+    }
   };
 }

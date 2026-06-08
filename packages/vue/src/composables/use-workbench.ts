@@ -8,11 +8,15 @@ import {
   type AssetWorkspacePayloadSummary,
   type Command,
   type Editor,
+  type EditorWithGlbImport,
   type EditorAction,
   type EditorOptions,
   type EditorRuntime,
+  type EditorRuntimeOptions,
   type WorkbenchModel,
   type WorkbenchProblemItem,
+  type WorkbenchAssetImportOptions,
+  type WorkbenchAssetImportResult,
   type HistoryState,
   type InspectorModel,
   type Problem,
@@ -30,7 +34,8 @@ import {
 } from "@ek-aiot/3d-editor-core";
 
 export interface UseWorkbenchOptions extends EditorOptions {
-  editor?: Editor | Ref<Editor | undefined>;
+  editor?: EditorWithGlbImport | Ref<EditorWithGlbImport | undefined>;
+  loader?: EditorRuntimeOptions["loader"] | Ref<EditorRuntimeOptions["loader"] | undefined>;
 }
 
 export interface WorkbenchSelectionContext {
@@ -65,6 +70,7 @@ export interface WorkbenchProjectContext {
 export interface WorkbenchAssetContext {
   payloads?: AssetWorkspacePayloadSummary[];
   workspaceVersion?: number;
+  importFiles(options: Omit<WorkbenchAssetImportOptions, "loader"> & { loader?: WorkbenchAssetImportOptions["loader"] }): Promise<WorkbenchAssetImportResult[]>;
   replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
 }
 
@@ -78,7 +84,7 @@ export interface WorkbenchProblemsContext {
 }
 
 export interface WorkbenchContext {
-  editor: Editor;
+  editor: EditorWithGlbImport;
   model: WorkbenchModel;
   snapshot: SceneSnapshot;
   inspector: InspectorModel;
@@ -116,11 +122,12 @@ export interface WorkbenchContext {
   dispatch(command: Command): ReturnType<Editor["dispatch"]>;
   importProject(packageBytes: Uint8Array, options?: ProjectImportOptions): ProjectImportResult;
   exportProject(options?: ProjectExportOptions): ProjectExportResult;
+  importAssetFiles(options: Omit<WorkbenchAssetImportOptions, "loader"> & { loader?: WorkbenchAssetImportOptions["loader"] }): Promise<WorkbenchAssetImportResult[]>;
   replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
 }
 
 export interface UseWorkbenchResult {
-  editor: Editor;
+  editor: EditorWithGlbImport;
   snapshot: ShallowRef<SceneSnapshot>;
   inspector: ComputedRef<InspectorModel>;
   model: ComputedRef<WorkbenchModel>;
@@ -142,6 +149,7 @@ export interface UseWorkbenchResult {
   dispatch(command: Command): ReturnType<Editor["dispatch"]>;
   importProject(packageBytes: Uint8Array, options?: ProjectImportOptions): ProjectImportResult;
   exportProject(options?: ProjectExportOptions): ProjectExportResult;
+  importAssetFiles(options: Omit<WorkbenchAssetImportOptions, "loader"> & { loader?: WorkbenchAssetImportOptions["loader"] }): Promise<WorkbenchAssetImportResult[]>;
   replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
   dispose(): void;
 }
@@ -149,7 +157,7 @@ export interface UseWorkbenchResult {
 export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchResult {
   const editorOption = isRefOption(options.editor) ? options.editor : undefined;
   const initialEditor = resolveInitialEditor(options, editorOption);
-  const currentEditor = shallowRef<Editor>(markRaw(initialEditor));
+  const currentEditor = shallowRef<EditorWithGlbImport>(markRaw(initialEditor));
   const ownsCurrentEditor = ref(editorOption ? !editorOption.value : !options.editor);
   const snapshot = shallowRef(currentEditor.value.getSnapshot());
   const snap = shallowRef<SnapSettings>(currentEditor.value.snap.get());
@@ -284,6 +292,13 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     return currentEditor.value.exportProject(projectOptions);
   }
 
+  function importAssetFiles(assetOptions: Omit<WorkbenchAssetImportOptions, "loader"> & { loader?: WorkbenchAssetImportOptions["loader"] }): Promise<WorkbenchAssetImportResult[]> {
+    return currentEditor.value.importWorkbenchAssets({
+      ...assetOptions,
+      loader: assetOptions.loader ?? resolveLoader(options.loader)
+    });
+  }
+
   function replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult> {
     return currentEditor.value.replaceAsset(input);
   }
@@ -358,6 +373,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     assets: {
       payloads: getAssetWorkspacePayloads(currentEditor.value),
       workspaceVersion: assetWorkspaceVersion.value,
+      importFiles: importAssetFiles,
       replaceAsset
     },
     problems: {
@@ -395,6 +411,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     dispatch,
     importProject,
     exportProject,
+    importAssetFiles,
     replaceAsset
   }));
 
@@ -425,16 +442,17 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     dispatch,
     importProject,
     exportProject,
+    importAssetFiles,
     replaceAsset,
     dispose
   };
 }
 
-function isRefOption(value: UseWorkbenchOptions["editor"]): value is Ref<Editor | undefined> {
-  return Boolean(value && typeof value === "object" && "value" in value);
+function isRefOption(value: UseWorkbenchOptions["editor"]): value is Ref<EditorWithGlbImport | undefined> {
+  return isRefValue<EditorWithGlbImport | undefined>(value);
 }
 
-function resolveInitialEditor(options: UseWorkbenchOptions, editorOption: Ref<Editor | undefined> | undefined): Editor {
+function resolveInitialEditor(options: UseWorkbenchOptions, editorOption: Ref<EditorWithGlbImport | undefined> | undefined): EditorWithGlbImport {
   if (editorOption?.value) {
     return editorOption.value;
   }
@@ -461,4 +479,12 @@ function getAssetWorkspacePayloads(editor: Editor): AssetWorkspacePayloadSummary
 
 function getAssetWorkspaceVersion(editor: Editor): number {
   return editor.getAssetWorkspaceVersion?.() ?? 0;
+}
+
+function resolveLoader(loader: UseWorkbenchOptions["loader"]): EditorRuntimeOptions["loader"] | undefined {
+  return isRefValue<EditorRuntimeOptions["loader"] | undefined>(loader) ? loader.value : loader;
+}
+
+function isRefValue<T>(value: unknown): value is Ref<T> {
+  return Boolean(value && typeof value === "object" && "value" in value);
 }

@@ -12,8 +12,10 @@ import {
   buildAssetWorkspaceModel,
   buildInspectorModel,
   buildWorkbenchModel,
+  classifyWorkbenchAssetImportFile,
   filterAssetWorkspaceItems,
   GLB_IMPORT_MANIFEST_METADATA_KEY,
+  importWorkbenchAssets,
   sortAssetWorkspaceItems,
   buildSetTransformCommand,
   ThreeGltfLoaderAdapter,
@@ -85,7 +87,10 @@ import {
   type TransformVectorName,
   type UngroupNodesCommand,
   type UpdateLightCommand,
-  type WorkbenchModel
+  type WorkbenchAssetImportOptions,
+  type WorkbenchAssetImportResult,
+  type WorkbenchModel,
+  type WorkbenchRasterImportKind
 } from "./index";
 
 describe("core public API", () => {
@@ -151,7 +156,7 @@ describe("core public API", () => {
     expect(publicApi).not.toHaveProperty("exportProjectPackage");
   });
 
-  it("exports expanded schema and command contracts from the package root", () => {
+  it("exports expanded schema and command contracts from the package root", async () => {
     const command: SetMaterialCommand = {
       type: "set-material",
       target: { kind: "object", objectId: "object-a" },
@@ -256,6 +261,20 @@ describe("core public API", () => {
       snapshot: createEmptySnapshot("scene-import"),
       committed: false
     };
+    const rasterKind: WorkbenchRasterImportKind = "texture";
+    const workspaceImportOptions: WorkbenchAssetImportOptions = {
+      rasterKind,
+      files: [{ name: "texture.png", source: new Uint8Array([1]), mimeType: "image/png" }]
+    };
+    const workspaceImportResult: WorkbenchAssetImportResult = {
+      label: "texture.png",
+      kind: "texture",
+      status: "succeeded",
+      assetId: "asset-a",
+      committed: true,
+      diagnostics: [],
+      snapshot: createEmptySnapshot("scene-import-result")
+    };
     const editorWithImport: EditorWithGlbImport = createEditor();
     const baseEditor: Editor = editorWithImport;
 
@@ -312,6 +331,13 @@ describe("core public API", () => {
     expect(importResult.committed).toBe(false);
     expect(legacyLoaderAdapter.analyze).toBeUndefined();
     expect(typeof editorWithImport.importGlbAsset).toBe("function");
+    expect(typeof editorWithImport.importWorkbenchAssets).toBe("function");
+    expect(workspaceImportOptions.rasterKind).toBe("texture");
+    expect(workspaceImportResult.status).toBe("succeeded");
+    expect(classifyWorkbenchAssetImportFile({ name: "texture.png", source: new Uint8Array([1]) }, rasterKind)).toMatchObject({
+      kind: "texture"
+    });
+    await expect(importWorkbenchAssets(editorWithImport, { files: [] })).resolves.toEqual([]);
     expect(baseEditor.getSnapshot()).toMatchObject({ scene: { id: expect.any(String) } });
     editorWithImport.dispose();
   });

@@ -110,6 +110,8 @@ workspace 不保存也不暴露 payload bytes、`Blob`、`File`、object URL、r
 
 payload-only 变化也会更新 workspace。例如 `replaceAsset()` 成功后，稳定 asset ID 不变，Snapshot 不一定变化，但 `editor.subscribeAssetWorkspace()` 会通知消费者重新读取 `editor.getAssetWorkspacePayloads()` 并重建 Workbench/workspace model。
 
+默认 React/Vue Workbench 的导入队列不是项目包协议的一部分。多文件导入、drag hover、当前 raster intent、importing/succeeded/failed queue rows 和 file input value 都是 UI transient state。导入成功后，只有 core command 产生的 asset reference、GLB import manifest metadata 和 project payload 摘要会通过 Snapshot/`.ek3d` 或 workspace projection 体现。
+
 ## 替换缺失资产
 
 如果导入后某个资产 payload 缺失或 runtime resolver 失败，UI 可以让用户选择新文件，然后用原 asset ID 替换 transient payload：
