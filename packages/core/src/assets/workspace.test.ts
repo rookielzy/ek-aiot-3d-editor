@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createMissingAssetProblem } from "./problems";
+import { attachGlbImportManifestMetadata, createGlbImportDiagnosticsFromError, createGlbImportManifest } from "./import-pipeline";
 import {
   buildAssetWorkspaceModel,
   collectAssetReferenceLocations,
@@ -268,6 +269,76 @@ describe("asset workspace", () => {
       problemCount: 1,
       actionLabel: "Replace asset"
     });
+  });
+
+  it("projects GLB import manifest status and diagnostics onto asset rows", () => {
+    const editor = createEditor();
+    const manifest = createGlbImportManifest({
+      diagnostics: createGlbImportDiagnosticsFromError(new Error("THREE.GLTFLoader: No DRACOLoader instance provided."))
+    });
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: {
+        id: "glb-a",
+        label: "Compressed GLB",
+        metadata: attachGlbImportManifestMetadata(undefined, manifest)
+      }
+    });
+
+    const workspace = buildAssetWorkspaceModel(editor.getSnapshot());
+    const item = workspace.items.find((candidate) => candidate.id === "glb-a");
+
+    expect(item).toMatchObject({
+      importStatus: "failed",
+      problemCount: 1,
+      highestProblemSeverity: "error",
+      actionLabel: "Configure decoder"
+    });
+    expect(item?.importManifest).toEqual(manifest);
+    expect(item?.importDiagnostics[0]).toMatchObject({
+      code: "glb-decoder-missing",
+      assetId: "glb-a",
+      target: { kind: "asset", assetId: "glb-a" }
+    });
+    expect(JSON.stringify(workspace)).not.toContain("Object3D");
+    expect(JSON.stringify(workspace)).not.toContain("blob:");
+  });
+
+  it("does not duplicate GLB manifest diagnostics already reported by runtime", () => {
+    const editor = createEditor();
+    const diagnostic = createGlbImportDiagnosticsFromError(new Error("THREE.GLTFLoader: No DRACOLoader instance provided."))[0]!;
+    const manifest = createGlbImportManifest({ diagnostics: [diagnostic] });
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: {
+        id: "glb-a",
+        metadata: attachGlbImportManifestMetadata(undefined, manifest)
+      }
+    });
+
+    const workspace = buildAssetWorkspaceModel(editor.getSnapshot(), {
+      problems: [{
+        id: "glb-import:glb-a:object-a:glb-decoder-missing:KHR_draco_mesh_compression",
+        severity: diagnostic.severity,
+        code: diagnostic.code,
+        source: "runtime",
+        target: { kind: "object", objectId: "object-a" },
+        title: diagnostic.display.title,
+        detail: diagnostic.display.detail ?? diagnostic.message,
+        recoverability: diagnostic.recoverability,
+        actionLabel: diagnostic.display.actionLabel,
+        assetId: "glb-a",
+        objectId: "object-a",
+        project: false
+      }]
+    });
+    const item = workspace.items.find((candidate) => candidate.id === "glb-a");
+
+    expect(item?.importDiagnostics).toEqual([]);
+    expect(item?.problemIds).toEqual(["glb-import:glb-a:object-a:glb-decoder-missing:KHR_draco_mesh_compression"]);
+    expect(item?.problemCount).toBe(1);
   });
 
   it("filters and sorts rows using core-owned semantics", () => {

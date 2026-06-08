@@ -1,4 +1,4 @@
-import { AssetResolverBridge, createEditor } from "@ek-aiot/3d-editor-core";
+import { AssetResolverBridge, createEditor, ThreeGltfLoaderAdapter } from "@ek-aiot/3d-editor-core";
 
 export async function runVanillaProofLoop(container: HTMLElement) {
   const editor = createEditor();
@@ -6,7 +6,15 @@ export async function runVanillaProofLoop(container: HTMLElement) {
     container,
     resolver: new AssetResolverBridge((asset) => ({
       uri: `/assets/${asset.id}.glb`
-    }))
+    })),
+    loader: new ThreeGltfLoaderAdapter({
+      decoders: {
+        // Hosts provide ready decoder instances or factories here when their GLBs require them.
+        // draco: () => dracoLoader,
+        // ktx2: () => ktx2Loader,
+        // meshopt: () => MeshoptDecoder
+      }
+    })
   });
 
   editor.dispatch({ type: "import-glb", objectId: "box", asset: { id: "simple-box", label: "Simple box" } });

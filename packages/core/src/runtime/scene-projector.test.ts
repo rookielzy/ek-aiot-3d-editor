@@ -1,11 +1,13 @@
 import { AmbientLight, BoxGeometry, Group, Mesh, MeshStandardMaterial, PointLight, Texture } from "three";
 import { describe, expect, it, vi } from "vitest";
+import { createGlbImportDiagnosticsFromError, createGlbImportManifest } from "../assets/import-pipeline";
 import { AssetResolverBridge } from "../assets/resolver";
 import { AssetRegistry } from "../assets/registry";
 import { CommandDispatcher } from "../commands/dispatcher";
 import { EditorStore } from "../editor/store";
 import { CommandHistory } from "../history/history";
 import type { RuntimePmremAdapter } from "./pmrem-adapter";
+import { GlbImportError, ThreeGltfLoaderAdapter } from "./gltf-loader-adapter";
 import { SceneProjector } from "./scene-projector";
 
 describe("scene projector", () => {
@@ -140,6 +142,87 @@ describe("scene projector", () => {
       display: { title: "Asset failed to load" }
     }]);
     expect(store.getSnapshot().problems.acknowledged).toEqual({});
+  });
+
+  it("converts structured GLB loader diagnostics into runtime problems", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    const diagnostics = createGlbImportDiagnosticsFromError(
+      new Error("THREE.GLTFLoader: setKTX2Loader must be called before loading KTX2 textures")
+    );
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/ktx2.glb" })),
+      loader: {
+        load: async () => new Group(),
+        analyze: async () => ({
+          scene: new Group(),
+          manifest: createGlbImportManifest({ diagnostics }),
+          diagnostics
+        })
+      }
+    });
+
+    await projector.project(store.getSnapshot());
+
+    expect(projector.objects.get("object-a")).toBeInstanceOf(Group);
+    expect(projector.problems).toMatchObject([{
+      code: "glb-decoder-missing",
+      source: "runtime",
+      target: { kind: "object", objectId: "object-a" },
+      assetId: "asset-a",
+      objectId: "object-a",
+      recoverability: "user-action",
+      display: { actionLabel: "Configure decoder" }
+    }]);
+    expect(store.getSnapshot().problems.acknowledged).toEqual({});
+  });
+
+  it("uses GLB import diagnostics instead of generic load failures when decoder config is missing", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    const diagnostics = createGlbImportDiagnosticsFromError(new Error("THREE.GLTFLoader: No DRACOLoader instance provided."));
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/draco.glb" })),
+      loader: {
+        load: async () => {
+          throw new GlbImportError("missing draco", diagnostics);
+        }
+      }
+    });
+
+    await projector.project(store.getSnapshot());
+
+    expect(projector.objects.get("object-a")?.userData.problem).toBe(true);
+    expect(projector.problems.map((problem) => problem.code)).toEqual(["glb-decoder-missing"]);
+  });
+
+  it("uses GLB diagnostics when adapter decoder setup fails before load", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/ktx2.glb" })),
+      loader: new ThreeGltfLoaderAdapter({
+        loaderFactory: () => createFakeGltfLoader() as never,
+        decoders: {
+          ktx2: () => {
+            throw new Error("THREE.GLTFLoader: setKTX2Loader must be called before loading KTX2 textures");
+          }
+        }
+      })
+    });
+
+    await projector.project(store.getSnapshot());
+
+    expect(projector.objects.get("object-a")?.userData.problem).toBe(true);
+    expect(projector.problems).toMatchObject([{
+      code: "glb-decoder-missing",
+      target: { kind: "object", objectId: "object-a" },
+      assetId: "asset-a",
+      objectId: "object-a"
+    }]);
   });
 
   it("exposes structured runtime problems when GLB resolution throws", async () => {
@@ -388,3 +471,35 @@ describe("scene projector", () => {
     expect(textureDispose).toHaveBeenCalledTimes(1);
   });
 });
+
+function createFakeGltfLoader() {
+  return {
+    setDRACOLoader() {
+      return this;
+    },
+    setKTX2Loader() {
+      return this;
+    },
+    setMeshoptDecoder() {
+      return this;
+    },
+    load(_uri: string, onLoad: (gltf: unknown) => void) {
+      const scene = new Group();
+      onLoad({
+        scene,
+        scenes: [scene],
+        cameras: [],
+        animations: [],
+        asset: { version: "2.0" },
+        parser: {
+          json: {
+            asset: { version: "2.0" },
+            scenes: [{ nodes: [0] }],
+            nodes: [{ name: "Loaded" }]
+          }
+        },
+        userData: {}
+      });
+    }
+  };
+}

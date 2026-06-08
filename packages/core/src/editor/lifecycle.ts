@@ -1,26 +1,36 @@
 import { AssetRegistry } from "../assets/registry";
 import { AssetResolverBridge } from "../assets/resolver";
 import type { AssetInput } from "../assets/types";
+import {
+  attachGlbImportManifestMetadata,
+  createGlbImportDiagnosticsFromError,
+  createGlbImportManifest,
+  type GlbImportDiagnostic,
+  normalizeGltfLoaderOutput,
+  sanitizeGlbImportManifestForMetadata
+} from "../assets/import-pipeline";
 import { CommandDispatcher } from "../commands/dispatcher";
 import type { Command, CommandResult } from "../commands/types";
 import { CommandHistory, type HistoryState } from "../history/history";
 import { defaultArchiveAdapter } from "../project/archive-adapter";
-import { ProjectAssetStore } from "../project/asset-store";
+import { blobToBytes, checksumBytes, normalizeProjectAssetSource, ProjectAssetStore } from "../project/asset-store";
 import { exportProjectPackage } from "../project/export-project";
 import { importProjectAssets } from "../project/import-project";
 import { replaceProjectAsset } from "../project/replace-asset";
 import type { ProjectAssetPayloadSummary, ProjectAssetSourceInput } from "../project/project-api";
 import type { ProjectExportOptions, ProjectExportResult, ProjectImportOptions, ProjectImportResult, ReplaceAssetInput, ReplaceAssetResult } from "../project/project-api";
 import { ThreeEditorRuntime, type EditorRuntime } from "../runtime/editor-runtime";
+import { disposeObjectTree } from "../runtime/disposal";
+import { GlbImportError, ThreeGltfLoaderAdapter } from "../runtime/gltf-loader-adapter";
 import { EditorTransformModeState, type TransformModeSubscriber } from "../runtime/transform/transform-mode";
 import type { SceneSnapshot, SerializedSceneSnapshot } from "../snapshot/types";
 import { createAdvancedEditorOperations, createMemoryClipboard, type AdvancedEditorOperations, type EditorClipboard } from "./operations";
 import { EditorSnapState, type SnapSubscriber } from "./snap-state";
 import { restoreSnapshot, serializeSnapshot } from "./serialization";
 import { EditorStore } from "./store";
-import type { AssetWorkspaceSubscriber, Editor, EditorOptions, MountRuntimeOptions, RuntimeSubscriber, SnapshotSubscriber } from "./editor-api";
+import type { AssetWorkspaceSubscriber, EditorOptions, EditorWithGlbImport, ImportGlbAssetOptions, ImportGlbAssetResult, MountRuntimeOptions, RuntimeSubscriber, SnapshotSubscriber } from "./editor-api";
 
-export class CoreEditor implements Editor {
+export class CoreEditor implements EditorWithGlbImport {
   readonly assets = new AssetRegistry();
   readonly projectAssets = new ProjectAssetStore();
   readonly history = new CommandHistory();
@@ -171,6 +181,105 @@ export class CoreEditor implements Editor {
     return exportProjectPackage(this.store.getSnapshot(), this.projectAssets, defaultArchiveAdapter, options);
   }
 
+  async importGlbAsset(options: ImportGlbAssetOptions): Promise<ImportGlbAssetResult> {
+    this.#assertActive();
+    const commit = options.commit ?? true;
+    const kind = options.asset.kind ?? "glb";
+    if (kind !== "glb") {
+      const diagnostic = createSourceInvalidDiagnostic("import-glb requires a GLB asset.");
+      return {
+        ok: false,
+        diagnostics: [diagnostic],
+        snapshot: this.store.getSnapshot(),
+        committed: false
+      };
+    }
+
+    let resolved;
+    let revoke: (() => void) | undefined;
+    try {
+      ({ resolved, revoke } = await createResolvedAssetForImport(options.asset));
+    } catch (error) {
+      const diagnostic = createSourceInvalidDiagnostic(error instanceof Error ? error.message : String(error));
+      return {
+        ok: false,
+        diagnostics: [diagnostic],
+        snapshot: this.store.getSnapshot(),
+        committed: false
+      };
+    }
+
+    let loadResult;
+    try {
+      const adapter = options.loader ?? new ThreeGltfLoaderAdapter();
+      loadResult = adapter.analyze
+        ? await adapter.analyze(resolved)
+        : normalizeGltfLoaderOutput(await adapter.load(resolved));
+      const manifest = sanitizeGlbImportManifestForMetadata(loadResult.manifest ?? createGlbImportManifest({
+        scene: loadResult.scene,
+        resolved,
+        diagnostics: loadResult.diagnostics
+      }));
+      const diagnostics = mergeDiagnostics(loadResult.diagnostics ?? [], manifest.diagnostics);
+
+      if (!commit) {
+        return {
+          ok: diagnostics.every((diagnostic) => diagnostic.severity !== "error"),
+          manifest,
+          diagnostics,
+          snapshot: this.store.getSnapshot(),
+          committed: false
+        };
+      }
+
+      if (diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
+        return {
+          ok: false,
+          manifest,
+          diagnostics,
+          snapshot: this.store.getSnapshot(),
+          committed: false
+        };
+      }
+
+      const commandResult = this.dispatch({
+        type: "import-glb",
+        objectId: options.objectId,
+        name: options.name,
+        parentId: options.parentId,
+        transform: options.transform,
+        asset: {
+          ...options.asset,
+          kind: "glb",
+          metadata: attachGlbImportManifestMetadata(options.asset.metadata, manifest)
+        }
+      });
+      return {
+        ok: commandResult.ok,
+        manifest,
+        diagnostics,
+        commandResult,
+        snapshot: commandResult.snapshot,
+        committed: commandResult.ok
+      };
+    } catch (error) {
+      const diagnostics = error instanceof GlbImportError
+        ? error.diagnostics
+        : createGlbImportDiagnosticsFromError(error);
+      return {
+        ok: false,
+        diagnostics,
+        snapshot: this.store.getSnapshot(),
+        committed: false
+      };
+    } finally {
+      if (loadResult) {
+        disposeObjectTree(loadResult.scene);
+      }
+      revoke?.();
+    }
+  }
+
   async replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult> {
     this.#assertActive();
     const result = await replaceProjectAsset(this.store.getSnapshot(), this.projectAssets, input);
@@ -286,4 +395,71 @@ export class CoreEditor implements Editor {
 
 function isProjectAssetSource(source: AssetInput["source"]): source is ProjectAssetSourceInput {
   return source !== undefined && source !== null;
+}
+
+async function createResolvedAssetForImport(asset: AssetInput) {
+  if (asset.source === undefined || asset.source === null) {
+    throw new Error("GLB import analysis requires a local asset source.");
+  }
+  const normalized = normalizeProjectAssetSource(asset.source);
+  const bytes = normalized.bytes ?? (normalized.blob ? await blobToBytes(normalized.blob) : undefined);
+  const blob = normalized.blob ?? (bytes ? new Blob([toBlobArrayBuffer(bytes)], normalized.mimeType ? { type: normalized.mimeType } : undefined) : undefined);
+  if (!blob) {
+    throw new Error("GLB import analysis requires bytes or a Blob source.");
+  }
+  const uri = typeof URL !== "undefined" && typeof URL.createObjectURL === "function"
+    ? URL.createObjectURL(blob)
+    : undefined;
+  if (!uri) {
+    throw new Error("GLB import analysis requires URL.createObjectURL support for local sources.");
+  }
+  return {
+    resolved: {
+      uri,
+      ...(normalized.mimeType ? { mimeType: normalized.mimeType } : {}),
+      metadata: {
+        ...(normalized.metadata ?? {}),
+        byteSize: bytes?.byteLength ?? blob.size,
+        ...(bytes ? { checksum: checksumBytes(bytes) } : {})
+      }
+    },
+    revoke: () => {
+      if (typeof URL !== "undefined" && typeof URL.revokeObjectURL === "function") {
+        URL.revokeObjectURL(uri);
+      }
+    }
+  };
+}
+
+function createSourceInvalidDiagnostic(message: string): GlbImportDiagnostic {
+  return {
+    id: "glb-source-invalid",
+    severity: "error",
+    code: "glb-source-invalid",
+    target: { kind: "asset" },
+    message,
+    recoverability: "user-action",
+    display: {
+      title: "GLB source is invalid",
+      detail: message,
+      actionLabel: "Choose GLB"
+    }
+  };
+}
+
+function mergeDiagnostics(
+  left: readonly GlbImportDiagnostic[],
+  right: readonly GlbImportDiagnostic[]
+): GlbImportDiagnostic[] {
+  const diagnostics = new Map<string, GlbImportDiagnostic>();
+  for (const diagnostic of [...left, ...right]) {
+    diagnostics.set(diagnostic.id, diagnostic);
+  }
+  return [...diagnostics.values()].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function toBlobArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
 }

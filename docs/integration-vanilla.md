@@ -13,15 +13,24 @@ pnpm add @ek-aiot/3d-editor-core three
 ## 最小用法
 
 ```ts
-import { AssetResolverBridge, createEditor } from "@ek-aiot/3d-editor-core";
+import { AssetResolverBridge, createEditor, ThreeGltfLoaderAdapter } from "@ek-aiot/3d-editor-core";
 
 const editor = createEditor();
+const loader = new ThreeGltfLoaderAdapter({
+  decoders: {
+    // Host 提供 ready decoder 实例或 factory；core 不硬编码 decoder URL。
+    // draco: () => dracoLoader,
+    // ktx2: () => ktx2Loader,
+    // meshopt: () => MeshoptDecoder
+  }
+});
 
 const runtime = editor.mountRuntime({
   container: document.querySelector("#viewport")!,
   resolver: new AssetResolverBridge((asset) =>
     asset.kind === "glb" ? { uri: `/assets/${asset.id}.glb` } : null
-  )
+  ),
+  loader
 });
 
 editor.dispatch({
@@ -114,6 +123,43 @@ const runtime = editor.mountRuntime({
 });
 ```
 
+如果使用官方 Three.js loader surface，推荐构造 `ThreeGltfLoaderAdapter`：
+
+```ts
+const loader = new ThreeGltfLoaderAdapter({
+  decoders: {
+    draco: () => dracoLoader,
+    ktx2: async () => ktx2Loader,
+    meshopt: () => MeshoptDecoder
+  },
+  loaderFactory: undefined
+});
+```
+
+Draco decoder path、KTX2 transcoder path、renderer-specific KTX2 `detectSupport()`、Meshopt module 初始化和 worker 限制都由 host 负责。Core 只消费 ready decoder/factory，并把缺失 decoder、未知/unsupported extension、load failure 归一化为 import/runtime diagnostics。
+
+## GLB import analysis
+
+`editor.importGlbAsset()` 可以在提交 durable `import-glb` 命令前异步分析本地 GLB：
+
+```ts
+const result = await editor.importGlbAsset({
+  asset: {
+    id: "machine",
+    label: "machine.glb",
+    source: file,
+    kind: "glb"
+  },
+  loader
+});
+
+if (!result.ok) {
+  console.log(result.diagnostics);
+}
+```
+
+成功提交会把 JSON-compatible `glbImportManifest` 写入 asset metadata。Manifest 可以被 `buildAssetWorkspaceModel()` 投影为 `importStatus`、`importManifest` 和 `importDiagnostics`。失败不会默认注册 asset/object，因此 Snapshot 不会因为坏 GLB 被污染。
+
 `RendererLike` 需要提供：
 
 - `domElement`
@@ -139,3 +185,4 @@ if (exported.packageBytes instanceof Uint8Array) {
 - runtime 绑定到一个 DOM container；container 卸载前调用 `runtime.dispose()`。
 - 不再使用 editor 时调用 `editor.dispose()`。
 - 不要在 dispose 后继续 dispatch、subscribe 或 mount runtime。
+- 不要把 `GLTFLoader`、parser、loaded `Object3D`、`Texture`、`File`、`Blob`、object URL、resolver 输出、decoder 实例或 PMREM 输出写入 Snapshot 或 `.ek3d`。

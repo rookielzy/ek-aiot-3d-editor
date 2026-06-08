@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { markRaw } from "vue";
 import { describe, expect, it, vi } from "vitest";
-import { AssetResolverBridge, createEditor, type EditorRuntimeOptions, type RendererLike } from "@ek-aiot/3d-editor-core";
+import { AssetResolverBridge, createEditor, ThreeGltfLoaderAdapter, type EditorRuntimeOptions, type RendererLike } from "@ek-aiot/3d-editor-core";
 import EditorViewport from "../src/components/EditorViewport.vue";
 
 describe("EditorViewport", () => {
@@ -77,6 +77,23 @@ describe("EditorViewport", () => {
     wrapper.unmount();
 
     expect(wrapper.emitted("runtimeReady")?.at(-1)?.[0]).toBeNull();
+  });
+
+  it("forwards decoder-aware loader adapters as raw core runtime options", () => {
+    const editor = markRaw(createEditor());
+    const mountRuntime = vi.spyOn(editor, "mountRuntime");
+    const loader = new ThreeGltfLoaderAdapter({ decoders: {} });
+    const wrapper = mount(EditorViewport, {
+      props: {
+        editor,
+        loader,
+        rendererFactory: fakeRenderer
+      }
+    });
+
+    expect(mountRuntime).toHaveBeenCalledWith(expect.objectContaining({ loader }));
+
+    wrapper.unmount();
   });
 });
 

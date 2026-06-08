@@ -1,7 +1,7 @@
 import React from "react";
 import { render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { createEditor, type EditorRuntime, type EditorRuntimeOptions, type RendererLike } from "@ek-aiot/3d-editor-core";
+import { createEditor, ThreeGltfLoaderAdapter, type EditorRuntime, type EditorRuntimeOptions, type RendererLike } from "@ek-aiot/3d-editor-core";
 import { EditorViewport } from "../src/components/EditorViewport";
 
 describe("EditorViewport", () => {
@@ -51,6 +51,24 @@ describe("EditorViewport", () => {
     unmount();
 
     expect(runtimeReady).toHaveBeenLastCalledWith(null);
+  });
+
+  it("forwards decoder-aware loader adapters without React-owned loader semantics", () => {
+    const editor = createEditor();
+    const mountRuntime = vi.spyOn(editor, "mountRuntime");
+    const loader = new ThreeGltfLoaderAdapter({ decoders: {} });
+
+    const { unmount } = render(
+      <EditorViewport
+        editor={editor}
+        loader={loader}
+        rendererFactory={fakeRenderer}
+      />
+    );
+
+    expect(mountRuntime).toHaveBeenCalledWith(expect.objectContaining({ loader }));
+
+    unmount();
   });
 });
 

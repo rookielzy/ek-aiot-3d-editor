@@ -22,11 +22,11 @@ import "@ek-aiot/3d-editor-vue/styles.css";
 
 ```vue
 <template>
-  <EditorWorkbench :editor="editor" :resolver="resolver" />
+  <EditorWorkbench :editor="editor" :resolver="resolver" :loader="loader" />
 </template>
 
 <script setup lang="ts">
-import { AssetResolverBridge } from "@ek-aiot/3d-editor-core";
+import { AssetResolverBridge, ThreeGltfLoaderAdapter } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench, useEditor } from "@ek-aiot/3d-editor-vue";
 import "@ek-aiot/3d-editor-vue/styles.css";
 
@@ -34,6 +34,14 @@ const { editor } = useEditor();
 const resolver = new AssetResolverBridge((asset) =>
   asset.kind === "glb" ? { uri: `/assets/${asset.id}.glb` } : null
 );
+const loader = new ThreeGltfLoaderAdapter({
+  decoders: {
+    // Host 提供 ready decoder 实例或 factory；core 不硬编码 decoder URL。
+    // draco: () => dracoLoader,
+    // ktx2: () => ktx2Loader,
+    // meshopt: () => MeshoptDecoder
+  }
+});
 
 if (!editor.getSnapshot().objects.box) {
   editor.dispatch({
@@ -115,6 +123,12 @@ interface WorkbenchContext {
 ```
 
 资产面板应优先读取 `workbench.model.assets.workspace`。该 workspace 已经合并 Snapshot asset registry、对象/材质/环境引用位置、项目包 payload 摘要和资产问题，并提供 core 统一的搜索/过滤/排序 helper。`replaceAsset()` 这类 payload-only 更新不会改变 Snapshot，但 Vue composable 会订阅 core asset workspace 版本并重新计算 model；宿主不需要也不应该读取 transient project store、`Blob` 或 object URL。
+
+## Decoder-aware GLB
+
+真实用户 GLB 可能依赖 Draco、KTX2/Basis 或 Meshopt。Vue 适配层只把 `loader` prop 作为 raw core runtime option 传入，不解释 decoder 语义，也不会把 adapter 放进深层 reactive state。宿主应在应用层创建 `ThreeGltfLoaderAdapter`，并提供已经配置好的 decoder 实例、异步 factory 或完整 `loaderFactory`。
+
+`editor.importGlbAsset()` 可以在提交 `import-glb` 命令前执行异步分析。成功结果会把 JSON-compatible `glbImportManifest` 写入 asset metadata；失败结果返回结构化 diagnostics，不会默认注册 asset/object。Manifest 可以被资产 workspace 读取，用来显示 `importStatus` 和 import diagnostics。不要持久化 `GLTFLoader`、parser、`Object3D`、`Texture`、`File`、`Blob`、object URL、resolver 输出或 decoder 对象。
 
 ## 本地 proof-loop demo
 

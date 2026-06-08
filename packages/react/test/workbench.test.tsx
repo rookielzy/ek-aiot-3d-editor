@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AssetResolverBridge,
   createEditor,
+  ThreeGltfLoaderAdapter,
   type EditorRuntimeOptions,
   type RendererLike
 } from "@ek-aiot/3d-editor-core";
@@ -121,6 +122,16 @@ describe("React EditorWorkbench", () => {
 
     fireEvent.click(screen.getByTitle("Duplicate selection"));
     expect(duplicate).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes decoder-aware loader adapters through to the core runtime", () => {
+    const editor = createEditor();
+    const mountRuntime = vi.spyOn(editor, "mountRuntime");
+    const loader = new ThreeGltfLoaderAdapter({ decoders: {} });
+
+    render(<EditorWorkbench editor={editor} loader={loader} rendererFactory={fakeRenderer} />);
+
+    expect(mountRuntime).toHaveBeenCalledWith(expect.objectContaining({ loader }));
   });
 
   it("routes default project open and export controls through core project APIs", async () => {
