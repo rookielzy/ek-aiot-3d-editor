@@ -1,9 +1,11 @@
 import { BoxGeometry, Group, Mesh, MeshBasicMaterial, PerspectiveCamera } from "three";
 import { describe, expect, it, vi } from "vitest";
+import { attachGlbImportManifestMetadata, createGlbImportManifest } from "../assets/import-pipeline";
 import { AssetRegistry } from "../assets/registry";
 import { CommandDispatcher } from "../commands/dispatcher";
 import { EditorStore } from "../editor/store";
 import { CommandHistory } from "../history/history";
+import type { SceneSnapshot } from "../snapshot/types";
 import { ObjectPicker } from "./picking";
 import { ThreeObjectMap } from "./three-object-map";
 
@@ -110,7 +112,20 @@ describe("object picking", () => {
     const store = new EditorStore();
     const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
     const dispatchSpy = vi.spyOn(dispatcher, "dispatch");
-    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    const metadata = attachGlbImportManifestMetadata(undefined, createSinglePrimitiveManifest());
+    dispatcher.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: { id: "asset-a", metadata },
+      expandImportedTargets: true
+    });
+    const importedPrimitiveNodeId = findImportedNodeIdByKey(
+      store.getSnapshot(),
+      "glb:object-a/primitive:meshes/0/primitives/0"
+    );
+    if (!importedPrimitiveNodeId) {
+      throw new Error("Expected imported primitive target node to exist.");
+    }
     const camera = new PerspectiveCamera(50, 1, 0.1, 1000);
     camera.position.set(0, 0, 5);
     camera.lookAt(0, 0, 0);
@@ -119,7 +134,7 @@ describe("object picking", () => {
     const child = new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial());
     owner.add(child);
     objects.set("object-a", owner, { kind: "object", objectId: "object-a", pickable: true });
-    objects.set("imported-primitive", child, {
+    objects.set(importedPrimitiveNodeId, child, {
       kind: "imported",
       ownerObjectId: "object-a",
       importKey: "glb:object-a/primitive:meshes/0/primitives/0",
@@ -147,7 +162,7 @@ describe("object picking", () => {
     const result = picker.pickNodeFromClientPoint(container, 100, 100, [owner], "replace");
 
     expect(result.ok).toBe(true);
-    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-node", nodeId: "imported-primitive" });
+    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-node", nodeId: importedPrimitiveNodeId });
   });
 
   it("skips runtime-only ray hits and selects the next pickable target", () => {
@@ -187,3 +202,24 @@ describe("object picking", () => {
     expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-node", nodeId: "object-a" });
   });
 });
+
+function findImportedNodeIdByKey(snapshot: SceneSnapshot, importKey: string): string | null {
+  return Object.values(snapshot.nodes).find((node) => node.kind === "imported" && node.importKey === importKey)?.id ?? null;
+}
+
+function createSinglePrimitiveManifest() {
+  return createGlbImportManifest({
+    gltf: {
+      parser: {
+        json: {
+          nodes: [{ name: "Root", mesh: 0 }],
+          meshes: [{
+            name: "Panel",
+            primitives: [{ attributes: { POSITION: 0 }, material: 0 }]
+          }],
+          materials: [{ name: "Red" }]
+        }
+      }
+    }
+  });
+}
