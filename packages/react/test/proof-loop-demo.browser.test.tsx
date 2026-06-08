@@ -45,7 +45,8 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
     });
     expect(text(section(host, "Assets"))).toContain("Recoverable asset");
     expect(text(section(host, "Assets"))).toContain("glb");
-    expect(text(section(host, "Assets"))).toContain("ready");
+    expect(text(section(host, "Assets"))).toContain("missing payload");
+    expect(text(section(host, "Assets"))).toContain("blocked");
     expect(text(section(host, "Assets"))).toContain("1 refs");
     assertAssetWorkspaceLayout(host);
     expect(text(testId(host, "starter-overlay"))).toContain("3 objects");
