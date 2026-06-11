@@ -167,11 +167,13 @@ editor.dispatch({
 - 保存 texture slot 的 asset ID。
 - Runtime 会把 object-level assignment 投影到 GLB 对象下的 `MeshStandardMaterial` mesh，并隔离 shared source material。
 - Imported GLB target schema 可以保存 manifest-derived material slot key 和 descriptor；slot assignment 使用 `{ kind: "material-slot", objectId, slotId }`，其中 `slotId` 是 imported slot key。
+- `set-material` 新建 material-slot assignment 时会校验 owner object 和当前 imported slot metadata；reimport 后已经存在的 stale slot assignment 仍可继续 patch 或清理。
+- Runtime slot projection 会先应用 object-level broad assignment，再让 slot-level assignment 覆盖对应 primitive mesh 或 material array index。其他 slot 保持源材质或 broad projection。
 - Schema validation 不会因为 reimport 后 slot 暂时无法解析而删除 material-slot assignment；这类情况应作为 recoverable problem 暴露。
 - Texture slot 会通过 resolver/loader 加载为 transient texture；失败暴露为 runtime problem，不写回 Snapshot。
 - 保持 React/Vue inspector 行为一致。
 
-runtime slot-aware material projection、material slot inspector UI、复杂材质编辑、节点材质和 shader 编辑不在当前范围内。
+material slot inspector UI、复杂材质编辑、节点材质、shader 编辑和 glTF material variant authoring 不在当前范围内。
 
 ## 项目导入/导出
 
@@ -209,7 +211,7 @@ Core 提供 `resolveEditorShortcut()` 和 `executeEditorAction()`。React/Vue wo
 
 - 框选。
 - durable imported target row 之外的 Workbench hierarchy UI polish。
-- Imported material slot assignment 的 runtime projection。
+- React/Vue 默认 material slot inspector UI。
 - 系统剪贴板集成和外部 paste 格式。
 - 网格渲染、对齐辅助线和可视 snap 控件。
 - 持久化快捷键配置和命令面板 UI。

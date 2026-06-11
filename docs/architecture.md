@@ -101,6 +101,8 @@ Runtime 派生结果不得写回 Snapshot。
 
 Imported GLB target 是 durable target identity，不是 runtime traversal cache。Runtime projector 会把 imported node 解析成 loaded owner GLB scene 内的 descendant link，并把该 link 注册到 `ThreeObjectMap`。Pointer picking、selection bounds、camera framing 和 TransformControls 都复用这张 runtime target map。Core 不会把 loaded glTF scene graph、Three.js `Object3D`、material/texture、loader parser、resolver result、base transform cache 或 runtime problem 写回 Snapshot。Reimport remap 和 slot-aware material projection 必须从 v5 imported target key/slot key contract 派生，而不是重新发明一套 runtime-only ID。无法解析的 reimport target/slot 会保留 durable marker，并投影为 runtime/workbench problem。
 
+Material projection 只消费 durable material assignment、imported slot descriptor 和 runtime target map。Object-level assignment 是 broad pass；material-slot assignment 是 narrower pass，只覆盖匹配 primitive mesh 或 material array index 的 projection-owned clone。Texture loader result、shared texture resource owner、slot resolver result、cloned material 和 projection problem 都属于 runtime projection，不能写回 Snapshot 或 `.ek3d`。
+
 ## Asset 解析边界
 
 Snapshot 中只保存稳定资产引用：

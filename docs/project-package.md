@@ -131,6 +131,8 @@ await editor.replaceAsset({
 
 Registered GLB row 的 reimport 应使用 `editor.reimportGlbAsset()`，而不是先调用 `replaceAsset()` 再手写 Snapshot。这样 replacement manifest、target remap、material-slot assignment rewrite、rollback 和 asset workspace 通知都由 core 在同一生命周期内处理。
 
+Material-slot assignment 会像 object-level material assignment 一样保存在 `scene.json` 中：durable 数据只有 assignment ID、`{ kind: "material-slot"; objectId; slotId }` target、`MeshStandardMaterialOverride` 子集和 texture/image asset references。`.ek3d` 不保存 Three.js `Material` clone、loaded `Texture`、resolver URI、object URL、slot lookup result、runtime target link 或 `imported-material-slot-*` runtime problem。若 GLB reimport 后 slot 无法匹配，assignment 仍保留在 `scene.json`，由 runtime/workbench problem 提示用户处理。
+
 ## 默认限制
 
 默认导入限制：

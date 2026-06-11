@@ -130,6 +130,8 @@ interface WorkbenchContext {
 
 资产面板应优先读取 `workbench.model.assets.workspace`。该 workspace 已经合并 Snapshot asset registry、对象/材质/环境引用位置、项目包 payload 摘要、GLB import manifest diagnostics、GLB reimport remap problem 和资产问题，并提供 core 统一的搜索/过滤/排序 helper。`replaceAsset()` 这类 payload-only 更新不会改变 Snapshot，但 Vue composable 会订阅 core asset workspace 版本并重新计算 model；宿主不需要也不应该读取 transient project store、`Blob` 或 object URL。
 
+Core 已支持 material-slot assignment 的 durable command 和 runtime projection。自定义 Vue inspector 可以在已展开 imported target 的 `materialSlots` 中读取 slot key，并 dispatch `set-material` 到 `{ kind: "material-slot", objectId, slotId }`；默认 Vue material inspector 仍只提供基础 object-level 控件，slot list/未解析 slot 的 UI 属于后续 U8。
+
 默认左栏的资产区支持多文件选择、拖放和 registered GLB reimport。`.glb` 导入会通过 `context.assets.importFiles()` 调用 core 的 decoder-aware GLB import bridge，并使用传给 `EditorWorkbench` 的同一个 `loader` prop；已注册的 GLB row 会通过 `context.assets.reimportGlbAsset()` 调用 core reimport lifecycle。`.hdr` 会注册为 HDR asset；PNG/JPG/WebP/SVG 等 raster 文件需要用户在 UI 中显式选择 `texture` 或 `image` intent。导入队列、drag hover、file input value 和失败提示是 Vue transient state，不进入 `SceneSnapshot` 或 `.ek3d` JSON。
 
 自定义 `leftPanel` slot 也可以调用同一个 core-owned 入口：

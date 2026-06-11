@@ -236,8 +236,10 @@ export function createImportedTargetUnresolvedProblem(node: SceneImportedGlbNode
 export function createImportedMaterialSlotUnresolvedProblem(
   node: SceneImportedGlbNode,
   slotId: string,
-  assetId?: string
+  assetId?: string,
+  reason: "slot-missing" | "runtime-target-missing" = "slot-missing"
 ): Problem {
+  const runtimeTargetMissing = reason === "runtime-target-missing";
   return {
     id: `imported-material-slot-unresolved:${node.ownerObjectId}:${node.id}:${slotId}`,
     severity: "warning",
@@ -253,16 +255,82 @@ export function createImportedMaterialSlotUnresolvedProblem(
       slotId
     },
     recoverability: "user-action",
-    message: `Imported material slot ${slotId} could not be remapped during GLB reimport.`,
+    message: runtimeTargetMissing
+      ? `Imported material slot ${slotId} has no matched runtime target.`
+      : `Imported material slot ${slotId} could not be remapped during GLB reimport.`,
     display: {
-      title: "Imported material slot needs remap",
-      detail: `Material assignment target ${slotId} remains durable but no replacement slot was matched.`,
-      actionLabel: "Review remap"
+      title: runtimeTargetMissing ? "Imported material slot unavailable" : "Imported material slot needs remap",
+      detail: runtimeTargetMissing
+        ? `Material assignment target ${slotId} remains durable but no runtime imported target was registered.`
+        : `Material assignment target ${slotId} remains durable but no replacement slot was matched.`,
+      actionLabel: runtimeTargetMissing ? "Review imported target" : "Review remap"
     },
     metadata: {
       importKey: node.importKey,
       slotId,
+      reason,
       previousImportKey: node.remap?.previousImportKey ?? node.importKey
+    }
+  };
+}
+
+export function createImportedMaterialSlotAssignmentUnresolvedProblem(
+  objectId: string,
+  slotId: string,
+  assetId?: string,
+  reason = `Imported material slot ${slotId} could not be resolved.`
+): Problem {
+  return {
+    id: `imported-material-slot-unresolved:${objectId}:assignment:${slotId}`,
+    severity: "warning",
+    code: "imported-material-slot-unresolved",
+    objectId,
+    ...(assetId ? { assetId } : {}),
+    source: "runtime",
+    target: { kind: "object", objectId },
+    recoverability: "user-action",
+    message: reason,
+    display: {
+      title: "Imported material slot needs remap",
+      detail: `Material assignment target ${slotId} remains durable but no imported slot was matched.`,
+      actionLabel: "Review remap"
+    },
+    metadata: { slotId }
+  };
+}
+
+export function createImportedMaterialSlotProjectionProblem(
+  node: SceneImportedGlbNode,
+  slotId: string,
+  reason: string,
+  assetId?: string
+): Problem {
+  return {
+    id: `imported-material-slot-projection-failed:${node.ownerObjectId}:${node.id}:${slotId}`,
+    severity: "warning",
+    code: "imported-material-slot-projection-failed",
+    objectId: node.ownerObjectId,
+    ...(assetId ? { assetId } : {}),
+    source: "runtime",
+    target: {
+      kind: "imported-material-slot",
+      objectId: node.ownerObjectId,
+      nodeId: node.id,
+      importKey: node.importKey,
+      slotId
+    },
+    recoverability: "user-action",
+    message: reason,
+    display: {
+      title: "Imported material slot could not be projected",
+      detail: reason,
+      actionLabel: "Review material slot"
+    },
+    metadata: {
+      importKey: node.importKey,
+      slotId,
+      sourceKind: node.source.kind,
+      sourcePath: node.source.path
     }
   };
 }

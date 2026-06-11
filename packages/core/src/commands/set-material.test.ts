@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { attachGlbImportManifestMetadata, createGlbImportManifest } from "../assets/import-pipeline";
 import { AssetRegistry } from "../assets/registry";
 import { EditorStore } from "../editor/store";
 import { CommandHistory } from "../history/history";
+import { createEditor } from "../editor/create-editor";
+import { planGlbImportRemap } from "../assets/import-remap";
+import { createMaterialAssignmentId } from "../materials/defaults";
 import type { MaterialPatch } from "../materials/types";
+import type { SceneImportedGlbNode } from "../snapshot/types";
 import { CommandDispatcher } from "./dispatcher";
 
 describe("set material command", () => {
@@ -185,6 +190,124 @@ describe("set material command", () => {
     expect(store.getSnapshot()).toBe(before);
   });
 
+  it("stores material-slot assignments only for discoverable imported GLB slots", () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: {
+        id: "asset-a",
+        metadata: attachGlbImportManifestMetadata(undefined, createMaterialSlotManifest())
+      },
+      expandImportedTargets: true
+    });
+    const slotId = "glb:object-a/slot:meshes/0/primitives/0:material-0";
+
+    const result = editor.dispatch({
+      type: "set-material",
+      target: { kind: "material-slot", objectId: "object-a", slotId },
+      material: { color: "#ff0000" }
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.snapshot.materials.assignments[createMaterialAssignmentId({
+      kind: "material-slot",
+      objectId: "object-a",
+      slotId
+    })]).toMatchObject({
+      materialId: `material:material-slot:object-a:${slotId}`,
+      target: { kind: "material-slot", objectId: "object-a", slotId }
+    });
+    expect(result.snapshot.materials.definitions[`material:material-slot:object-a:${slotId}`].override).toMatchObject({
+      color: "#ff0000"
+    });
+  });
+
+  it("rejects new material-slot assignments for missing owners or unknown slots without mutating state", () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: {
+        id: "asset-a",
+        metadata: attachGlbImportManifestMetadata(undefined, createMaterialSlotManifest())
+      },
+      expandImportedTargets: true
+    });
+    const before = editor.getSnapshot();
+
+    const missingOwner = editor.dispatch({
+      type: "set-material",
+      target: { kind: "material-slot", objectId: "object-missing", slotId: "slot-a" },
+      material: { color: "#ff0000" }
+    });
+    const unknownSlot = editor.dispatch({
+      type: "set-material",
+      target: { kind: "material-slot", objectId: "object-a", slotId: "glb:object-a/slot:missing:material-0" },
+      material: { color: "#00ff00" }
+    });
+
+    expect(missingOwner.ok).toBe(false);
+    expect(missingOwner.error).toContain("object-missing");
+    expect(unknownSlot.ok).toBe(false);
+    expect(unknownSlot.error).toContain("does not exist");
+    expect(editor.getSnapshot()).toBe(before);
+  });
+
+  it("allows existing stale material-slot assignments to be patched after reimport removes the slot", () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: {
+        id: "asset-a",
+        metadata: attachGlbImportManifestMetadata(undefined, createMaterialSlotManifest())
+      },
+      expandImportedTargets: true
+    });
+    const slotId = "glb:object-a/slot:meshes/0/primitives/0:material-0";
+    editor.dispatch({ type: "register-asset", asset: { id: "texture-a", kind: "texture" } });
+    editor.dispatch({
+      type: "set-material",
+      target: { kind: "material-slot", objectId: "object-a", slotId },
+      material: { color: "#ff0000", textures: { map: { assetId: "texture-a" } } }
+    });
+    const replacement = withoutPrimitiveMaterial(createMaterialSlotManifest());
+    const remap = planGlbImportRemap({
+      ownerObjectId: "object-a",
+      currentTargets: Object.values(editor.getSnapshot().nodes).filter((node): node is SceneImportedGlbNode =>
+        node.kind === "imported" && node.ownerObjectId === "object-a"
+      ),
+      replacementManifest: replacement
+    });
+    editor.dispatch({
+      type: "reimport-glb",
+      ownerObjectId: "object-a",
+      assetId: "asset-a",
+      manifest: replacement,
+      remap
+    });
+
+    const result = editor.dispatch({
+      type: "set-material",
+      target: { kind: "material-slot", objectId: "object-a", slotId },
+      material: { roughness: 0.4, textures: { map: null } }
+    });
+
+    const materialId = `material:material-slot:object-a:${slotId}`;
+    expect(result.ok).toBe(true);
+    expect(result.snapshot.materials.assignments[createMaterialAssignmentId({
+      kind: "material-slot",
+      objectId: "object-a",
+      slotId
+    })]).toBeDefined();
+    expect(result.snapshot.materials.definitions[materialId].override).toEqual({
+      color: "#ff0000",
+      roughness: 0.4,
+      textures: {}
+    });
+  });
+
   it("undoes and redoes material edits deterministically", () => {
     const store = new EditorStore();
     const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
@@ -202,3 +325,33 @@ describe("set material command", () => {
     expect(store.getSnapshot().materials.definitions["material:object:object-a"].override.color).toBe("#111111");
   });
 });
+
+function createMaterialSlotManifest() {
+  return createGlbImportManifest({
+    gltf: {
+      parser: {
+        json: {
+          nodes: [{ name: "Panel", mesh: 0 }],
+          meshes: [{
+            name: "Panel mesh",
+            primitives: [{ attributes: { POSITION: 0, NORMAL: 1 }, material: 0 }]
+          }],
+          materials: [{ name: "Red" }]
+        }
+      }
+    }
+  });
+}
+
+function withoutPrimitiveMaterial(manifest: ReturnType<typeof createMaterialSlotManifest>) {
+  const mesh = manifest.meshes[0]!;
+  const primitive = mesh.primitives[0]!;
+  const { materialIndex, ...primitiveWithoutMaterial } = primitive;
+  return {
+    ...manifest,
+    meshes: [{
+      ...mesh,
+      primitives: [primitiveWithoutMaterial]
+    }]
+  };
+}

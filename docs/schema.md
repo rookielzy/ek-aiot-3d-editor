@@ -290,17 +290,19 @@ Selection 是 durable state，因此可以序列化/恢复。`nodeId` 是 primar
 
 ## Materials
 
-材质状态保存一小部分 `MeshStandardMaterial` override 和 assignment。当前文档只描述使用边界：
+材质状态保存一小部分 `MeshStandardMaterial` override 和 assignment。当前使用边界：
 
 - material override 是持久化 authoring data。
 - object-level assignment 会在 runtime 投影到对应 GLB 对象下的 `MeshStandardMaterial` mesh。
+- material-slot assignment 使用 `{ kind: "material-slot"; objectId; slotId }` 引用 imported slot key。`set-material` 新建 slot assignment 时要求 owner object 存在且 slot 能从 imported target metadata 中发现。
+- runtime 会先应用 object-level broad override，再把 material-slot assignment 应用到匹配的 imported slot。slot pass 只替换对应 primitive mesh 或 material array index 的投影 clone；未命中的 slot 保留源材质或 object-level 投影结果。
 - texture slot 只保存 asset reference；runtime 会解析并加载 `texture` / `image` 资产。
-- runtime 创建出来的 cloned Three.js material/texture 不进入 Snapshot。
+- runtime 创建出来的 cloned Three.js material/texture、slot lookup record、resolver result 和 projection problem 不进入 Snapshot。
 - resolver/loader 失败只产生 runtime problem，不删除 durable material assignment 或 texture slot。
 - imported target 可以暴露 `materialSlots`，`MaterialAssignmentTarget` 仍使用 `{ kind: "material-slot"; objectId; slotId }` 引用 slot key。
 - validation 允许 material-slot assignment 指向当前不存在的 slot key，因为 reimport 后 slot 消失应该成为 recoverable problem，而不是 schema 层删除 durable assignment。
 - `reimport-glb` 会在 slot 可唯一匹配时改写 material-slot assignment ID/slot ID；无法匹配时保留 durable assignment，并通过 `imported-material-slot-unresolved` problem 暴露。
-- 当前非目标包括 runtime material slot projection、material slot inspector UI、复杂材质图、节点材质和 shader 编辑。
+- 当前非目标包括 material slot inspector UI、复杂材质图、节点材质、shader 编辑和 glTF material variant authoring。
 
 ## Environment
 

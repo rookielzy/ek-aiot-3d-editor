@@ -241,6 +241,56 @@ describe("material resource manager", () => {
     expect(result).toEqual({ ok: false, stale: true });
     expect(texture.dispose).toHaveBeenCalledTimes(1);
   });
+
+  it("tracks texture resource owners by assignment target while releasing by object", async () => {
+    const texture = createTrackedTexture();
+    const manager = new MaterialResourceManager({
+      resolver: new AssetResolverBridge(() => ({ uri: "/shared.png" })),
+      textureLoader: { load: vi.fn(async () => texture) }
+    });
+    const snapshot = snapshotWithAsset("texture-a", "texture");
+    const firstToken = manager.beginProjection();
+
+    await manager.load({
+      snapshot,
+      materialId: "material-a",
+      objectId: "object-a",
+      ownerKey: "material-slot:object-a:slot-a",
+      slot: "map",
+      textureSlot: { assetId: "texture-a" },
+      token: firstToken
+    });
+    await manager.load({
+      snapshot,
+      materialId: "material-b",
+      objectId: "object-a",
+      ownerKey: "material-slot:object-a:slot-b",
+      slot: "map",
+      textureSlot: { assetId: "texture-a" },
+      token: firstToken
+    });
+    manager.releaseUnused(firstToken);
+
+    const secondToken = manager.beginProjection();
+    await manager.load({
+      snapshot,
+      materialId: "material-a",
+      objectId: "object-a",
+      ownerKey: "material-slot:object-a:slot-a",
+      slot: "map",
+      textureSlot: { assetId: "texture-a" },
+      token: secondToken
+    });
+    manager.releaseUnused(secondToken);
+
+    expect(manager.size).toBe(1);
+    expect(texture.dispose).not.toHaveBeenCalled();
+
+    manager.releaseObjects(new Set());
+
+    expect(texture.dispose).toHaveBeenCalledTimes(1);
+    expect(manager.size).toBe(0);
+  });
 });
 
 function createTrackedTexture(): Texture {

@@ -206,9 +206,9 @@ describe("reimport GLB command", () => {
   });
 
   it("fails without mutation when material-slot assignment ids collide after remap", () => {
-    const editor = createExpandedEditor(createManifest());
+    const editor = createExpandedEditor(createTwoSlotManifest());
     const firstSlotKey = "glb:object-a/slot:meshes/0/primitives/0:material-0";
-    const secondSlotKey = "glb:object-a/slot:legacy:material-0";
+    const secondSlotKey = "glb:object-a/slot:meshes/0/primitives/1:material-1";
     editor.dispatch({
       type: "set-material",
       target: { kind: "material-slot", objectId: "object-a", slotId: firstSlotKey },
@@ -224,11 +224,11 @@ describe("reimport GLB command", () => {
       material: { color: "#0000ff" }
     });
     const before = editor.getSnapshot();
-    const replacementManifest = withPrimitivePath(createManifest(), "meshes/panel/primitives/0");
+    const replacementManifest = withPrimitivePath(createTwoSlotManifest(), "meshes/panel/primitives/0");
     const remap = planForSnapshot(before, replacementManifest);
     remap.slotRemaps.push({
-      nodeId: "glb:object-a/primitive:meshes/0/primitives/0",
-      previousImportKey: "glb:object-a/primitive:meshes/0/primitives/0",
+      nodeId: "glb:object-a/primitive:meshes/0/primitives/1",
+      previousImportKey: "glb:object-a/primitive:meshes/0/primitives/1",
       nextImportKey: "glb:object-a/primitive:meshes/panel/primitives/0",
       previousSlotKey: secondSlotKey,
       nextSlotKey: "glb:object-a/slot:meshes/panel/primitives/0:material-0",
@@ -310,6 +310,26 @@ function createManifest(): GlbImportManifest {
             primitives: [{ attributes: { POSITION: 0, NORMAL: 1 }, material: 0 }]
           }],
           materials: [{ name: "Red" }]
+        }
+      }
+    }
+  });
+}
+
+function createTwoSlotManifest(): GlbImportManifest {
+  return createGlbImportManifest({
+    gltf: {
+      parser: {
+        json: {
+          nodes: [{ name: "Panel", mesh: 0 }],
+          meshes: [{
+            name: "Panel mesh",
+            primitives: [
+              { attributes: { POSITION: 0, NORMAL: 1 }, material: 0 },
+              { attributes: { POSITION: 2, NORMAL: 3 }, material: 1 }
+            ]
+          }],
+          materials: [{ name: "Red" }, { name: "Blue" }]
         }
       }
     }
