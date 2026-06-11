@@ -42,6 +42,7 @@ export interface LoadMaterialTextureOptions {
   snapshot: SceneSnapshot;
   materialId: string;
   objectId: string;
+  ownerKey?: string;
   slot: TextureSlotName;
   textureSlot: TextureSlot;
   token: number;
@@ -50,7 +51,12 @@ export interface LoadMaterialTextureOptions {
 interface MaterialTextureResourceEntry {
   texture: Texture;
   usedToken: number;
-  owners: Map<string, number>;
+  owners: Map<string, MaterialTextureResourceOwner>;
+}
+
+interface MaterialTextureResourceOwner {
+  objectId: string;
+  usedToken: number;
 }
 
 export class MaterialResourceManager {
@@ -129,7 +135,7 @@ export class MaterialResourceManager {
     const entry: MaterialTextureResourceEntry = {
       texture,
       usedToken: options.token,
-      owners: new Map([[options.objectId, options.token]])
+      owners: new Map([[createOwnerKey(options), createResourceOwner(options)]])
     };
     this.#resources.set(key, entry);
     return { ok: true, texture };
@@ -141,9 +147,9 @@ export class MaterialResourceManager {
     }
 
     for (const [key, resource] of this.#resources) {
-      for (const [objectId, usedToken] of resource.owners) {
-        if (usedToken !== token) {
-          resource.owners.delete(objectId);
+      for (const [ownerKey, owner] of resource.owners) {
+        if (owner.usedToken !== token) {
+          resource.owners.delete(ownerKey);
         }
       }
       if (resource.usedToken !== token || resource.owners.size === 0) {
@@ -156,9 +162,9 @@ export class MaterialResourceManager {
   releaseObjects(activeObjectIds: Set<string>): void {
     this.#activeToken += 1;
     for (const [key, resource] of this.#resources) {
-      for (const objectId of resource.owners.keys()) {
-        if (!activeObjectIds.has(objectId)) {
-          resource.owners.delete(objectId);
+      for (const [ownerKey, owner] of resource.owners) {
+        if (!activeObjectIds.has(owner.objectId)) {
+          resource.owners.delete(ownerKey);
         }
       }
       if (resource.owners.size === 0) {
@@ -191,7 +197,18 @@ export class MaterialResourceManager {
 
 function markUsed(entry: MaterialTextureResourceEntry, options: LoadMaterialTextureOptions): void {
   entry.usedToken = options.token;
-  entry.owners.set(options.objectId, options.token);
+  entry.owners.set(createOwnerKey(options), createResourceOwner(options));
+}
+
+function createOwnerKey(options: Pick<LoadMaterialTextureOptions, "objectId" | "ownerKey">): string {
+  return options.ownerKey ?? `object:${options.objectId}`;
+}
+
+function createResourceOwner(options: Pick<LoadMaterialTextureOptions, "objectId" | "token">): MaterialTextureResourceOwner {
+  return {
+    objectId: options.objectId,
+    usedToken: options.token
+  };
 }
 
 function resolveAssetReference(snapshot: SceneSnapshot, assetId: string): AssetReference | undefined {

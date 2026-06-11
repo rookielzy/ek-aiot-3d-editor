@@ -99,7 +99,7 @@ export class SceneProjector {
     }
     this.#lights.release(activeLightIds);
 
-    const materialProblems = await this.#materials.project(snapshot, this.objects.entries());
+    const materialProblems = await this.#materials.project(snapshot, this.objects.targetEntries());
     if (!this.#isActive(generation)) {
       return;
     }

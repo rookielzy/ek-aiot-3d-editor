@@ -292,6 +292,7 @@ The tree shows the planned new module shape. Existing modules and tests remain l
 ### U7. Slot-aware material assignment in core and runtime
 
 - **Goal:** Implement material slot discovery and projection so assignments can target a specific imported material slot instead of the whole GLB object.
+- **Detailed plan:** `docs/plans/2026-06-11-001-feat-slot-aware-material-assignment-plan.md`.
 - **Requirements:** R6, R8, R9, R22, R23.
 - **Dependencies:** U4, U5, U6.
 - **Files:** `packages/core/src/materials/types.ts`, `packages/core/src/materials/defaults.ts`, `packages/core/src/materials/validation.ts`, `packages/core/src/materials/materials.test.ts`, `packages/core/src/commands/set-material.ts`, `packages/core/src/commands/set-material.test.ts`, `packages/core/src/runtime/material-projector.ts`, `packages/core/src/runtime/material-projector.test.ts`, `packages/core/src/runtime/material-resource-manager.ts`, `docs/schema.md`, `docs/interactions.md`.

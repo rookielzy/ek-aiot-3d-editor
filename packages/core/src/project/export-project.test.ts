@@ -148,6 +148,47 @@ describe("project export", () => {
     expect(serializedScene).not.toContain("runtimeOnly");
     expect(serializedScene).not.toContain("imported-target-missing");
   });
+
+  it("exports material-slot assignments and texture references without runtime material values", () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: {
+        id: "asset-a",
+        source: new Uint8Array([1, 2, 3]),
+        metadata: attachGlbImportManifestMetadata(undefined, createImportManifest())
+      },
+      expandImportedTargets: true
+    });
+    editor.dispatch({
+      type: "register-asset",
+      asset: { id: "texture-a", kind: "texture", source: new Uint8Array([4, 5, 6]) }
+    });
+    const slotId = "glb:object-a/slot:meshes/0/primitives/0:material-0";
+    editor.dispatch({
+      type: "set-material",
+      target: { kind: "material-slot", objectId: "object-a", slotId },
+      material: { color: "#ff0000", textures: { map: { assetId: "texture-a" } } }
+    });
+
+    const result = editor.exportProject();
+
+    expect(result.ok).toBe(true);
+    const archiveEntries = defaultArchiveAdapter.read(result.packageBytes as Uint8Array);
+    const serializedScene = new TextDecoder().decode(archiveEntries.find((entry) => entry.path === PROJECT_SCENE_PATH)!.bytes);
+    const scene = JSON.parse(serializedScene);
+    expect(scene.materials.assignments[`material-slot:object-a:${slotId}`]).toMatchObject({
+      target: { kind: "material-slot", objectId: "object-a", slotId }
+    });
+    expect(scene.materials.definitions[`material:material-slot:object-a:${slotId}`].override.textures.map).toEqual({
+      assetId: "texture-a"
+    });
+    expect(serializedScene).not.toContain("MeshStandardMaterial");
+    expect(serializedScene).not.toContain("isTexture");
+    expect(serializedScene).not.toContain("object URL");
+    expect(serializedScene).not.toContain("imported-material-slot-unresolved");
+  });
 });
 
 function createImportManifest() {

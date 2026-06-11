@@ -560,6 +560,99 @@ describe("scene projector", () => {
     expect(projector.objects.get(nodeTargetId)).toBe(loadedMesh);
   });
 
+  it("projects material-slot assignments onto only the resolved imported primitive", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: { id: "asset-a", metadata: createTwoPrimitiveImportManifestMetadata() },
+      expandImportedTargets: true
+    });
+    const secondSlotId = "glb:object-a/slot:meshes/0/primitives/1:material-1";
+    dispatcher.dispatch({
+      type: "set-material",
+      target: { kind: "material-slot", objectId: "object-a", slotId: secondSlotId },
+      material: { color: "#0000ff" }
+    });
+    const loadedScene = new Group();
+    const meshGroup = new Group();
+    const firstPrimitive = new Mesh(new BoxGeometry(), new MeshStandardMaterial({ color: "#ffffff" }));
+    const secondPrimitive = new Mesh(new BoxGeometry(), new MeshStandardMaterial({ color: "#ffffff" }));
+    meshGroup.add(firstPrimitive, secondPrimitive);
+    loadedScene.add(meshGroup);
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: {
+        analyze: async () => ({ scene: loadedScene, manifest: createTwoPrimitiveImportManifest() }),
+        load: async () => loadedScene
+      }
+    });
+
+    await projector.project(store.getSnapshot());
+
+    expect((firstPrimitive.material as MeshStandardMaterial).color.getHexString()).toBe("ffffff");
+    expect((secondPrimitive.material as MeshStandardMaterial).color.getHexString()).toBe("0000ff");
+    expect(projector.problems.map((problem) => problem.code)).not.toContain("imported-material-slot-unresolved");
+  });
+
+  it("keeps stale material-slot assignments durable and emits unresolved runtime problems after reimport", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: { id: "asset-a", metadata: createTwoPrimitiveImportManifestMetadata() },
+      expandImportedTargets: true
+    });
+    const slotId = "glb:object-a/slot:meshes/0/primitives/0:material-0";
+    dispatcher.dispatch({
+      type: "set-material",
+      target: { kind: "material-slot", objectId: "object-a", slotId },
+      material: { color: "#ff0000" }
+    });
+    const primitiveNodeId = findImportedNodeIdByKey(store.getSnapshot(), "glb:object-a/primitive:meshes/0/primitives/0")!;
+    store.replaceSnapshot({
+      ...store.getSnapshot(),
+      nodes: {
+        ...store.getSnapshot().nodes,
+        [primitiveNodeId]: {
+          ...store.getSnapshot().nodes[primitiveNodeId],
+          materialSlots: [],
+          remap: {
+            status: "resolved",
+            previousImportKey: "glb:object-a/primitive:meshes/0/primitives/0",
+            metadata: { unresolvedMaterialSlots: [slotId] }
+          }
+        }
+      }
+    });
+    const loadedScene = new Group();
+    loadedScene.add(new Mesh(new BoxGeometry(), new MeshStandardMaterial()));
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: {
+        analyze: async () => ({ scene: loadedScene, manifest: createTwoPrimitiveImportManifest() }),
+        load: async () => loadedScene
+      }
+    });
+
+    await projector.project(store.getSnapshot());
+
+    expect(store.getSnapshot().materials.assignments[`material-slot:object-a:${slotId}`]).toBeDefined();
+    expect(projector.problems).toContainEqual(expect.objectContaining({
+      code: "imported-material-slot-unresolved",
+      target: {
+        kind: "imported-material-slot",
+        objectId: "object-a",
+        nodeId: primitiveNodeId,
+        importKey: "glb:object-a/primitive:meshes/0/primitives/0",
+        slotId
+      }
+    }));
+    expect(JSON.stringify(store.getSnapshot())).not.toContain("Object3D");
+  });
+
   it("applies imported target transforms and restores loaded base transforms when overrides are removed", async () => {
     const store = new EditorStore();
     const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
@@ -928,6 +1021,30 @@ function createRuntimeImportManifestMetadata(variant: "mesh" | "node-only" = "me
       }
     }
   }));
+}
+
+function createTwoPrimitiveImportManifest() {
+  return createGlbImportManifest({
+    gltf: {
+      parser: {
+        json: {
+          nodes: [{ name: "Panel", mesh: 0 }],
+          meshes: [{
+            name: "Panel",
+            primitives: [
+              { attributes: { POSITION: 0 }, material: 0 },
+              { attributes: { POSITION: 1 }, material: 1 }
+            ]
+          }],
+          materials: [{ name: "Red" }, { name: "Blue" }]
+        }
+      }
+    }
+  });
+}
+
+function createTwoPrimitiveImportManifestMetadata() {
+  return attachGlbImportManifestMetadata(undefined, createTwoPrimitiveImportManifest());
 }
 
 function findImportedNodeIdByKey(snapshot: ReturnType<EditorStore["getSnapshot"]>, importKey: string): string | null {
