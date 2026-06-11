@@ -764,6 +764,70 @@ describe("scene projector", () => {
     expect(JSON.stringify(store.getSnapshot())).not.toContain("Object3D");
   });
 
+  it("prefers unresolved reimport problems over duplicate missing imported target problems", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: { id: "asset-a", metadata: createRuntimeImportManifestMetadata() },
+      expandImportedTargets: true
+    });
+    const importedNodeId = findImportedNodeIdByKey(store.getSnapshot(), "glb:object-a/node:nodes/0")!;
+    store.replaceSnapshot({
+      ...store.getSnapshot(),
+      nodes: {
+        ...store.getSnapshot().nodes,
+        [importedNodeId]: {
+          ...store.getSnapshot().nodes[importedNodeId],
+          remap: {
+            status: "unresolved",
+            previousImportKey: "glb:object-a/node:nodes/previous",
+            candidateImportKeys: ["glb:object-a/node:nodes/1"]
+          }
+        }
+      }
+    });
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: {
+        analyze: async () => ({
+          scene: new Group(),
+          manifest: createGlbImportManifest({
+            gltf: {
+              parser: {
+                json: {
+                  nodes: [],
+                  meshes: []
+                }
+              }
+            }
+          })
+        }),
+        load: async () => new Group()
+      }
+    });
+
+    await projector.project(store.getSnapshot());
+
+    const targetProblems = projector.problems.filter((problem) =>
+      problem.target.kind === "imported-target" && problem.target.nodeId === importedNodeId
+    );
+    expect(targetProblems.map((problem) => problem.code)).toEqual(["imported-target-unresolved"]);
+    expect(targetProblems[0]).toMatchObject({
+      target: {
+        kind: "imported-target",
+        objectId: "object-a",
+        nodeId: importedNodeId,
+        importKey: "glb:object-a/node:nodes/0"
+      },
+      metadata: {
+        previousImportKey: "glb:object-a/node:nodes/previous",
+        candidateImportKeys: ["glb:object-a/node:nodes/1"]
+      }
+    });
+  });
+
   it("reapplies material overrides after project export/import restores durable references", async () => {
     const texture = new Texture();
     const store = new EditorStore();

@@ -33,7 +33,7 @@ assets/
 - `scene.json`：普通 `SceneSnapshot`。当前导出是 v5 node graph；导入旧 v1/v2/v3/v4 scene 会先迁移到当前 schema。
 - `assets/*`：资产 payload bytes。
 
-GLB import analysis 产生的 `glbImportManifest` 属于 `scene.json` 中 asset metadata 的 JSON-compatible authoring data。Imported GLB target node、source descriptor、slot key、authored transform override 和 remap metadata 也保存在 `scene.json`。它们不改变 ZIP 布局，也不在 `assets/*` 下创建额外记录。Runtime imported target links、base transform caches、selection helpers、loader results、resolver output 和 runtime problems 不会进入 `scene.json` 或 `project.json`。
+GLB import analysis 产生的 `glbImportManifest` 属于 `scene.json` 中 asset metadata 的 JSON-compatible authoring data。Imported GLB target node、source descriptor、slot key、authored transform override 和 remap metadata 也保存在 `scene.json`。GLB reimport 会更新同一稳定 asset ID 的 manifest metadata，并保留 matched imported node identity；unresolved target/slot 只保存 JSON-compatible remap marker，不保存 replacement loader result。它们不改变 ZIP 布局，也不在 `assets/*` 下创建额外记录。Runtime imported target links、base transform caches、selection helpers、loader results、resolver output 和 runtime problems 不会进入 `scene.json` 或 `project.json`。
 
 ## project.json
 
@@ -110,6 +110,8 @@ workspace 不保存也不暴露 payload bytes、`Blob`、`File`、object URL、r
 
 payload-only 变化也会更新 workspace。例如 `replaceAsset()` 成功后，稳定 asset ID 不变，Snapshot 不一定变化，但 `editor.subscribeAssetWorkspace()` 会通知消费者重新读取 `editor.getAssetWorkspacePayloads()` 并重建 Workbench/workspace model。
 
+`reimportGlbAsset()` 也使用同一稳定 asset ID 替换 payload，但它不是 payload-only 操作。提交成功时，core 会把 replacement `glbImportManifest` 和 imported target remap 结果写回 `scene.json`：matched target 保留 node ID，new target 新增 node，unresolved target/slot 作为 durable authoring state 保留并由 workspace/runtime problem projection 提示用户处理。
+
 默认 React/Vue Workbench 的导入队列不是项目包协议的一部分。多文件导入、drag hover、当前 raster intent、importing/succeeded/failed queue rows 和 file input value 都是 UI transient state。导入成功后，只有 core command 产生的 asset reference、GLB import manifest metadata 和 project payload 摘要会通过 Snapshot/`.ek3d` 或 workspace projection 体现。
 
 ## 替换缺失资产
@@ -126,6 +128,8 @@ await editor.replaceAsset({
 ```
 
 替换资产不会改变对象、材质、环境字段中的稳定 asset ID。runtime 重新投影成功后，派生 runtime problem 会消失。
+
+Registered GLB row 的 reimport 应使用 `editor.reimportGlbAsset()`，而不是先调用 `replaceAsset()` 再手写 Snapshot。这样 replacement manifest、target remap、material-slot assignment rewrite、rollback 和 asset workspace 通知都由 core 在同一生命周期内处理。
 
 ## 默认限制
 

@@ -15,6 +15,7 @@ import { applyGroupObjects } from "./group-objects";
 import { applyImportGlb } from "./import-glb";
 import { applyPasteObjects } from "./paste-objects";
 import { applyRegisterAsset } from "./register-asset";
+import { applyReimportGlb } from "./reimport-glb";
 import { applyReparentNode } from "./reparent-node";
 import { applyRemoveLight } from "./remove-light";
 import { applyReparentObject } from "./reparent-object";
@@ -110,6 +111,8 @@ export class CommandDispatcher {
     switch (command.type) {
       case "import-glb":
         return applyImportGlb(snapshot, command, this.assets);
+      case "reimport-glb":
+        return applyReimportGlb(snapshot, command);
       case "register-asset":
         return applyRegisterAsset(snapshot, command, this.assets);
       case "create-imported-glb-targets":

@@ -4,7 +4,9 @@ import { Group } from "three";
 import { describe, expect, it, vi } from "vitest";
 import {
   AssetResolverBridge,
+  attachGlbImportManifestMetadata,
   buildAssetWorkspaceModel,
+  createGlbImportManifest,
   createEditor,
   filterAssetWorkspaceItems,
   ThreeGltfLoaderAdapter,
@@ -229,6 +231,61 @@ describe("Vue EditorWorkbench", () => {
     expect(expectedIds).toEqual(["image-a"]);
     expect(wrapper.find('[aria-label="Asset workspace rows"]').text()).toContain("Manual label");
     expect(wrapper.find('[aria-label="Asset workspace rows"]').text()).not.toContain("Panel paint");
+    wrapper.unmount();
+  });
+
+  it("reimports GLB assets from the default asset row through core remap API", async () => {
+    const editor = markRaw(createEditor());
+    const initialManifest = createWorkbenchManifest();
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      name: "Robot arm",
+      asset: {
+        id: "asset-a",
+        label: "robot.glb",
+        source: new Uint8Array([1, 2, 3]),
+        metadata: attachGlbImportManifestMetadata(undefined, initialManifest)
+      },
+      expandImportedTargets: true
+    });
+    const replacementManifest = withPrimitivePath(createWorkbenchManifest(), "meshes/panel/primitives/0");
+    const loader: EditorRuntimeOptions["loader"] = {
+      load: vi.fn(async () => new Group()),
+      analyze: vi.fn(async () => ({ scene: new Group(), manifest: replacementManifest }))
+    };
+    const reimport = vi.spyOn(editor, "reimportGlbAsset");
+    const urls = mockObjectUrls();
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, loader, rendererFactory: fakeRenderer }
+    });
+    const project = vi.spyOn(editor.getRuntime()!, "project");
+    const projectCallsBeforeReimport = project.mock.calls.length;
+
+    const input = wrapper.find('[aria-label="Reimport robot.glb"]').element as HTMLInputElement;
+    const file = new File([new Uint8Array([4, 5, 6])], "robot-v2.glb", { type: "model/gltf-binary" });
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [file]
+    });
+    await wrapper.find('[aria-label="Reimport robot.glb"]').trigger("change");
+    await waitForAssertion(() => {
+      expect(reimport).toHaveBeenCalledWith(expect.objectContaining({
+        assetId: "asset-a",
+        source: file,
+        loader
+      }));
+    });
+
+    await waitForAssertion(() => {
+      expect(wrapper.text()).toContain("remapped");
+    });
+    expect(editor.getSnapshot().objects["object-a"].asset.id).toBe("asset-a");
+    expect(Object.values(editor.getSnapshot().nodes).some((node) =>
+      node.kind === "imported" && node.importKey === "glb:object-a/primitive:meshes/panel/primitives/0"
+    )).toBe(true);
+    expect(project).toHaveBeenCalledTimes(projectCallsBeforeReimport + 2);
+    urls.restore();
     wrapper.unmount();
   });
 
@@ -723,5 +780,37 @@ function mockObjectUrls(): {
       URL.createObjectURL = originalCreate;
       URL.revokeObjectURL = originalRevoke;
     }
+  };
+}
+
+function createWorkbenchManifest() {
+  return createGlbImportManifest({
+    gltf: {
+      parser: {
+        json: {
+          nodes: [{ name: "Panel", mesh: 0 }],
+          meshes: [{
+            name: "Panel mesh",
+            primitives: [{ attributes: { POSITION: 0 }, material: 0 }]
+          }],
+          materials: [{ name: "Red" }]
+        }
+      }
+    }
+  });
+}
+
+function withPrimitivePath(manifest: ReturnType<typeof createWorkbenchManifest>, path: string) {
+  const mesh = manifest.meshes[0]!;
+  const primitive = mesh.primitives[0]!;
+  return {
+    ...manifest,
+    meshes: [{
+      ...mesh,
+      primitives: [{
+        ...primitive,
+        path
+      }]
+    }]
   };
 }

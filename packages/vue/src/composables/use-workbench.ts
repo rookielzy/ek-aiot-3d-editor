@@ -27,6 +27,8 @@ import {
   type RuntimeCameraFrameOptions,
   type ReplaceAssetInput,
   type ReplaceAssetResult,
+  type ReimportGlbAssetOptions,
+  type ReimportGlbAssetResult,
   type SceneSnapshot,
   type SnapChannel,
   type SnapSettings,
@@ -72,6 +74,7 @@ export interface WorkbenchAssetContext {
   workspaceVersion?: number;
   importFiles(options: Omit<WorkbenchAssetImportOptions, "loader"> & { loader?: WorkbenchAssetImportOptions["loader"] }): Promise<WorkbenchAssetImportResult[]>;
   replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
+  reimportGlbAsset(input: Omit<ReimportGlbAssetOptions, "loader"> & { loader?: ReimportGlbAssetOptions["loader"] }): Promise<ReimportGlbAssetResult>;
 }
 
 export interface WorkbenchProblemsContext {
@@ -151,6 +154,7 @@ export interface UseWorkbenchResult {
   exportProject(options?: ProjectExportOptions): ProjectExportResult;
   importAssetFiles(options: Omit<WorkbenchAssetImportOptions, "loader"> & { loader?: WorkbenchAssetImportOptions["loader"] }): Promise<WorkbenchAssetImportResult[]>;
   replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
+  reimportGlbAsset(input: Omit<ReimportGlbAssetOptions, "loader"> & { loader?: ReimportGlbAssetOptions["loader"] }): Promise<ReimportGlbAssetResult>;
   dispose(): void;
 }
 
@@ -303,6 +307,13 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     return currentEditor.value.replaceAsset(input);
   }
 
+  function reimportGlbAsset(input: Omit<ReimportGlbAssetOptions, "loader"> & { loader?: ReimportGlbAssetOptions["loader"] }): Promise<ReimportGlbAssetResult> {
+    return currentEditor.value.reimportGlbAsset({
+      ...input,
+      loader: input.loader ?? resolveLoader(options.loader)
+    });
+  }
+
   function dispose(): void {
     if (disposed) {
       return;
@@ -374,7 +385,8 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
       payloads: getAssetWorkspacePayloads(currentEditor.value),
       workspaceVersion: assetWorkspaceVersion.value,
       importFiles: importAssetFiles,
-      replaceAsset
+      replaceAsset,
+      reimportGlbAsset
     },
     problems: {
       items: model.value.problems.items,
@@ -444,6 +456,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     exportProject,
     importAssetFiles,
     replaceAsset,
+    reimportGlbAsset,
     dispose
   };
 }

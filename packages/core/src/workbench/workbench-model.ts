@@ -10,6 +10,7 @@ import type { Problem, ProblemSeverity } from "../problems/types";
 import type { ProjectCompleteness, ProjectProblem } from "../project/package-types";
 import type { SnapSettings } from "../runtime/transform/snap";
 import type { TransformMode } from "../runtime/transform/transform-mode";
+import { deriveImportedRemapProblems } from "../runtime/remap-problems";
 import type { AssetReference, SceneNode, SceneSnapshot } from "../snapshot/types";
 
 export interface BuildWorkbenchModelOptions {
@@ -170,7 +171,7 @@ const SEVERITY_RANK: Record<ProblemSeverity, number> = {
 };
 
 export function buildWorkbenchModel(snapshot: SceneSnapshot, options: BuildWorkbenchModelOptions = {}): WorkbenchModel {
-  const runtimeProblems = options.runtimeProblems ?? [];
+  const runtimeProblems = mergeProblems(options.runtimeProblems ?? [], deriveImportedRemapProblems(snapshot));
   const inspector = options.inspector ?? buildInspectorModel(snapshot, { runtimeProblems });
   const history = options.history ?? EMPTY_HISTORY;
   const snap = options.snap ?? EMPTY_SNAP;
@@ -467,6 +468,17 @@ function buildWorkbenchProject(
     ready: completeness === "complete" && problemCount === 0,
     statusLabel: problemCount > 0 ? `${problemCount} problems` : completeness === "partial" ? "Partial" : "Ready"
   };
+}
+
+function mergeProblems(
+  left: readonly Problem[],
+  right: readonly Problem[]
+): Problem[] {
+  const byId = new Map<string, Problem>();
+  for (const problem of [...left, ...right]) {
+    byId.set(problem.id, problem);
+  }
+  return [...byId.values()];
 }
 
 function formatSelectionLabel(snapshot: SceneSnapshot, nodeId: string | null, count: number): string {

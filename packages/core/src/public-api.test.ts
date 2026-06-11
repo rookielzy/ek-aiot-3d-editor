@@ -16,6 +16,7 @@ import {
   filterAssetWorkspaceItems,
   GLB_IMPORT_MANIFEST_METADATA_KEY,
   importWorkbenchAssets,
+  planGlbImportRemap,
   sortAssetWorkspaceItems,
   buildSetTransformCommand,
   createImportedGlbBindingDescriptor,
@@ -41,6 +42,7 @@ import {
   type EditorWithGlbImport,
   type GlbImportDiagnostic,
   type GlbImportManifest,
+  type GlbImportRemapPlan,
   type GltfDecoderConfiguration,
   type GltfLoaderAdapter,
   type GroupNodesCommand,
@@ -49,6 +51,9 @@ import {
   type InspectorCommandResult,
   type ImportGlbAssetOptions,
   type ImportGlbAssetResult,
+  type ReimportGlbAssetOptions,
+  type ReimportGlbAssetResult,
+  type ReimportGlbCommand,
   type ImportedGlbMaterialSlotDescriptor,
   type ImportedGlbSourceDescriptor,
   type ImportedGlbTargetBindingDescriptor,
@@ -200,6 +205,18 @@ describe("core public API", () => {
     const selectNodes: SelectNodesCommand = { type: "select-nodes", mode: "replace", nodeIds: ["node-a"], primaryNodeId: "node-a" };
     const createGroup: CreateGroupCommand = { type: "create-group", nodeId: "group-a" };
     const createImportedTargets: CreateImportedGlbTargetsCommand = { type: "create-imported-glb-targets", ownerObjectId: "object-a" };
+    const reimportRemap: GlbImportRemapPlan = planGlbImportRemap({
+      ownerObjectId: "object-a",
+      currentTargets: [],
+      replacementManifest: createImportManifest([])
+    });
+    const reimportGlb: ReimportGlbCommand = {
+      type: "reimport-glb",
+      ownerObjectId: "object-a",
+      assetId: "asset-a",
+      manifest: createImportManifest([]),
+      remap: reimportRemap
+    };
     const deleteNodes: DeleteNodesCommand = { type: "delete-nodes", nodeIds: ["node-a"] };
     const groupNodes: GroupNodesCommand = { type: "group-nodes", nodeIds: ["node-a"], nodeId: "group-a" };
     const ungroupNodes: UngroupNodesCommand = { type: "ungroup-nodes", nodeId: "group-a" };
@@ -303,6 +320,15 @@ describe("core public API", () => {
       snapshot: createEmptySnapshot("scene-import"),
       committed: false
     };
+    const reimportOptions: ReimportGlbAssetOptions = { assetId: "asset-a", source: new Uint8Array([1]) };
+    const reimportResult: ReimportGlbAssetResult = {
+      ok: true,
+      manifest: importManifest,
+      diagnostics: [],
+      remap: reimportRemap,
+      snapshot: createEmptySnapshot("scene-reimport"),
+      committed: false
+    };
     const rasterKind: WorkbenchRasterImportKind = "texture";
     const workspaceImportOptions: WorkbenchAssetImportOptions = {
       rasterKind,
@@ -332,6 +358,7 @@ describe("core public API", () => {
     expect(selectNodes.primaryNodeId).toBe("node-a");
     expect(createGroup.type).toBe("create-group");
     expect(createImportedTargets.ownerObjectId).toBe("object-a");
+    expect(reimportGlb.remap.summary.newTargetCount).toBe(0);
     expect(deleteNodes.nodeIds).toEqual(["node-a"]);
     expect(groupNodes.nodeId).toBe("group-a");
     expect(ungroupNodes.nodeId).toBe("group-a");
@@ -375,8 +402,11 @@ describe("core public API", () => {
     expect(GLB_IMPORT_MANIFEST_METADATA_KEY).toBe("glbImportManifest");
     expect(importOptions.loader).toBe(loaderAdapter);
     expect(importResult.committed).toBe(false);
+    expect(reimportOptions.assetId).toBe("asset-a");
+    expect(reimportResult.remap?.summary.exactTargetCount).toBe(0);
     expect(legacyLoaderAdapter.analyze).toBeUndefined();
     expect(typeof editorWithImport.importGlbAsset).toBe("function");
+    expect(typeof editorWithImport.reimportGlbAsset).toBe("function");
     expect(typeof editorWithImport.importWorkbenchAssets).toBe("function");
     expect(workspaceImportOptions.rasterKind).toBe("texture");
     expect(workspaceImportResult.status).toBe("succeeded");

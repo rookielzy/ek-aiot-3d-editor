@@ -17,6 +17,18 @@ export type {
   GltfLoaderResult
 } from "./assets/import-pipeline";
 export type {
+  GlbImportNewTarget,
+  GlbImportRemapConfidence,
+  GlbImportRemapMatchKind,
+  GlbImportRemapPlan,
+  GlbImportRemapSummary,
+  GlbImportSlotRemap,
+  GlbImportTargetRemap,
+  GlbImportUnresolvedSlot,
+  GlbImportUnresolvedTarget,
+  PlanGlbImportRemapOptions
+} from "./assets/import-remap";
+export type {
   AssetReferenceLocation,
   AssetWorkspaceItem,
   AssetWorkspaceModel,
@@ -55,6 +67,7 @@ export type {
   ImportGlbCommand,
   PasteObjectsCommand,
   RegisterAssetCommand,
+  ReimportGlbCommand,
   ReparentNodeCommand,
   ReparentObjectCommand,
   RemoveLightCommand,
@@ -71,7 +84,19 @@ export type {
   UngroupObjectsCommand,
   UpdateLightCommand
 } from "./commands/types";
-export type { AssetWorkspaceSubscriber, Editor, EditorOptions, EditorWithGlbImport, ImportGlbAssetOptions, ImportGlbAssetResult, MountRuntimeOptions, RuntimeSubscriber, SnapshotSubscriber } from "./editor/editor-api";
+export type {
+  AssetWorkspaceSubscriber,
+  Editor,
+  EditorOptions,
+  EditorWithGlbImport,
+  ImportGlbAssetOptions,
+  ImportGlbAssetResult,
+  MountRuntimeOptions,
+  ReimportGlbAssetOptions,
+  ReimportGlbAssetResult,
+  RuntimeSubscriber,
+  SnapshotSubscriber
+} from "./editor/editor-api";
 export type { AdvancedEditorOperations, EditorClipboard } from "./editor/operations";
 export type { SnapChannel, SnapSubscriber } from "./editor/snap-state";
 export type {
@@ -278,6 +303,9 @@ export {
   resolveGlbImportStatus,
   validateGlbImportManifest
 } from "./assets/import-pipeline";
+export {
+  planGlbImportRemap
+} from "./assets/import-remap";
 export {
   ThreeGltfLoaderAdapter
 } from "./runtime/gltf-loader-adapter";

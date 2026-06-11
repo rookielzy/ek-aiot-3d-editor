@@ -1,5 +1,6 @@
 import type { Problem } from "../problems/types";
 import type { TextureSlotName } from "../materials/types";
+import type { SceneImportedGlbNode } from "../snapshot/types";
 import type { RuntimeImportedTargetMatch } from "./imported-target-resolver";
 
 export { createMissingAssetProblem } from "../assets/problems";
@@ -193,6 +194,75 @@ export function createImportedTargetMissingProblem(match: RuntimeImportedTargetM
       importKey: match.importKey,
       sourceKind: match.source.kind,
       sourcePath: match.source.path
+    }
+  };
+}
+
+export function createImportedTargetUnresolvedProblem(node: SceneImportedGlbNode, assetId?: string): Problem {
+  const previousImportKey = node.remap?.previousImportKey ?? node.importKey;
+  const candidateImportKeys = node.remap?.candidateImportKeys ?? [];
+  return {
+    id: `imported-target-unresolved:${node.ownerObjectId}:${node.id}:${previousImportKey}`,
+    severity: "warning",
+    code: "imported-target-unresolved",
+    objectId: node.ownerObjectId,
+    ...(assetId ? { assetId } : {}),
+    source: "runtime",
+    target: {
+      kind: "imported-target",
+      objectId: node.ownerObjectId,
+      nodeId: node.id,
+      importKey: node.importKey
+    },
+    recoverability: "user-action",
+    message: `Imported target ${previousImportKey} could not be remapped during GLB reimport.`,
+    display: {
+      title: "Imported target needs remap",
+      detail: candidateImportKeys.length > 0
+        ? `Previous target ${previousImportKey} has ${candidateImportKeys.length} possible replacement targets.`
+        : `Previous target ${previousImportKey} was not found in the replacement GLB.`,
+      actionLabel: "Review remap"
+    },
+    metadata: {
+      importKey: node.importKey,
+      previousImportKey,
+      candidateImportKeys,
+      sourceKind: node.source.kind,
+      sourcePath: node.source.path
+    }
+  };
+}
+
+export function createImportedMaterialSlotUnresolvedProblem(
+  node: SceneImportedGlbNode,
+  slotId: string,
+  assetId?: string
+): Problem {
+  return {
+    id: `imported-material-slot-unresolved:${node.ownerObjectId}:${node.id}:${slotId}`,
+    severity: "warning",
+    code: "imported-material-slot-unresolved",
+    objectId: node.ownerObjectId,
+    ...(assetId ? { assetId } : {}),
+    source: "runtime",
+    target: {
+      kind: "imported-material-slot",
+      objectId: node.ownerObjectId,
+      nodeId: node.id,
+      importKey: node.importKey,
+      slotId
+    },
+    recoverability: "user-action",
+    message: `Imported material slot ${slotId} could not be remapped during GLB reimport.`,
+    display: {
+      title: "Imported material slot needs remap",
+      detail: `Material assignment target ${slotId} remains durable but no replacement slot was matched.`,
+      actionLabel: "Review remap"
+    },
+    metadata: {
+      importKey: node.importKey,
+      slotId,
+      previousImportKey: node.remap?.previousImportKey ?? node.importKey
     }
   };
 }

@@ -176,6 +176,23 @@ if (!result.ok) {
 
 成功提交会把 JSON-compatible `glbImportManifest` 写入 asset metadata。Manifest 可以被 `buildAssetWorkspaceModel()` 投影为 `importStatus`、`importManifest` 和 `importDiagnostics`。失败不会默认注册 asset/object，因此 Snapshot 不会因为坏 GLB 被污染。
 
+现有 GLB asset 的重导入应走 `editor.reimportGlbAsset()`：
+
+```ts
+const preview = await editor.reimportGlbAsset({
+  assetId: "machine",
+  source: replacementFile,
+  loader,
+  commit: false
+});
+
+if (preview.ok) {
+  console.log(preview.remap?.summary);
+}
+```
+
+提交时省略 `commit: false`。Core 会替换同一稳定 asset ID 的 transient payload、写入 replacement manifest、保留可匹配 imported target 的 node ID 和 authored transform、重写可匹配 material-slot assignment，并把 unresolved target/slot 投影为可恢复 problem。Host 不应自行把 `File`、`Blob`、object URL、loaded glTF scene 或 remap preview 写入 Snapshot。
+
 `RendererLike` 需要提供：
 
 - `domElement`

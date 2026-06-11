@@ -110,7 +110,7 @@ GLB import analysis 可以把 `glbImportManifest` 存入 `AssetReference.metadat
 - import diagnostics，包括 missing decoder、unsupported extension、source invalid、load failed 等稳定 code。
 - deterministic source paths，例如 `nodes/0`、`meshes/0/primitives/1`。
 
-Manifest 可进入 Snapshot 和 `.ek3d` 的 `scene.json`，但只能包含 string、number、boolean、null、array 和 plain object。禁止在 metadata 中保存 `GLTFLoader`、parser、Three.js `Object3D`、`Texture`、`Material`、`AnimationClip`、`Camera`、`File`、`Blob`、object URL、resolver 输出、decoder 实例、image bitmap 或 PMREM 输出。导入分析失败默认不提交 `import-glb` 命令，因此不会注册坏 asset/object。
+Manifest 可进入 Snapshot 和 `.ek3d` 的 `scene.json`，但只能包含 string、number、boolean、null、array 和 plain object。禁止在 metadata 中保存 `GLTFLoader`、parser、Three.js `Object3D`、`Texture`、`Material`、`AnimationClip`、`Camera`、`File`、`Blob`、object URL、resolver 输出、decoder 实例、image bitmap 或 PMREM 输出。导入分析失败默认不提交 `import-glb` 命令，因此不会注册坏 asset/object。GLB reimport 使用同一 manifest 形状更新稳定 asset ID 的 metadata，并用纯数据 remap plan 决定 imported target/slot 如何保留、重定向或标记 unresolved。
 
 ## SceneNode
 
@@ -202,6 +202,16 @@ interface ImportedGlbMaterialSlotDescriptor {
   materialImportKey?: string;
   metadata?: Record<string, JsonValue>;
 }
+
+interface ImportedGlbRemapMetadata {
+  status?: "resolved" | "unresolved" | "stale";
+  previousImportKey?: string;
+  candidateImportKeys?: string[];
+  metadata?: {
+    unresolvedMaterialSlots?: string[];
+    [key: string]: JsonValue | undefined;
+  };
+}
 ```
 
 Owner 约束：
@@ -212,7 +222,7 @@ Owner 约束：
 - regular group/object/light node 不能挂到 imported node 下。
 - 同一 owner 下 `importKey` 必须唯一。
 
-`importKey` 是 GLB source identity，来自 `GlbImportManifest` descriptor path，例如 `glb:object-a/node:nodes/0`。`node.id` 是 editor identity，供 selection/history/commands 使用。首次展开导入时可以从 import key 派生 node ID；未来 reimport/remap 可以保留 node ID，同时更新 source/remap metadata。
+`importKey` 是 GLB source identity，来自 `GlbImportManifest` descriptor path，例如 `glb:object-a/node:nodes/0`。`node.id` 是 editor identity，供 selection/history/commands 使用。首次展开导入时可以从 import key 派生 node ID；reimport/remap 会保留 node ID，同时更新 source/remap metadata。
 
 Imported target 创建是显式操作：
 
@@ -223,7 +233,7 @@ editor.dispatch({
 });
 ```
 
-Runtime projection 会把这些 durable imported nodes 解析为 loaded GLB scene 内的 transient `Object3D` descendant，并把结果放入 runtime node target map。该映射只在运行时存在：`Object3D`、base transform cache、loader result、parser association、selection helper 和 runtime problem 都不会写入 Snapshot。若 loaded GLB 中找不到对应 `importKey/source`，runtime 会暴露 target 为 `{ kind: "imported-target" }` 的 recoverable problem，并保留 durable imported node 与已 authored 的 transform override。
+Runtime projection 会把这些 durable imported nodes 解析为 loaded GLB scene 内的 transient `Object3D` descendant，并把结果放入 runtime node target map。该映射只在运行时存在：`Object3D`、base transform cache、loader result、parser association、selection helper 和 runtime problem 都不会写入 Snapshot。若 loaded GLB 中找不到对应 `importKey/source`，runtime 会暴露 target 为 `{ kind: "imported-target" }` 的 recoverable problem，并保留 durable imported node 与已 authored 的 transform override。若 GLB reimport 把 node 标记为 `remap.status: "unresolved"`，runtime/workbench 会暴露 `imported-target-unresolved`，而不是删除 node 或它的 authored transform。
 
 或在 import 时 opt-in：
 
@@ -237,6 +247,8 @@ editor.dispatch({
 ```
 
 默认 object-level GLB import 不创建 imported targets。
+
+GLB reimport 通过 `reimport-glb` 命令提交 durable changes。命令会用 replacement manifest 重建该 owner 下的 imported nodes：exact/source/relationship match 保留原 node ID 和 authored transform，非 exact match 写入 `remap.status: "resolved"` 与 `previousImportKey`，无法唯一匹配的旧 node 保留为 `remap.status: "unresolved"`，replacement manifest 中新增的 target 会创建新的 imported node。若 target 匹配成功但旧 material slot 无法匹配，node 会在 `remap.metadata.unresolvedMaterialSlots` 中记录旧 slot key，用于派生 recoverable slot problem。`commit: false` 的 reimport preview 只返回 remap plan，不改变 Snapshot 或 asset payload。
 
 ## SceneObject Payload
 
@@ -287,6 +299,7 @@ Selection 是 durable state，因此可以序列化/恢复。`nodeId` 是 primar
 - resolver/loader 失败只产生 runtime problem，不删除 durable material assignment 或 texture slot。
 - imported target 可以暴露 `materialSlots`，`MaterialAssignmentTarget` 仍使用 `{ kind: "material-slot"; objectId; slotId }` 引用 slot key。
 - validation 允许 material-slot assignment 指向当前不存在的 slot key，因为 reimport 后 slot 消失应该成为 recoverable problem，而不是 schema 层删除 durable assignment。
+- `reimport-glb` 会在 slot 可唯一匹配时改写 material-slot assignment ID/slot ID；无法匹配时保留 durable assignment，并通过 `imported-material-slot-unresolved` problem 暴露。
 - 当前非目标包括 runtime material slot projection、material slot inspector UI、复杂材质图、节点材质和 shader 编辑。
 
 ## Environment

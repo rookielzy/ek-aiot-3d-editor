@@ -123,7 +123,17 @@
               <small v-if="problem.detail">{{ problem.detail }}</small>
             </li>
           </ul>
-          <label v-if="asset.recoverable && asset.registered" class="ek-workbench__asset-replace">
+          <label v-if="asset.kind === 'glb' && asset.registered" class="ek-workbench__asset-replace">
+            <span>Reimport GLB</span>
+            <small>{{ recoveryState[recoveryId(asset)] ?? "Remap imported targets" }}</small>
+            <input
+              type="file"
+              accept=".glb,.gltf,model/gltf-binary,model/gltf+json"
+              :aria-label="`Reimport ${asset.label}`"
+              @change="reimportWorkspaceGlb(asset, $event)"
+            />
+          </label>
+          <label v-else-if="asset.recoverable && asset.registered" class="ek-workbench__asset-replace">
             <span>{{ asset.actionLabel ?? "Replace asset" }}</span>
             <small>{{ recoveryState[recoveryId(asset)] ?? "Preserves asset ID" }}</small>
             <input type="file" :aria-label="`Replace ${asset.label}`" @change="replaceWorkspaceAsset(asset, $event)" />
@@ -335,6 +345,28 @@ async function replaceWorkspaceAsset(asset: AssetWorkspaceItem, event: Event): P
   recoveryState[id] = result.problems[0]?.message ?? "Replacement failed";
 }
 
+async function reimportWorkspaceGlb(asset: AssetWorkspaceItem, event: Event): Promise<void> {
+  const input = event.currentTarget as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) {
+    return;
+  }
+
+  const id = recoveryId(asset);
+  recoveryState[id] = "Analyzing GLB...";
+  const result = await props.context.assets.reimportGlbAsset({
+    assetId: asset.id,
+    source: file
+  });
+  if (result.ok) {
+    props.context.refreshProblems();
+    recoveryState[id] = formatReimportSummary(file.name, result.remap?.summary);
+    return;
+  }
+  recoveryState[id] = result.diagnostics[0]?.display.title ?? result.commandResult?.error ?? "Reimport failed";
+}
+
 async function replaceMissingAsset(item: WorkbenchMissingAssetItem, event: Event): Promise<void> {
   const input = event.currentTarget as HTMLInputElement;
   const file = input.files?.[0];
@@ -366,5 +398,20 @@ function recoveryId(asset: AssetWorkspaceItem): string {
 
 function formatStatus(value: string): string {
   return value.replace(/-/g, " ");
+}
+
+function formatReimportSummary(
+  fileName: string,
+  summary: { exactTargetCount: number; remappedTargetCount: number; newTargetCount: number; unresolvedTargetCount: number } | undefined
+): string {
+  if (!summary) {
+    return `Reimported ${fileName}`;
+  }
+  return [
+    `${summary.exactTargetCount} exact`,
+    `${summary.remappedTargetCount} remapped`,
+    `${summary.newTargetCount} new`,
+    `${summary.unresolvedTargetCount} unresolved`
+  ].join(" · ");
 }
 </script>
