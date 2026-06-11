@@ -363,6 +363,32 @@ function AssetWorkspaceRow({
     }));
   }
 
+  async function reimportGlbAsset(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) {
+      return;
+    }
+
+    setRecoveryState((current) => ({ ...current, [recoveryId]: "Analyzing GLB..." }));
+    const result = await context.assets.reimportGlbAsset({
+      assetId: asset.id,
+      source: file
+    });
+    if (result.ok) {
+      context.refreshProblems();
+      setRecoveryState((current) => ({
+        ...current,
+        [recoveryId]: formatReimportSummary(file.name, result.remap?.summary)
+      }));
+      return;
+    }
+    setRecoveryState((current) => ({
+      ...current,
+      [recoveryId]: result.diagnostics[0]?.display.title ?? result.commandResult?.error ?? "Reimport failed"
+    }));
+  }
+
   return (
     <li
       className="ek-workbench__asset-row"
@@ -396,7 +422,13 @@ function AssetWorkspaceRow({
           ))}
         </ul>
       ) : null}
-      {asset.recoverable && asset.registered ? (
+      {asset.kind === "glb" && asset.registered ? (
+        <label className="ek-workbench__asset-replace">
+          <span>Reimport GLB</span>
+          <small>{recoveryState[recoveryId] ?? "Remap imported targets"}</small>
+          <input type="file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" aria-label={`Reimport ${asset.label}`} onChange={(event) => void reimportGlbAsset(event)} />
+        </label>
+      ) : asset.recoverable && asset.registered ? (
         <label className="ek-workbench__asset-replace">
           <span>{asset.actionLabel ?? "Replace asset"}</span>
           <small>{recoveryState[recoveryId] ?? "Preserves asset ID"}</small>
@@ -441,4 +473,19 @@ function WorkbenchNodeRow({ context, row }: { context: WorkbenchContext; row: Wo
 
 function formatStatus(value: string): string {
   return value.replace(/-/g, " ");
+}
+
+function formatReimportSummary(
+  fileName: string,
+  summary: { exactTargetCount: number; remappedTargetCount: number; newTargetCount: number; unresolvedTargetCount: number } | undefined
+): string {
+  if (!summary) {
+    return `Reimported ${fileName}`;
+  }
+  return [
+    `${summary.exactTargetCount} exact`,
+    `${summary.remappedTargetCount} remapped`,
+    `${summary.newTargetCount} new`,
+    `${summary.unresolvedTargetCount} unresolved`
+  ].join(" · ");
 }

@@ -81,7 +81,7 @@ Snapshot 保存：
 - material overrides
 - environment/background authoring intent
 - light definitions and their light node targets
-- imported GLB target identity, owner hierarchy constraints, source descriptors, optional transform overrides, and imported material slot descriptors
+- imported GLB target identity, owner hierarchy constraints, source descriptors, optional transform overrides, imported material slot descriptors, and JSON-compatible reimport remap metadata
 - authored problem metadata
 - JSON-compatible metadata
 
@@ -99,7 +99,7 @@ Runtime 保存或派生：
 
 Runtime 派生结果不得写回 Snapshot。
 
-Imported GLB target 是 durable target identity，不是 runtime traversal cache。Runtime projector 会把 imported node 解析成 loaded owner GLB scene 内的 descendant link，并把该 link 注册到 `ThreeObjectMap`。Pointer picking、selection bounds、camera framing 和 TransformControls 都复用这张 runtime target map。Core 不会把 loaded glTF scene graph、Three.js `Object3D`、material/texture、loader parser、resolver result、base transform cache 或 runtime problem 写回 Snapshot。后续 reimport remap 和 slot-aware material projection 必须从 v5 imported target key/slot key contract 派生，而不是重新发明一套 runtime-only ID。
+Imported GLB target 是 durable target identity，不是 runtime traversal cache。Runtime projector 会把 imported node 解析成 loaded owner GLB scene 内的 descendant link，并把该 link 注册到 `ThreeObjectMap`。Pointer picking、selection bounds、camera framing 和 TransformControls 都复用这张 runtime target map。Core 不会把 loaded glTF scene graph、Three.js `Object3D`、material/texture、loader parser、resolver result、base transform cache 或 runtime problem 写回 Snapshot。Reimport remap 和 slot-aware material projection 必须从 v5 imported target key/slot key contract 派生，而不是重新发明一套 runtime-only ID。无法解析的 reimport target/slot 会保留 durable marker，并投影为 runtime/workbench problem。
 
 ## Asset 解析边界
 
@@ -164,6 +164,7 @@ Workbench context 包含：
 - `importProject()`
 - `exportProject()`
 - `replaceAsset()`
+- `assets.reimportGlbAsset()`
 
 Workbench 不形成插件系统，也不暴露私有 runtime projector。
 
@@ -176,10 +177,12 @@ Core editor 生命周期：
 1. `createEditor({ snapshot })`
 2. `editor.subscribe(...)`
 3. `editor.mountRuntime({ container, resolver, loader, rendererFactory })`
-4. `editor.dispatch(...)`
+4. `editor.dispatch(...)` 或 `editor.importGlbAsset()` / `editor.reimportGlbAsset()`
 5. `editor.serialize()` / `editor.exportProject()`
 6. `runtime.dispose()` 或组件卸载自动 dispose
 7. `editor.dispose()`
+
+`editor.reimportGlbAsset()` 是 async lifecycle API：它先用 host loader 分析 replacement GLB，再构建 pure remap plan。`commit: false` 只返回 preview；提交时先替换同一 asset ID 的 transient payload，再 dispatch `reimport-glb`。如果 payload replace 或 command 失败，core 会恢复旧 payload/snapshot 并通知 asset workspace 订阅者。
 
 同一个 editor 同一时间只应由一个 viewport/runtime 挂载。React/Vue 组件会在卸载时 dispose runtime；如果 editor 由宿主传入，workbench 不会在卸载时 dispose 宿主 editor。
 

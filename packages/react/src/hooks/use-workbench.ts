@@ -23,6 +23,8 @@ import {
   type RuntimeCameraFrameOptions,
   type ReplaceAssetInput,
   type ReplaceAssetResult,
+  type ReimportGlbAssetOptions,
+  type ReimportGlbAssetResult,
   type SceneSnapshot,
   type SnapChannel,
   type SnapSettings,
@@ -71,6 +73,7 @@ export interface WorkbenchAssetContext {
   workspaceVersion?: number;
   importFiles(options: Omit<WorkbenchAssetImportOptions, "loader"> & { loader?: WorkbenchAssetImportOptions["loader"] }): Promise<WorkbenchAssetImportResult[]>;
   replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
+  reimportGlbAsset(input: Omit<ReimportGlbAssetOptions, "loader"> & { loader?: ReimportGlbAssetOptions["loader"] }): Promise<ReimportGlbAssetResult>;
 }
 
 export interface WorkbenchProblemsContext {
@@ -172,6 +175,11 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     editor.importProject(packageBytes, projectOptions), [editor]);
   const exportProject = useCallback((projectOptions?: ProjectExportOptions) => editor.exportProject(projectOptions), [editor]);
   const replaceAsset = useCallback((input: ReplaceAssetInput) => editor.replaceAsset(input), [editor]);
+  const reimportGlbAsset = useCallback((input: Omit<ReimportGlbAssetOptions, "loader"> & { loader?: ReimportGlbAssetOptions["loader"] }) =>
+    editor.reimportGlbAsset({
+      ...input,
+      loader: input.loader ?? options.loader
+    }), [editor, options.loader]);
   const importAssetFiles = useCallback((assetOptions: Omit<WorkbenchAssetImportOptions, "loader"> & { loader?: WorkbenchAssetImportOptions["loader"] }) =>
     editor.importWorkbenchAssets({
       ...assetOptions,
@@ -229,7 +237,8 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     payloads: assetPayloads,
     workspaceVersion: assetWorkspaceVersion,
     importFiles: importAssetFiles,
-    replaceAsset
+    replaceAsset,
+    reimportGlbAsset
   };
   const problems: WorkbenchProblemsContext = {
     items: model.problems.items,

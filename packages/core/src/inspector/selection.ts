@@ -1,4 +1,5 @@
 import type { Problem } from "../problems/types";
+import { deriveImportedRemapProblems } from "../runtime/remap-problems";
 import { getSelectedNodeIds, getSelectedObjectIds } from "../selection/selection";
 import type { SceneSnapshot } from "../snapshot/types";
 import { buildEnvironmentSection } from "./environment";
@@ -33,7 +34,7 @@ export function getInspectorSelection(snapshot: SceneSnapshot): InspectorSelecti
 }
 
 export function buildInspectorModel(snapshot: SceneSnapshot, options: BuildInspectorModelOptions = {}): InspectorModel {
-  const runtimeProblems: readonly Problem[] = options.runtimeProblems ?? [];
+  const runtimeProblems = mergeProblems(options.runtimeProblems ?? [], deriveImportedRemapProblems(snapshot));
   return {
     selection: getInspectorSelection(snapshot),
     transform: buildTransformSection(snapshot),
@@ -42,4 +43,15 @@ export function buildInspectorModel(snapshot: SceneSnapshot, options: BuildInspe
     lights: buildLightSection(snapshot, options.activeLightId),
     problems: buildProblemSection(snapshot, runtimeProblems)
   };
+}
+
+function mergeProblems(
+  left: readonly Problem[],
+  right: readonly Problem[]
+): Problem[] {
+  const byId = new Map<string, Problem>();
+  for (const problem of [...left, ...right]) {
+    byId.set(problem.id, problem);
+  }
+  return [...byId.values()];
 }

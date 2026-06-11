@@ -180,8 +180,11 @@ Workbench context 暴露：
 - `exportProject(options)`
 - `importProject(packageBytes, options)`
 - `replaceAsset(input)`
+- `reimportGlbAsset(options)`
 
-这些 API 处理 `.ek3d` 项目包和缺失资产恢复。二进制 payload 不进入 Snapshot。
+这些 API 处理 `.ek3d` 项目包、缺失资产恢复和 GLB reimport。二进制 payload 不进入 Snapshot。
+
+GLB reimport 使用稳定 asset ID 替换 transient payload，并在提交前分析 replacement GLB。`commit: false` 返回 remap preview，不改变 Snapshot 或 payload；提交成功后 `reimport-glb` 会保留可匹配 imported target 的 node ID、transform 和 material slot assignment，新增 replacement target 会成为新的 imported node，无法唯一匹配的旧 target/slot 会保留 durable authoring state 并暴露可恢复 problem。
 
 ## 本地 demo checklist
 
@@ -189,7 +192,7 @@ React 和 Vue proof-loop demo 的侧栏包含：
 
 - Scene hierarchy：显示 object/group/light node 名称、payload 辅助信息、selected/primary 标记和 problem badge。
 - Node operations：默认 toolbar 通过 core operations 触发 select all、copy、paste、duplicate、delete、group、ungroup。
-- Asset workspace：默认左栏支持多文件本地导入、raster image/texture intent、搜索、kind/status filter、sort、reference summary、payload/package status、GLB import diagnostics 和 stable-ID missing payload replacement。
+- Asset workspace：默认左栏支持多文件本地导入、raster image/texture intent、搜索、kind/status filter、sort、reference summary、payload/package status、GLB import diagnostics、stable-ID missing payload replacement 和 registered GLB reimport。
 - Proof checklist：从当前 selection、material assignment、history、transform mode、snap、runtime problems 和本次 demo session 派生验证进度。
 
 Checklist 和 asset import queue 都不是 durable project state。导出 `.ek3d`、导入 `.ek3d` 或序列化 Scene Snapshot 时，不会保存 checklist 进度、camera/control 状态、runtime problems、drag hover、file input value、queue row、`File`、`Blob`、object URL 或 resolver 结果。
@@ -206,7 +209,6 @@ Core 提供 `resolveEditorShortcut()` 和 `executeEditorAction()`。React/Vue wo
 
 - 框选。
 - durable imported target row 之外的 Workbench hierarchy UI polish。
-- GLB reimport diff/remap command。
 - Imported material slot assignment 的 runtime projection。
 - 系统剪贴板集成和外部 paste 格式。
 - 网格渲染、对齐辅助线和可视 snap 控件。

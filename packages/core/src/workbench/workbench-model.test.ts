@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { attachGlbImportManifestMetadata, createGlbImportManifest } from "../assets/import-pipeline";
 import { createMissingAssetProblem } from "../assets/problems";
+import { planGlbImportRemap } from "../assets/import-remap";
 import { createEditor } from "../editor/create-editor";
+import { createMaterialAssignmentId } from "../materials/defaults";
 import { buildInspectorModel } from "../inspector/selection";
 import { createEnvironmentAssetUnresolvedProblem, createImportedTargetMissingProblem } from "../runtime/problems";
 import { filterAssetWorkspaceItems, sortAssetWorkspaceItems } from "../assets/workspace";
@@ -158,6 +160,161 @@ describe("workbench model", () => {
       highestProblemSeverity: "warning"
     });
     expect(JSON.stringify(model)).not.toContain("Object3D");
+  });
+
+  it("derives unresolved GLB reimport problems from durable remap metadata", () => {
+    const editor = createEditor();
+    const manifest = createGlbImportManifest({
+      gltf: {
+        parser: {
+          json: {
+            nodes: [{ name: "Panel", mesh: 0 }],
+            meshes: [{
+              name: "Panel mesh",
+              primitives: [{ attributes: { POSITION: 0 }, material: 0 }]
+            }],
+            materials: [{ name: "Red" }]
+          }
+        }
+      }
+    });
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: { id: "asset-a", metadata: attachGlbImportManifestMetadata(undefined, manifest) },
+      expandImportedTargets: true
+    });
+    const primitive = Object.values(editor.getSnapshot().nodes)
+      .find((node) => node.kind === "imported" && node.source.kind === "primitive")!;
+    const slotId = primitive.materialSlots![0]!.slotKey;
+    editor.dispatch({
+      type: "set-material",
+      target: { kind: "material-slot", objectId: "object-a", slotId },
+      materialId: "material-a",
+      materialName: "Override",
+      material: { color: "#ff0000" }
+    });
+    const replacement = createGlbImportManifest({
+      gltf: {
+        parser: {
+          json: {
+            nodes: [{ name: "Replacement" }]
+          }
+        }
+      }
+    });
+    const remap = planGlbImportRemap({
+      ownerObjectId: "object-a",
+      currentTargets: Object.values(editor.getSnapshot().nodes).filter((node) => node.kind === "imported"),
+      replacementManifest: replacement
+    });
+    editor.dispatch({
+      type: "reimport-glb",
+      ownerObjectId: "object-a",
+      assetId: "asset-a",
+      manifest: replacement,
+      remap
+    });
+    const snapshot = editor.getSnapshot();
+    const model = buildWorkbenchModel(snapshot, {
+      inspector: buildInspectorModel(snapshot),
+      history: editor.getHistoryState(),
+      snap: editor.snap.get(),
+      transformMode: editor.transformMode.get(),
+      runtimeReady: true
+    });
+
+    expect(snapshot.problems.acknowledged).toEqual({});
+    expect(snapshot.materials.assignments[createMaterialAssignmentId({
+      kind: "material-slot",
+      objectId: "object-a",
+      slotId
+    })]).toBeDefined();
+    expect(model.problems.items.map((problem) => problem.code)).toEqual(expect.arrayContaining([
+      "imported-target-unresolved",
+      "imported-material-slot-unresolved"
+    ]));
+    expect(model.hierarchy.rows.find((row) => row.id === primitive.id)).toMatchObject({
+      problemCount: 2,
+      highestProblemSeverity: "warning"
+    });
+    expect(model.assets.workspace?.items.find((item) => item.id === "asset-a")).toMatchObject({
+      status: "missing-payload",
+      problemCount: expect.any(Number)
+    });
+  });
+
+  it("derives unresolved material-slot problems from matched target remap metadata", () => {
+    const editor = createEditor();
+    const manifest = createGlbImportManifest({
+      gltf: {
+        parser: {
+          json: {
+            nodes: [{ name: "Panel", mesh: 0 }],
+            meshes: [{
+              name: "Panel mesh",
+              primitives: [{ attributes: { POSITION: 0 }, material: 0 }]
+            }],
+            materials: [{ name: "Red" }]
+          }
+        }
+      }
+    });
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: { id: "asset-a", metadata: attachGlbImportManifestMetadata(undefined, manifest) },
+      expandImportedTargets: true
+    });
+    const primitive = Object.values(editor.getSnapshot().nodes)
+      .find((node) => node.kind === "imported" && node.source.kind === "primitive")!;
+    const slotId = primitive.materialSlots![0]!.slotKey;
+    editor.dispatch({
+      type: "set-material",
+      target: { kind: "material-slot", objectId: "object-a", slotId },
+      materialId: "material-a",
+      materialName: "Override",
+      material: { color: "#ff0000" }
+    });
+    const replacement = withoutPrimitiveMaterial(manifest);
+    const remap = planGlbImportRemap({
+      ownerObjectId: "object-a",
+      currentTargets: Object.values(editor.getSnapshot().nodes).filter((node) => node.kind === "imported"),
+      replacementManifest: replacement
+    });
+    editor.dispatch({
+      type: "reimport-glb",
+      ownerObjectId: "object-a",
+      assetId: "asset-a",
+      manifest: replacement,
+      remap
+    });
+    const snapshot = editor.getSnapshot();
+    const model = buildWorkbenchModel(snapshot, {
+      inspector: buildInspectorModel(snapshot),
+      history: editor.getHistoryState(),
+      snap: editor.snap.get(),
+      transformMode: editor.transformMode.get(),
+      runtimeReady: true
+    });
+
+    expect(snapshot.materials.assignments[createMaterialAssignmentId({
+      kind: "material-slot",
+      objectId: "object-a",
+      slotId
+    })]).toBeDefined();
+    expect(snapshot.nodes[primitive.id]).toMatchObject({
+      remap: {
+        metadata: {
+          unresolvedMaterialSlots: [slotId]
+        }
+      }
+    });
+    expect(model.problems.items.map((problem) => problem.code)).toEqual(["imported-material-slot-unresolved"]);
+    expect(model.hierarchy.rows.find((row) => row.id === primitive.id)).toMatchObject({
+      problemCount: 1,
+      highestProblemSeverity: "warning"
+    });
   });
 
   it("uses asset workspace payload summaries while preserving legacy asset item fields", () => {
@@ -440,4 +597,32 @@ function createImportedManifestMetadata() {
       }
     }
   }));
+}
+
+function withPrimitivePath(manifest: ReturnType<typeof createGlbImportManifest>, path: string): ReturnType<typeof createGlbImportManifest> {
+  const mesh = manifest.meshes[0]!;
+  const primitive = mesh.primitives[0]!;
+  return {
+    ...manifest,
+    meshes: [{
+      ...mesh,
+      primitives: [{
+        ...primitive,
+        path
+      }]
+    }]
+  };
+}
+
+function withoutPrimitiveMaterial(manifest: ReturnType<typeof createGlbImportManifest>): ReturnType<typeof createGlbImportManifest> {
+  const mesh = manifest.meshes[0]!;
+  const primitive = mesh.primitives[0]!;
+  const { materialIndex, ...primitiveWithoutMaterial } = primitive;
+  return {
+    ...manifest,
+    meshes: [{
+      ...mesh,
+      primitives: [primitiveWithoutMaterial]
+    }]
+  };
 }

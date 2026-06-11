@@ -258,7 +258,7 @@ describe("editor lifecycle", () => {
     expect(result.ok).toBe(false);
     expect(result.committed).toBe(false);
     expect(result.diagnostics).toMatchObject([{ code: "glb-decoder-missing" }]);
-    expect(editor.getSnapshot()).toBe(before);
+    expect(editor.getSnapshot()).toStrictEqual(before);
     expect(editor.getSnapshot().assets["asset-a"]).toBeUndefined();
     expect(urls.revokeObjectURL).toHaveBeenCalledWith("blob:import-0");
   });
@@ -301,7 +301,7 @@ describe("editor lifecycle", () => {
     expect(analysis.ok).toBe(false);
     expect(analysis.committed).toBe(false);
     expect(analysis.snapshot).toBe(before);
-    expect(editor.getSnapshot()).toBe(before);
+    expect(editor.getSnapshot()).toStrictEqual(before);
     expect(editor.getHistoryState()).toEqual(beforeHistory);
     expect(editor.getSnapshot().assets["asset-a"]).toBeUndefined();
 
@@ -367,6 +367,184 @@ describe("editor lifecycle", () => {
     expect(disposeMaterial).toHaveBeenCalledTimes(1);
     expect(urls.revokeObjectURL).toHaveBeenCalledWith("blob:import-0");
   });
+
+  it("previews GLB reimport remaps without mutating snapshot or payloads", async () => {
+    const editor = createEditor();
+    const urls = mockObjectUrls();
+    await editor.importGlbAsset({
+      objectId: "object-a",
+      asset: { id: "asset-a", source: new Uint8Array([1, 2, 3]) },
+      loader: createManifestLoader(createManifest()),
+      expandImportedTargets: true
+    });
+    const before = editor.getSnapshot();
+    const beforePayloads = editor.getAssetWorkspacePayloads();
+
+    const result = await editor.reimportGlbAsset({
+      assetId: "asset-a",
+      source: new Uint8Array([4, 5, 6]),
+      loader: createManifestLoader(withPrimitivePath(createManifest(), "meshes/panel/primitives/0")),
+      commit: false
+    });
+    urls.restore();
+
+    expect(result.ok).toBe(true);
+    expect(result.committed).toBe(false);
+    expect(result.remap?.summary.remappedTargetCount).toBeGreaterThan(0);
+    expect(editor.getSnapshot()).toBe(before);
+    expect(editor.getAssetWorkspacePayloads()).toEqual(beforePayloads);
+  });
+
+  it("commits GLB reimport by preserving asset id and replacing payload after analysis succeeds", async () => {
+    const editor = createEditor();
+    const urls = mockObjectUrls();
+    await editor.importGlbAsset({
+      objectId: "object-a",
+      asset: { id: "asset-a", source: new Uint8Array([1, 2, 3]) },
+      loader: createManifestLoader(createManifest()),
+      expandImportedTargets: true
+    });
+    const oldPrimitive = Object.values(editor.getSnapshot().nodes)
+      .find((node) => node.kind === "imported" && node.source.kind === "primitive")!;
+
+    const result = await editor.reimportGlbAsset({
+      assetId: "asset-a",
+      source: { bytes: new Uint8Array([4, 5, 6]), mimeType: "model/gltf-binary" },
+      loader: createManifestLoader(withPrimitivePath(createManifest(), "meshes/panel/primitives/0"))
+    });
+    urls.restore();
+
+    expect(result.ok).toBe(true);
+    expect(result.committed).toBe(true);
+    expect(result.commandResult?.ok).toBe(true);
+    expect(editor.getSnapshot().objects["object-a"].asset.id).toBe("asset-a");
+    expect(editor.getSnapshot().nodes[oldPrimitive.id]).toMatchObject({
+      kind: "imported",
+      importKey: "glb:object-a/primitive:meshes/panel/primitives/0"
+    });
+    expect(editor.getAssetWorkspacePayloads()).toEqual([expect.objectContaining({
+      assetId: "asset-a",
+      byteSize: 3,
+      checksum: "fnv1a32-c31d9cec"
+    })]);
+  });
+
+  it("does not report a committed GLB reimport as failed when an asset workspace subscriber throws", async () => {
+    const editor = createEditor();
+    const urls = mockObjectUrls();
+    await editor.importGlbAsset({
+      objectId: "object-a",
+      asset: { id: "asset-a", source: new Uint8Array([1, 2, 3]) },
+      loader: createManifestLoader(createManifest()),
+      expandImportedTargets: true
+    });
+    editor.subscribeAssetWorkspace(() => {
+      throw new Error("subscriber failed");
+    });
+
+    const result = await editor.reimportGlbAsset({
+      assetId: "asset-a",
+      source: new Uint8Array([4, 5, 6]),
+      loader: createManifestLoader(withPrimitivePath(createManifest(), "meshes/panel/primitives/0"))
+    });
+    urls.restore();
+
+    expect(result.ok).toBe(true);
+    expect(result.committed).toBe(true);
+    expect(result.commandResult?.ok).toBe(true);
+    expect(Object.values(editor.getSnapshot().nodes).find((node) =>
+      node.kind === "imported" && node.source.kind === "primitive"
+    )).toMatchObject({
+      importKey: "glb:object-a/primitive:meshes/panel/primitives/0"
+    });
+  });
+
+  it("leaves previous snapshot and payload unchanged when GLB reimport analysis fails", async () => {
+    const editor = createEditor();
+    const urls = mockObjectUrls();
+    await editor.importGlbAsset({
+      objectId: "object-a",
+      asset: { id: "asset-a", source: new Uint8Array([1, 2, 3]) },
+      loader: createManifestLoader(createManifest()),
+      expandImportedTargets: true
+    });
+    const before = editor.getSnapshot();
+    const beforePayloads = editor.getAssetWorkspacePayloads();
+    const diagnostics = createGlbImportDiagnosticsFromError(new Error("THREE.GLTFLoader: No DRACOLoader instance provided."));
+
+    const result = await editor.reimportGlbAsset({
+      assetId: "asset-a",
+      source: new Uint8Array([4, 5, 6]),
+      loader: {
+        load: async () => {
+          throw new GlbImportError("missing draco", diagnostics);
+        }
+      }
+    });
+    urls.restore();
+
+    expect(result.ok).toBe(false);
+    expect(result.committed).toBe(false);
+    expect(result.diagnostics).toMatchObject([{ code: "glb-decoder-missing" }]);
+    expect(editor.getSnapshot()).toStrictEqual(before);
+    expect(editor.getAssetWorkspacePayloads()).toEqual(beforePayloads);
+  });
+
+  it("rolls back replacement payload when GLB reimport command dispatch fails", async () => {
+    const editor = createEditor();
+    const urls = mockObjectUrls();
+    await editor.importGlbAsset({
+      objectId: "object-a",
+      asset: { id: "asset-a", source: new Uint8Array([1, 2, 3]) },
+      loader: createManifestLoader(createManifest()),
+      expandImportedTargets: true
+    });
+    const before = editor.getSnapshot();
+    const beforePayloads = editor.getAssetWorkspacePayloads();
+
+    const result = await editor.reimportGlbAsset({
+      assetId: "asset-a",
+      ownerObjectId: "missing-object",
+      source: new Uint8Array([4, 5, 6]),
+      loader: createManifestLoader(createManifest())
+    });
+    urls.restore();
+
+    expect(result.ok).toBe(false);
+    expect(result.commandResult?.ok).toBe(false);
+    expect(result.committed).toBe(false);
+    expect(editor.getSnapshot()).toStrictEqual(before);
+    expect(editor.getAssetWorkspacePayloads()).toEqual(beforePayloads);
+  });
+
+  it("does not dispatch GLB reimport when replacement payload registration fails", async () => {
+    const editor = createEditor();
+    const urls = mockObjectUrls();
+    await editor.importGlbAsset({
+      objectId: "object-a",
+      asset: { id: "asset-a", source: new Uint8Array([1, 2, 3]) },
+      loader: createManifestLoader(createManifest()),
+      expandImportedTargets: true
+    });
+    const before = editor.getSnapshot();
+    const beforePayloads = editor.getAssetWorkspacePayloads();
+    const result = await editor.reimportGlbAsset({
+      assetId: "asset-a",
+      source: {
+        bytes: new Uint8Array([4, 5, 6]),
+        metadata: { invalid: Number.NaN }
+      },
+      loader: createManifestLoader(withPrimitivePath(createManifest(), "meshes/panel/primitives/0"))
+    });
+    urls.restore();
+
+    expect(result.ok).toBe(false);
+    expect(result.committed).toBe(false);
+    expect(result.commandResult).toBeUndefined();
+    expect(result.snapshot).toBe(before);
+    expect(editor.getSnapshot()).toBe(before);
+    expect(editor.getAssetWorkspacePayloads()).toEqual(beforePayloads);
+  });
 });
 
 function createFakeRenderer(container: HTMLElement): RendererLike {
@@ -397,5 +575,47 @@ function mockObjectUrls(): {
       URL.createObjectURL = originalCreate;
       URL.revokeObjectURL = originalRevoke;
     }
+  };
+}
+
+function createManifestLoader(manifest: ReturnType<typeof createManifest>) {
+  return {
+    load: async () => new Group(),
+    analyze: async () => ({
+      scene: new Group(),
+      manifest
+    })
+  };
+}
+
+function createManifest() {
+  return createGlbImportManifest({
+    gltf: {
+      parser: {
+        json: {
+          nodes: [{ name: "Panel", mesh: 0 }],
+          meshes: [{
+            name: "Panel mesh",
+            primitives: [{ attributes: { POSITION: 0, NORMAL: 1 }, material: 0 }]
+          }],
+          materials: [{ name: "Red" }]
+        }
+      }
+    }
+  });
+}
+
+function withPrimitivePath(manifest: ReturnType<typeof createManifest>, path: string) {
+  const mesh = manifest.meshes[0]!;
+  const primitive = mesh.primitives[0]!;
+  return {
+    ...manifest,
+    meshes: [{
+      ...mesh,
+      primitives: [{
+        ...primitive,
+        path
+      }]
+    }]
   };
 }

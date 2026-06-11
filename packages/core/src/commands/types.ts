@@ -1,4 +1,6 @@
 import type { AssetInput } from "../assets/types";
+import type { GlbImportManifest } from "../assets/import-pipeline";
+import type { GlbImportRemapPlan } from "../assets/import-remap";
 import type { SceneEnvironment } from "../environment/types";
 import type { LightDefinition, LightKind } from "../lights/types";
 import type { MaterialAssignmentTarget, MaterialPatch } from "../materials/types";
@@ -11,6 +13,7 @@ export type Command =
 
 export type SingleCommand =
   | ImportGlbCommand
+  | ReimportGlbCommand
   | RegisterAssetCommand
   | CreateImportedGlbTargetsCommand
   | SelectNodeCommand
@@ -44,6 +47,14 @@ export interface ImportGlbCommand {
   parentId?: string | null;
   transform?: Partial<Transform>;
   expandImportedTargets?: boolean;
+}
+
+export interface ReimportGlbCommand {
+  type: "reimport-glb";
+  ownerObjectId: string;
+  assetId: string;
+  manifest: GlbImportManifest;
+  remap: GlbImportRemapPlan;
 }
 
 export interface CreateImportedGlbTargetsCommand {

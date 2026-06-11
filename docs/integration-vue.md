@@ -120,12 +120,17 @@ interface WorkbenchContext {
   exportProject(options?: ProjectExportOptions): ProjectExportResult;
   importAssetFiles(options: WorkbenchAssetImportOptions): Promise<WorkbenchAssetImportResult[]>;
   replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
+  assets: {
+    importFiles(options: WorkbenchAssetImportOptions): Promise<WorkbenchAssetImportResult[]>;
+    replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
+    reimportGlbAsset(input: ReimportGlbAssetOptions): Promise<ReimportGlbAssetResult>;
+  };
 }
 ```
 
-资产面板应优先读取 `workbench.model.assets.workspace`。该 workspace 已经合并 Snapshot asset registry、对象/材质/环境引用位置、项目包 payload 摘要、GLB import manifest diagnostics 和资产问题，并提供 core 统一的搜索/过滤/排序 helper。`replaceAsset()` 这类 payload-only 更新不会改变 Snapshot，但 Vue composable 会订阅 core asset workspace 版本并重新计算 model；宿主不需要也不应该读取 transient project store、`Blob` 或 object URL。
+资产面板应优先读取 `workbench.model.assets.workspace`。该 workspace 已经合并 Snapshot asset registry、对象/材质/环境引用位置、项目包 payload 摘要、GLB import manifest diagnostics、GLB reimport remap problem 和资产问题，并提供 core 统一的搜索/过滤/排序 helper。`replaceAsset()` 这类 payload-only 更新不会改变 Snapshot，但 Vue composable 会订阅 core asset workspace 版本并重新计算 model；宿主不需要也不应该读取 transient project store、`Blob` 或 object URL。
 
-默认左栏的资产区支持多文件选择和拖放。`.glb` 会通过 `context.assets.importFiles()` 调用 core 的 decoder-aware GLB import bridge，并使用传给 `EditorWorkbench` 的同一个 `loader` prop；`.hdr` 会注册为 HDR asset；PNG/JPG/WebP/SVG 等 raster 文件需要用户在 UI 中显式选择 `texture` 或 `image` intent。导入队列、drag hover、file input value 和失败提示是 Vue transient state，不进入 `SceneSnapshot` 或 `.ek3d` JSON。
+默认左栏的资产区支持多文件选择、拖放和 registered GLB reimport。`.glb` 导入会通过 `context.assets.importFiles()` 调用 core 的 decoder-aware GLB import bridge，并使用传给 `EditorWorkbench` 的同一个 `loader` prop；已注册的 GLB row 会通过 `context.assets.reimportGlbAsset()` 调用 core reimport lifecycle。`.hdr` 会注册为 HDR asset；PNG/JPG/WebP/SVG 等 raster 文件需要用户在 UI 中显式选择 `texture` 或 `image` intent。导入队列、drag hover、file input value 和失败提示是 Vue transient state，不进入 `SceneSnapshot` 或 `.ek3d` JSON。
 
 自定义 `leftPanel` slot 也可以调用同一个 core-owned 入口：
 
@@ -144,7 +149,7 @@ await context.assets.importFiles({
 
 真实用户 GLB 可能依赖 Draco、KTX2/Basis 或 Meshopt。Vue 适配层只把 `loader` prop 作为 raw core runtime option 传入，不解释 decoder 语义，也不会把 adapter 放进深层 reactive state。宿主应在应用层创建 `ThreeGltfLoaderAdapter`，并提供已经配置好的 decoder 实例、异步 factory 或完整 `loaderFactory`。
 
-`editor.importGlbAsset()` 可以在提交 `import-glb` 命令前执行异步分析。成功结果会把 JSON-compatible `glbImportManifest` 写入 asset metadata；失败结果返回结构化 diagnostics，不会默认注册 asset/object。Manifest 可以被资产 workspace 读取，用来显示 `importStatus` 和 import diagnostics。不要持久化 `GLTFLoader`、parser、`Object3D`、`Texture`、`File`、`Blob`、object URL、resolver 输出或 decoder 对象。
+`editor.importGlbAsset()` 可以在提交 `import-glb` 命令前执行异步分析。成功结果会把 JSON-compatible `glbImportManifest` 写入 asset metadata；失败结果返回结构化 diagnostics，不会默认注册 asset/object。`editor.reimportGlbAsset()` 对现有 GLB asset 执行同样的异步分析，并返回 remap summary；`commit: false` 可用于预览，提交成功后 core 会在同一 lifecycle 内替换 payload、提交 `reimport-glb`、刷新 runtime/workspace。Manifest 可以被资产 workspace 读取，用来显示 `importStatus` 和 import diagnostics。不要持久化 `GLTFLoader`、parser、`Object3D`、`Texture`、`File`、`Blob`、object URL、resolver 输出或 decoder 对象。
 
 ## 本地 proof-loop demo
 
@@ -156,7 +161,7 @@ pnpm --filter @ek-aiot/vue-proof-loop dev
 
 示例首屏就是可操作 workbench，不是 landing page。示例代码只保留真实宿主通常需要拥有的部分：创建 editor、初始化 starter snapshot、配置 resolver/loader、选择可选 renderer factory，以及一个很薄的 viewport overlay。toolbar、hierarchy、assets、project status、missing-asset recovery、inspector 和 status 都来自 `@ek-aiot/3d-editor-vue` 默认 Workbench。
 
-默认 UI 可以完成 starter flow：选择 hierarchy row、编辑 Transform/Material inspector、切换 snap/transform、undo/redo、duplicate、搜索/过滤资产、export partial package、通过 Open 重新载入 `.ek3d`、以及从左栏恢复缺失资产。缺失资产恢复使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem。
+默认 UI 可以完成 starter flow：选择 hierarchy row、编辑 Transform/Material inspector、切换 snap/transform、undo/redo、duplicate、搜索/过滤资产、export partial package、通过 Open 重新载入 `.ek3d`、从左栏恢复缺失资产，以及对 registered GLB 执行 reimport。缺失资产恢复使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem；GLB reimport 使用 `context.assets.reimportGlbAsset()`，提交 replacement manifest 和 target remap，并在按钮反馈中显示 exact/remapped/new/unresolved summary。
 
 浏览器证据通过仓库根目录命令运行：
 

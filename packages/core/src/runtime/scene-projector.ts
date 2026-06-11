@@ -20,7 +20,8 @@ import type { RuntimeTextureLoaderAdapter } from "./texture-loader-adapter";
 import {
   createImportedTargetAmbiguousProblem,
   createImportedTargetMissingProblem,
-  createImportedTargetNonTransformableProblem
+  createImportedTargetNonTransformableProblem,
+  createImportedTargetUnresolvedProblem
 } from "./problems";
 
 export interface SceneProjectorOptions {
@@ -555,8 +556,13 @@ export class SceneProjector {
     this.#releaseImportedTargetsForOwner(object.id, matchedNodeIds);
 
     for (const match of matches) {
+      if (match.node.remap?.status === "unresolved") {
+        this.#addProblem(createImportedTargetUnresolvedProblem(match.node, object.asset.id));
+      }
       if (!match.object || match.status === "missing") {
-        this.#addProblem(createImportedTargetMissingProblem(match));
+        if (match.node.remap?.status !== "unresolved") {
+          this.#addProblem(createImportedTargetMissingProblem(match));
+        }
         continue;
       }
       if (match.status === "ambiguous") {

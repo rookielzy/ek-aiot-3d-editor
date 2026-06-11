@@ -1,5 +1,6 @@
 import type { AssetInput, AssetReference } from "../assets/types";
 import type { GlbImportDiagnostic, GlbImportManifest } from "../assets/import-pipeline";
+import type { GlbImportRemapPlan } from "../assets/import-remap";
 import type { WorkbenchAssetImportOptions, WorkbenchAssetImportResult } from "../assets/workspace-import";
 import type { Command, CommandResult } from "../commands/types";
 import type { AdvancedEditorOperations, EditorClipboard } from "./operations";
@@ -40,6 +41,24 @@ export interface ImportGlbAssetResult {
   committed: boolean;
 }
 
+export interface ReimportGlbAssetOptions {
+  assetId: string;
+  source: NonNullable<AssetInput["source"]>;
+  loader?: EditorRuntimeOptions["loader"];
+  ownerObjectId?: string;
+  commit?: boolean;
+}
+
+export interface ReimportGlbAssetResult {
+  ok: boolean;
+  manifest?: GlbImportManifest;
+  diagnostics: GlbImportDiagnostic[];
+  remap?: GlbImportRemapPlan;
+  commandResult?: CommandResult;
+  snapshot: SceneSnapshot;
+  committed: boolean;
+}
+
 export interface Editor {
   getSnapshot(): SceneSnapshot;
   subscribe(subscriber: SnapshotSubscriber): () => void;
@@ -71,5 +90,6 @@ export interface Editor {
 
 export interface EditorWithGlbImport extends Editor {
   importGlbAsset(options: ImportGlbAssetOptions): Promise<ImportGlbAssetResult>;
+  reimportGlbAsset(options: ReimportGlbAssetOptions): Promise<ReimportGlbAssetResult>;
   importWorkbenchAssets(options: WorkbenchAssetImportOptions): Promise<WorkbenchAssetImportResult[]>;
 }

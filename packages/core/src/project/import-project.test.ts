@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { attachGlbImportManifestMetadata, createGlbImportManifest } from "../assets/import-pipeline";
+import { createMaterialAssignmentId } from "../materials/defaults";
 import { createEditor } from "../editor/create-editor";
+import type { SceneImportedGlbNode } from "../snapshot/types";
+import { Group } from "three";
 
 describe("project import", () => {
   it("restores a valid package and resolves packaged payloads", async () => {
@@ -118,6 +121,69 @@ describe("project import", () => {
     expect(fresh.getSnapshot().materials.assignments["material-slot:object-a:glb:object-a/slot:meshes/0/primitives/0:material-0"]).toBeDefined();
     expect(fresh.exportProject().ok).toBe(true);
   });
+
+  it("round-trips reimported GLB remap metadata and replacement payloads through project import", async () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: {
+        id: "asset-a",
+        source: new Uint8Array([1, 2, 3]),
+        metadata: attachGlbImportManifestMetadata(undefined, createImportManifest())
+      },
+      expandImportedTargets: true
+    });
+    const primitive = Object.values(editor.getSnapshot().nodes)
+      .find((node): node is SceneImportedGlbNode => node.kind === "imported" && node.source.kind === "primitive")!;
+    const oldSlotKey = primitive.materialSlots![0]!.slotKey;
+    editor.dispatch({
+      type: "set-material",
+      target: { kind: "material-slot", objectId: "object-a", slotId: oldSlotKey },
+      materialId: "material-a",
+      materialName: "Slot override",
+      material: { color: "#ff0000" }
+    });
+    const replacementManifest = withPrimitivePath(createImportManifest(), "meshes/panel/primitives/0");
+    const reimported = await editor.reimportGlbAsset({
+      assetId: "asset-a",
+      source: new Uint8Array([9, 8, 7]),
+      loader: {
+        load: async () => new Group(),
+        analyze: async () => ({ scene: new Group(), manifest: replacementManifest })
+      }
+    });
+    const exported = editor.exportProject();
+    const fresh = createEditor();
+
+    const imported = fresh.importProject(exported.packageBytes as Uint8Array);
+
+    const newSlotKey = "glb:object-a/slot:meshes/panel/primitives/0:material-0";
+    expect(reimported.ok).toBe(true);
+    expect(imported.ok).toBe(true);
+    expect(fresh.getSnapshot().objects["object-a"].asset.id).toBe("asset-a");
+    expect(fresh.getAssetWorkspacePayloads()).toEqual([expect.objectContaining({
+      assetId: "asset-a",
+      byteSize: 3,
+      checksum: "fnv1a32-3213b079"
+    })]);
+    expect(fresh.getSnapshot().assets["asset-a"].metadata?.glbImportManifest).toMatchObject({
+      meshes: [expect.objectContaining({
+        primitives: [expect.objectContaining({ path: "meshes/panel/primitives/0" })]
+      })]
+    });
+    expect(fresh.getSnapshot().nodes[primitive.id]).toMatchObject({
+      importKey: "glb:object-a/primitive:meshes/panel/primitives/0",
+      remap: { status: "resolved", previousImportKey: "glb:object-a/primitive:meshes/0/primitives/0" }
+    });
+    expect(fresh.getSnapshot().materials.assignments[createMaterialAssignmentId({
+      kind: "material-slot",
+      objectId: "object-a",
+      slotId: newSlotKey
+    })]).toBeDefined();
+    expect(JSON.stringify(fresh.serialize())).not.toContain("Object3D");
+    expect(JSON.stringify(fresh.serialize())).not.toContain("runtime");
+  });
 });
 
 function createImportManifest() {
@@ -135,4 +201,19 @@ function createImportManifest() {
       }
     }
   });
+}
+
+function withPrimitivePath(manifest: ReturnType<typeof createImportManifest>, path: string) {
+  const mesh = manifest.meshes[0]!;
+  const primitive = mesh.primitives[0]!;
+  return {
+    ...manifest,
+    meshes: [{
+      ...mesh,
+      primitives: [{
+        ...primitive,
+        path
+      }]
+    }]
+  };
 }

@@ -11,6 +11,7 @@ import {
   normalizeGltfLoaderOutput,
   sanitizeGlbImportManifestForMetadata
 } from "../assets/import-pipeline";
+import { planGlbImportRemap } from "../assets/import-remap";
 import { CommandDispatcher } from "../commands/dispatcher";
 import type { Command, CommandResult } from "../commands/types";
 import { CommandHistory, type HistoryState } from "../history/history";
@@ -25,12 +26,12 @@ import { ThreeEditorRuntime, type EditorRuntime } from "../runtime/editor-runtim
 import { disposeObjectTree } from "../runtime/disposal";
 import { GlbImportError, ThreeGltfLoaderAdapter } from "../runtime/gltf-loader-adapter";
 import { EditorTransformModeState, type TransformModeSubscriber } from "../runtime/transform/transform-mode";
-import type { SceneSnapshot, SerializedSceneSnapshot } from "../snapshot/types";
+import type { SceneImportedGlbNode, SceneSnapshot, SerializedSceneSnapshot } from "../snapshot/types";
 import { createAdvancedEditorOperations, createMemoryClipboard, type AdvancedEditorOperations, type EditorClipboard } from "./operations";
 import { EditorSnapState, type SnapSubscriber } from "./snap-state";
 import { restoreSnapshot, serializeSnapshot } from "./serialization";
 import { EditorStore } from "./store";
-import type { AssetWorkspaceSubscriber, EditorOptions, EditorWithGlbImport, ImportGlbAssetOptions, ImportGlbAssetResult, MountRuntimeOptions, RuntimeSubscriber, SnapshotSubscriber } from "./editor-api";
+import type { AssetWorkspaceSubscriber, EditorOptions, EditorWithGlbImport, ImportGlbAssetOptions, ImportGlbAssetResult, MountRuntimeOptions, ReimportGlbAssetOptions, ReimportGlbAssetResult, RuntimeSubscriber, SnapshotSubscriber } from "./editor-api";
 
 export class CoreEditor implements EditorWithGlbImport {
   readonly assets = new AssetRegistry();
@@ -145,7 +146,7 @@ export class CoreEditor implements EditorWithGlbImport {
   subscribeAssetWorkspace(subscriber: AssetWorkspaceSubscriber): () => void {
     this.#assertActive();
     this.#assetWorkspaceSubscribers.add(subscriber);
-    subscriber(this.getAssetWorkspaceVersion());
+    this.#notifyAssetWorkspaceSubscriber(subscriber, this.getAssetWorkspaceVersion());
 
     return () => {
       this.#assetWorkspaceSubscribers.delete(subscriber);
@@ -283,6 +284,155 @@ export class CoreEditor implements EditorWithGlbImport {
     }
   }
 
+  async reimportGlbAsset(options: ReimportGlbAssetOptions): Promise<ReimportGlbAssetResult> {
+    this.#assertActive();
+    const commit = options.commit ?? true;
+    const snapshot = this.store.getSnapshot();
+    const asset = snapshot.assets[options.assetId];
+    if (!asset || asset.kind !== "glb") {
+      const diagnostic = createSourceInvalidDiagnostic(`GLB asset ${options.assetId} does not exist.`);
+      return {
+        ok: false,
+        diagnostics: [diagnostic],
+        snapshot,
+        committed: false
+      };
+    }
+
+    const ownerObjectId = options.ownerObjectId ?? Object.values(snapshot.objects)
+      .find((object) => object.asset.id === options.assetId)?.id;
+    if (!ownerObjectId) {
+      const diagnostic = createSourceInvalidDiagnostic(`GLB asset ${options.assetId} is not referenced by an object.`);
+      return {
+        ok: false,
+        diagnostics: [diagnostic],
+        snapshot,
+        committed: false
+      };
+    }
+
+    let resolved;
+    let revoke: (() => void) | undefined;
+    let loadResult;
+    try {
+      ({ resolved, revoke } = await createResolvedAssetForImport({
+        id: options.assetId,
+        kind: "glb",
+        source: options.source
+      }));
+      const adapter = options.loader ?? new ThreeGltfLoaderAdapter();
+      loadResult = adapter.analyze
+        ? await adapter.analyze(resolved)
+        : normalizeGltfLoaderOutput(await adapter.load(resolved));
+      const manifest = sanitizeGlbImportManifestForMetadata(loadResult.manifest ?? createGlbImportManifest({
+        scene: loadResult.scene,
+        resolved,
+        diagnostics: loadResult.diagnostics
+      }));
+      const diagnostics = mergeDiagnostics(loadResult.diagnostics ?? [], manifest.diagnostics);
+      const currentTargets = Object.values(snapshot.nodes).filter((node): node is SceneImportedGlbNode =>
+        node.kind === "imported" && node.ownerObjectId === ownerObjectId
+      );
+      const remap = planGlbImportRemap({
+        ownerObjectId,
+        currentTargets,
+        replacementManifest: manifest
+      });
+
+      if (!commit) {
+        return {
+          ok: diagnostics.every((diagnostic) => diagnostic.severity !== "error"),
+          manifest,
+          diagnostics,
+          remap,
+          snapshot,
+          committed: false
+        };
+      }
+
+      if (diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
+        return {
+          ok: false,
+          manifest,
+          diagnostics,
+          remap,
+          snapshot,
+          committed: false
+        };
+      }
+
+      const previousAssets = [...this.projectAssets.entries()].map(([, stored]) => stored);
+      const beforeSnapshot = this.store.getSnapshot();
+      const replaced = await replaceProjectAsset(beforeSnapshot, this.projectAssets, {
+        assetId: options.assetId,
+        kind: "glb",
+        source: options.source,
+        metadata: attachGlbImportManifestMetadata(asset.metadata, manifest)
+      });
+      if (!replaced.ok) {
+        this.projectAssets.replaceAll(previousAssets);
+        this.#notifyAssetWorkspaceSubscribers();
+        return {
+          ok: false,
+          manifest,
+          diagnostics,
+          remap,
+          snapshot: beforeSnapshot,
+          committed: false
+        };
+      }
+
+      const commandResult = this.dispatch({
+        type: "reimport-glb",
+        ownerObjectId,
+        assetId: options.assetId,
+        manifest,
+        remap
+      });
+      if (!commandResult.ok) {
+        this.projectAssets.replaceAll(previousAssets);
+        this.store.replaceSnapshot(beforeSnapshot);
+        this.#notifyAssetWorkspaceSubscribers();
+        return {
+          ok: false,
+          manifest,
+          diagnostics,
+          remap,
+          commandResult,
+          snapshot: beforeSnapshot,
+          committed: false
+        };
+      }
+
+      this.#notifyAssetWorkspaceSubscribers();
+      void this.#runtime?.project(commandResult.snapshot);
+      return {
+        ok: true,
+        manifest,
+        diagnostics,
+        remap,
+        commandResult,
+        snapshot: commandResult.snapshot,
+        committed: true
+      };
+    } catch (error) {
+      const diagnostics = error instanceof GlbImportError
+        ? error.diagnostics
+        : createGlbImportDiagnosticsFromError(error);
+      return {
+        ok: false,
+        diagnostics,
+        snapshot: this.store.getSnapshot(),
+        committed: false
+      };
+    } finally {
+      if (loadResult) {
+        disposeObjectTree(loadResult.scene);
+      }
+      revoke?.();
+    }
+  }
+
   importWorkbenchAssets(options: WorkbenchAssetImportOptions): Promise<WorkbenchAssetImportResult[]> {
     this.#assertActive();
     return importWorkbenchAssets(this, options);
@@ -372,7 +522,15 @@ export class CoreEditor implements EditorWithGlbImport {
   #notifyAssetWorkspaceSubscribers(): void {
     this.#assetWorkspaceVersion += 1;
     for (const subscriber of [...this.#assetWorkspaceSubscribers]) {
-      subscriber(this.#assetWorkspaceVersion);
+      this.#notifyAssetWorkspaceSubscriber(subscriber, this.#assetWorkspaceVersion);
+    }
+  }
+
+  #notifyAssetWorkspaceSubscriber(subscriber: AssetWorkspaceSubscriber, version: number): void {
+    try {
+      subscriber(version);
+    } catch {
+      // Subscriber failures must not change command or project lifecycle results.
     }
   }
 
