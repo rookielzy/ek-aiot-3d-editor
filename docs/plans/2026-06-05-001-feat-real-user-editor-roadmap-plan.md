@@ -310,9 +310,10 @@ The tree shows the planned new module shape. Existing modules and tests remain l
 ### U8. Material slot inspector in React and Vue
 
 - **Goal:** Make slot-aware material editing understandable and reachable in the default inspector.
+- **Detailed plan:** `docs/plans/2026-06-11-002-feat-material-slot-inspector-plan.md`.
 - **Requirements:** R8, R9, R12, R21, R24.
 - **Dependencies:** U7.
-- **Files:** `packages/core/src/inspector/material.ts`, `packages/core/src/inspector/material.test.ts`, `packages/core/src/inspector/types.ts`, `packages/react/src/components/MaterialInspector.tsx`, `packages/react/test/inspector.test.tsx`, `packages/react/test/default-workbench.browser.test.tsx`, `packages/vue/src/components/MaterialInspector.vue`, `packages/vue/test/inspector.test.ts`, `packages/vue/test/default-workbench.browser.test.ts`, `docs/integration-react.md`, `docs/integration-vue.md`.
+- **Files:** `packages/core/src/inspector/material.ts`, `packages/core/src/inspector/material.test.ts`, `packages/core/src/inspector/types.ts`, `packages/react/src/components/MaterialInspector.tsx`, `packages/react/test/inspector.test.tsx`, `packages/react/test/workbench.test.tsx`, `packages/react/test/default-workbench.browser.test.tsx`, `packages/vue/src/components/MaterialInspector.vue`, `packages/vue/test/inspector.test.ts`, `packages/vue/test/workbench.test.ts`, `packages/vue/test/default-workbench.browser.test.ts`, `docs/integration-react.md`, `docs/integration-vue.md`.
 - **Approach:** Extend inspector model with selected target material context, slot list, unresolved slot state, and broad-vs-slot assignment affordance. React/Vue render slot controls from the same core model and dispatch `set-material` commands only.
 - **Patterns to follow:** Existing transform/material/environment/light inspector command builders.
 - **Test scenarios:**

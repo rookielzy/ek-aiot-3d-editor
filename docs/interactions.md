@@ -23,7 +23,7 @@ React 和 Vue proof-loop demo 的可见验证路径保持一致：
 1. 使用 camera helper（Reset camera / Frame selected / Frame all）验证 transient camera controls。
 2. 通过 viewport picking 或 Scene hierarchy 选择 object、group、light node，并在层级中看到 selected / primary 标记。
 3. 通过 TransformControls 或 demo toolbar 提交一次 transform，并验证 undo/redo。
-4. 通过 Material inspector 修改支持的 object-level `MeshStandardMaterial` 字段，并确认 runtime 投影更新。
+4. 通过 Material inspector 修改支持的 object-level 或 material-slot-level `MeshStandardMaterial` 字段，并确认 runtime 投影更新。
 5. 通过 Node operations 执行 duplicate、copy/paste、delete、group、ungroup 等 hierarchy 操作。
 6. 导出并重新导入 `.ek3d` 项目包。
 7. 观察 recoverable missing-asset problem，然后用 stable asset ID 替换资产并清除 problem。
@@ -117,7 +117,7 @@ Imported target TransformControls 只会附着到 runtime map 标记为可独立
 React/Vue inspector 当前覆盖：
 
 - Transform
-- Material override
+- Material broad object override 和 imported material-slot target override
 - Environment/background
 - Light list/add/update/remove
 - Problems
@@ -170,10 +170,13 @@ editor.dispatch({
 - `set-material` 新建 material-slot assignment 时会校验 owner object 和当前 imported slot metadata；reimport 后已经存在的 stale slot assignment 仍可继续 patch 或清理。
 - Runtime slot projection 会先应用 object-level broad assignment，再让 slot-level assignment 覆盖对应 primitive mesh 或 material array index。其他 slot 保持源材质或 broad projection。
 - Schema validation 不会因为 reimport 后 slot 暂时无法解析而删除 material-slot assignment；这类情况应作为 recoverable problem 暴露。
+- React/Vue 默认 Material inspector 从 core `MaterialInspectorSection.targets` 渲染 broad object target 和 slot target。选择 owner object 时 broad target 在前、随后显示该 object 下的 slots；选择 imported primitive target 时默认激活该 target 的第一个可编辑 slot，同时保留 broad target 作为显式选项。
+- 未解析 slot 若已有 durable assignment，会显示 unresolved 状态并保留当前 override 值；没有 assignment 的 unresolved slot 只作为 disabled target 解释问题，不能创建新 assignment。
+- Active material target、字段 draft 和 controlled validation warning 是框架本地 UI state，不写入 Snapshot 或 `.ek3d`。
 - Texture slot 会通过 resolver/loader 加载为 transient texture；失败暴露为 runtime problem，不写回 Snapshot。
 - 保持 React/Vue inspector 行为一致。
 
-material slot inspector UI、复杂材质编辑、节点材质、shader 编辑和 glTF material variant authoring 不在当前范围内。
+复杂材质编辑、节点材质、shader 编辑、glTF material variant authoring、slot thumbnail/source material preview 和手动 remap UI 不在当前范围内。
 
 ## 项目导入/导出
 
@@ -211,7 +214,6 @@ Core 提供 `resolveEditorShortcut()` 和 `executeEditorAction()`。React/Vue wo
 
 - 框选。
 - durable imported target row 之外的 Workbench hierarchy UI polish。
-- React/Vue 默认 material slot inspector UI。
 - 系统剪贴板集成和外部 paste 格式。
 - 网格渲染、对齐辅助线和可视 snap 控件。
 - 持久化快捷键配置和命令面板 UI。

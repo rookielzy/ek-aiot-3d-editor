@@ -38,7 +38,7 @@ export function buildInspectorModel(snapshot: SceneSnapshot, options: BuildInspe
   return {
     selection: getInspectorSelection(snapshot),
     transform: buildTransformSection(snapshot),
-    material: buildMaterialSection(snapshot),
+    material: buildMaterialSection(snapshot, runtimeProblems),
     environment: buildEnvironmentSection(snapshot),
     lights: buildLightSection(snapshot, options.activeLightId),
     problems: buildProblemSection(snapshot, runtimeProblems)

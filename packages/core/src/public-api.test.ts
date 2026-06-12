@@ -12,6 +12,7 @@ import {
   buildAssetWorkspaceModel,
   buildInspectorModel,
   buildWorkbenchModel,
+  buildMaterialFieldsForTarget,
   classifyWorkbenchAssetImportFile,
   filterAssetWorkspaceItems,
   GLB_IMPORT_MANIFEST_METADATA_KEY,
@@ -59,6 +60,7 @@ import {
   type ImportedGlbTargetBindingDescriptor,
   type ImportedGlbTargetDescriptor,
   type LightDefinition,
+  type MaterialInspectorTarget,
   type Problem,
   PROJECT_PACKAGE_VERSION,
   type ProjectAssetPayloadSummary,
@@ -287,6 +289,28 @@ describe("core public API", () => {
       materialSlots: [importedSlot]
     };
     const bindingDescriptor: ImportedGlbTargetBindingDescriptor = createImportedGlbBindingDescriptor(importedNode, importedSlot.slotKey);
+    const materialInspectorTarget: MaterialInspectorTarget = {
+      key: "material-slot:object-a:slot-a",
+      kind: "material-slot",
+      label: "Red",
+      ownerObjectId: "object-a",
+      importedNodeId: "imported-a",
+      importedNodeName: "Imported",
+      importKey: importedNode.importKey,
+      slotId: "slot-a",
+      assignmentId: "material-slot:object-a:slot-a",
+      materialId: null,
+      selected: true,
+      preferred: true,
+      hasOverride: false,
+      unresolved: false,
+      problemIds: [],
+      canSelect: true,
+      canEditExistingAssignment: false,
+      canCreateAssignment: true,
+      canClear: false,
+      commandTarget: { kind: "material-slot", objectId: "object-a", slotId: "slot-a" }
+    };
     const sceneNode: SceneNode = objectNode;
     const clipboardNode: ClipboardSceneNode = { ...objectNode, originalId: "object-a" };
     const workspacePayload: AssetWorkspacePayloadSummary = {
@@ -390,6 +414,7 @@ describe("core public API", () => {
     expect(importedNode.kind).toBe("imported");
     expect(importedDescriptor.materialSlots?.[0]?.slotKey).toBe(importedSlot.slotKey);
     expect(bindingDescriptor.slotKey).toBe(importedSlot.slotKey);
+    expect(materialInspectorTarget.commandTarget.kind).toBe("material-slot");
     expect(clipboardNode.originalId).toBe("object-a");
     expect(environment.mode).toBe("none");
     expect(light.kind).toBe("ambient");
@@ -444,12 +469,14 @@ describe("core public API", () => {
     const snapshot = createEmptySnapshot("scene-a");
     const inspector: InspectorModel = buildInspectorModel(snapshot);
     const command: InspectorCommandResult = buildSetTransformCommand(snapshot, "position.x", 1);
+    const materialFields = buildMaterialFieldsForTarget(snapshot, inspector.material.targets[0] ?? null, inspector.material.empty);
     const workbenchOptions: BuildWorkbenchModelOptions = { inspector };
     const workspace = buildAssetWorkspaceModel(snapshot);
     const workbench: WorkbenchModel = buildWorkbenchModel(snapshot, workbenchOptions);
 
     expect(inspector.environment.enabled).toBe(true);
     expect(command.ok).toBe(false);
+    expect(materialFields[0]?.id).toBe("color");
     expect(filterAssetWorkspaceItems(workspace.items, { query: "missing" })).toEqual([]);
     expect(sortAssetWorkspaceItems(workspace.items)).toEqual([]);
     expect(workbench.project.sceneId).toBe("scene-a");

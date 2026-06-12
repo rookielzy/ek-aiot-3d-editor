@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { markRaw, nextTick } from "vue";
 import { describe, expect, it, vi } from "vitest";
-import { AssetResolverBridge, createEditor } from "@ek-aiot/3d-editor-core";
+import { AssetResolverBridge, attachGlbImportManifestMetadata, createEditor, createGlbImportManifest } from "@ek-aiot/3d-editor-core";
 import InspectorPanel from "../src/components/InspectorPanel.vue";
 import { useInspector } from "../src/composables/use-inspector";
 
@@ -73,6 +73,127 @@ describe("Vue InspectorPanel", () => {
     wrapper.unmount();
   });
 
+  it("renders material slot targets and dispatches slot-aware material commands", async () => {
+    const editor = markRaw(createSlotEditor());
+    const slotId = getSlotIds(editor)[0]!;
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+    const wrapper = mount(InspectorPanel, { props: { editor } });
+
+    const bodyTarget = wrapper.findAll(".ek-material-target-option").find((option) => option.text().includes("Body"));
+    expect(bodyTarget).toBeTruthy();
+    await bodyTarget!.find('input[type="radio"]').setValue(true);
+    const baseColor = wrapper.findAll('input[type="color"]')[0];
+    await baseColor.setValue("#336699");
+
+    expect(dispatchSpy).toHaveBeenLastCalledWith({
+      type: "set-material",
+      target: { kind: "material-slot", objectId: "object-a", slotId },
+      material: { color: "#336699" }
+    });
+    wrapper.unmount();
+  });
+
+  it("keeps broad material target behavior when object override remains active", async () => {
+    const editor = markRaw(createSlotEditor());
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+    const wrapper = mount(InspectorPanel, { props: { editor } });
+
+    const roughness = wrapper.findAll("label").find((label) => label.text().includes("Roughness"))?.find('input[type="number"]');
+    if (!roughness) {
+      throw new Error("Roughness input was not rendered");
+    }
+    await roughness.setValue("0.42");
+    await roughness.trigger("blur");
+
+    expect(dispatchSpy).toHaveBeenLastCalledWith({
+      type: "set-material",
+      target: { kind: "object", objectId: "object-a" },
+      material: { roughness: 0.42 }
+    });
+    wrapper.unmount();
+  });
+
+  it("resets material target to the selected imported node slot context", async () => {
+    const editor = markRaw(createSlotEditor());
+    const importedNodeId = getImportedNodeIds(editor)[0]!;
+    const slotId = getSlotIds(editor)[0]!;
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+    const wrapper = mount(InspectorPanel, { props: { editor } });
+
+    const roughness = wrapper.findAll("label").find((label) => label.text().includes("Roughness"))?.find('input[type="number"]');
+    if (!roughness) {
+      throw new Error("Roughness input was not rendered");
+    }
+    await roughness.setValue("0.42");
+    await roughness.trigger("blur");
+    editor.dispatch({ type: "select-node", nodeId: importedNodeId });
+    await nextTick();
+    const baseColor = wrapper.findAll('input[type="color"]')[0];
+    await baseColor.setValue("#336699");
+
+    expect(dispatchSpy).toHaveBeenLastCalledWith({
+      type: "set-material",
+      target: { kind: "material-slot", objectId: "object-a", slotId },
+      material: { color: "#336699" }
+    });
+    wrapper.unmount();
+  });
+
+  it("resets material target to broad object when selection returns to the owner object", async () => {
+    const editor = markRaw(createSlotEditor());
+    const slotId = getSlotIds(editor)[0]!;
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+    const wrapper = mount(InspectorPanel, { props: { editor } });
+
+    const bodyTarget = wrapper.findAll(".ek-material-target-option").find((option) => option.text().includes("Body"));
+    expect(bodyTarget).toBeTruthy();
+    await bodyTarget!.find('input[type="radio"]').setValue(true);
+    const baseColor = wrapper.findAll('input[type="color"]')[0];
+    await baseColor.setValue("#336699");
+    expect(dispatchSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+      target: { kind: "material-slot", objectId: "object-a", slotId }
+    }));
+
+    const importedNodeId = getImportedNodeIds(editor)[0]!;
+    editor.dispatch({ type: "select-node", nodeId: importedNodeId });
+    await nextTick();
+    expect((bodyTarget!.find('input[type="radio"]').element as HTMLInputElement).checked).toBe(true);
+    editor.dispatch({ type: "select-node", nodeId: "object-a" });
+    await nextTick();
+    const objectTarget = wrapper.findAll(".ek-material-target-option").find((option) => option.text().includes("Object override"));
+    expect((objectTarget!.find('input[type="radio"]').element as HTMLInputElement).checked).toBe(true);
+    const roughness = wrapper.findAll("label").find((label) => label.text().includes("Roughness"))?.find('input[type="number"]');
+    if (!roughness) {
+      throw new Error("Roughness input was not rendered");
+    }
+    await roughness.setValue("0.42");
+    await roughness.trigger("blur");
+
+    expect(dispatchSpy).toHaveBeenLastCalledWith({
+      type: "set-material",
+      target: { kind: "object", objectId: "object-a" },
+      material: { roughness: 0.42 }
+    });
+    wrapper.unmount();
+  });
+
+  it("shows controlled material field problems without dispatching invalid drafts", async () => {
+    const editor = markRaw(createSlotEditor());
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+    const wrapper = mount(InspectorPanel, { props: { editor } });
+
+    const opacity = wrapper.findAll("label").find((label) => label.text().includes("Opacity"))?.find('input[type="number"]');
+    if (!opacity) {
+      throw new Error("Opacity input was not rendered");
+    }
+    await opacity.setValue("1.2");
+    await opacity.trigger("blur");
+
+    expect(wrapper.text()).toContain("less than or equal to 1");
+    expect(dispatchSpy).not.toHaveBeenCalledWith(expect.objectContaining({ type: "set-material" }));
+    wrapper.unmount();
+  });
+
   it("subscribes and cleans up inspector runtime problem observations", () => {
     const editor = markRaw(createEditor());
     const unsubscribe = vi.fn();
@@ -127,3 +248,51 @@ describe("Vue InspectorPanel", () => {
     wrapper.unmount();
   });
 });
+
+function createSlotEditor() {
+  const editor = createEditor();
+  editor.dispatch({
+    type: "import-glb",
+    objectId: "object-a",
+    asset: {
+      id: "asset-a",
+      metadata: attachGlbImportManifestMetadata(undefined, createSlotManifest())
+    },
+    expandImportedTargets: true
+  });
+  editor.dispatch({ type: "select-node", nodeId: "object-a" });
+  return editor;
+}
+
+function getSlotIds(editor: ReturnType<typeof createEditor>) {
+  return Object.values(editor.getSnapshot().nodes)
+    .filter((node) => node.kind === "imported")
+    .flatMap((node) => node.materialSlots?.map((slot) => slot.slotKey) ?? []);
+}
+
+function getImportedNodeIds(editor: ReturnType<typeof createEditor>) {
+  return Object.values(editor.getSnapshot().nodes)
+    .filter((node) => node.kind === "imported" && node.source.kind === "primitive")
+    .map((node) => node.id)
+    .sort();
+}
+
+function createSlotManifest() {
+  return createGlbImportManifest({
+    gltf: {
+      parser: {
+        json: {
+          nodes: [{ name: "Panel", mesh: 0 }],
+          meshes: [{
+            name: "Panel mesh",
+            primitives: [
+              { attributes: { POSITION: 0, NORMAL: 1 }, material: 0 },
+              { attributes: { POSITION: 2, NORMAL: 3 }, material: 1 }
+            ]
+          }],
+          materials: [{ name: "Body" }, { name: "Screen" }]
+        }
+      }
+    }
+  });
+}

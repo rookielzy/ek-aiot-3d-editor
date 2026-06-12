@@ -1,6 +1,6 @@
 import type { Command } from "../commands/types";
 import type { LightKind } from "../lights/types";
-import type { MaterialSide, TextureSlotName } from "../materials/types";
+import type { MaterialAssignmentTarget, MaterialSide, TextureSlotName } from "../materials/types";
 import type { Problem, ProblemRecoverability, ProblemSeverity, ProblemSource, ProblemTarget } from "../problems/types";
 import type { AssetKind, AssetReference, SceneNode, SceneObject } from "../snapshot/types";
 import type { LightDefinition } from "../lights/types";
@@ -64,6 +64,30 @@ export type MaterialFieldId =
   | "envMapIntensity"
   | `textures.${TextureSlotName}.assetId`;
 
+export interface MaterialInspectorTarget {
+  key: string;
+  kind: MaterialAssignmentTarget["kind"];
+  label: string;
+  ownerObjectId: string;
+  importedNodeId: string | null;
+  importedNodeName?: string;
+  importKey?: string;
+  slotId: string | null;
+  assignmentId: string;
+  materialId: string | null;
+  selected: boolean;
+  preferred: boolean;
+  hasOverride: boolean;
+  unresolved: boolean;
+  problemIds: string[];
+  canSelect: boolean;
+  canEditExistingAssignment: boolean;
+  canCreateAssignment: boolean;
+  canClear: boolean;
+  disabledReason?: string;
+  commandTarget: MaterialAssignmentTarget;
+}
+
 export type EnvironmentFieldId =
   | "mode"
   | "background.mode"
@@ -114,6 +138,8 @@ export interface InspectorSelectionModel {
 export interface MaterialInspectorSection extends InspectorSection {
   assignmentId: string | null;
   materialId: string | null;
+  activeTargetKey: string | null;
+  targets: MaterialInspectorTarget[];
   sideOptions: InspectorFieldOption<MaterialSide>[];
 }
 

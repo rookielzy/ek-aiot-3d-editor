@@ -336,6 +336,33 @@ describe("React EditorWorkbench", () => {
     expect((screen.getByLabelText("Position X") as HTMLInputElement).value).toBe("0");
   });
 
+  it("edits material slots through the default Workbench inspector", () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      name: "Panel",
+      asset: {
+        id: "asset-a",
+        label: "panel.glb",
+        metadata: attachGlbImportManifestMetadata(undefined, createWorkbenchManifest({ twoSlots: true }))
+      },
+      expandImportedTargets: true
+    });
+    editor.dispatch({ type: "select-node", nodeId: "object-a" });
+    const slotId = getWorkbenchSlotIds(editor)[1]!;
+
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    fireEvent.click(screen.getByLabelText(/Screen/));
+    fireEvent.change(screen.getByLabelText("Base color"), { target: { value: "#336699" } });
+
+    expect(editor.getSnapshot().materials.assignments[`material-slot:object-a:${slotId}`]).toMatchObject({
+      target: { kind: "material-slot", objectId: "object-a", slotId }
+    });
+    expect(editor.getSnapshot().materials.assignments["object:object-a"]).toBeUndefined();
+    expect(JSON.stringify(editor.getSnapshot())).not.toContain("ek-material-target");
+  });
+
   it("supports explicit left/right region overrides while keeping sidePanel compatible", () => {
     const editor = createEditor();
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
@@ -734,7 +761,7 @@ function mockObjectUrls(): {
   };
 }
 
-function createWorkbenchManifest() {
+function createWorkbenchManifest(options: { twoSlots?: boolean } = {}) {
   return createGlbImportManifest({
     gltf: {
       parser: {
@@ -742,13 +769,24 @@ function createWorkbenchManifest() {
           nodes: [{ name: "Panel", mesh: 0 }],
           meshes: [{
             name: "Panel mesh",
-            primitives: [{ attributes: { POSITION: 0 }, material: 0 }]
+            primitives: options.twoSlots
+              ? [
+                  { attributes: { POSITION: 0 }, material: 0 },
+                  { attributes: { POSITION: 1 }, material: 1 }
+                ]
+              : [{ attributes: { POSITION: 0 }, material: 0 }]
           }],
-          materials: [{ name: "Red" }]
+          materials: options.twoSlots ? [{ name: "Body" }, { name: "Screen" }] : [{ name: "Red" }]
         }
       }
     }
   });
+}
+
+function getWorkbenchSlotIds(editor: ReturnType<typeof createEditor>) {
+  return Object.values(editor.getSnapshot().nodes)
+    .filter((node) => node.kind === "imported")
+    .flatMap((node) => node.materialSlots?.map((slot) => slot.slotKey) ?? []);
 }
 
 function withPrimitivePath(manifest: ReturnType<typeof createWorkbenchManifest>, path: string) {

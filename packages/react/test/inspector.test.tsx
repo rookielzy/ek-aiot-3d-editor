@@ -1,7 +1,7 @@
 import React from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { createEditor } from "@ek-aiot/3d-editor-core";
+import { attachGlbImportManifestMetadata, createEditor, createGlbImportManifest } from "@ek-aiot/3d-editor-core";
 import { InspectorPanel } from "../src/components/InspectorPanel";
 
 describe("React InspectorPanel", () => {
@@ -83,6 +83,101 @@ describe("React InspectorPanel", () => {
     expect(JSON.stringify(editor.getSnapshot())).not.toContain("Texture");
   });
 
+  it("renders material slot targets and dispatches slot-aware material commands", () => {
+    const editor = createSlotEditor();
+    const slotId = getSlotIds(editor)[0]!;
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+
+    render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByLabelText(/Body/));
+    fireEvent.change(screen.getByLabelText("Base color"), { target: { value: "#336699" } });
+
+    expect(dispatchSpy).toHaveBeenLastCalledWith({
+      type: "set-material",
+      target: { kind: "material-slot", objectId: "object-a", slotId },
+      material: { color: "#336699" }
+    });
+  });
+
+  it("keeps broad material target behavior when the object override remains active", () => {
+    const editor = createSlotEditor();
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+
+    render(<InspectorPanel editor={editor} />);
+    fireEvent.change(screen.getByLabelText("Roughness"), { target: { value: "0.42" } });
+    fireEvent.blur(screen.getByLabelText("Roughness"));
+
+    expect(dispatchSpy).toHaveBeenLastCalledWith({
+      type: "set-material",
+      target: { kind: "object", objectId: "object-a" },
+      material: { roughness: 0.42 }
+    });
+  });
+
+  it("resets material target to the selected imported node slot context", () => {
+    const editor = createSlotEditor();
+    const importedNodeId = getImportedNodeIds(editor)[0]!;
+    const slotId = getSlotIds(editor)[0]!;
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+
+    render(<InspectorPanel editor={editor} />);
+    fireEvent.change(screen.getByLabelText("Roughness"), { target: { value: "0.42" } });
+    fireEvent.blur(screen.getByLabelText("Roughness"));
+    act(() => {
+      editor.dispatch({ type: "select-node", nodeId: importedNodeId });
+    });
+    fireEvent.change(screen.getByLabelText("Base color"), { target: { value: "#336699" } });
+
+    expect(dispatchSpy).toHaveBeenLastCalledWith({
+      type: "set-material",
+      target: { kind: "material-slot", objectId: "object-a", slotId },
+      material: { color: "#336699" }
+    });
+  });
+
+  it("resets material target to broad object when selection returns to the owner object", () => {
+    const editor = createSlotEditor();
+    const slotId = getSlotIds(editor)[0]!;
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+
+    render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByLabelText(/Body/));
+    fireEvent.change(screen.getByLabelText("Base color"), { target: { value: "#336699" } });
+    expect(dispatchSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+      target: { kind: "material-slot", objectId: "object-a", slotId }
+    }));
+
+    const importedNodeId = getImportedNodeIds(editor)[0]!;
+    act(() => {
+      editor.dispatch({ type: "select-node", nodeId: importedNodeId });
+    });
+    expect((screen.getByLabelText(/Body/) as HTMLInputElement).checked).toBe(true);
+    act(() => {
+      editor.dispatch({ type: "select-node", nodeId: "object-a" });
+    });
+    expect((screen.getByRole("radio", { name: /Object override/ }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.change(screen.getByLabelText("Roughness"), { target: { value: "0.42" } });
+    fireEvent.blur(screen.getByLabelText("Roughness"));
+
+    expect(dispatchSpy).toHaveBeenLastCalledWith({
+      type: "set-material",
+      target: { kind: "object", objectId: "object-a" },
+      material: { roughness: 0.42 }
+    });
+  });
+
+  it("shows controlled material field problems without dispatching invalid drafts", () => {
+    const editor = createSlotEditor();
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+
+    render(<InspectorPanel editor={editor} />);
+    fireEvent.change(screen.getByLabelText("Opacity"), { target: { value: "1.2" } });
+    fireEvent.blur(screen.getByLabelText("Opacity"));
+
+    expect(screen.getByText(/less than or equal to 1/)).toBeTruthy();
+    expect(dispatchSpy).not.toHaveBeenCalledWith(expect.objectContaining({ type: "set-material" }));
+  });
+
   it("renders runtime problems from the inspector model", async () => {
     const editor = createEditor();
     const runtime = {
@@ -135,3 +230,51 @@ describe("React InspectorPanel", () => {
     expect(Object.values(editor.getSnapshot().lights).filter((light) => light.kind === "point")).toHaveLength(2);
   });
 });
+
+function createSlotEditor() {
+  const editor = createEditor();
+  editor.dispatch({
+    type: "import-glb",
+    objectId: "object-a",
+    asset: {
+      id: "asset-a",
+      metadata: attachGlbImportManifestMetadata(undefined, createSlotManifest())
+    },
+    expandImportedTargets: true
+  });
+  editor.dispatch({ type: "select-node", nodeId: "object-a" });
+  return editor;
+}
+
+function getSlotIds(editor: ReturnType<typeof createEditor>) {
+  return Object.values(editor.getSnapshot().nodes)
+    .filter((node) => node.kind === "imported")
+    .flatMap((node) => node.materialSlots?.map((slot) => slot.slotKey) ?? []);
+}
+
+function getImportedNodeIds(editor: ReturnType<typeof createEditor>) {
+  return Object.values(editor.getSnapshot().nodes)
+    .filter((node) => node.kind === "imported" && node.source.kind === "primitive")
+    .map((node) => node.id)
+    .sort();
+}
+
+function createSlotManifest() {
+  return createGlbImportManifest({
+    gltf: {
+      parser: {
+        json: {
+          nodes: [{ name: "Panel", mesh: 0 }],
+          meshes: [{
+            name: "Panel mesh",
+            primitives: [
+              { attributes: { POSITION: 0, NORMAL: 1 }, material: 0 },
+              { attributes: { POSITION: 2, NORMAL: 3 }, material: 1 }
+            ]
+          }],
+          materials: [{ name: "Body" }, { name: "Screen" }]
+        }
+      }
+    }
+  });
+}
