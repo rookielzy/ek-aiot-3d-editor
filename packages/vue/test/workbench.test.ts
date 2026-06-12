@@ -376,6 +376,38 @@ describe("Vue EditorWorkbench", () => {
     wrapper.unmount();
   });
 
+  it("edits material slots through the default Workbench inspector", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      name: "Panel",
+      asset: {
+        id: "asset-a",
+        label: "panel.glb",
+        metadata: attachGlbImportManifestMetadata(undefined, createWorkbenchManifest({ twoSlots: true }))
+      },
+      expandImportedTargets: true
+    });
+    editor.dispatch({ type: "select-node", nodeId: "object-a" });
+    const slotId = getWorkbenchSlotIds(editor)[1]!;
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer }
+    });
+
+    const screenTarget = wrapper.findAll(".ek-material-target-option").find((option) => option.text().includes("Screen"));
+    expect(screenTarget).toBeTruthy();
+    await screenTarget!.find('input[type="radio"]').setValue(true);
+    await wrapper.findAll('input[type="color"]')[0].setValue("#336699");
+
+    expect(editor.getSnapshot().materials.assignments[`material-slot:object-a:${slotId}`]).toMatchObject({
+      target: { kind: "material-slot", objectId: "object-a", slotId }
+    });
+    expect(editor.getSnapshot().materials.assignments["object:object-a"]).toBeUndefined();
+    expect(JSON.stringify(editor.getSnapshot())).not.toContain("ek-material-target");
+    wrapper.unmount();
+  });
+
   it("supports explicit left/right slot overrides while keeping sidePanel compatible", async () => {
     const editor = markRaw(createEditor());
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
@@ -783,7 +815,7 @@ function mockObjectUrls(): {
   };
 }
 
-function createWorkbenchManifest() {
+function createWorkbenchManifest(options: { twoSlots?: boolean } = {}) {
   return createGlbImportManifest({
     gltf: {
       parser: {
@@ -791,13 +823,24 @@ function createWorkbenchManifest() {
           nodes: [{ name: "Panel", mesh: 0 }],
           meshes: [{
             name: "Panel mesh",
-            primitives: [{ attributes: { POSITION: 0 }, material: 0 }]
+            primitives: options.twoSlots
+              ? [
+                  { attributes: { POSITION: 0 }, material: 0 },
+                  { attributes: { POSITION: 1 }, material: 1 }
+                ]
+              : [{ attributes: { POSITION: 0 }, material: 0 }]
           }],
-          materials: [{ name: "Red" }]
+          materials: options.twoSlots ? [{ name: "Body" }, { name: "Screen" }] : [{ name: "Red" }]
         }
       }
     }
   });
+}
+
+function getWorkbenchSlotIds(editor: ReturnType<typeof createEditor>) {
+  return Object.values(editor.getSnapshot().nodes)
+    .filter((node) => node.kind === "imported")
+    .flatMap((node) => node.materialSlots?.map((slot) => slot.slotKey) ?? []);
 }
 
 function withPrimitivePath(manifest: ReturnType<typeof createWorkbenchManifest>, path: string) {

@@ -129,6 +129,7 @@ export type {
   LightListItem,
   MaterialFieldId,
   MaterialInspectorSection,
+  MaterialInspectorTarget,
   ProblemInspectorSection,
   TransformAxis,
   TransformFieldId,
@@ -329,6 +330,7 @@ export {
   buildLightSection
 } from "./inspector/lights";
 export {
+  buildMaterialFieldsForTarget,
   buildMaterialSection
 } from "./inspector/material";
 export {

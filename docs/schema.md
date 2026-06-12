@@ -302,7 +302,8 @@ Selection 是 durable state，因此可以序列化/恢复。`nodeId` 是 primar
 - imported target 可以暴露 `materialSlots`，`MaterialAssignmentTarget` 仍使用 `{ kind: "material-slot"; objectId; slotId }` 引用 slot key。
 - validation 允许 material-slot assignment 指向当前不存在的 slot key，因为 reimport 后 slot 消失应该成为 recoverable problem，而不是 schema 层删除 durable assignment。
 - `reimport-glb` 会在 slot 可唯一匹配时改写 material-slot assignment ID/slot ID；无法匹配时保留 durable assignment，并通过 `imported-material-slot-unresolved` problem 暴露。
-- 当前非目标包括 material slot inspector UI、复杂材质图、节点材质、shader 编辑和 glTF material variant authoring。
+- 默认 React/Vue inspector 可以把这些 durable slot assignment 暴露为 broad object target 和 material-slot target；active target、字段草稿、controlled validation warning 和 runtime unresolved problem 仍是 UI/runtime projection，不进入 Snapshot。
+- 当前非目标包括手动 slot remap UI、slot thumbnail/source material preview、复杂材质图、节点材质、shader 编辑和 glTF material variant authoring。
 
 ## Environment
 

@@ -89,7 +89,7 @@ React app store 可以镜像可序列化的项目 metadata、当前 route、最�
 
 资产面板应优先读取 `workbench.model.assets.workspace`。该 workspace 已经合并 Snapshot asset registry、对象/材质/环境引用位置、项目包 payload 摘要、GLB import manifest diagnostics、GLB reimport remap problem 和资产问题，并提供 core 统一的搜索/过滤/排序 helper。`replaceAsset()` 这类 payload-only 更新不会改变 Snapshot，但 React hook 会订阅 core asset workspace 版本并重新计算 model；宿主不需要也不应该读取 transient project store、`Blob` 或 object URL。
 
-Core 已支持 material-slot assignment 的 durable command 和 runtime projection。自定义 React inspector 可以在已展开 imported target 的 `materialSlots` 中读取 slot key，并 dispatch `set-material` 到 `{ kind: "material-slot", objectId, slotId }`；默认 React material inspector 仍只提供基础 object-level 控件，slot list/未解析 slot 的 UI 属于后续 U8。
+默认 React material inspector 已支持 object-level broad override 和 imported material-slot target。`MaterialInspectorSection.targets` 由 core 统一派生，React 只渲染 target radio group、显示 unresolved/disabled 状态，并把 active target 传回 core `buildSetMaterialCommand()`。Active target、字段草稿和 controlled warning 都是组件本地 UI state，不进入 `SceneSnapshot` 或 `.ek3d`。自定义 React inspector 也应优先使用同一 core inspector model，而不是自行扫描 `materialSlots` 后拼 command target。
 
 默认左栏的资产区支持多文件选择、拖放和 registered GLB reimport。`.glb` 导入会通过 `context.assets.importFiles()` 调用 core 的 decoder-aware GLB import bridge，并使用传给 `EditorWorkbench` 的同一个 `loader` prop；已注册的 GLB row 会通过 `context.assets.reimportGlbAsset()` 调用 core reimport lifecycle。`.hdr` 会注册为 HDR asset；PNG/JPG/WebP/SVG 等 raster 文件需要用户在 UI 中显式选择 `texture` 或 `image` intent。导入队列、drag hover、file input value 和失败提示是 React transient state，不进入 `SceneSnapshot` 或 `.ek3d` JSON。
 
@@ -196,7 +196,7 @@ pnpm --filter @ek-aiot/react-proof-loop dev
 
 示例首屏就是可操作 workbench，不是 landing page。示例代码只保留真实宿主通常需要拥有的部分：创建 editor、初始化 starter snapshot、配置 resolver/loader、选择可选 renderer factory，以及一个很薄的 viewport overlay。toolbar、hierarchy、assets、project status、missing-asset recovery、inspector 和 status 都来自 `@ek-aiot/3d-editor-react` 默认 Workbench。
 
-默认 UI 可以完成 starter flow：选择 hierarchy row、编辑 Transform/Material inspector、切换 snap/transform、undo/redo、duplicate、export partial package、通过 Open 重新载入 `.ek3d`、从左栏恢复缺失资产，以及对 registered GLB 执行 reimport。缺失资产恢复使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem；GLB reimport 使用 `context.assets.reimportGlbAsset()`，提交 replacement manifest 和 target remap，并在按钮反馈中显示 exact/remapped/new/unresolved summary。
+默认 UI 可以完成 starter flow：选择 hierarchy row、编辑 Transform/Material inspector、在 expanded GLB 上选择 broad object 或 material slot target、切换 snap/transform、undo/redo、duplicate、export partial package、通过 Open 重新载入 `.ek3d`、从左栏恢复缺失资产，以及对 registered GLB 执行 reimport。缺失资产恢复使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem；GLB reimport 使用 `context.assets.reimportGlbAsset()`，提交 replacement manifest 和 target remap，并在按钮反馈中显示 exact/remapped/new/unresolved summary。
 
 浏览器证据通过仓库根目录命令运行：
 
