@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { createApp, type App as VueApp } from "vue";
 import { afterEach, describe, expect, it } from "vitest";
 import type { RendererLike } from "@ek-aiot/3d-editor-core";
+import { decodeArchiveJson, defaultArchiveAdapter } from "../../core/src/project/archive-adapter";
 import { App as ReactProofLoopApp } from "../../../examples/react-proof-loop/src/App";
 import ReactDemoStyles from "../../../examples/react-proof-loop/src/styles.css?raw";
 import VueProofLoopApp from "../../../examples/vue-proof-loop/src/App.vue";
@@ -103,7 +104,7 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
     await waitFor(() => expect(text(host)).toContain("Exported partial project"));
     await waitFor(() => expect(window.__lastDownloadedProject).toBeInstanceOf(Uint8Array));
     expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("asset-unresolved");
-    await expectExportedMarqueeSelection(window.__lastDownloadedProject!);
+    expectExportedMarqueeSelection(window.__lastDownloadedProject!);
 
     const openInput = section(host, "Project actions").querySelector('input[type="file"]') as HTMLInputElement | null;
     expect(openInput, "Expected default Open project file input").toBeTruthy();
@@ -248,10 +249,9 @@ async function dragMarquee(canvas: HTMLCanvasElement, start: { x: number; y: num
   await waitForAnimationFrame();
 }
 
-async function expectExportedMarqueeSelection(bytes: Uint8Array): Promise<void> {
-  const { unzipSync, strFromU8 } = await import("fflate");
-  const files = unzipSync(bytes);
-  const scene = JSON.parse(strFromU8(files["scene.json"]));
+function expectExportedMarqueeSelection(bytes: Uint8Array): void {
+  const files = defaultArchiveAdapter.read(bytes);
+  const scene = decodeArchiveJson(files.find((entry) => entry.path === "scene.json")!.bytes) as { selection: { nodeIds: string[] } };
   expect(scene.selection.nodeIds).toEqual(["detail", "box"]);
   const serialized = JSON.stringify(scene);
   expect(serialized).not.toContain("marquee");
