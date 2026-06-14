@@ -14,8 +14,10 @@ import { ObjectPicker } from "./picking";
 import type { RuntimeTextureLoaderAdapter } from "./texture-loader-adapter";
 import type { Unsubscribe } from "../editor/subscription";
 import type { EditorSnapState } from "../editor/snap-state";
+import { IDLE_VIEWPORT_SNAP_FEEDBACK, type EditorViewportHelperState, type ViewportHelperStateSnapshot } from "../editor/viewport-helper-state";
 import { RuntimeSelectionVisuals } from "./selection-visuals";
 import type { RuntimeNodeTarget } from "./three-object-map";
+import { RuntimeViewportHelpers } from "./viewport-helpers";
 import { TransformControlsAdapter, createThreeTransformControls, type RuntimeTransformControlsFactory } from "./transform/transform-controls-adapter";
 import { TransformController } from "./transform/transform-controller";
 import type { EditorTransformModeState } from "./transform/transform-mode";
@@ -61,6 +63,7 @@ interface ThreeEditorRuntimeOptions extends EditorRuntimeOptions {
   cameraControlsFactory?: ViewportCameraControlsFactory;
   transformControlsFactory?: RuntimeTransformControlsFactory;
   snap?: EditorSnapState;
+  viewportHelpers?: EditorViewportHelperState;
   transformMode?: EditorTransformModeState;
   resizeObserverFactory?: ResizeObserverFactory;
   scheduleFrame?: RuntimeAnimationFrameScheduler;
@@ -106,12 +109,16 @@ export class ThreeEditorRuntime implements EditorRuntime {
   #transformControls: TransformControlsAdapter | null = null;
   #transformController: TransformController;
   #selectionVisuals: RuntimeSelectionVisuals | null = null;
+  #viewportHelpers: RuntimeViewportHelpers | null = null;
+  #viewportHelperState: EditorViewportHelperState | null = null;
+  #currentHelperSnapshot: ViewportHelperStateSnapshot | null = null;
   #resizeObserver: Pick<ResizeObserver, "observe" | "disconnect"> | null = null;
   #scheduleFrame: RuntimeAnimationFrameScheduler;
   #cancelFrame: RuntimeAnimationFrameCancel;
   #pendingFrame: number | null = null;
   #unsubscribe: (() => void) | null = null;
   #unsubscribeSnap: (() => void) | null = null;
+  #unsubscribeViewportHelpers: (() => void) | null = null;
   #unsubscribeTransformMode: (() => void) | null = null;
   #problemSubscribers = new Set<RuntimeProblemSubscriber>();
   #problemVersion = 0;
@@ -148,6 +155,16 @@ export class ThreeEditorRuntime implements EditorRuntime {
       modifiers: event,
       mode: resolvePointerSelectionMode(event, options.defaultMode)
     });
+  };
+  #handlePointerMove = (event: PointerEvent) => {
+    if (!this.#viewportHelperState || !this.#currentHelperSnapshot?.visibility.hover) {
+      return;
+    }
+    const nodeId = this.#hitNodeFromPointer(event.clientX, event.clientY);
+    this.#viewportHelperState.setHover(nodeId);
+  };
+  #handlePointerLeave = () => {
+    this.#viewportHelperState?.setHover(null);
   };
 
   constructor(options: ThreeEditorRuntimeOptions) {
@@ -186,7 +203,9 @@ export class ThreeEditorRuntime implements EditorRuntime {
     if (this.#disposed || generation !== this.#projectGeneration) {
       return;
     }
-    this.#selectionVisuals?.sync();
+    this.#clearStaleViewportHelperTargets();
+    this.#syncSelectionVisuals();
+    this.#viewportHelpers?.sync();
     this.#transformControls?.sync(snapshot);
     this.invalidateRender();
     this.#publishProblems();
@@ -363,6 +382,28 @@ export class ThreeEditorRuntime implements EditorRuntime {
       this.#selectionVisuals = new RuntimeSelectionVisuals(this.scene, this.projector.objects, this.#interactions.selectionVisuals);
     }
 
+    if (this.#interactions.viewportHelpers) {
+      this.#viewportHelpers = new RuntimeViewportHelpers(this.scene, this.projector.objects, this.#interactions.viewportHelpers);
+      this.#viewportHelperState = options.viewportHelpers ?? null;
+      if (this.#viewportHelperState) {
+        this.#viewportHelperState.seedVisibility(this.#interactions.viewportHelpers.visibility);
+        this.#currentHelperSnapshot = this.#viewportHelperState.get();
+      } else {
+        this.#currentHelperSnapshot = {
+          visibility: this.#interactions.viewportHelpers.visibility,
+          hoverNodeId: null,
+          snapFeedback: IDLE_VIEWPORT_SNAP_FEEDBACK
+        };
+        this.#viewportHelpers.setState(this.#currentHelperSnapshot);
+      }
+      this.#unsubscribeViewportHelpers = this.#viewportHelperState?.subscribe((snapshot) => {
+        this.#currentHelperSnapshot = snapshot;
+        this.#viewportHelpers?.setState(snapshot);
+        this.#syncSelectionVisuals();
+        this.invalidateRender();
+      }) ?? null;
+    }
+
     if (this.#interactions.transform) {
       const controlsFactory = options.transformControlsFactory ?? createThreeTransformControls;
       this.#transformControls = new TransformControlsAdapter({
@@ -377,7 +418,10 @@ export class ThreeEditorRuntime implements EditorRuntime {
         cameraControls: this.#controls,
         mode: options.transformMode?.get(),
         snap: options.snap?.get(),
-        onChange: this.#handleControlsChange
+        onChange: this.#handleControlsChange,
+        onSnapFeedback: (feedback) => {
+          this.#viewportHelperState?.setSnapFeedback(feedback);
+        }
       });
       this.#unsubscribeSnap = options.snap?.subscribe((settings) => {
         this.#transformControls?.setSnap(settings);
@@ -390,6 +434,11 @@ export class ThreeEditorRuntime implements EditorRuntime {
     if (this.#interactions.pointerSelection) {
       this.#renderer.domElement.addEventListener("pointerdown", this.#handlePointerDown);
       this.#renderer.domElement.addEventListener("pointerup", this.#handlePointerUp);
+    }
+
+    if (this.#interactions.viewportHelpers) {
+      this.#renderer.domElement.addEventListener("pointermove", this.#handlePointerMove);
+      this.#renderer.domElement.addEventListener("pointerleave", this.#handlePointerLeave);
     }
 
     if (this.#interactions.resize) {
@@ -409,6 +458,8 @@ export class ThreeEditorRuntime implements EditorRuntime {
   #unmountInteractions(): void {
     this.#renderer.domElement.removeEventListener("pointerdown", this.#handlePointerDown);
     this.#renderer.domElement.removeEventListener("pointerup", this.#handlePointerUp);
+    this.#renderer.domElement.removeEventListener("pointermove", this.#handlePointerMove);
+    this.#renderer.domElement.removeEventListener("pointerleave", this.#handlePointerLeave);
     this.#resizeObserver?.disconnect();
     this.#resizeObserver = null;
     this.#controls?.removeEventListener("change", this.#handleControlsChange);
@@ -416,12 +467,65 @@ export class ThreeEditorRuntime implements EditorRuntime {
     this.#controls = null;
     this.#unsubscribeSnap?.();
     this.#unsubscribeSnap = null;
+    this.#unsubscribeViewportHelpers?.();
+    this.#unsubscribeViewportHelpers = null;
     this.#unsubscribeTransformMode?.();
     this.#unsubscribeTransformMode = null;
     this.#transformControls?.dispose();
     this.#transformControls = null;
+    this.#clearViewportHelperSessionTargets();
     this.#selectionVisuals?.dispose();
     this.#selectionVisuals = null;
+    this.#viewportHelpers?.dispose();
+    this.#viewportHelpers = null;
+    this.#viewportHelperState = null;
+    this.#currentHelperSnapshot = null;
+  }
+
+  #hitNodeFromPointer(clientX: number, clientY: number): string | null {
+    const candidates = [...this.projector.objects.targetEntries()]
+      .filter(([, target]) => target.pickable && !target.object.userData.problem)
+      .map(([, target]) => target.object);
+    return this.picker.hitNodeFromClientPoint(this.#container, clientX, clientY, candidates);
+  }
+
+  #clearStaleViewportHelperTargets(): void {
+    const snapshot = this.#currentHelperSnapshot;
+    if (!this.#viewportHelperState || !snapshot) {
+      return;
+    }
+    if (snapshot.hoverNodeId && !this.projector.objects.getTarget(snapshot.hoverNodeId)) {
+      this.#viewportHelperState.setHover(null);
+    }
+    if (snapshot.snapFeedback.nodeId && !this.projector.objects.getTarget(snapshot.snapFeedback.nodeId)) {
+      this.#viewportHelperState.setSnapFeedback(IDLE_VIEWPORT_SNAP_FEEDBACK);
+    }
+  }
+
+  #clearViewportHelperSessionTargets(): void {
+    const snapshot = this.#viewportHelperState?.get();
+    if (!snapshot) {
+      return;
+    }
+    if (snapshot.hoverNodeId) {
+      this.#viewportHelperState?.setHover(null);
+    }
+    if (snapshot.snapFeedback.status !== "idle" || snapshot.snapFeedback.nodeId) {
+      this.#viewportHelperState?.setSnapFeedback(IDLE_VIEWPORT_SNAP_FEEDBACK);
+    }
+  }
+
+  #syncSelectionVisuals(): void {
+    if (!this.#interactions.selectionVisuals) {
+      return;
+    }
+    if (this.#currentHelperSnapshot?.visibility.selectionBounds === false) {
+      this.#selectionVisuals?.dispose();
+      this.#selectionVisuals = null;
+      return;
+    }
+    this.#selectionVisuals ??= new RuntimeSelectionVisuals(this.scene, this.projector.objects, this.#interactions.selectionVisuals);
+    this.#selectionVisuals.sync();
   }
 }
 

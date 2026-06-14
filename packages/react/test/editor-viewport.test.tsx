@@ -34,7 +34,8 @@ describe("EditorViewport", () => {
       pointerSelection: { defaultMode: "toggle" },
       resize: true,
       selectionVisuals: true,
-      transform: true
+      transform: true,
+      viewportHelpers: true
     } satisfies EditorRuntimeOptions["interactions"];
     const { unmount } = render(
       <EditorViewport

@@ -23,6 +23,8 @@ describe("createEditor", () => {
     const editor = createEditor();
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
     editor.dispatch({ type: "set-transform", objectId: "object-a", transform: { position: [1, 2, 3] } });
+    editor.viewportHelpers.setVisibility({ grid: true, hover: true });
+    editor.viewportHelpers.setHover("object-a");
     const serialized = editor.serialize();
     const restored = createEditor();
 
@@ -31,6 +33,26 @@ describe("createEditor", () => {
 
     expect(restored.getSnapshot().objects["object-a"].transform.position).toEqual([1, 2, 3]);
     expect(restored.getSnapshot().selection.objectId).toBe("object-a");
+    expect(JSON.stringify(serialized)).not.toContain("viewportHelpers");
+    expect(JSON.stringify(serialized)).not.toContain("hoverNodeId");
+    expect(editor.viewportHelpers.get()).toMatchObject({
+      hoverNodeId: "object-a",
+      visibility: { grid: true, hover: true }
+    });
+  });
+
+  it("resets helper session state on restore without writing durable fields", () => {
+    const editor = createEditor();
+    editor.viewportHelpers.setVisibility({ grid: true, floor: true, hover: true });
+    editor.viewportHelpers.setHover("object-a");
+
+    editor.restore(editor.serialize());
+
+    expect(editor.viewportHelpers.get()).toMatchObject({
+      hoverNodeId: null,
+      visibility: { grid: false, floor: false, hover: false }
+    });
+    expect(JSON.stringify(editor.serialize())).not.toContain("viewportHelper");
   });
 
   it("accepts legacy serialized snapshots at construction and keeps command/history/runtime behavior working", async () => {

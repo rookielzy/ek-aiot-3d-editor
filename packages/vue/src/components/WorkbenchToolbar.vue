@@ -52,6 +52,27 @@
       </button>
     </div>
 
+    <div class="ek-workbench__tool-group" aria-label="Viewport helpers">
+      <button type="button" title="Toggle viewport grid" :aria-pressed="toolbar.viewportHelpers.grid" @click="context.toggleViewportHelper('grid')">
+        Grid
+      </button>
+      <button type="button" title="Toggle viewport floor" :aria-pressed="toolbar.viewportHelpers.floor" @click="context.toggleViewportHelper('floor')">
+        Floor
+      </button>
+      <button type="button" title="Toggle viewport axes" :aria-pressed="toolbar.viewportHelpers.axes" @click="context.toggleViewportHelper('axes')">
+        Axes
+      </button>
+      <button type="button" title="Toggle hover feedback" :aria-pressed="toolbar.viewportHelpers.hover" @click="context.toggleViewportHelper('hover')">
+        Hover
+      </button>
+      <button type="button" title="Toggle selection bounds" :aria-pressed="toolbar.viewportHelpers.selectionBounds" @click="context.toggleViewportHelper('selectionBounds')">
+        Bounds
+      </button>
+      <button type="button" title="Toggle snap feedback" :aria-pressed="toolbar.viewportHelpers.snapFeedback" @click="context.toggleViewportHelper('snapFeedback')">
+        Guide
+      </button>
+    </div>
+
     <div class="ek-workbench__tool-group" aria-label="Camera">
       <button type="button" title="Reset camera" :disabled="!context.camera.ready" @click="context.resetCamera">
         Reset

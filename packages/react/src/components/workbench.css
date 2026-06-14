@@ -68,6 +68,7 @@
 }
 
 .ek-workbench__default-toolbar {
+  flex: 1 1 auto;
   gap: 0.5rem;
 }
 
@@ -76,6 +77,7 @@
 }
 
 .ek-workbench__tool-group {
+  flex: 0 1 auto;
   gap: 0.25rem;
   padding-right: 0.5rem;
   border-right: 1px solid var(--ek-workbench-border);
@@ -98,6 +100,7 @@
 .ek-workbench__toolbar-status {
   display: inline-flex;
   align-items: center;
+  flex: 1 1 12rem;
   min-height: 2rem;
   max-width: 16rem;
   padding: 0.25rem 0.625rem;
@@ -227,6 +230,7 @@
   align-items: center;
   gap: 0.5rem;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .ek-workbench__tree-row span,
@@ -550,7 +554,7 @@
   min-width: 2.75rem;
   min-height: 2.75rem;
   max-width: 8.5rem;
-  padding: 0 0.625rem;
+  padding: 0.25rem 0.625rem;
   border: 1px solid var(--ek-workbench-border-strong);
   border-radius: 0.375rem;
   background: #ffffff;

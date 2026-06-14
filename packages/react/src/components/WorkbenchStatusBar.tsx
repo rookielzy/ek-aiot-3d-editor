@@ -15,6 +15,7 @@ export function WorkbenchStatusBar({ context }: WorkbenchStatusBarProps) {
       <span>Undo {status.undoCount}</span>
       <span>Redo {status.redoCount}</span>
       <span>Runtime {status.runtimeReady ? "ready" : "missing"}</span>
+      <span>{status.snapFeedbackLabel}</span>
       <span>Project {project.statusLabel}</span>
       {workspace ? (
         <span>

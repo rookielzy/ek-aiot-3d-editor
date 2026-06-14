@@ -5,6 +5,7 @@ import type { WorkbenchAssetImportOptions, WorkbenchAssetImportResult } from "..
 import type { Command, CommandResult } from "../commands/types";
 import type { AdvancedEditorOperations, EditorClipboard } from "./operations";
 import type { EditorSnapState, SnapSubscriber } from "./snap-state";
+import type { EditorViewportHelperState, ViewportHelperSubscriber } from "./viewport-helper-state";
 import type { EditorTransformModeState, TransformModeSubscriber } from "../runtime/transform/transform-mode";
 import type { HistoryState } from "../history/history";
 import type { ProjectAssetPayloadSummary, ProjectExportOptions, ProjectExportResult, ProjectImportOptions, ProjectImportResult, ReplaceAssetInput, ReplaceAssetResult } from "../project/project-api";
@@ -66,8 +67,10 @@ export interface Editor {
   readonly operations: AdvancedEditorOperations;
   readonly clipboard: EditorClipboard;
   readonly snap: EditorSnapState;
+  readonly viewportHelpers?: EditorViewportHelperState;
   readonly transformMode: EditorTransformModeState;
   subscribeSnap(subscriber: SnapSubscriber): () => void;
+  subscribeViewportHelpers?(subscriber: ViewportHelperSubscriber): () => void;
   subscribeTransformMode(subscriber: TransformModeSubscriber): () => void;
   undo(): CommandResult;
   redo(): CommandResult;

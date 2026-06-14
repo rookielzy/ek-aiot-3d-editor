@@ -13,7 +13,7 @@
         :resolver="resolver"
         :loader="loader"
         :renderer-factory="rendererFactory"
-        :interactions="interactions"
+        :interactions="resolvedInteractions"
         :class="viewportClassName ? `ek-workbench__viewport ${viewportClassName}` : 'ek-workbench__viewport'"
         @runtime-ready="emit('runtimeReady', $event)"
       />
@@ -65,7 +65,8 @@ const DEFAULT_WORKBENCH_INTERACTIONS = {
   pointerSelection: true,
   resize: true,
   selectionVisuals: true,
-  transform: true
+  transform: true,
+  viewportHelpers: true
 } satisfies EditorRuntimeOptions["interactions"];
 
 const props = withDefaults(defineProps<EditorWorkbenchProps>(), {
@@ -86,6 +87,7 @@ const currentSnapshot = computed(() => workbench.snapshot.value);
 const currentInspector = computed(() => workbench.inspector.value);
 const rootClassName = computed(() => props.class ? `ek-workbench ${props.class}` : "ek-workbench");
 const interactions = computed(() => props.interactions ?? DEFAULT_WORKBENCH_INTERACTIONS);
+const resolvedInteractions = computed(() => interactions.value);
 const showDefaultToolbar = computed(() => props.showDefaultToolbar);
 const root = ref<HTMLElement | null>(null);
 

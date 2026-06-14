@@ -16,7 +16,8 @@ const DEFAULT_WORKBENCH_INTERACTIONS = {
   pointerSelection: true,
   resize: true,
   selectionVisuals: true,
-  transform: true
+  transform: true,
+  viewportHelpers: true
 } satisfies EditorRuntimeOptions["interactions"];
 
 export interface EditorWorkbenchProps extends UseWorkbenchOptions {

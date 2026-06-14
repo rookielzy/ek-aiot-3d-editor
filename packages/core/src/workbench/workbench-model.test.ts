@@ -366,6 +366,51 @@ describe("workbench model", () => {
     expect(JSON.stringify(model.assets.workspace)).not.toContain("\"bytes\"");
   });
 
+  it("projects viewport helper and snap feedback session state without durable runtime objects", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.viewportHelpers.setVisibility({
+      grid: true,
+      floor: true,
+      axes: false,
+      selectionBounds: true,
+      hover: true,
+      snapFeedback: true
+    });
+    editor.viewportHelpers.setSnapFeedback({
+      status: "dragging-snapped",
+      nodeId: "object-a",
+      mode: "translate",
+      increment: 0.5,
+      channelSnapped: true,
+      before: [0, 0, 0],
+      preview: [1.24, -0.26, 0],
+      snapped: [1, -0.5, 0]
+    });
+
+    const snapshot = editor.getSnapshot();
+    const model = buildWorkbenchModel(snapshot, {
+      inspector: buildInspectorModel(snapshot),
+      history: editor.getHistoryState(),
+      snap: editor.snap.get(),
+      viewportHelpers: editor.viewportHelpers.get(),
+      transformMode: editor.transformMode.get(),
+      runtimeReady: true
+    });
+
+    expect(model.toolbar.viewportHelpers).toMatchObject({
+      grid: true,
+      floor: true,
+      axes: false,
+      selectionBounds: true,
+      hover: true,
+      snapFeedback: true
+    });
+    expect(model.status.snapFeedbackLabel).toBe("Snap translate 0.5");
+    expect(JSON.stringify(model)).not.toContain("Object3D");
+    expect(JSON.stringify(editor.serialize())).not.toContain("snapFeedback");
+  });
+
   it("exposes core asset workspace filter and sort behavior through the workbench model", () => {
     const editor = createEditor();
     editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Pump", asset: { id: "pump-a", label: "Pump GLB" } });

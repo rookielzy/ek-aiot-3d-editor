@@ -54,7 +54,7 @@ if (!editor.getSnapshot().objects.box) {
 </script>
 ```
 
-不传 `toolbar`、`leftPanel`、`rightPanel` 或 `status` slot 时，Workbench 会使用 package-owned 默认 UI。默认 toolbar 已包含 open/export、undo/redo、transform mode、snap、camera、copy/paste/duplicate/delete/group/ungroup/select controls；默认左栏会显示 hierarchy、可批量导入的 asset workspace、project summary、project/runtime problems 和缺失资产恢复入口。
+不传 `toolbar`、`leftPanel`、`rightPanel` 或 `status` slot 时，Workbench 会使用 package-owned 默认 UI。默认 toolbar 已包含 open/export、undo/redo、transform mode、snap、grid/floor/axes/hover/bounds/snap guide helper、camera、copy/paste/duplicate/delete/group/ungroup/select controls；默认左栏会显示 hierarchy、可批量导入的 asset workspace、project summary、project/runtime problems 和缺失资产恢复入口。
 
 ## Primitive 组件
 
@@ -106,10 +106,12 @@ interface WorkbenchContext {
   selectedObjectIds: string[];
   selectedLightId: string | null;
   snap: SnapSettings;
+  viewportHelperState: ViewportHelperStateSnapshot;
   transformMode: TransformMode;
   setActiveLightId(value: string | null): void;
   setTransformMode(mode: TransformMode): void;
   toggleSnap(channel: SnapChannel, increment?: number): SnapSettings;
+  toggleViewportHelper(key: ViewportHelperKey): ViewportHelperStateSnapshot;
   runAction(action: EditorAction): EditorActionResult;
   resetCamera(): void;
   frameSelected(options?: RuntimeCameraFrameOptions): boolean;
@@ -125,8 +127,14 @@ interface WorkbenchContext {
     replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
     reimportGlbAsset(input: ReimportGlbAssetOptions): Promise<ReimportGlbAssetResult>;
   };
+  viewportHelpers: {
+    state: ViewportHelperStateSnapshot;
+    toggle(key: ViewportHelperKey): ViewportHelperStateSnapshot;
+  };
 }
 ```
+
+`viewportHelperState` 是 session-only projection。Grid/floor/axes visibility、hover target、bounds toggle 和 snap guide feedback 不会写入 `SceneSnapshot` 或 `.ek3d`，也不会产生 undo history。
 
 资产面板应优先读取 `workbench.model.assets.workspace`。该 workspace 已经合并 Snapshot asset registry、对象/材质/环境引用位置、项目包 payload 摘要、GLB import manifest diagnostics、GLB reimport remap problem 和资产问题，并提供 core 统一的搜索/过滤/排序 helper。`replaceAsset()` 这类 payload-only 更新不会改变 Snapshot，但 Vue composable 会订阅 core asset workspace 版本并重新计算 model；宿主不需要也不应该读取 transient project store、`Blob` 或 object URL。
 
@@ -163,7 +171,7 @@ pnpm --filter @ek-aiot/vue-proof-loop dev
 
 示例首屏就是可操作 workbench，不是 landing page。示例代码只保留真实宿主通常需要拥有的部分：创建 editor、初始化 starter snapshot、配置 resolver/loader、选择可选 renderer factory，以及一个很薄的 viewport overlay。toolbar、hierarchy、assets、project status、missing-asset recovery、inspector 和 status 都来自 `@ek-aiot/3d-editor-vue` 默认 Workbench。
 
-默认 UI 可以完成 starter flow：选择 hierarchy row、编辑 Transform/Material inspector、在 expanded GLB 上选择 broad object 或 material slot target、切换 snap/transform、undo/redo、duplicate、搜索/过滤资产、export partial package、通过 Open 重新载入 `.ek3d`、从左栏恢复缺失资产，以及对 registered GLB 执行 reimport。缺失资产恢复使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem；GLB reimport 使用 `context.assets.reimportGlbAsset()`，提交 replacement manifest 和 target remap，并在按钮反馈中显示 exact/remapped/new/unresolved summary。
+默认 UI 可以完成 starter flow：选择 hierarchy row、编辑 Transform/Material inspector、在 expanded GLB 上选择 broad object 或 material slot target、切换 helper/snap/transform、undo/redo、duplicate、搜索/过滤资产、export partial package、通过 Open 重新载入 `.ek3d`、从左栏恢复缺失资产，以及对 registered GLB 执行 reimport。缺失资产恢复使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem；GLB reimport 使用 `context.assets.reimportGlbAsset()`，提交 replacement manifest 和 target remap，并在按钮反馈中显示 exact/remapped/new/unresolved summary。
 
 浏览器证据通过仓库根目录命令运行：
 

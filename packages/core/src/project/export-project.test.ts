@@ -149,6 +149,48 @@ describe("project export", () => {
     expect(serializedScene).not.toContain("imported-target-missing");
   });
 
+  it("does not export viewport helper, hover, or snap feedback session state", () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: { id: "asset-a", source: new Uint8Array([1, 2, 3]) }
+    });
+    editor.viewportHelpers.setVisibility({
+      grid: true,
+      floor: true,
+      axes: true,
+      selectionBounds: true,
+      hover: true,
+      snapFeedback: true
+    });
+    editor.viewportHelpers.setHover("object-a");
+    editor.viewportHelpers.setSnapFeedback({
+      status: "dragging-snapped",
+      nodeId: "object-a",
+      mode: "translate",
+      increment: 0.5,
+      channelSnapped: true,
+      before: [0, 0, 0],
+      preview: [1.24, -0.26, 0],
+      snapped: [1, -0.5, 0]
+    });
+
+    const result = editor.exportProject();
+
+    expect(result.ok).toBe(true);
+    const archiveEntries = defaultArchiveAdapter.read(result.packageBytes as Uint8Array);
+    const serializedScene = new TextDecoder().decode(archiveEntries.find((entry) => entry.path === PROJECT_SCENE_PATH)!.bytes);
+    expect(serializedScene).toContain("object-a");
+    expect(serializedScene).not.toContain("viewportHelpers");
+    expect(serializedScene).not.toContain("viewportHelper");
+    expect(serializedScene).not.toContain("hoverNodeId");
+    expect(serializedScene).not.toContain("snapFeedback");
+    expect(serializedScene).not.toContain("dragging-snapped");
+    expect(serializedScene).not.toContain("GridHelper");
+    expect(serializedScene).not.toContain("Object3D");
+  });
+
   it("exports material-slot assignments and texture references without runtime material values", () => {
     const editor = createEditor();
     editor.dispatch({
