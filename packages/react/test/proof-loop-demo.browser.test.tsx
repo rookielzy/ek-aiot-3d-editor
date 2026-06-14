@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { createApp, type App as VueApp } from "vue";
 import { afterEach, describe, expect, it } from "vitest";
+import { PerspectiveCamera, Vector3 } from "three";
 import type { RendererLike } from "@ek-aiot/3d-editor-core";
 import { decodeArchiveJson, defaultArchiveAdapter } from "../../core/src/project/archive-adapter";
 import { App as ReactProofLoopApp } from "../../../examples/react-proof-loop/src/App";
@@ -65,7 +66,7 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
       expect(hasNonBlankCanvasPixel(canvas!)).toBe(true);
     });
 
-    await dragMarquee(canvas!, { x: 35, y: 35 }, { x: 135, y: 165 });
+    await dragMarqueeStarterObjects(canvas!);
     await waitFor(() => {
       expect(text(host)).toContain("Selection 2 nodes");
       expect(text(section(host, "Hierarchy"))).toContain("Detail block selected");
@@ -247,6 +248,74 @@ async function dragMarquee(canvas: HTMLCanvasElement, start: { x: number; y: num
     clientY: rect.top + end.y
   }));
   await waitForAnimationFrame();
+}
+
+async function dragMarqueeStarterObjects(canvas: HTMLCanvasElement): Promise<void> {
+  const rect = canvas.getBoundingClientRect();
+  const detailRect = projectStarterBoxRect(-1.35, rect.width, rect.height);
+  const boxRect = projectStarterBoxRect(0, rect.width, rect.height);
+  const recoverableRect = projectStarterBoxRect(1.35, rect.width, rect.height);
+  const ambientPoint = projectStarterPoint(0, 0, 0, rect.width, rect.height);
+  const paddingX = Math.max(2, rect.width * 0.01);
+  const paddingY = Math.min(8, Math.max(2, rect.height * 0.02));
+  const start = {
+    x: Math.max(4, Math.min(detailRect.left, boxRect.left) - paddingX),
+    y: Math.max(4, ambientPoint.y + paddingY)
+  };
+  const end = {
+    x: Math.min(rect.width - 4, recoverableRect.left - paddingX, Math.max(detailRect.right, boxRect.right) + paddingX),
+    y: Math.min(rect.height - 4, Math.max(detailRect.bottom, boxRect.bottom) + paddingY)
+  };
+
+  expect(end.x).toBeGreaterThan(start.x + 4);
+  expect(end.y).toBeGreaterThan(start.y + 4);
+  expect(start.y).toBeGreaterThan(ambientPoint.y);
+
+  await dragMarquee(canvas, start, end);
+}
+
+function projectStarterBoxRect(centerX: number, width: number, height: number): { left: number; top: number; right: number; bottom: number } {
+  const camera = new PerspectiveCamera(50, width / height, 0.1, 1000);
+  camera.position.set(0, 2, 5);
+  camera.lookAt(0, 0, 0);
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld();
+
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (const x of [centerX - 0.5, centerX + 0.5]) {
+    for (const y of [-0.5, 0.5]) {
+      for (const z of [-0.5, 0.5]) {
+        const point = new Vector3(x, y, z).project(camera);
+        const projected = toViewportPoint(point, width, height);
+        xs.push(projected.x);
+        ys.push(projected.y);
+      }
+    }
+  }
+
+  return {
+    left: Math.min(...xs),
+    top: Math.min(...ys),
+    right: Math.max(...xs),
+    bottom: Math.max(...ys)
+  };
+}
+
+function projectStarterPoint(x: number, y: number, z: number, width: number, height: number): { x: number; y: number } {
+  const camera = new PerspectiveCamera(50, width / height, 0.1, 1000);
+  camera.position.set(0, 2, 5);
+  camera.lookAt(0, 0, 0);
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld();
+  return toViewportPoint(new Vector3(x, y, z).project(camera), width, height);
+}
+
+function toViewportPoint(point: Vector3, width: number, height: number): { x: number; y: number } {
+  return {
+    x: (point.x + 1) / 2 * width,
+    y: (1 - point.y) / 2 * height
+  };
 }
 
 function expectExportedMarqueeSelection(bytes: Uint8Array): void {
