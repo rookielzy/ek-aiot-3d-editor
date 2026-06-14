@@ -14,6 +14,7 @@ export type WorkbenchRegionName = "toolbar" | "leftPanel" | "sidePanel" | "viewp
 const DEFAULT_WORKBENCH_INTERACTIONS = {
   camera: true,
   pointerSelection: true,
+  marqueeSelection: true,
   resize: true,
   selectionVisuals: true,
   transform: true,

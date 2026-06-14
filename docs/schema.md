@@ -235,7 +235,7 @@ editor.dispatch({
 
 Runtime projection 会把这些 durable imported nodes 解析为 loaded GLB scene 内的 transient `Object3D` descendant，并把结果放入 runtime node target map。该映射只在运行时存在：`Object3D`、base transform cache、loader result、parser association、selection helper 和 runtime problem 都不会写入 Snapshot。若 loaded GLB 中找不到对应 `importKey/source`，runtime 会暴露 target 为 `{ kind: "imported-target" }` 的 recoverable problem，并保留 durable imported node 与已 authored 的 transform override。若 GLB reimport 把 node 标记为 `remap.status: "unresolved"`，runtime/workbench 会暴露 `imported-target-unresolved`，而不是删除 node 或它的 authored transform。
 
-Viewport grid/floor/axes helpers, selection/hover/snap guide helper objects, helper visibility, hover target, and snap feedback state are runtime/workbench session projection. They must not be serialized into Snapshot, history, clipboard payload, or `.ek3d` `scene.json`.
+Viewport grid/floor/axes helpers, selection/hover/snap guide helper objects, helper visibility, hover target, snap feedback state, and marquee overlay/drag/candidate state are runtime/workbench session projection. They must not be serialized into Snapshot, history, clipboard payload, or `.ek3d` `scene.json`.
 
 或在 import 时 opt-in：
 
@@ -289,6 +289,8 @@ Selection 是 durable state，因此可以序列化/恢复。`nodeId` 是 primar
 - 非空 `objectId` 必须包含在 `objectIds` 中。
 - `objectIds` 中所有对象都必须存在且不能重复。
 - imported node 可进入 `selection.nodeId/nodeIds`；它不会进入 `selection.objectId/objectIds`，除非同次 selection 里还选中了 object node。
+
+Viewport marquee selection 不引入新的 durable schema 字段。拖拽矩形、overlay DOM、candidate preview、pointer/camera suppression 和 runtime target projection 都是 transient session state；完成拖拽后只有现有 `selection.nodeId/nodeIds` 和兼容 `selection.objectId/objectIds` 会保存到 Snapshot。
 
 ## Materials
 

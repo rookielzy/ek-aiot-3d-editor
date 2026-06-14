@@ -527,6 +527,7 @@ describe("React EditorWorkbench", () => {
     const interactions: EditorRuntimeOptions["interactions"] = {
       camera: { enableDamping: true },
       pointerSelection: true,
+      marqueeSelection: { defaultMode: "add" },
       resize: true,
       selectionVisuals: true,
       transform: true
@@ -549,6 +550,29 @@ describe("React EditorWorkbench", () => {
 
     expect(runtimeReady).toHaveBeenLastCalledWith(null);
     expect(editor.disposed).toBe(false);
+  });
+
+  it("enables marquee selection in the default Workbench interactions", () => {
+    const editor = createEditor();
+    const mountRuntime = vi.spyOn(editor, "mountRuntime");
+    const { container, unmount } = render(
+      <EditorWorkbench
+        editor={editor}
+        rendererFactory={fakeRenderer}
+      />
+    );
+
+    expect(mountRuntime).toHaveBeenCalledWith(expect.objectContaining({
+      interactions: expect.objectContaining({
+        pointerSelection: true,
+        marqueeSelection: true,
+        viewportHelpers: true
+      })
+    }));
+    const viewport = container.querySelector(".ek-workbench__viewport");
+    expect(viewport).not.toBeNull();
+
+    unmount();
   });
 
   it("exposes runtime problems through built-in UI and render context without serialization", async () => {

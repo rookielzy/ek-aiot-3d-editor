@@ -22,6 +22,15 @@ export interface RuntimePointerSelectionOptions {
   defaultMode?: SelectionMode;
 }
 
+export interface RuntimeMarqueeSelectionOptions {
+  enabled?: boolean;
+  button?: number;
+  dragThreshold?: number;
+  minSize?: number;
+  defaultMode?: SelectionMode;
+  previewCandidates?: boolean;
+}
+
 export interface RuntimePointerSelectionModifiers {
   shiftKey?: boolean;
   ctrlKey?: boolean;
@@ -81,6 +90,7 @@ export interface ResolvedRuntimeViewportHelperOptions extends Required<Omit<Runt
 export interface RuntimeInteractionOptions {
   camera?: boolean | RuntimeCameraControlsOptions;
   pointerSelection?: boolean | RuntimePointerSelectionOptions;
+  marqueeSelection?: boolean | RuntimeMarqueeSelectionOptions;
   resize?: boolean;
   selectionVisuals?: boolean | RuntimeSelectionVisualOptions;
   transform?: boolean | RuntimeTransformControlsOptions;
@@ -90,6 +100,7 @@ export interface RuntimeInteractionOptions {
 export interface ResolvedRuntimeInteractionOptions {
   camera: false | RuntimeCameraControlsOptions;
   pointerSelection: false | Required<RuntimePointerSelectionOptions>;
+  marqueeSelection: false | Required<RuntimeMarqueeSelectionOptions>;
   resize: boolean;
   selectionVisuals: false | ResolvedRuntimeSelectionVisualOptions;
   transform: false | RuntimeTransformControlsOptions;
@@ -125,6 +136,7 @@ export function normalizeRuntimeInteractionOptions(
     return {
       camera: false,
       pointerSelection: false,
+      marqueeSelection: false,
       resize: false,
       selectionVisuals: false,
       transform: false,
@@ -136,6 +148,7 @@ export function normalizeRuntimeInteractionOptions(
     return {
       camera: {},
       pointerSelection: normalizePointerSelectionOptions(true),
+      marqueeSelection: normalizeMarqueeSelectionOptions(true),
       resize: true,
       selectionVisuals: normalizeSelectionVisualOptions(true),
       transform: normalizeTransformControlsOptions(true),
@@ -146,6 +159,7 @@ export function normalizeRuntimeInteractionOptions(
   return {
     camera: options.camera === undefined ? false : normalizeCameraOptions(options.camera),
     pointerSelection: options.pointerSelection === undefined ? false : normalizePointerSelectionOptions(options.pointerSelection),
+    marqueeSelection: options.marqueeSelection === undefined ? false : normalizeMarqueeSelectionOptions(options.marqueeSelection),
     resize: options.resize ?? true,
     selectionVisuals: options.selectionVisuals === undefined ? false : normalizeSelectionVisualOptions(options.selectionVisuals),
     transform: options.transform === undefined ? false : normalizeTransformControlsOptions(options.transform),
@@ -276,6 +290,26 @@ function normalizePointerSelectionOptions(
     button: normalized.button ?? 0,
     clickTolerance: normalized.clickTolerance ?? 4,
     defaultMode: normalized.defaultMode ?? "replace"
+  };
+}
+
+function normalizeMarqueeSelectionOptions(
+  options: boolean | RuntimeMarqueeSelectionOptions | undefined
+): false | Required<RuntimeMarqueeSelectionOptions> {
+  if (options === false) {
+    return false;
+  }
+  const normalized = options === true || options === undefined ? {} : options;
+  if (normalized.enabled === false) {
+    return false;
+  }
+  return {
+    enabled: true,
+    button: normalized.button ?? 0,
+    dragThreshold: normalized.dragThreshold ?? 4,
+    minSize: normalized.minSize ?? 4,
+    defaultMode: normalized.defaultMode ?? "replace",
+    previewCandidates: normalized.previewCandidates ?? false
   };
 }
 

@@ -21,6 +21,15 @@ export class ObjectPicker {
     return this.dispatcher.dispatch({ type: "select-nodes", mode, nodeId });
   }
 
+  selectNodes(nodeIds: string[], mode: SelectionMode = "replace", primaryNodeId: string | null = nodeIds[0] ?? null): CommandResult {
+    return this.dispatcher.dispatch({
+      type: "select-nodes",
+      mode,
+      nodeIds,
+      primaryNodeId
+    });
+  }
+
   selectObject(objectId: string | null, mode: SelectionMode = "replace"): CommandResult {
     const nodeId = objectId ? this.objects.getObjectNodeId(objectId) ?? objectId : null;
     return this.selectNode(nodeId, mode);

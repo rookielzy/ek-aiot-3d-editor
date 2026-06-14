@@ -3,6 +3,7 @@ import { attachGlbImportManifestMetadata, createGlbImportManifest } from "../ass
 import { decodeArchiveJson, defaultArchiveAdapter } from "./archive-adapter";
 import { PROJECT_SCENE_PATH } from "./package-types";
 import { createEditor } from "../editor/create-editor";
+import type { EditorMarqueeSelectionState } from "../editor/marquee-selection-state";
 
 describe("project export", () => {
   it("exports scene, manifest, and payload entries when payloads are available", () => {
@@ -189,6 +190,31 @@ describe("project export", () => {
     expect(serializedScene).not.toContain("dragging-snapped");
     expect(serializedScene).not.toContain("GridHelper");
     expect(serializedScene).not.toContain("Object3D");
+  });
+
+  it("does not export marquee overlay or candidate session state", () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: { id: "asset-a", source: new Uint8Array([1, 2, 3]) }
+    });
+    const marqueeSelection = editor.marqueeSelection as EditorMarqueeSelectionState;
+    marqueeSelection.start({ x: 20, y: 30 }, "replace");
+    marqueeSelection.drag({ x: 90, y: 110 }, ["object-a"]);
+    editor.dispatch({ type: "select-nodes", mode: "replace", nodeIds: ["object-a"], primaryNodeId: "object-a" });
+
+    const result = editor.exportProject();
+
+    expect(result.ok).toBe(true);
+    const archiveEntries = defaultArchiveAdapter.read(result.packageBytes as Uint8Array);
+    const serializedScene = new TextDecoder().decode(archiveEntries.find((entry) => entry.path === PROJECT_SCENE_PATH)!.bytes);
+    const scene = JSON.parse(serializedScene);
+    expect(scene.selection.nodeIds).toEqual(["object-a"]);
+    expect(serializedScene).not.toContain("marquee");
+    expect(serializedScene).not.toContain("candidateNodeIds");
+    expect(serializedScene).not.toContain("\"left\":20");
+    expect(serializedScene).not.toContain("PointerEvent");
   });
 
   it("exports material-slot assignments and texture references without runtime material values", () => {

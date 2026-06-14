@@ -1,5 +1,5 @@
 import React from "react";
-import { render } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { createEditor, ThreeGltfLoaderAdapter, type EditorRuntime, type EditorRuntimeOptions, type RendererLike } from "@ek-aiot/3d-editor-core";
 import { EditorViewport } from "../src/components/EditorViewport";
@@ -71,6 +71,38 @@ describe("EditorViewport", () => {
 
     unmount();
   });
+
+  it("renders a pointer-transparent marquee overlay from core session state", () => {
+    const editor = createEditor();
+    const { container, unmount } = render(
+      <EditorViewport
+        editor={editor}
+        interactions={{ marqueeSelection: true }}
+        rendererFactory={sizedFakeRenderer}
+      />
+    );
+    const canvas = container.querySelector("canvas");
+
+    act(() => {
+      canvas?.dispatchEvent(new PointerEvent("pointerdown", { clientX: 20, clientY: 30, button: 0 }));
+      canvas?.dispatchEvent(new PointerEvent("pointermove", { clientX: 90, clientY: 110, button: 0, buttons: 1 }));
+    });
+
+    const overlay = container.querySelector(".ek-editor-viewport__marquee") as HTMLElement | null;
+    expect(overlay).not.toBeNull();
+    expect(overlay?.getAttribute("aria-hidden")).toBe("true");
+    expect(overlay?.style.left).toBe("20px");
+    expect(overlay?.style.top).toBe("30px");
+    expect(overlay?.style.width).toBe("70px");
+    expect(overlay?.style.height).toBe("80px");
+
+    act(() => {
+      canvas?.dispatchEvent(new PointerEvent("pointerup", { clientX: 90, clientY: 110, button: 0 }));
+    });
+
+    expect(container.querySelector(".ek-editor-viewport__marquee")).toBeNull();
+    unmount();
+  });
 });
 
 function fakeRenderer(container: HTMLElement): RendererLike {
@@ -80,4 +112,21 @@ function fakeRenderer(container: HTMLElement): RendererLike {
     render() {},
     dispose() {}
   };
+}
+
+function sizedFakeRenderer(container: HTMLElement): RendererLike {
+  Object.defineProperty(container, "clientWidth", { configurable: true, value: 200 });
+  Object.defineProperty(container, "clientHeight", { configurable: true, value: 200 });
+  container.getBoundingClientRect = () => ({
+    x: 0,
+    y: 0,
+    left: 0,
+    top: 0,
+    right: 200,
+    bottom: 200,
+    width: 200,
+    height: 200,
+    toJSON() {}
+  });
+  return fakeRenderer(container);
 }

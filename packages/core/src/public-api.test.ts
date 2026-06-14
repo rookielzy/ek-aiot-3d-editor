@@ -83,6 +83,7 @@ import {
   type ProblemTarget,
   type RegisterAssetCommand,
   type ReparentNodeCommand,
+  type ReadonlyEditorMarqueeSelectionState,
   type RemoveLightCommand,
   type RuntimeInteractionOptions,
   type RuntimePointerSelectionInput,
@@ -159,6 +160,8 @@ describe("core public API", () => {
     expect(publicApi).not.toHaveProperty("ThreePmremAdapter");
     expect(publicApi).not.toHaveProperty("ObjectPicker");
     expect(publicApi).not.toHaveProperty("RuntimeSelectionVisuals");
+    expect(publicApi).not.toHaveProperty("RuntimeMarqueeSelection");
+    expect(publicApi).not.toHaveProperty("EditorMarqueeSelectionState");
     expect(publicApi).not.toHaveProperty("createOrbitViewportCameraControls");
     expect(publicApi).not.toHaveProperty("SceneProjector");
     expect(publicApi).toHaveProperty("ThreeGltfLoaderAdapter");
@@ -372,6 +375,7 @@ describe("core public API", () => {
     };
     const editorWithImport: EditorWithGlbImport = createEditor();
     const baseEditor: Editor = editorWithImport;
+    const readonlyMarqueeSelection: ReadonlyEditorMarqueeSelectionState | undefined = baseEditor.marqueeSelection;
     const structuralEditorWithoutViewportHelpers: Editor = {
       getSnapshot: baseEditor.getSnapshot,
       subscribe: baseEditor.subscribe,
@@ -462,7 +466,9 @@ describe("core public API", () => {
     expect(typeof editorWithImport.importGlbAsset).toBe("function");
     expect(typeof editorWithImport.reimportGlbAsset).toBe("function");
     expect(typeof editorWithImport.importWorkbenchAssets).toBe("function");
+    expect(readonlyMarqueeSelection?.get().status).toBe("idle");
     expect(structuralEditorWithoutViewportHelpers.viewportHelpers).toBeUndefined();
+    expect(structuralEditorWithoutViewportHelpers.marqueeSelection).toBeUndefined();
     expect(new EditorViewportHelperState({ grid: true }).get().visibility.grid).toBe(true);
     expect(workspaceImportOptions.rasterKind).toBe("texture");
     expect(workspaceImportResult.status).toBe("succeeded");

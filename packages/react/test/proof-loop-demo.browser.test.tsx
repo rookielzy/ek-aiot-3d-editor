@@ -64,6 +64,13 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
       expect(hasNonBlankCanvasPixel(canvas!)).toBe(true);
     });
 
+    await dragMarquee(canvas!, { x: 35, y: 35 }, { x: 135, y: 165 });
+    await waitFor(() => {
+      expect(text(host)).toContain("Selection 2 nodes");
+      expect(text(section(host, "Hierarchy"))).toContain("Detail block selected");
+      expect(text(section(host, "Hierarchy"))).toContain("Simple box selected primary");
+    });
+
     await clickByText(host, "Snap move");
     expect(button(host, "Snap move")?.getAttribute("aria-pressed")).toBe("true");
 
@@ -96,11 +103,17 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
     await waitFor(() => expect(text(host)).toContain("Exported partial project"));
     await waitFor(() => expect(window.__lastDownloadedProject).toBeInstanceOf(Uint8Array));
     expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("asset-unresolved");
+    await expectExportedMarqueeSelection(window.__lastDownloadedProject!);
 
     const openInput = section(host, "Project actions").querySelector('input[type="file"]') as HTMLInputElement | null;
     expect(openInput, "Expected default Open project file input").toBeTruthy();
     await uploadFile(openInput!, new File([copyBytes(window.__lastDownloadedProject!)], "starter.ek3d", { type: "application/octet-stream" }));
     await waitFor(() => expect(text(host)).toContain("Opened starter.ek3d"));
+    await waitFor(() => {
+      expect(text(host)).toContain("Selection 2 nodes");
+      expect(text(section(host, "Hierarchy"))).toContain("Detail block selected");
+      expect(text(section(host, "Hierarchy"))).toContain("Simple box selected primary");
+    });
 
     await waitFor(() => {
       expect(text(section(host, "Missing asset recovery"))).toContain("Replace asset");
@@ -202,6 +215,48 @@ async function clickByText(host: HTMLElement, label: string): Promise<void> {
   expect(target, `Expected button ${label}`).toBeTruthy();
   target!.click();
   await waitForAnimationFrame();
+}
+
+async function dragMarquee(canvas: HTMLCanvasElement, start: { x: number; y: number }, end: { x: number; y: number }): Promise<void> {
+  const rect = canvas.getBoundingClientRect();
+  const pointer = {
+    pointerId: 1,
+    pointerType: "mouse",
+    button: 0,
+    buttons: 1,
+    bubbles: true,
+    cancelable: true
+  };
+  canvas.dispatchEvent(new PointerEvent("pointerdown", {
+    ...pointer,
+    clientX: rect.left + start.x,
+    clientY: rect.top + start.y
+  }));
+  await waitForAnimationFrame();
+  canvas.dispatchEvent(new PointerEvent("pointermove", {
+    ...pointer,
+    clientX: rect.left + end.x,
+    clientY: rect.top + end.y
+  }));
+  await waitForAnimationFrame();
+  canvas.dispatchEvent(new PointerEvent("pointerup", {
+    ...pointer,
+    buttons: 0,
+    clientX: rect.left + end.x,
+    clientY: rect.top + end.y
+  }));
+  await waitForAnimationFrame();
+}
+
+async function expectExportedMarqueeSelection(bytes: Uint8Array): Promise<void> {
+  const { unzipSync, strFromU8 } = await import("fflate");
+  const files = unzipSync(bytes);
+  const scene = JSON.parse(strFromU8(files["scene.json"]));
+  expect(scene.selection.nodeIds).toEqual(["detail", "box"]);
+  const serialized = JSON.stringify(scene);
+  expect(serialized).not.toContain("marquee");
+  expect(serialized).not.toContain("candidateNodeIds");
+  expect(serialized).not.toContain("PointerEvent");
 }
 
 function button(host: HTMLElement, label: string): HTMLButtonElement | null {

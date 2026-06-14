@@ -4,6 +4,7 @@ import { attachGlbImportManifestMetadata, createGlbImportManifest } from "../ass
 import { AssetResolverBridge } from "../assets/resolver";
 import { AssetRegistry } from "../assets/registry";
 import { CommandDispatcher } from "../commands/dispatcher";
+import { EditorMarqueeSelectionState } from "../editor/marquee-selection-state";
 import { EditorSnapState } from "../editor/snap-state";
 import { EditorViewportHelperState } from "../editor/viewport-helper-state";
 import { EditorStore } from "../editor/store";
@@ -365,6 +366,431 @@ describe("editor runtime", () => {
 
     expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-nodes", mode: "toggle", nodeId: "object-a" });
     expect(store.getSnapshot().selection.objectId).toBe("object-a");
+    runtime.dispose();
+  });
+
+  it("keeps small marquee-capable pointer movement on the click selection path", async () => {
+    const container = createSizedContainer();
+    const controls = createFakeControls();
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const dispatchSpy = vi.spyOn(dispatcher, "dispatch");
+    const renderer = createFakeRenderer(container);
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      interactions: { camera: true, pointerSelection: true, marqueeSelection: true },
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()) },
+      rendererFactory: () => renderer,
+      cameraControlsFactory: () => controls
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    await runtime.project();
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerdown", { clientX: 100, clientY: 100, button: 0 }));
+    expect(controls.enabled).toBe(false);
+    renderer.domElement.dispatchEvent(new PointerEvent("pointermove", { clientX: 102, clientY: 102, button: 0, buttons: 1 }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerup", { clientX: 102, clientY: 102, button: 0 }));
+
+    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-node", nodeId: "object-a" });
+    expect(controls.enabled).toBe(true);
+    expect(store.getSnapshot().selection.nodeIds).toEqual(["object-a"]);
+    runtime.dispose();
+  });
+
+  it("dispatches ordered select-nodes from marquee drag completion", async () => {
+    const container = createSizedContainer();
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const dispatchSpy = vi.spyOn(dispatcher, "dispatch");
+    const renderer = createFakeRenderer(container);
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      interactions: { pointerSelection: true, marqueeSelection: true },
+      resolver: new AssetResolverBridge((asset) => ({ uri: `/${asset.id}.glb` })),
+      loader: { load: async () => new Mesh(new BoxGeometry(0.5, 0.5, 0.5), new MeshBasicMaterial()) },
+      rendererFactory: () => renderer
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-b", asset: { id: "asset-b" }, transform: { position: [1, -0.7, 0] } });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" }, transform: { position: [-1, 0.7, 0] } });
+    await runtime.project();
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerdown", { clientX: 40, clientY: 35, button: 0 }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointermove", { clientX: 160, clientY: 165, button: 0, buttons: 1 }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerup", { clientX: 160, clientY: 165, button: 0 }));
+
+    expect(dispatchSpy).toHaveBeenLastCalledWith({
+      type: "select-nodes",
+      mode: "replace",
+      nodeIds: ["object-a", "object-b"],
+      primaryNodeId: "object-a"
+    });
+    const selectionCommands = dispatchSpy.mock.calls
+      .map(([command]) => command)
+      .filter((command) => command.type === "select-node" || command.type === "select-nodes");
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerup", { clientX: 160, clientY: 165, button: 0 }));
+    expect(dispatchSpy.mock.calls
+      .map(([command]) => command)
+      .filter((command) => command.type === "select-node" || command.type === "select-nodes")).toEqual(selectionCommands);
+    expect(store.getSnapshot().selection.nodeIds).toEqual(["object-a", "object-b"]);
+    runtime.dispose();
+  });
+
+  it.each([
+    ["shift", { shiftKey: true }, "add", ["object-b", "object-a"], ["object-b", "object-a"]],
+    ["ctrl", { ctrlKey: true }, "toggle", ["object-b"], ["object-b", "object-a"]],
+    ["meta", { metaKey: true }, "toggle", ["object-b"], ["object-b", "object-a"]],
+    ["alt", { altKey: true }, "remove", ["object-b"], ["object-b"]]
+  ] as const)("maps %s marquee modifier to existing select-nodes %s mode", async (_label, modifiers, mode, initialSelection, expectedSelection) => {
+    const container = createSizedContainer();
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const dispatchSpy = vi.spyOn(dispatcher, "dispatch");
+    const renderer = createFakeRenderer(container);
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      interactions: { marqueeSelection: true },
+      resolver: new AssetResolverBridge((asset) => ({ uri: `/${asset.id}.glb` })),
+      loader: { load: async () => new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()) },
+      rendererFactory: () => renderer
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-b", asset: { id: "asset-b" }, transform: { position: [3, 0, 0] } });
+    dispatcher.dispatch({ type: "select-nodes", mode: "replace", nodeIds: [...initialSelection], primaryNodeId: initialSelection[0] ?? null });
+    await runtime.project();
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerdown", { clientX: 60, clientY: 60, button: 0, ...modifiers }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointermove", { clientX: 140, clientY: 140, button: 0, buttons: 1, ...modifiers }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerup", { clientX: 140, clientY: 140, button: 0, ...modifiers }));
+
+    expect(dispatchSpy).toHaveBeenLastCalledWith({
+      type: "select-nodes",
+      mode,
+      nodeIds: ["object-a"],
+      primaryNodeId: "object-a"
+    });
+    expect(store.getSnapshot().selection.nodeIds).toEqual(expectedSelection);
+    runtime.dispose();
+  });
+
+  it("uses pointerup modifiers when completing marquee selection", async () => {
+    const container = createSizedContainer();
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const dispatchSpy = vi.spyOn(dispatcher, "dispatch");
+    const renderer = createFakeRenderer(container);
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      interactions: { marqueeSelection: true },
+      resolver: new AssetResolverBridge((asset) => ({ uri: `/${asset.id}.glb` })),
+      loader: { load: async () => new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()) },
+      rendererFactory: () => renderer
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-b", asset: { id: "asset-b" }, transform: { position: [3, 0, 0] } });
+    dispatcher.dispatch({ type: "select-node", nodeId: "object-b" });
+    await runtime.project();
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerdown", { clientX: 60, clientY: 60, button: 0 }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointermove", { clientX: 140, clientY: 140, button: 0, buttons: 1 }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerup", { clientX: 140, clientY: 140, button: 0, shiftKey: true }));
+
+    expect(dispatchSpy).toHaveBeenLastCalledWith({
+      type: "select-nodes",
+      mode: "add",
+      nodeIds: ["object-a"],
+      primaryNodeId: "object-a"
+    });
+    expect(store.getSnapshot().selection.nodeIds).toEqual(["object-b", "object-a"]);
+    runtime.dispose();
+  });
+
+  it("does not start marquee while transform controls are dragging", async () => {
+    const container = createSizedContainer();
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const dispatchSpy = vi.spyOn(dispatcher, "dispatch");
+    const renderer = createFakeRenderer(container);
+    const transformControls = createFakeTransformControls();
+    const marqueeState = new EditorMarqueeSelectionState();
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      interactions: { transform: true, marqueeSelection: true },
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()) },
+      rendererFactory: () => renderer,
+      transformControlsFactory: () => transformControls,
+      marqueeSelection: marqueeState
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "select-object", objectId: "object-a" });
+    await runtime.project();
+    transformControls.emit("mouseDown");
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerdown", { clientX: 60, clientY: 60, button: 0 }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointermove", { clientX: 140, clientY: 140, button: 0, buttons: 1 }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerup", { clientX: 140, clientY: 140, button: 0 }));
+
+    expect(marqueeState.get().status).toBe("idle");
+    expect(dispatchSpy.mock.calls
+      .map(([command]) => command)
+      .filter((command) => command.type === "select-nodes")).toEqual([]);
+    transformControls.emit("mouseUp");
+    runtime.dispose();
+  });
+
+  it("clears selection through existing command semantics on empty replace marquee", async () => {
+    const container = createSizedContainer();
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const dispatchSpy = vi.spyOn(dispatcher, "dispatch");
+    const renderer = createFakeRenderer(container);
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      interactions: { marqueeSelection: true },
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(0.5, 0.5, 0.5), new MeshBasicMaterial()) },
+      rendererFactory: () => renderer
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" }, transform: { position: [-2, 0, 0] } });
+    dispatcher.dispatch({ type: "select-object", objectId: "object-a" });
+    await runtime.project();
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerdown", { clientX: 170, clientY: 170, button: 0 }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointermove", { clientX: 199, clientY: 199, button: 0, buttons: 1 }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerup", { clientX: 199, clientY: 199, button: 0 }));
+
+    expect(dispatchSpy).toHaveBeenLastCalledWith({ type: "select-node", nodeId: null });
+    expect(store.getSnapshot().selection.nodeIds).toEqual([]);
+    runtime.dispose();
+  });
+
+  it("ignores drags that exceed threshold but stay below the minimum marquee size", async () => {
+    const container = createSizedContainer();
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const dispatchSpy = vi.spyOn(dispatcher, "dispatch");
+    const renderer = createFakeRenderer(container);
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      interactions: { marqueeSelection: { dragThreshold: 2, minSize: 12 } },
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()) },
+      rendererFactory: () => renderer
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "select-object", objectId: "object-a" });
+    await runtime.project();
+    const selectionCommandsBeforeDrag = dispatchSpy.mock.calls
+      .map(([command]) => command)
+      .filter((command) => command.type === "select-node" || command.type === "select-nodes");
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerdown", { clientX: 90, clientY: 90, button: 0 }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointermove", { clientX: 98, clientY: 98, button: 0, buttons: 1 }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerup", { clientX: 98, clientY: 98, button: 0 }));
+
+    expect(dispatchSpy.mock.calls
+      .map(([command]) => command)
+      .filter((command) => command.type === "select-node" || command.type === "select-nodes")).toEqual(selectionCommandsBeforeDrag);
+    expect(store.getSnapshot().selection.nodeIds).toEqual(["object-a"]);
+    runtime.dispose();
+  });
+
+  it("does not compute preview candidates when preview is disabled", async () => {
+    const container = createSizedContainer();
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const renderer = createFakeRenderer(container);
+    const marqueeState = new EditorMarqueeSelectionState();
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      interactions: { marqueeSelection: { previewCandidates: false } },
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()) },
+      rendererFactory: () => renderer,
+      marqueeSelection: marqueeState
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    await runtime.project();
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerdown", { clientX: 60, clientY: 60, button: 0 }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointermove", { clientX: 140, clientY: 140, button: 0, buttons: 1 }));
+
+    expect(marqueeState.get().candidateNodeIds).toEqual([]);
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerup", { clientX: 140, clientY: 140, button: 0 }));
+    expect(store.getSnapshot().selection.nodeIds).toEqual(["object-a"]);
+    runtime.dispose();
+  });
+
+  it("clamps off-viewport marquee coordinates to the viewport bounds", async () => {
+    const container = createSizedContainer();
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const renderer = createFakeRenderer(container);
+    const marqueeState = new EditorMarqueeSelectionState();
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      interactions: { marqueeSelection: true },
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()) },
+      rendererFactory: () => renderer,
+      marqueeSelection: marqueeState
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    await runtime.project();
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerdown", { clientX: -20, clientY: -15, button: 0 }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointermove", { clientX: 240, clientY: 230, button: 0, buttons: 1 }));
+
+    expect(marqueeState.get().rect).toEqual({
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 200,
+      width: 200,
+      height: 200
+    });
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerup", { clientX: 240, clientY: 230, button: 0 }));
+    expect(store.getSnapshot().selection.nodeIds).toEqual(["object-a"]);
+    runtime.dispose();
+  });
+
+  it("suppresses hover and camera controls while marquee is active", async () => {
+    const container = createSizedContainer();
+    const controls = createFakeControls();
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const renderer = createFakeRenderer(container);
+    const viewportHelpers = new EditorViewportHelperState();
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      interactions: { camera: true, pointerSelection: true, marqueeSelection: true, viewportHelpers: { grid: false, axes: false, hover: true } },
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()) },
+      rendererFactory: () => renderer,
+      cameraControlsFactory: () => controls,
+      viewportHelpers
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    await runtime.project();
+    renderer.domElement.dispatchEvent(new PointerEvent("pointermove", { clientX: 100, clientY: 100 }));
+    expect(viewportHelpers.get().hoverNodeId).toBe("object-a");
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerdown", { clientX: 60, clientY: 60, button: 0, pointerId: 1 }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointermove", { clientX: 140, clientY: 140, button: 0, buttons: 1, pointerId: 1 }));
+
+    expect(controls.enabled).toBe(false);
+    expect(viewportHelpers.get().hoverNodeId).toBeNull();
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerup", { clientX: 140, clientY: 140, button: 0 }));
+
+    expect(controls.enabled).toBe(true);
+    runtime.dispose();
+  });
+
+  it("clears marquee session state on pointer cancel, Escape, project, and disposal", async () => {
+    const container = createSizedContainer();
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const renderer = createFakeRenderer(container);
+    const releasePointerCapture = vi.fn();
+    renderer.domElement.releasePointerCapture = releasePointerCapture;
+    const marqueeState = new EditorMarqueeSelectionState();
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      interactions: { marqueeSelection: true },
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()) },
+      rendererFactory: () => renderer,
+      marqueeSelection: marqueeState
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    await runtime.project();
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerdown", { clientX: 60, clientY: 60, button: 0 }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointermove", { clientX: 140, clientY: 140, button: 0, buttons: 1 }));
+    expect(marqueeState.get().status).toBe("dragging");
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointercancel", { clientX: 140, clientY: 140, button: 0, pointerId: 1 }));
+    expect(marqueeState.get().status).toBe("idle");
+    expect(releasePointerCapture).toHaveBeenCalledTimes(1);
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerdown", { clientX: 60, clientY: 60, button: 0, pointerId: 2 }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointermove", { clientX: 140, clientY: 140, button: 0, buttons: 1, pointerId: 2 }));
+    renderer.domElement.ownerDocument.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(marqueeState.get().status).toBe("idle");
+    expect(releasePointerCapture).toHaveBeenCalledTimes(2);
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerdown", { clientX: 60, clientY: 60, button: 0, pointerId: 3 }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointermove", { clientX: 140, clientY: 140, button: 0, buttons: 1, pointerId: 3 }));
+    await runtime.project();
+    expect(marqueeState.get().status).toBe("idle");
+    expect(releasePointerCapture).toHaveBeenCalledTimes(3);
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerdown", { clientX: 60, clientY: 60, button: 0, pointerId: 4 }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointermove", { clientX: 140, clientY: 140, button: 0, buttons: 1, pointerId: 4 }));
+    runtime.dispose();
+    expect(marqueeState.get().status).toBe("idle");
+    expect(releasePointerCapture).toHaveBeenCalledTimes(4);
+  });
+
+  it("cancels active marquee synchronously when a new projection starts", async () => {
+    const container = createSizedContainer();
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const dispatchSpy = vi.spyOn(dispatcher, "dispatch");
+    const renderer = createFakeRenderer(container);
+    const marqueeState = new EditorMarqueeSelectionState();
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      interactions: { marqueeSelection: true },
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()) },
+      rendererFactory: () => renderer,
+      marqueeSelection: marqueeState
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    await runtime.project();
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerdown", { clientX: 60, clientY: 60, button: 0, pointerId: 7 }));
+    renderer.domElement.dispatchEvent(new PointerEvent("pointermove", { clientX: 140, clientY: 140, button: 0, buttons: 1, pointerId: 7 }));
+    expect(marqueeState.get().status).toBe("dragging");
+    const projection = runtime.project();
+
+    expect(marqueeState.get().status).toBe("idle");
+    renderer.domElement.dispatchEvent(new PointerEvent("pointerup", { clientX: 140, clientY: 140, button: 0, pointerId: 7 }));
+    await projection;
+
+    expect(dispatchSpy.mock.calls
+      .map(([command]) => command)
+      .filter((command) => command.type === "select-node" || command.type === "select-nodes")).toEqual([]);
+    expect(store.getSnapshot().selection.nodeIds).toEqual([]);
     runtime.dispose();
   });
 
@@ -1067,6 +1493,24 @@ function createFakeRenderer(container: HTMLElement): RendererLike {
     render: vi.fn(),
     dispose: vi.fn()
   };
+}
+
+function createSizedContainer(width = 200, height = 200): HTMLElement {
+  const container = document.createElement("div");
+  Object.defineProperty(container, "clientWidth", { configurable: true, value: width });
+  Object.defineProperty(container, "clientHeight", { configurable: true, value: height });
+  container.getBoundingClientRect = () => ({
+    x: 0,
+    y: 0,
+    left: 0,
+    top: 0,
+    right: width,
+    bottom: height,
+    width,
+    height,
+    toJSON() {}
+  });
+  return container;
 }
 
 function createFrameScheduler() {
