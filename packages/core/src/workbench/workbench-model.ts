@@ -8,6 +8,7 @@ import type { InspectorModel, InspectorProblemItem } from "../inspector/types";
 import type { HistoryState } from "../history/history";
 import type { Problem, ProblemSeverity } from "../problems/types";
 import type { ProjectCompleteness, ProjectProblem } from "../project/package-types";
+import type { ViewportHelperStateSnapshot, ViewportHelperVisibility, ViewportSnapFeedbackState } from "../editor/viewport-helper-state";
 import type { SnapSettings } from "../runtime/transform/snap";
 import type { TransformMode } from "../runtime/transform/transform-mode";
 import { deriveImportedRemapProblems } from "../runtime/remap-problems";
@@ -17,6 +18,7 @@ export interface BuildWorkbenchModelOptions {
   inspector?: InspectorModel;
   history?: HistoryState;
   snap?: SnapSettings;
+  viewportHelpers?: ViewportHelperStateSnapshot;
   transformMode?: TransformMode;
   runtimeReady?: boolean;
   runtimeProblems?: readonly Problem[];
@@ -123,6 +125,7 @@ export interface WorkbenchToolbarModel {
   canFrameAll: boolean;
   transformMode: TransformMode;
   snapEnabled: Record<keyof SnapSettings, boolean>;
+  viewportHelpers: ViewportHelperVisibility;
 }
 
 export interface WorkbenchStatusModel {
@@ -137,6 +140,8 @@ export interface WorkbenchStatusModel {
   authoredProblemCount: number;
   runtimeProblemCount: number;
   projectProblemCount: number;
+  snapFeedback: ViewportSnapFeedbackState;
+  snapFeedbackLabel: string;
 }
 
 export interface WorkbenchProjectModel {
@@ -175,6 +180,7 @@ export function buildWorkbenchModel(snapshot: SceneSnapshot, options: BuildWorkb
   const inspector = options.inspector ?? buildInspectorModel(snapshot, { runtimeProblems });
   const history = options.history ?? EMPTY_HISTORY;
   const snap = options.snap ?? EMPTY_SNAP;
+  const viewportHelpers = options.viewportHelpers;
   const transformMode = options.transformMode ?? "translate";
   const runtimeReady = options.runtimeReady ?? false;
   const projectProblems = options.projectProblems ?? [];
@@ -191,6 +197,7 @@ export function buildWorkbenchModel(snapshot: SceneSnapshot, options: BuildWorkb
   const toolbar = buildWorkbenchToolbar(snapshot, inspector, {
     history,
     snap,
+    viewportHelpers,
     transformMode,
     runtimeReady
   });
@@ -198,7 +205,8 @@ export function buildWorkbenchModel(snapshot: SceneSnapshot, options: BuildWorkb
     history,
     runtimeReady,
     projectCompleteness,
-    dirty: options.dirty
+    dirty: options.dirty,
+    snapFeedback: viewportHelpers?.snapFeedback
   });
   const project = buildWorkbenchProject(snapshot, projectCompleteness, problems.totalCount);
 
@@ -395,6 +403,7 @@ function buildWorkbenchToolbar(
   options: {
     history: HistoryState;
     snap: SnapSettings;
+    viewportHelpers?: ViewportHelperStateSnapshot;
     transformMode: TransformMode;
     runtimeReady: boolean;
   }
@@ -422,6 +431,14 @@ function buildWorkbenchToolbar(
       translate: isSnapEnabled(options.snap.translate),
       rotate: isSnapEnabled(options.snap.rotate),
       scale: isSnapEnabled(options.snap.scale)
+    },
+    viewportHelpers: options.viewportHelpers?.visibility ?? {
+      grid: false,
+      floor: false,
+      axes: false,
+      selectionBounds: false,
+      hover: false,
+      snapFeedback: false
     }
   };
 }
@@ -434,8 +451,16 @@ function buildWorkbenchStatus(
     runtimeReady: boolean;
     projectCompleteness: ProjectCompleteness;
     dirty?: boolean;
+    snapFeedback?: ViewportSnapFeedbackState;
   }
 ): WorkbenchStatusModel {
+  const snapFeedback = options.snapFeedback ?? {
+    status: "idle",
+    nodeId: null,
+    mode: null,
+    increment: null,
+    channelSnapped: false
+  } satisfies ViewportSnapFeedbackState;
   return {
     selectionLabel: selection.label,
     selectionCount: selection.count,
@@ -447,7 +472,9 @@ function buildWorkbenchStatus(
     problemCount: problems.totalCount,
     authoredProblemCount: problems.authoredCount,
     runtimeProblemCount: problems.runtimeCount,
-    projectProblemCount: problems.projectCount
+    projectProblemCount: problems.projectCount,
+    snapFeedback,
+    snapFeedbackLabel: formatSnapFeedbackLabel(snapFeedback)
   };
 }
 
@@ -553,4 +580,20 @@ function highestSeverity(problems: readonly Pick<WorkbenchProblemItem, "severity
 
 function isSnapEnabled(value: number | null | undefined): boolean {
   return value !== null && value !== undefined;
+}
+
+function formatSnapFeedbackLabel(feedback: ViewportSnapFeedbackState): string {
+  if (feedback.status === "idle") {
+    return "Snap idle";
+  }
+  if (feedback.status === "invalid") {
+    return `Snap ${feedback.mode ?? "mode"} invalid`;
+  }
+  if (feedback.status === "dragging-snapped") {
+    return `Snap ${feedback.mode ?? "mode"} ${feedback.increment ?? ""}`.trim();
+  }
+  if (feedback.status === "dragging-unsnapped") {
+    return `Snap ${feedback.mode ?? "mode"} off`;
+  }
+  return "Snap disabled";
 }

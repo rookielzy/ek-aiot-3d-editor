@@ -3,7 +3,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
+import { onBeforeUnmount, onMounted, ref, toRaw, unref, watch } from "vue";
 import type { AssetResolverBridge, Editor, EditorRuntime, EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
 
 const props = defineProps<{
@@ -30,22 +30,32 @@ function mountRuntime() {
   const editor = toRaw(props.editor);
   runtime = editor.mountRuntime({
     container: container.value,
-    resolver: props.resolver ? toRaw(props.resolver) : undefined,
-    loader: props.loader ? toRaw(props.loader) : undefined,
-    rendererFactory: props.rendererFactory ? toRaw(props.rendererFactory) : undefined,
-    interactions: props.interactions ? toRaw(props.interactions) : undefined
+    resolver: resolveRuntimeOption(props.resolver),
+    loader: resolveRuntimeOption(props.loader),
+    rendererFactory: resolveRuntimeOption(props.rendererFactory),
+    interactions: resolveRuntimeOption(props.interactions)
   });
   emit("runtimeReady", runtime);
 }
 
 onMounted(mountRuntime);
-watch(() => [props.editor, props.resolver, props.loader, props.rendererFactory, props.interactions], mountRuntime);
+watch(() => [
+  toRaw(props.editor),
+  resolveRuntimeOption(props.resolver),
+  resolveRuntimeOption(props.loader),
+  resolveRuntimeOption(props.rendererFactory),
+  resolveRuntimeOption(props.interactions)
+], mountRuntime);
 
 onBeforeUnmount(() => {
   runtime?.dispose();
   runtime = null;
   emit("runtimeReady", null);
 });
+
+function resolveRuntimeOption<T>(value: T | undefined): T | undefined {
+  return value === undefined ? undefined : toRaw(unref(value));
+}
 </script>
 
 <style scoped>

@@ -119,6 +119,30 @@ describe("React EditorWorkbench", () => {
     expect(editor.snap.get().translate).toBe(0.5);
     expect(screen.getByTitle("Toggle move snap").getAttribute("aria-pressed")).toBe("true");
 
+    fireEvent.click(screen.getByTitle("Toggle viewport grid"));
+    expect(editor.viewportHelpers.get().visibility.grid).toBe(false);
+    expect(screen.getByTitle("Toggle viewport grid").getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(screen.getByTitle("Toggle viewport floor"));
+    expect(editor.viewportHelpers.get().visibility.floor).toBe(true);
+    expect(screen.getByTitle("Toggle viewport floor").getAttribute("aria-pressed")).toBe("true");
+
+    for (const title of [
+      "Toggle viewport axes",
+      "Toggle hover feedback",
+      "Toggle selection bounds",
+      "Toggle snap feedback",
+      "Toggle viewport floor"
+    ]) {
+      fireEvent.click(screen.getByTitle(title));
+      expect(screen.getByTitle(title).getAttribute("aria-pressed")).toBe("false");
+    }
+    expect(Object.values(editor.viewportHelpers.get().visibility)).toEqual([false, false, false, false, false, false]);
+
+    fireEvent.click(screen.getByTitle("Move mode"));
+    expect(Object.values(editor.viewportHelpers.get().visibility)).toEqual([false, false, false, false, false, false]);
+    expect(JSON.stringify(editor.serialize())).not.toContain("viewportHelpers");
+
     fireEvent.click(screen.getByTitle("Reset camera"));
     fireEvent.click(screen.getByTitle("Frame selected"));
     expect(resetCamera).toHaveBeenCalledTimes(1);

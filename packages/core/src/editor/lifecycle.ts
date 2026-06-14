@@ -29,6 +29,7 @@ import { EditorTransformModeState, type TransformModeSubscriber } from "../runti
 import type { SceneImportedGlbNode, SceneSnapshot, SerializedSceneSnapshot } from "../snapshot/types";
 import { createAdvancedEditorOperations, createMemoryClipboard, type AdvancedEditorOperations, type EditorClipboard } from "./operations";
 import { EditorSnapState, type SnapSubscriber } from "./snap-state";
+import { EditorViewportHelperState, IDLE_VIEWPORT_SNAP_FEEDBACK, type ViewportHelperSubscriber } from "./viewport-helper-state";
 import { restoreSnapshot, serializeSnapshot } from "./serialization";
 import { EditorStore } from "./store";
 import type { AssetWorkspaceSubscriber, EditorOptions, EditorWithGlbImport, ImportGlbAssetOptions, ImportGlbAssetResult, MountRuntimeOptions, ReimportGlbAssetOptions, ReimportGlbAssetResult, RuntimeSubscriber, SnapshotSubscriber } from "./editor-api";
@@ -42,6 +43,7 @@ export class CoreEditor implements EditorWithGlbImport {
   readonly clipboard: EditorClipboard = createMemoryClipboard();
   readonly operations: AdvancedEditorOperations;
   readonly snap = new EditorSnapState();
+  readonly viewportHelpers = new EditorViewportHelperState();
   readonly transformMode = new EditorTransformModeState();
   #runtime: EditorRuntime | null = null;
   #runtimeSubscribers = new Set<RuntimeSubscriber>();
@@ -67,6 +69,11 @@ export class CoreEditor implements EditorWithGlbImport {
   subscribeSnap(subscriber: SnapSubscriber): () => void {
     this.#assertActive();
     return this.snap.subscribe(subscriber);
+  }
+
+  subscribeViewportHelpers(subscriber: ViewportHelperSubscriber): () => void {
+    this.#assertActive();
+    return this.viewportHelpers.subscribe(subscriber);
   }
 
   subscribeTransformMode(subscriber: TransformModeSubscriber): () => void {
@@ -117,6 +124,7 @@ export class CoreEditor implements EditorWithGlbImport {
     this.projectAssets.clear();
     this.clipboard.clear();
     this.snap.set({});
+    this.viewportHelpers.reset();
     this.transformMode.reset();
     const nextSnapshot = this.store.replaceSnapshot(restored);
     this.#notifyAssetWorkspaceSubscribers();
@@ -170,6 +178,8 @@ export class CoreEditor implements EditorWithGlbImport {
     }
 
     this.history.clear();
+    this.viewportHelpers.setHover(null);
+    this.viewportHelpers.setSnapFeedback(IDLE_VIEWPORT_SNAP_FEEDBACK);
     const snapshot = this.store.replaceSnapshot(result.snapshot);
     this.#notifyAssetWorkspaceSubscribers();
     void this.#runtime?.project(snapshot);
@@ -473,6 +483,7 @@ export class CoreEditor implements EditorWithGlbImport {
       dispatcher: this.dispatcher,
       resolver: this.#resolver,
       snap: this.snap,
+      viewportHelpers: this.viewportHelpers,
       transformMode: this.transformMode
     });
     this.#notifyRuntimeSubscribers();
@@ -498,6 +509,7 @@ export class CoreEditor implements EditorWithGlbImport {
     this.projectAssets.clear();
     this.clipboard.clear();
     this.snap.clear();
+    this.viewportHelpers.clear();
     this.transformMode.clear();
     this.store.dispose();
   }

@@ -15,15 +15,26 @@ describe("viewport controls", () => {
       pointerSelection: false,
       resize: false,
       selectionVisuals: false,
-      transform: false
+      transform: false,
+      viewportHelpers: false
     });
 
     expect(normalizeRuntimeInteractionOptions(true)).toMatchObject({
       camera: {},
       pointerSelection: { button: 0, clickTolerance: 4, defaultMode: "replace" },
       resize: true,
-      selectionVisuals: { selectedColor: 0x4f8cff, primarySelectedColor: 0xffc247 },
-      transform: {}
+      selectionVisuals: { selectedColor: 0x4f8cff, primarySelectedColor: 0xffc247, hoverColor: 0x7dd3fc },
+      transform: {},
+      viewportHelpers: {
+        visibility: {
+          grid: true,
+          floor: false,
+          axes: true,
+          selectionBounds: true,
+          hover: true,
+          snapFeedback: true
+        }
+      }
     });
 
     expect(normalizeRuntimeInteractionOptions({ resize: true })).toMatchObject({
@@ -31,7 +42,8 @@ describe("viewport controls", () => {
       pointerSelection: false,
       resize: true,
       selectionVisuals: false,
-      transform: false
+      transform: false,
+      viewportHelpers: false
     });
   });
 
@@ -39,6 +51,36 @@ describe("viewport controls", () => {
     expect(normalizeRuntimeInteractionOptions({ transform: true }).transform).toEqual({});
     expect(normalizeRuntimeInteractionOptions({ transform: { size: 0.8, space: "local" } }).transform).toEqual({ size: 0.8, space: "local" });
     expect(normalizeRuntimeInteractionOptions({ transform: { enabled: false } }).transform).toBe(false);
+  });
+
+  it("normalizes viewport helpers without leaking disabled option payloads", () => {
+    expect(normalizeRuntimeInteractionOptions({ viewportHelpers: true }).viewportHelpers).toMatchObject({
+      visibility: {
+        grid: true,
+        floor: false,
+        axes: true,
+        selectionBounds: true,
+        hover: true,
+        snapFeedback: true
+      },
+      gridSize: 20,
+      axesSize: 2
+    });
+    expect(normalizeRuntimeInteractionOptions({
+      viewportHelpers: {
+        grid: false,
+        floor: true,
+        axesSize: 3
+      }
+    }).viewportHelpers).toMatchObject({
+      visibility: {
+        grid: false,
+        floor: true,
+        axes: true
+      },
+      axesSize: 3
+    });
+    expect(normalizeRuntimeInteractionOptions({ viewportHelpers: { enabled: false, grid: true } }).viewportHelpers).toBe(false);
   });
 
   it("maps pointer modifiers to additive selection modes", () => {

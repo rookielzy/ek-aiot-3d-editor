@@ -37,6 +37,15 @@ export class ObjectPicker {
     return this.selectNode(nodeId, mode);
   }
 
+  hitNodeFromClientPoint(
+    container: HTMLElement,
+    clientX: number,
+    clientY: number,
+    candidates: Object3D[]
+  ): string | null {
+    return this.#hitNodeId(container, clientX, clientY, candidates);
+  }
+
   pickFromClientPoint(
     container: HTMLElement,
     clientX: number,

@@ -1,5 +1,5 @@
 import { mount } from "@vue/test-utils";
-import { markRaw } from "vue";
+import { defineComponent, h, markRaw, nextTick, ref } from "vue";
 import { describe, expect, it, vi } from "vitest";
 import { AssetResolverBridge, createEditor, ThreeGltfLoaderAdapter, type EditorRuntimeOptions, type RendererLike } from "@ek-aiot/3d-editor-core";
 import EditorViewport from "../src/components/EditorViewport.vue";
@@ -61,7 +61,8 @@ describe("EditorViewport", () => {
       pointerSelection: { defaultMode: "toggle" },
       resize: true,
       selectionVisuals: true,
-      transform: true
+      transform: true,
+      viewportHelpers: true
     } satisfies EditorRuntimeOptions["interactions"];
     const wrapper = mount(EditorViewport, {
       props: {
@@ -77,6 +78,47 @@ describe("EditorViewport", () => {
     wrapper.unmount();
 
     expect(wrapper.emitted("runtimeReady")?.at(-1)?.[0]).toBeNull();
+  });
+
+  it("remounts when ref-backed runtime option values change", async () => {
+    const editor = markRaw(createEditor());
+    const firstRendererDispose = vi.fn();
+    const secondRendererDispose = vi.fn();
+    const interactions = ref<EditorRuntimeOptions["interactions"]>({
+      camera: true,
+      viewportHelpers: false
+    });
+    const rendererFactory = ref((container: HTMLElement): RendererLike => fakeRenderer(container, firstRendererDispose));
+    const mountRuntime = vi.spyOn(editor, "mountRuntime");
+    const Host = defineComponent({
+      setup() {
+        return () => h(EditorViewport, {
+          editor,
+          interactions,
+          rendererFactory
+        });
+      }
+    });
+    const wrapper = mount(Host);
+
+    interactions.value = {
+      camera: true,
+      viewportHelpers: true
+    };
+    rendererFactory.value = (container: HTMLElement): RendererLike => fakeRenderer(container, secondRendererDispose);
+    await nextTick();
+
+    expect(firstRendererDispose).toHaveBeenCalledTimes(1);
+    expect(mountRuntime).toHaveBeenLastCalledWith(expect.objectContaining({
+      interactions: {
+        camera: true,
+        viewportHelpers: true
+      }
+    }));
+
+    wrapper.unmount();
+
+    expect(secondRendererDispose).toHaveBeenCalledTimes(1);
   });
 
   it("forwards decoder-aware loader adapters as raw core runtime options", () => {

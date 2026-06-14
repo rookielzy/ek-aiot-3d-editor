@@ -30,6 +30,39 @@ describe("project import", () => {
     expect(editor.getHistoryState().undoCount).toBe(1);
   });
 
+  it("clears target-bound viewport helper state after successful import", () => {
+    const source = createEditor();
+    source.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a", source: new Uint8Array([1, 2, 3]) } });
+    const exported = source.exportProject();
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "old-asset" } });
+    editor.viewportHelpers.setVisibility({ grid: true, hover: true, snapFeedback: true });
+    editor.viewportHelpers.setHover("object-a");
+    editor.viewportHelpers.setSnapFeedback({
+      status: "dragging-snapped",
+      nodeId: "object-a",
+      mode: "translate",
+      increment: 0.5,
+      channelSnapped: true
+    });
+
+    const imported = editor.importProject(exported.packageBytes as Uint8Array);
+
+    expect(imported.ok).toBe(true);
+    expect(editor.viewportHelpers.get()).toMatchObject({
+      visibility: {
+        grid: true,
+        hover: true,
+        snapFeedback: true
+      },
+      hoverNodeId: null,
+      snapFeedback: {
+        status: "idle",
+        nodeId: null
+      }
+    });
+  });
+
   it("round-trips v4 node graph, selection, materials, lights, environment, problems, and asset references", () => {
     const editor = createEditor();
     editor.dispatch({ type: "create-group", nodeId: "group-a" });

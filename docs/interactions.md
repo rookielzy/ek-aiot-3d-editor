@@ -112,6 +112,23 @@ Imported target TransformControls 只会附着到 runtime map 标记为可独立
 
 多节点 transaction 会把多个 `set-node-transform` 子命令合成一个 `batch` command。`snap` 支持 translation、rotation、scale increment helper；吸附结果进入 durable transform，吸附设置本身仍是 editor/session state。
 
+## Runtime viewport helpers
+
+默认 React/Vue Workbench 现在开启一组 runtime-only viewport helper：
+
+- grid：地面参考网格。
+- floor：可选半透明地面面片。
+- axes：局部空间方向参考。
+- bounds：selected 和 primary selected target 的边界框。
+- hover：pointer hover 命中 target 时的 transient 边界反馈。
+- guide：TransformControls drag 期间的 snap feedback 参考线/状态。
+
+这些 helper 都由 core runtime/session 管理。Grid、floor、axes、hover 和 guide 会被标记为 `runtimeOnly`，不会进入 `ThreeObjectMap.targetEntries()`，因此不会成为 picking/selection target。Bounds 继续使用 runtime target map；选择 imported GLB target 时，边界框包围 matched imported target object，而不是 owner GLB object。
+
+Helper visibility、hover target、snap feedback status、guide geometry、Three.js helper object 和 TransformControls helper 都不属于 durable scene authoring state。它们不会进入 `SceneSnapshot`、history command、`editor.serialize()` 或 `.ek3d` `scene.json`。React/Vue toolbar 只通过 core session API 切换这些 helper，不拥有 selection、transform 或 snap 语义。
+
+Snap feedback 从同一 transform transaction 和 `snapTransform()` 路径派生。Status bar 可以显示当前 mode/increment 和 snapped 状态；最终持久化的仍只有 commit 后的 transform 值。
+
 ## Inspector 编辑
 
 React/Vue inspector 当前覆盖：
@@ -215,7 +232,9 @@ Core 提供 `resolveEditorShortcut()` 和 `executeEditorAction()`。React/Vue wo
 - 框选。
 - durable imported target row 之外的 Workbench hierarchy UI polish。
 - 系统剪贴板集成和外部 paste 格式。
-- 网格渲染、对齐辅助线和可视 snap 控件。
+- 框选/lasso 之外的高级选择 gizmo。
+- 推断对象边/中心关系的对齐辅助线。
+- CAD 式测量、标尺和单位系统。
 - 持久化快捷键配置和命令面板 UI。
 - 持久化布局。
 - 完整资产库、模型市场和外部 paste/import 队列。

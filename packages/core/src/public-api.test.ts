@@ -23,6 +23,7 @@ import {
   createImportedGlbBindingDescriptor,
   createImportedGlbTargetDescriptors,
   ThreeGltfLoaderAdapter,
+  EditorViewportHelperState,
   findImportedGlbMaterialSlot,
   resolveEditorShortcut,
   snapNumber,
@@ -87,6 +88,7 @@ import {
   type RuntimePointerSelectionInput,
   type RuntimeSelectionVisualOptions,
   type RuntimeTransformControlsOptions,
+  type RuntimeViewportHelperOptions,
   type SceneEnvironmentPatch,
   type SceneImportedGlbNode,
   type SceneNode,
@@ -232,7 +234,8 @@ describe("core public API", () => {
     const snap: SnapSettings = { translate: 0.5 };
     const transformMode: TransformMode = "rotate";
     const transformControls: RuntimeTransformControlsOptions = { size: 0.75, space: "local" };
-    const interactions: RuntimeInteractionOptions = { camera: true, pointerSelection: true, resize: true, selectionVisuals: true, transform: transformControls };
+    const viewportHelpers: RuntimeViewportHelperOptions = { grid: true, floor: true, hover: true };
+    const interactions: RuntimeInteractionOptions = { camera: true, pointerSelection: true, resize: true, selectionVisuals: true, transform: transformControls, viewportHelpers };
     const pointerInput: RuntimePointerSelectionInput = { clientX: 10, clientY: 20, modifiers: { ctrlKey: true } };
     const selectionVisuals: RuntimeSelectionVisualOptions = { selectedColor: "#4f8cff" };
     const textureSlot: TextureSlot = { assetId: "texture-a", colorSpace: "srgb" };
@@ -369,6 +372,31 @@ describe("core public API", () => {
     };
     const editorWithImport: EditorWithGlbImport = createEditor();
     const baseEditor: Editor = editorWithImport;
+    const structuralEditorWithoutViewportHelpers: Editor = {
+      getSnapshot: baseEditor.getSnapshot,
+      subscribe: baseEditor.subscribe,
+      dispatch: baseEditor.dispatch,
+      operations: baseEditor.operations,
+      clipboard: baseEditor.clipboard,
+      snap: baseEditor.snap,
+      transformMode: baseEditor.transformMode,
+      subscribeSnap: baseEditor.subscribeSnap,
+      subscribeTransformMode: baseEditor.subscribeTransformMode,
+      undo: baseEditor.undo,
+      redo: baseEditor.redo,
+      getHistoryState: baseEditor.getHistoryState,
+      serialize: baseEditor.serialize,
+      restore: baseEditor.restore,
+      registerAsset: baseEditor.registerAsset,
+      importProject: baseEditor.importProject,
+      exportProject: baseEditor.exportProject,
+      replaceAsset: baseEditor.replaceAsset,
+      subscribeRuntime: baseEditor.subscribeRuntime,
+      mountRuntime: baseEditor.mountRuntime,
+      getRuntime: baseEditor.getRuntime,
+      dispose: baseEditor.dispose,
+      disposed: false
+    };
 
     expect(command.type).toBe("set-material");
     expect(registerAsset.asset.kind).toBe("texture");
@@ -399,6 +427,7 @@ describe("core public API", () => {
     expect(interactions.transform).toEqual(transformControls);
     expect(pointerInput.modifiers?.ctrlKey).toBe(true);
     expect(selectionVisuals.selectedColor).toBe("#4f8cff");
+    expect(viewportHelpers.floor).toBe(true);
     expect(textureSlot.assetId).toBe("texture-a");
     expect(texturePatch.map).toBeNull();
     expect(packageVersion).toBe(1);
@@ -433,6 +462,8 @@ describe("core public API", () => {
     expect(typeof editorWithImport.importGlbAsset).toBe("function");
     expect(typeof editorWithImport.reimportGlbAsset).toBe("function");
     expect(typeof editorWithImport.importWorkbenchAssets).toBe("function");
+    expect(structuralEditorWithoutViewportHelpers.viewportHelpers).toBeUndefined();
+    expect(new EditorViewportHelperState({ grid: true }).get().visibility.grid).toBe(true);
     expect(workspaceImportOptions.rasterKind).toBe("texture");
     expect(workspaceImportResult.status).toBe("succeeded");
     expect(classifyWorkbenchAssetImportFile({ name: "texture.png", source: new Uint8Array([1]) }, rasterKind)).toMatchObject({

@@ -5,6 +5,7 @@ import { AssetResolverBridge } from "../assets/resolver";
 import { AssetRegistry } from "../assets/registry";
 import { CommandDispatcher } from "../commands/dispatcher";
 import { EditorSnapState } from "../editor/snap-state";
+import { EditorViewportHelperState } from "../editor/viewport-helper-state";
 import { EditorStore } from "../editor/store";
 import { CommandHistory } from "../history/history";
 import { ThreeEditorRuntime, type RendererLike, type RuntimeProblemSnapshot } from "./editor-runtime";
@@ -398,6 +399,282 @@ describe("editor runtime", () => {
     expect(JSON.stringify(store.getSnapshot())).not.toContain("selectionHelper");
     expect(runtime.getObject("object-a")?.userData.primarySelected).toBe(true);
     runtime.dispose();
+  });
+
+  it("keeps viewport helpers transient, runtime-only, and out of picking targets", async () => {
+    const frames = createFrameScheduler();
+    const renderer = createFakeRenderer(document.createElement("div"));
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const viewportHelpers = new EditorViewportHelperState();
+    const runtime = new ThreeEditorRuntime({
+      container: document.createElement("div"),
+      store,
+      dispatcher,
+      interactions: { viewportHelpers: true },
+      rendererFactory: () => renderer,
+      viewportHelpers,
+      scheduleFrame: frames.schedule,
+      cancelFrame: frames.cancel
+    });
+
+    await runtime.project();
+    frames.flush();
+
+    expect(runtime.scene.children.map((object) => object.userData.viewportHelper).sort()).toEqual(["axes", "grid"]);
+    expect(runtime.scene.children.every((object) => object.userData.runtimeOnly)).toBe(true);
+    expect([...runtime.projector.objects.targetEntries()]).toEqual([]);
+    expect(JSON.stringify(store.getSnapshot())).not.toContain("viewportHelper");
+
+    viewportHelpers.setVisibility({ grid: false, axes: false, floor: true });
+    frames.flush();
+
+    expect(runtime.scene.children.map((object) => object.userData.viewportHelper)).toEqual(["floor"]);
+    runtime.dispose();
+  });
+
+  it("preserves session-owned helper visibility across runtime remounts", async () => {
+    const frames = createFrameScheduler();
+    const renderer = createFakeRenderer(document.createElement("div"));
+    const container = document.createElement("div");
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const viewportHelpers = new EditorViewportHelperState();
+    let runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      interactions: { viewportHelpers: true },
+      rendererFactory: () => renderer,
+      viewportHelpers,
+      scheduleFrame: frames.schedule,
+      cancelFrame: frames.cancel
+    });
+
+    await runtime.project();
+    viewportHelpers.setVisibility({ grid: false, axes: false, floor: true });
+    runtime.dispose();
+
+    runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      interactions: { viewportHelpers: true },
+      rendererFactory: () => renderer,
+      viewportHelpers,
+      scheduleFrame: frames.schedule,
+      cancelFrame: frames.cancel
+    });
+    await runtime.project();
+
+    expect(viewportHelpers.get().visibility).toMatchObject({
+      grid: false,
+      axes: false,
+      floor: true
+    });
+    expect(runtime.scene.children.map((object) => object.userData.viewportHelper)).toEqual(["floor"]);
+    runtime.dispose();
+  });
+
+  it("shows hover feedback from pointer movement without dispatching selection", async () => {
+    const container = document.createElement("div");
+    Object.defineProperty(container, "clientWidth", { configurable: true, value: 200 });
+    Object.defineProperty(container, "clientHeight", { configurable: true, value: 200 });
+    container.getBoundingClientRect = () => ({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 200,
+      width: 200,
+      height: 200,
+      toJSON() {}
+    });
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const dispatchSpy = vi.spyOn(dispatcher, "dispatch");
+    const renderer = createFakeRenderer(container);
+    const viewportHelpers = new EditorViewportHelperState();
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      interactions: { pointerSelection: true, viewportHelpers: { grid: false, axes: false, hover: true } },
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()) },
+      rendererFactory: () => renderer,
+      viewportHelpers
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    await runtime.project();
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointermove", { clientX: 100, clientY: 100 }));
+
+    expect(viewportHelpers.get().hoverNodeId).toBe("object-a");
+    expect(runtime.scene.children.find((object) => object.userData.hoverHelper)?.userData).toMatchObject({
+      sceneNodeId: "object-a",
+      sceneObjectId: "object-a"
+    });
+    expect(dispatchSpy).not.toHaveBeenCalledWith(expect.objectContaining({ type: "select-node" }));
+    expect(store.getSnapshot().selection.nodeId).toBeNull();
+    runtime.dispose();
+  });
+
+  it("invalidates rendering when existing helper state updates without object churn", async () => {
+    const container = document.createElement("div");
+    Object.defineProperty(container, "clientWidth", { configurable: true, value: 200 });
+    Object.defineProperty(container, "clientHeight", { configurable: true, value: 200 });
+    container.getBoundingClientRect = () => ({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 200,
+      width: 200,
+      height: 200,
+      toJSON() {}
+    });
+    const frames = createFrameScheduler();
+    const renderer = createFakeRenderer(container);
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const viewportHelpers = new EditorViewportHelperState();
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      interactions: { viewportHelpers: { grid: false, axes: false, hover: true } },
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()) },
+      rendererFactory: () => renderer,
+      viewportHelpers,
+      scheduleFrame: frames.schedule,
+      cancelFrame: frames.cancel
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" }, transform: { position: [-1, 0, 0] } });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-b", asset: { id: "asset-b" }, transform: { position: [0, 0, 0] } });
+    await runtime.project();
+    frames.flush();
+
+    viewportHelpers.setHover("object-a");
+    frames.flush();
+    const renderCountAfterCreate = renderer.render.mock.calls.length;
+
+    viewportHelpers.setHover("object-b");
+    frames.flush();
+
+    expect(renderer.render.mock.calls.length).toBe(renderCountAfterCreate + 1);
+    expect(runtime.scene.children.find((object) => object.userData.hoverHelper)?.userData.sceneNodeId).toBe("object-b");
+    runtime.dispose();
+  });
+
+  it("clears hover state when hover feedback is disabled", async () => {
+    const state = new EditorViewportHelperState({ hover: true });
+    state.setHover("object-a");
+
+    state.setVisibility({ hover: false });
+
+    expect(state.get().hoverNodeId).toBeNull();
+  });
+
+  it("clears hover feedback when the hovered runtime target is removed", async () => {
+    const container = document.createElement("div");
+    Object.defineProperty(container, "clientWidth", { configurable: true, value: 200 });
+    Object.defineProperty(container, "clientHeight", { configurable: true, value: 200 });
+    container.getBoundingClientRect = () => ({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 200,
+      width: 200,
+      height: 200,
+      toJSON() {}
+    });
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const renderer = createFakeRenderer(container);
+    const viewportHelpers = new EditorViewportHelperState();
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      interactions: { viewportHelpers: { grid: false, axes: false, hover: true } },
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()) },
+      rendererFactory: () => renderer,
+      viewportHelpers
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    await runtime.project();
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointermove", { clientX: 100, clientY: 100 }));
+    expect(viewportHelpers.get().hoverNodeId).toBe("object-a");
+
+    dispatcher.dispatch({ type: "delete-objects", objectIds: ["object-a"] });
+    await runtime.project();
+
+    expect(viewportHelpers.get().hoverNodeId).toBeNull();
+    expect(runtime.scene.children.find((object) => object.userData.hoverHelper)).toBeUndefined();
+    runtime.dispose();
+  });
+
+  it("clears transient hover state on runtime disposal before remount", async () => {
+    const container = document.createElement("div");
+    Object.defineProperty(container, "clientWidth", { configurable: true, value: 200 });
+    Object.defineProperty(container, "clientHeight", { configurable: true, value: 200 });
+    container.getBoundingClientRect = () => ({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 200,
+      width: 200,
+      height: 200,
+      toJSON() {}
+    });
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const viewportHelpers = new EditorViewportHelperState();
+    const renderer = createFakeRenderer(container);
+    const runtime = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      interactions: { viewportHelpers: { grid: false, axes: false, hover: true } },
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()) },
+      rendererFactory: () => renderer,
+      viewportHelpers
+    });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    await runtime.project();
+
+    renderer.domElement.dispatchEvent(new PointerEvent("pointermove", { clientX: 100, clientY: 100 }));
+    expect(viewportHelpers.get().hoverNodeId).toBe("object-a");
+
+    runtime.dispose();
+
+    expect(viewportHelpers.get().hoverNodeId).toBeNull();
+
+    const remounted = new ThreeEditorRuntime({
+      container,
+      store,
+      dispatcher,
+      interactions: { viewportHelpers: { grid: false, axes: false, hover: true } },
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()) },
+      rendererFactory: createFakeRenderer,
+      viewportHelpers
+    });
+    await remounted.project();
+
+    expect(remounted.scene.children.find((object) => object.userData.hoverHelper)).toBeUndefined();
+    remounted.dispose();
   });
 
   it("selects, frames, and transforms resolved imported GLB targets through runtime node targets", async () => {

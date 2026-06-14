@@ -1,11 +1,12 @@
 import type { Camera, Object3D, Scene } from "three";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import type { CommandResult } from "../../commands/types";
+import type { ViewportSnapFeedbackState } from "../../editor/viewport-helper-state";
 import type { SceneSnapshot, Transform } from "../../snapshot/types";
 import { readTransform } from "../transform";
 import type { ThreeObjectMap } from "../three-object-map";
 import type { ViewportCameraControls } from "../viewport-controls";
-import type { SnapSettings } from "./snap";
+import { snapTransform, type SnapSettings } from "./snap";
 import { TransformController } from "./transform-controller";
 import type { TransformMode } from "./transform-mode";
 
@@ -49,6 +50,7 @@ export interface TransformControlsAdapterOptions {
   mode?: TransformMode;
   snap?: SnapSettings;
   onChange?: () => void;
+  onSnapFeedback?: (feedback: ViewportSnapFeedbackState) => void;
 }
 
 export class TransformControlsAdapter {
@@ -58,6 +60,7 @@ export class TransformControlsAdapter {
   #controller: TransformController;
   #cameraControls: ViewportCameraControls | null;
   #onChange: () => void;
+  #onSnapFeedback: (feedback: ViewportSnapFeedbackState) => void;
   #mode: TransformMode;
   #snap: SnapSettings;
   #helper: Object3D;
@@ -86,6 +89,7 @@ export class TransformControlsAdapter {
     this.#controller = options.controller;
     this.#cameraControls = options.cameraControls ?? null;
     this.#onChange = options.onChange ?? (() => {});
+    this.#onSnapFeedback = options.onSnapFeedback ?? (() => {});
     this.#mode = options.mode ?? "translate";
     this.#snap = options.snap ?? {};
     this.#helper = this.#controls.getHelper();
@@ -139,6 +143,7 @@ export class TransformControlsAdapter {
 
     this.#mode = mode;
     this.#applyMode();
+    this.#publishIdleFeedback();
     this.#onChange();
   }
 
@@ -149,6 +154,10 @@ export class TransformControlsAdapter {
 
     this.#snap = { ...settings };
     this.#applySnap();
+    if (this.#dragNodeId) {
+      this.cancel();
+      return;
+    }
     this.#onChange();
   }
 
@@ -160,6 +169,7 @@ export class TransformControlsAdapter {
     this.#controller.cancel();
     this.#dragNodeId = null;
     this.#restoreCameraControls();
+    this.#publishIdleFeedback();
     this.#onChange();
   }
 
@@ -177,6 +187,7 @@ export class TransformControlsAdapter {
     this.#detach();
     this.#helper.removeFromParent();
     this.#controls.dispose();
+    this.#publishIdleFeedback();
   }
 
   get attachedObjectId(): string | null {
@@ -205,6 +216,7 @@ export class TransformControlsAdapter {
 
     this.#dragNodeId = this.#attachedNodeId;
     this.#disableCameraControls();
+    this.#publishPreviewFeedback();
     this.#onChange();
   }
 
@@ -220,7 +232,9 @@ export class TransformControlsAdapter {
       return;
     }
 
-    this.#controller.preview(patchForMode(this.#mode, readTransform(object)));
+    const preview = readTransform(object);
+    this.#controller.preview(patchForMode(this.#mode, preview));
+    this.#publishPreviewFeedback(preview);
     this.#onChange();
   }
 
@@ -236,11 +250,13 @@ export class TransformControlsAdapter {
     if (!this.#objects.get(nodeId)) {
       this.#controller.cancel();
       this.#detach();
+      this.#publishIdleFeedback();
       this.#onChange();
       return null;
     }
 
     const result = this.#controller.commit();
+    this.#publishIdleFeedback();
     this.#onChange();
     return result;
   }
@@ -263,6 +279,71 @@ export class TransformControlsAdapter {
     this.#controls.setTranslationSnap(normalizeSnapIncrement(this.#snap.translate));
     this.#controls.setRotationSnap(normalizeSnapIncrement(this.#snap.rotate));
     this.#controls.setScaleSnap(normalizeSnapIncrement(this.#snap.scale));
+  }
+
+  #publishPreviewFeedback(previewTransform?: Transform): void {
+    if (!this.#dragNodeId) {
+      this.#publishIdleFeedback();
+      return;
+    }
+    const transaction = this.#controller.activeTransaction;
+    const object = this.#objects.get(this.#dragNodeId);
+    if (!transaction || !object) {
+      this.#publishIdleFeedback();
+      return;
+    }
+    const current = previewTransform ?? readTransform(object);
+    const before = vectorForMode(this.#mode, transaction.before);
+    const preview = vectorForMode(this.#mode, current);
+    const increment = this.#snap[this.#mode];
+    const normalizedIncrement = normalizeSnapIncrement(increment);
+    if (increment !== undefined && increment !== null && normalizedIncrement === null) {
+      this.#onSnapFeedback({
+        status: "invalid",
+        nodeId: this.#dragNodeId,
+        mode: this.#mode,
+        increment: null,
+        channelSnapped: false,
+        before,
+        preview,
+        snapped: preview
+      });
+      return;
+    }
+    if (normalizedIncrement === null) {
+      this.#onSnapFeedback({
+        status: "dragging-unsnapped",
+        nodeId: this.#dragNodeId,
+        mode: this.#mode,
+        increment: null,
+        channelSnapped: false,
+        before,
+        preview,
+        snapped: preview
+      });
+      return;
+    }
+    const snapped = vectorForMode(this.#mode, snapTransform(current, this.#snap));
+    this.#onSnapFeedback({
+      status: "dragging-snapped",
+      nodeId: this.#dragNodeId,
+      mode: this.#mode,
+      increment: normalizedIncrement,
+      channelSnapped: !sameVector(preview, snapped),
+      before,
+      preview,
+      snapped
+    });
+  }
+
+  #publishIdleFeedback(): void {
+    this.#onSnapFeedback({
+      status: "idle",
+      nodeId: null,
+      mode: null,
+      increment: null,
+      channelSnapped: false
+    });
   }
 
   #disableCameraControls(): void {
@@ -310,6 +391,21 @@ function patchForMode(mode: TransformMode, transform: Transform): Partial<Transf
   }
 }
 
+function vectorForMode(mode: TransformMode, transform: Transform): [number, number, number] {
+  switch (mode) {
+    case "translate":
+      return transform.position;
+    case "rotate":
+      return transform.rotation;
+    case "scale":
+      return transform.scale;
+  }
+}
+
 function normalizeSnapIncrement(value: number | null | undefined): number | null {
   return value !== undefined && value !== null && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function sameVector(left: [number, number, number], right: [number, number, number]): boolean {
+  return left[0] === right[0] && left[1] === right[1] && left[2] === right[2];
 }

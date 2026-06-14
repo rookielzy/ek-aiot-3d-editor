@@ -113,6 +113,26 @@ export function WorkbenchToolbar({ context }: WorkbenchToolbarProps) {
           Snap scale
         </button>
       </div>
+      <div className="ek-workbench__tool-group" aria-label="Viewport helpers">
+        <button type="button" onClick={() => context.toggleViewportHelper("grid")} aria-pressed={toolbar.viewportHelpers.grid} title="Toggle viewport grid">
+          Grid
+        </button>
+        <button type="button" onClick={() => context.toggleViewportHelper("floor")} aria-pressed={toolbar.viewportHelpers.floor} title="Toggle viewport floor">
+          Floor
+        </button>
+        <button type="button" onClick={() => context.toggleViewportHelper("axes")} aria-pressed={toolbar.viewportHelpers.axes} title="Toggle viewport axes">
+          Axes
+        </button>
+        <button type="button" onClick={() => context.toggleViewportHelper("hover")} aria-pressed={toolbar.viewportHelpers.hover} title="Toggle hover feedback">
+          Hover
+        </button>
+        <button type="button" onClick={() => context.toggleViewportHelper("selectionBounds")} aria-pressed={toolbar.viewportHelpers.selectionBounds} title="Toggle selection bounds">
+          Bounds
+        </button>
+        <button type="button" onClick={() => context.toggleViewportHelper("snapFeedback")} aria-pressed={toolbar.viewportHelpers.snapFeedback} title="Toggle snap feedback">
+          Guide
+        </button>
+      </div>
       <div className="ek-workbench__tool-group" aria-label="Camera">
         <button type="button" onClick={context.resetCamera} disabled={!context.camera.ready} title="Reset camera">
           Reset

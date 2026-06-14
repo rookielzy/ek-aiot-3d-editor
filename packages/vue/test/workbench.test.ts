@@ -123,6 +123,37 @@ describe("Vue EditorWorkbench", () => {
     expect(editor.snap.get().translate).toBe(0.5);
     expect(wrapper.find('[title="Toggle move snap"]').attributes("aria-pressed")).toBe("true");
 
+    await waitForAssertion(() => {
+      expect(wrapper.find('[title="Toggle viewport grid"]').attributes("aria-pressed")).toBe("true");
+    });
+    await wrapper.find('[title="Toggle viewport grid"]').trigger("click");
+    await nextTick();
+    expect(editor.viewportHelpers.get().visibility.grid).toBe(false);
+    expect(wrapper.find('[title="Toggle viewport grid"]').attributes("aria-pressed")).toBe("false");
+
+    await wrapper.find('[title="Toggle viewport floor"]').trigger("click");
+    await nextTick();
+    expect(editor.viewportHelpers.get().visibility.floor).toBe(true);
+    expect(wrapper.find('[title="Toggle viewport floor"]').attributes("aria-pressed")).toBe("true");
+
+    for (const title of [
+      "Toggle viewport axes",
+      "Toggle hover feedback",
+      "Toggle selection bounds",
+      "Toggle snap feedback",
+      "Toggle viewport floor"
+    ]) {
+      await wrapper.find(`[title="${title}"]`).trigger("click");
+      await nextTick();
+      expect(wrapper.find(`[title="${title}"]`).attributes("aria-pressed")).toBe("false");
+    }
+    expect(Object.values(editor.viewportHelpers.get().visibility)).toEqual([false, false, false, false, false, false]);
+
+    await wrapper.find('[title="Move mode"]').trigger("click");
+    await nextTick();
+    expect(Object.values(editor.viewportHelpers.get().visibility)).toEqual([false, false, false, false, false, false]);
+    expect(JSON.stringify(editor.serialize())).not.toContain("viewportHelpers");
+
     await wrapper.find('[title="Reset camera"]').trigger("click");
     await wrapper.find('[title="Frame selected"]').trigger("click");
     expect(resetCamera).toHaveBeenCalledTimes(1);

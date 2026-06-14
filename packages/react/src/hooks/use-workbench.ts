@@ -1,5 +1,7 @@
 import { useCallback, useSyncExternalStore } from "react";
 import {
+  DEFAULT_WORKBENCH_VIEWPORT_HELPER_VISIBILITY,
+  EditorViewportHelperState,
   type Command,
   type Editor,
   type EditorWithGlbImport,
@@ -28,7 +30,9 @@ import {
   type SceneSnapshot,
   type SnapChannel,
   type SnapSettings,
-  type TransformMode
+  type TransformMode,
+  type ViewportHelperKey,
+  type ViewportHelperStateSnapshot
 } from "@ek-aiot/3d-editor-core";
 import { buildWorkbenchModel, executeEditorAction } from "@ek-aiot/3d-editor-core";
 import { useEditor } from "./use-editor";
@@ -54,6 +58,11 @@ export interface WorkbenchTransformContext {
   snap: SnapSettings;
   setMode(mode: TransformMode): void;
   toggleSnap(channel: SnapChannel, increment?: number): SnapSettings;
+}
+
+export interface WorkbenchViewportHelpersContext {
+  state: ViewportHelperStateSnapshot;
+  toggle(key: ViewportHelperKey): ViewportHelperStateSnapshot;
 }
 
 export interface WorkbenchCameraContext {
@@ -93,6 +102,7 @@ export interface WorkbenchContext {
   selection: WorkbenchSelectionContext;
   history: HistoryState;
   transform: WorkbenchTransformContext;
+  viewportHelpers: WorkbenchViewportHelpersContext;
   camera: WorkbenchCameraContext;
   project: WorkbenchProjectContext;
   assets: WorkbenchAssetContext;
@@ -112,10 +122,12 @@ export interface WorkbenchContext {
   selectedObjectIds: string[];
   selectedLightId: string | null;
   snap: SnapSettings;
+  viewportHelperState: ViewportHelperStateSnapshot;
   transformMode: TransformMode;
   setActiveLightId(value: string | null): void;
   setTransformMode(mode: TransformMode): void;
   toggleSnap(channel: SnapChannel, increment?: number): SnapSettings;
+  toggleViewportHelper(key: ViewportHelperKey): ViewportHelperStateSnapshot;
   runAction(action: EditorAction): ReturnType<typeof executeEditorAction>;
   resetCamera(): void;
   frameSelected(options?: RuntimeCameraFrameOptions): boolean;
@@ -135,6 +147,8 @@ export interface UseWorkbenchResult extends WorkbenchContext {
 
 export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchResult {
   const editor = useEditor(options) as EditorWithGlbImport;
+  const viewportHelperStore = getViewportHelperStore(editor);
+  ensureDefaultWorkbenchViewportHelpers(viewportHelperStore);
   const snap = useSyncExternalStore(
     (listener) => editor.subscribeSnap(listener),
     () => editor.snap.get(),
@@ -144,6 +158,11 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     (listener) => editor.subscribeTransformMode(listener),
     () => editor.transformMode.get(),
     () => editor.transformMode.get()
+  );
+  const viewportHelperState = useSyncExternalStore(
+    (listener) => subscribeViewportHelperStore(editor, viewportHelperStore, listener),
+    () => viewportHelperStore.get(),
+    () => viewportHelperStore.get()
   );
   const runtime = useSyncExternalStore(
     (listener) => editor.subscribeRuntime(listener),
@@ -163,6 +182,8 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   }, [editor]);
   const toggleSnap = useCallback((channel: SnapChannel, increment = defaultSnapIncrement(channel)) =>
     editor.snap.toggle(channel, increment), [editor]);
+  const toggleViewportHelper = useCallback((key: ViewportHelperKey) =>
+    viewportHelperStore.toggle(key), [viewportHelperStore]);
   const runAction = useCallback((action: EditorAction) => executeEditorAction(editor, action), [editor]);
   const resetCamera = useCallback(() => {
     editor.getRuntime()?.resetCamera();
@@ -198,6 +219,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     assetPayloads,
     history: historyState,
     snap,
+    viewportHelpers: viewportHelperState,
     transformMode,
     runtimeReady: runtime !== null
   });
@@ -222,6 +244,10 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     snap,
     setMode: setTransformMode,
     toggleSnap
+  };
+  const viewportHelpers: WorkbenchViewportHelpersContext = {
+    state: viewportHelperState,
+    toggle: toggleViewportHelper
   };
   const camera: WorkbenchCameraContext = {
     ready: runtime !== null,
@@ -257,6 +283,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     selection,
     history: historyState,
     transform,
+    viewportHelpers,
     camera,
     project,
     assets,
@@ -276,10 +303,12 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     selectedObjectIds,
     selectedLightId,
     snap,
+    viewportHelperState,
     transformMode,
     setActiveLightId: inspector.setActiveLightId,
     setTransformMode,
     toggleSnap,
+    toggleViewportHelper,
     runAction,
     resetCamera,
     frameSelected,
@@ -308,4 +337,33 @@ function getAssetWorkspacePayloads(editor: Editor): AssetWorkspacePayloadSummary
 
 function getAssetWorkspaceVersion(editor: Editor): number {
   return editor.getAssetWorkspaceVersion?.() ?? 0;
+}
+
+const fallbackViewportHelperStores = new WeakMap<Editor, EditorViewportHelperState>();
+
+function getViewportHelperStore(editor: Editor): EditorViewportHelperState {
+  if (editor.viewportHelpers) {
+    return editor.viewportHelpers;
+  }
+  let store = fallbackViewportHelperStores.get(editor);
+  if (!store) {
+    store = new EditorViewportHelperState();
+    fallbackViewportHelperStores.set(editor, store);
+  }
+  return store;
+}
+
+function subscribeViewportHelperStore(
+  editor: Editor,
+  viewportHelpers: EditorViewportHelperState,
+  listener: (snapshot: ViewportHelperStateSnapshot) => void
+): () => void {
+  if (editor.viewportHelpers && editor.subscribeViewportHelpers) {
+    return editor.subscribeViewportHelpers(listener);
+  }
+  return viewportHelpers.subscribe(listener);
+}
+
+function ensureDefaultWorkbenchViewportHelpers(viewportHelpers: EditorViewportHelperState): void {
+  viewportHelpers.seedVisibility(DEFAULT_WORKBENCH_VIEWPORT_HELPER_VISIBILITY);
 }

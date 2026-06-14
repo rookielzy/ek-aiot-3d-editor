@@ -75,6 +75,128 @@ describe("transform controls adapter", () => {
     expect(setup.controls.scaleSnap).toBeNull();
   });
 
+  it("publishes session-only snap feedback from the drag lifecycle", () => {
+    const feedback: unknown[] = [];
+    const setup = createAdapterHarness({
+      snap: { translate: 0.5 },
+      onSnapFeedback: (next) => feedback.push(next)
+    });
+
+    setup.controls.emit("mouseDown");
+    setup.object.position.set(1.24, -0.26, 0);
+    setup.controls.emit("objectChange");
+    setup.controls.emit("mouseUp");
+
+    expect(feedback).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        status: "dragging-snapped",
+        nodeId: "object-a",
+        mode: "translate",
+        increment: 0.5,
+        before: [0, 0, 0],
+        preview: [0, 0, 0],
+        snapped: [0, 0, 0]
+      }),
+      expect.objectContaining({
+        status: "dragging-snapped",
+        nodeId: "object-a",
+        mode: "translate",
+        increment: 0.5,
+        before: [0, 0, 0],
+        preview: [1.24, -0.26, 0],
+        snapped: [1, -0.5, 0]
+      }),
+      expect.objectContaining({
+        status: "idle",
+        nodeId: null
+      })
+    ]));
+    expect(setup.store.getSnapshot().objects["object-a"].transform.position).toEqual([1, -0.5, 0]);
+  });
+
+  it.each([
+    [{}, "dragging-unsnapped", null, [1.24, -0.26, 0], [1.24, -0.26, 0]],
+    [{ translate: Number.NaN }, "invalid", null, [1.24, -0.26, 0], [1.24, -0.26, 0]],
+    [{ translate: -1 }, "invalid", null, [1.24, -0.26, 0], [1.24, -0.26, 0]]
+  ] as const)("publishes %s translate snap feedback", (snap, status, increment, preview, snapped) => {
+    const feedback: unknown[] = [];
+    const setup = createAdapterHarness({
+      snap,
+      onSnapFeedback: (next) => feedback.push(next)
+    });
+
+    setup.controls.emit("mouseDown");
+    setup.object.position.set(...preview);
+    setup.controls.emit("objectChange");
+
+    expect(feedback).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        status,
+        nodeId: "object-a",
+        mode: "translate",
+        increment,
+        before: [0, 0, 0],
+        preview,
+        snapped
+      })
+    ]));
+  });
+
+  it.each([
+    ["rotate", "rotation", { rotate: 0.25 }, [0.31, 0, 0], [0.25, 0, 0]],
+    ["scale", "scale", { scale: 0.5 }, [1.24, 1.76, 2.1], [1, 2, 2]]
+  ] as const)("publishes snapped %s feedback for the active channel", (mode, channel, snap, preview, snapped) => {
+    const feedback: unknown[] = [];
+    const setup = createAdapterHarness({
+      mode,
+      snap,
+      onSnapFeedback: (next) => feedback.push(next)
+    });
+
+    setup.controls.emit("mouseDown");
+    if (channel === "rotation") {
+      setup.object.rotation.set(...preview);
+    } else {
+      setup.object.scale.set(...preview);
+    }
+    setup.controls.emit("objectChange");
+
+    expect(feedback).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        status: "dragging-snapped",
+        nodeId: "object-a",
+        mode,
+        increment: channel === "rotation" ? 0.25 : 0.5,
+        before: channel === "rotation" ? [0, 0, 0] : [1, 1, 1],
+        preview,
+        snapped
+      })
+    ]));
+  });
+
+  it("cancels the active drag when snap settings change mid-drag", () => {
+    const feedback: unknown[] = [];
+    const setup = createAdapterHarness({
+      snap: { translate: 0.5 },
+      onSnapFeedback: (next) => feedback.push(next)
+    });
+    const undoBefore = setup.history.state.undoCount;
+
+    setup.controls.emit("mouseDown");
+    setup.object.position.set(1.24, 0, 0);
+    setup.controls.emit("objectChange");
+    setup.adapter.setSnap({ translate: 0.25 });
+    setup.controls.emit("mouseUp");
+
+    expect(setup.adapter.dragging).toBe(false);
+    expect(setup.object.position.toArray()).toEqual([0, 0, 0]);
+    expect(setup.store.getSnapshot().objects["object-a"].transform.position).toEqual([0, 0, 0]);
+    expect(setup.history.state.undoCount).toBe(undoBefore);
+    expect(feedback).toEqual(expect.arrayContaining([
+      expect.objectContaining({ status: "idle", nodeId: null })
+    ]));
+  });
+
   it("cancels preview state without committing when selection changes during drag", () => {
     const setup = createAdapterHarness();
     const undoBefore = setup.history.state.undoCount;
@@ -267,6 +389,7 @@ function createAdapterHarness(options: {
   mode?: TransformMode;
   snap?: Parameters<TransformControlsAdapter["setSnap"]>[0];
   cameraControls?: ViewportCameraControls;
+  onSnapFeedback?: ConstructorParameters<typeof TransformControlsAdapter>[0]["onSnapFeedback"];
 } = {}) {
   const store = new EditorStore();
   const history = new CommandHistory();
@@ -288,7 +411,8 @@ function createAdapterHarness(options: {
     cameraControls: options.cameraControls,
     mode: options.mode,
     snap: options.snap,
-    onChange: vi.fn()
+    onChange: vi.fn(),
+    onSnapFeedback: options.onSnapFeedback
   });
   adapter.sync(store.getSnapshot());
 

@@ -100,6 +100,17 @@ export type {
 export type { AdvancedEditorOperations, EditorClipboard } from "./editor/operations";
 export type { SnapChannel, SnapSubscriber } from "./editor/snap-state";
 export type {
+  ViewportHelperKey,
+  ViewportHelperStateSnapshot,
+  ViewportHelperSubscriber,
+  ViewportHelperVisibility,
+  ViewportSnapFeedbackState
+} from "./editor/viewport-helper-state";
+export {
+  EditorViewportHelperState,
+  DEFAULT_WORKBENCH_VIEWPORT_HELPER_VISIBILITY
+} from "./editor/viewport-helper-state";
+export type {
   ClipboardLightDefinition,
   ClipboardSceneNode,
   ClipboardSceneObject,
@@ -236,7 +247,8 @@ export type {
   RuntimePointerSelectionInput,
   RuntimePointerSelectionModifiers,
   RuntimePointerSelectionOptions,
-  RuntimeSelectionVisualOptions
+  RuntimeSelectionVisualOptions,
+  RuntimeViewportHelperOptions
 } from "./runtime/viewport-controls";
 export type { RuntimeTransformControlsOptions } from "./runtime/transform/transform-controls-adapter";
 export type { EditorTransformModeState, TransformMode, TransformModeSubscriber } from "./runtime/transform/transform-mode";
