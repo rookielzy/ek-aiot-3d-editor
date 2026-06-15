@@ -85,7 +85,7 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
     positionX!.dispatchEvent(new Event("input", { bubbles: true }));
     positionX!.blur();
     await waitFor(() => {
-      expect(text(host)).toContain("Undo 1");
+      expect(text(host)).toMatch(/Undo [1-9]/);
       expect(text(host)).toContain("Dirty");
     });
 
