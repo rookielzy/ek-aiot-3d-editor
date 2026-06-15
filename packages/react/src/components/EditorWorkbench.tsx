@@ -165,6 +165,8 @@ export function EditorWorkbench({
             snapshot={workbench.snapshot}
             inspector={workbench.inspector}
             setActiveLightId={workbench.setActiveLightId}
+            setActiveCameraViewId={workbench.setActiveCameraViewId}
+            camera={workbench.camera}
             onReplaceAsset={(assetId, file) => {
               void workbench.replaceAsset({ assetId, source: file, label: file.name, mimeType: file.type });
             }}

@@ -5,6 +5,7 @@ import { immutableClone } from "../snapshot/immutability";
 import type { SceneSnapshot } from "../snapshot/types";
 import { assertValidSceneSnapshot } from "../snapshot/validation";
 import { applyAddLight } from "./add-light";
+import { applyCreateCameraView, applyDeleteCameraView, applySetDefaultCameraView, applyUpdateCameraView } from "./camera-commands";
 import { applyCreateGroup } from "./create-group";
 import { applyCreateImportedGlbTargets } from "./create-imported-glb-targets";
 import { applyDeleteNodes } from "./delete-nodes";
@@ -155,6 +156,14 @@ export class CommandDispatcher {
         return applySetMaterial(snapshot, command);
       case "set-environment":
         return applySetEnvironment(snapshot, command);
+      case "create-camera-view":
+        return applyCreateCameraView(snapshot, command);
+      case "update-camera-view":
+        return applyUpdateCameraView(snapshot, command);
+      case "delete-camera-view":
+        return applyDeleteCameraView(snapshot, command);
+      case "set-default-camera-view":
+        return applySetDefaultCameraView(snapshot, command);
       case "add-light":
         return applyAddLight(snapshot, command);
       case "update-light":

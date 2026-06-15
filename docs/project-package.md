@@ -30,10 +30,10 @@ assets/
 固定路径：
 
 - `project.json`：项目包 manifest。
-- `scene.json`：普通 `SceneSnapshot`。当前导出是 v5 node graph；导入旧 v1/v2/v3/v4 scene 会先迁移到当前 schema。
+- `scene.json`：普通 `SceneSnapshot`。当前导出是 v6 scene schema；导入旧 v1/v2/v3/v4/v5 scene 会先迁移到当前 schema。
 - `assets/*`：资产 payload bytes。
 
-GLB import analysis 产生的 `glbImportManifest` 属于 `scene.json` 中 asset metadata 的 JSON-compatible authoring data。Imported GLB target node、source descriptor、slot key、authored transform override 和 remap metadata 也保存在 `scene.json`。GLB reimport 会更新同一稳定 asset ID 的 manifest metadata，并保留 matched imported node identity；unresolved target/slot 只保存 JSON-compatible remap marker，不保存 replacement loader result。它们不改变 ZIP 布局，也不在 `assets/*` 下创建额外记录。Runtime imported target links、base transform caches、viewport grid/floor/axes helpers、selection/hover/snap guide helpers、helper visibility、hover target、snap feedback state、marquee overlay/drag rectangle/candidate IDs、loader results、resolver output 和 runtime problems 不会进入 `scene.json` 或 `project.json`。
+GLB import analysis 产生的 `glbImportManifest` 属于 `scene.json` 中 asset metadata 的 JSON-compatible authoring data。Imported GLB target node、source descriptor、slot key、authored transform override 和 remap metadata 也保存在 `scene.json`。Authored camera views 保存在 `scene.json.cameras`，默认展示视角保存在 `scene.json.presentation.defaultCameraId`；它们不需要额外 `assets/*` payload。GLB reimport 会更新同一稳定 asset ID 的 manifest metadata，并保留 matched imported node identity；unresolved target/slot 只保存 JSON-compatible remap marker，不保存 replacement loader result。它们不改变 ZIP 布局，也不在 `assets/*` 下创建额外记录。Runtime imported target links、base transform caches、viewport grid/floor/axes helpers、selection/hover/snap guide helpers、helper visibility、hover target、snap feedback state、marquee overlay/drag rectangle/candidate IDs、editor camera navigation、OrbitControls state、controls target object、loader results、resolver output 和 runtime problems 不会进入 `scene.json` 或 `project.json`。
 
 ## project.json
 
@@ -94,7 +94,7 @@ if (!result.ok) {
 - ZIP 结构。
 - entry path 是否安全。
 - manifest version 和字段。
-- `scene.json` Snapshot，并通过 snapshot migration 归一化为当前 v5 node graph。
+- `scene.json` Snapshot，并通过 snapshot migration 归一化为当前 v6 schema。
 - asset record 与 payload 引用。
 - size limits。
 
@@ -133,6 +133,8 @@ Registered GLB row 的 reimport 应使用 `editor.reimportGlbAsset()`，而不�
 
 Material-slot assignment 会像 object-level material assignment 一样保存在 `scene.json` 中：durable 数据只有 assignment ID、`{ kind: "material-slot"; objectId; slotId }` target、`MeshStandardMaterialOverride` 子集和 texture/image asset references。`.ek3d` 不保存默认 inspector 的 active target、字段 draft、controlled warning、Three.js `Material` clone、loaded `Texture`、resolver URI、object URL、slot lookup result、runtime target link 或 `imported-material-slot-*` runtime problem。若 GLB reimport 后 slot 无法匹配，assignment 仍保留在 `scene.json`，由 runtime/workbench problem 提示用户处理。
 
+Authored camera view 会像材质和灯光一样随 `scene.json` 往返：durable 数据只有 ID、名称、perspective FOV、position、target、near/far 和 JSON-compatible metadata。`.ek3d` 不保存编辑器当前 orbit/pan/zoom、reset/frame helper 结果、Three.js `PerspectiveCamera`、`OrbitControls`、controls target object、camera helper gizmo、renderer state 或 viewer resolver result。导入后可以用 `resolveDefaultPresentationView()` 读取默认 view，并由 runtime helper apply 到当前 transient editor camera。
+
 ## 默认限制
 
 默认导入限制：
@@ -159,5 +161,5 @@ Decoder-aware GLB runtime 使用 host 提供的 loader adapter。Draco、KTX2、
 - 不要信任外部 `.ek3d` 文件；导入前必须走 core validator。
 - 不要允许 ZIP entry path 跳出项目包范围。
 - 不要把 secret、tenant token、用户会话等运行时变量写入 manifest metadata。
-- project manifest 当前仍是 version 1；引入 v5 imported GLB target schema 只改变 `scene.json` 的 snapshot schema，不改变 `.ek3d` 包布局。
+- project manifest 当前仍是 version 1；引入 v5 imported GLB target schema 和 v6 authored camera views 只改变 `scene.json` 的 snapshot schema，不改变 `.ek3d` 包布局。
 - `.ek3d` 仍是实验性格式；在 `0.x` 阶段不保证长期兼容。

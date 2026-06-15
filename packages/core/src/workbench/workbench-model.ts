@@ -47,6 +47,7 @@ export interface WorkbenchHierarchyRow {
   childIds: string[];
   objectId?: string;
   lightId?: string;
+  cameraViewId?: string;
   assetId?: string;
   selected: boolean;
   problemCount: number;
@@ -108,6 +109,7 @@ export interface WorkbenchSelectionModel {
   objectId: string | null;
   objectIds: string[];
   lightId: string | null;
+  cameraViewId: string | null;
 }
 
 export interface WorkbenchToolbarModel {
@@ -123,6 +125,8 @@ export interface WorkbenchToolbarModel {
   canClearSelection: boolean;
   canFrameSelected: boolean;
   canFrameAll: boolean;
+  canCaptureCameraView: boolean;
+  canApplyCameraView: boolean;
   transformMode: TransformMode;
   snapEnabled: Record<keyof SnapSettings, boolean>;
   viewportHelpers: ViewportHelperVisibility;
@@ -150,6 +154,8 @@ export interface WorkbenchProjectModel {
   nodeCount: number;
   objectCount: number;
   lightCount: number;
+  cameraViewCount: number;
+  defaultCameraViewId: string | null;
   assetCount: number;
   completeness: ProjectCompleteness;
   problemCount: number;
@@ -177,7 +183,10 @@ const SEVERITY_RANK: Record<ProblemSeverity, number> = {
 
 export function buildWorkbenchModel(snapshot: SceneSnapshot, options: BuildWorkbenchModelOptions = {}): WorkbenchModel {
   const runtimeProblems = mergeProblems(options.runtimeProblems ?? [], deriveImportedRemapProblems(snapshot));
-  const inspector = options.inspector ?? buildInspectorModel(snapshot, { runtimeProblems });
+  const inspector = options.inspector ?? buildInspectorModel(snapshot, {
+    runtimeProblems,
+    runtimeReady: options.runtimeReady
+  });
   const history = options.history ?? EMPTY_HISTORY;
   const snap = options.snap ?? EMPTY_SNAP;
   const viewportHelpers = options.viewportHelpers;
@@ -277,7 +286,8 @@ function buildWorkbenchSelection(snapshot: SceneSnapshot, inspector: InspectorMo
     nodeKind: selection.nodeKind,
     objectId: selection.objectId,
     objectIds: [...selection.objectIds],
-    lightId: selection.lightId
+    lightId: selection.lightId,
+    cameraViewId: selection.cameraViewId
   };
 }
 
@@ -350,6 +360,7 @@ function createHierarchyRow(
     ...(node.kind === "object" ? { objectId: node.objectId, assetId: object?.asset.id } : {}),
     ...(node.kind === "imported" ? { objectId: node.ownerObjectId, assetId: ownerObject?.asset.id } : {}),
     ...(node.kind === "light" ? { lightId: node.lightId } : {}),
+    ...(node.kind === "camera" ? { cameraViewId: node.cameraId } : {}),
     selected: selectedIds.has(node.id),
     problemCount: problems.length,
     problemIds: problems.map((problem) => problem.id),
@@ -412,20 +423,23 @@ function buildWorkbenchToolbar(
   const selectedNodes = inspector.selection.nodeIds
     .map((nodeId) => snapshot.nodes[nodeId])
     .filter((node): node is SceneNode => Boolean(node));
+  const selectionIncludesCamera = inspector.selection.nodeIds.some((nodeId) => nodeSubtreeIncludesKind(snapshot, nodeId, "camera"));
 
   return {
     canUndo: options.history.undoCount > 0,
     canRedo: options.history.redoCount > 0,
-    canCopy: selectionCount > 0,
+    canCopy: selectionCount > 0 && !selectionIncludesCamera,
     canPaste: true,
-    canDuplicate: selectionCount > 0,
+    canDuplicate: selectionCount > 0 && !selectionIncludesCamera,
     canDelete: selectionCount > 0,
-    canGroup: selectionCount > 1,
+    canGroup: selectionCount > 1 && !selectionIncludesCamera,
     canUngroup: selectedNodes.some((node) => node.kind === "group"),
     canSelectAll: Object.keys(snapshot.nodes).length > 0,
     canClearSelection: selectionCount > 0,
     canFrameSelected: options.runtimeReady && selectionCount > 0,
     canFrameAll: options.runtimeReady && Object.keys(snapshot.nodes).length > 0,
+    canCaptureCameraView: inspector.cameras.canCapture,
+    canApplyCameraView: inspector.cameras.canApply,
     transformMode: options.transformMode,
     snapEnabled: {
       translate: isSnapEnabled(options.snap.translate),
@@ -478,6 +492,17 @@ function buildWorkbenchStatus(
   };
 }
 
+function nodeSubtreeIncludesKind(snapshot: SceneSnapshot, nodeId: string, kind: SceneNode["kind"]): boolean {
+  const node = snapshot.nodes[nodeId];
+  if (!node) {
+    return false;
+  }
+  if (node.kind === kind) {
+    return true;
+  }
+  return node.children.some((childId) => nodeSubtreeIncludesKind(snapshot, childId, kind));
+}
+
 function buildWorkbenchProject(
   snapshot: SceneSnapshot,
   completeness: ProjectCompleteness,
@@ -489,6 +514,8 @@ function buildWorkbenchProject(
     nodeCount: Object.keys(snapshot.nodes).length,
     objectCount: Object.keys(snapshot.objects).length,
     lightCount: Object.keys(snapshot.lights).length,
+    cameraViewCount: Object.keys(snapshot.cameras).length,
+    defaultCameraViewId: snapshot.presentation.defaultCameraId,
     assetCount: Object.keys(snapshot.assets).length,
     completeness,
     problemCount,

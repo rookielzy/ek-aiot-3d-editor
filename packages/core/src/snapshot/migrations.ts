@@ -1,3 +1,4 @@
+import { createEmptyCameraState, createEmptyPresentationState } from "../cameras/defaults";
 import { createDefaultEnvironment } from "../environment/defaults";
 import { createEmptyMaterialState } from "../materials/defaults";
 import { createEmptyAuthoredProblemState } from "../problems/defaults";
@@ -7,9 +8,10 @@ import {
   SNAPSHOT_VERSION,
   type LegacySceneSnapshot,
   type PreviousSceneSnapshot,
-  type SceneNode,
   type SceneSnapshot,
   type SerializedSceneSnapshot,
+  type V5SceneNode,
+  type V5SceneSnapshot,
   type V4SceneSnapshot,
   type V3SceneSnapshot
 } from "./types";
@@ -19,6 +21,12 @@ export function migrateSerializedSnapshot(serialized: SerializedSceneSnapshot): 
   if (serialized.version === SNAPSHOT_VERSION) {
     assertValidSceneSnapshot(serialized);
     return immutableClone(serialized);
+  }
+
+  if (serialized.version === 5) {
+    const migrated = migrateV5Snapshot(serialized);
+    assertValidSceneSnapshot(migrated);
+    return immutableClone(migrated);
   }
 
   if (serialized.version === 4) {
@@ -49,11 +57,57 @@ export function migrateSerializedSnapshot(serialized: SerializedSceneSnapshot): 
   throw new Error(`Unsupported snapshot version: ${String(version)}.`);
 }
 
-export function migrateV4Snapshot(serialized: V4SceneSnapshot): SceneSnapshot {
+export function migrateV5Snapshot(serialized: V5SceneSnapshot): SceneSnapshot {
   return {
     ...serialized,
-    version: SNAPSHOT_VERSION
+    version: SNAPSHOT_VERSION,
+    cameras: createEmptyCameraState(),
+    presentation: createEmptyPresentationState()
   };
+}
+
+export function migrateV4Snapshot(serialized: V4SceneSnapshot): SceneSnapshot {
+  return migrateV5Snapshot({
+    ...serialized,
+    version: 5
+  });
+}
+
+export function migrateV3Snapshot(serialized: V3SceneSnapshot): SceneSnapshot {
+  const nodes: Record<string, V5SceneNode> = {};
+  const usedNodeIds = new Set<string>();
+
+  for (const object of Object.values(serialized.objects)) {
+    nodes[object.id] = createObjectNode(object);
+    usedNodeIds.add(object.id);
+  }
+
+  const rootNodeIds = serialized.rootObjectIds.filter((objectId) => nodes[objectId]);
+
+  for (const light of Object.values(serialized.lights)) {
+    const nodeId = createCollisionSafeLightNodeId(light.id, usedNodeIds);
+    nodes[nodeId] = createLightNode(light, nodeId);
+    usedNodeIds.add(nodeId);
+    rootNodeIds.push(nodeId);
+  }
+
+  const nodeIds = serialized.selection.objectIds.filter((objectId) => nodes[objectId]);
+  const nodeId = serialized.selection.objectId && nodeIds.includes(serialized.selection.objectId)
+    ? serialized.selection.objectId
+    : nodeIds[0] ?? null;
+
+  return migrateV5Snapshot({
+    ...serialized,
+    version: 5,
+    nodes,
+    rootNodeIds,
+    selection: {
+      nodeId,
+      nodeIds,
+      objectId: nodeId,
+      objectIds: nodeIds
+    }
+  });
 }
 
 export function migrateV1Snapshot(serialized: LegacySceneSnapshot): SceneSnapshot {
@@ -77,43 +131,6 @@ export function migrateV2Snapshot(serialized: PreviousSceneSnapshot): SceneSnaps
       objectIds: selectedObjectId ? [selectedObjectId] : []
     }
   });
-}
-
-export function migrateV3Snapshot(serialized: V3SceneSnapshot): SceneSnapshot {
-  const nodes: Record<string, SceneNode> = {};
-  const usedNodeIds = new Set<string>();
-
-  for (const object of Object.values(serialized.objects)) {
-    nodes[object.id] = createObjectNode(object);
-    usedNodeIds.add(object.id);
-  }
-
-  const rootNodeIds = serialized.rootObjectIds.filter((objectId) => nodes[objectId]);
-
-  for (const light of Object.values(serialized.lights)) {
-    const nodeId = createCollisionSafeLightNodeId(light.id, usedNodeIds);
-    nodes[nodeId] = createLightNode(light, nodeId);
-    usedNodeIds.add(nodeId);
-    rootNodeIds.push(nodeId);
-  }
-
-  const nodeIds = serialized.selection.objectIds.filter((objectId) => nodes[objectId]);
-  const nodeId = serialized.selection.objectId && nodeIds.includes(serialized.selection.objectId)
-    ? serialized.selection.objectId
-    : nodeIds[0] ?? null;
-
-  return {
-    ...serialized,
-    version: SNAPSHOT_VERSION,
-    nodes,
-    rootNodeIds,
-    selection: {
-      nodeId,
-      nodeIds,
-      objectId: nodeId,
-      objectIds: nodeIds
-    }
-  };
 }
 
 export function validateSerializedSceneSnapshot(value: unknown): ValidationResult {

@@ -1,6 +1,7 @@
-import { computed, getCurrentInstance, onBeforeUnmount, shallowRef, toRaw, type ComputedRef, type Ref, type ShallowRef } from "vue";
+import { computed, getCurrentInstance, onBeforeUnmount, ref, shallowRef, toRaw, type ComputedRef, type Ref, type ShallowRef } from "vue";
 import {
   buildInspectorModel,
+  resolveActiveCameraViewId,
   type Editor,
   type InspectorModel,
   type Problem,
@@ -14,6 +15,7 @@ export interface UseInspectorOptions {
 
 export interface UseInspectorResult {
   activeLightId: Ref<string | null>;
+  activeCameraViewId: Ref<string | null>;
   snapshot: ComputedRef<SceneSnapshot>;
   runtimeProblems: ShallowRef<Problem[]>;
   inspector: ComputedRef<InspectorModel>;
@@ -26,6 +28,7 @@ export function useInspector(options: UseInspectorOptions): UseInspectorResult {
   const localSnapshot = shallowRef(editor.getSnapshot());
   const snapshot = computed(() => options.snapshot?.value ?? localSnapshot.value);
   const runtimeProblems = shallowRef<Problem[]>(editor.getRuntime()?.getProblems() ?? []);
+  const requestedActiveCameraViewId = ref<string | null>(null);
   let unsubscribeSnapshot: (() => void) | null = editor.subscribe((nextSnapshot) => {
     localSnapshot.value = nextSnapshot;
   });
@@ -50,12 +53,18 @@ export function useInspector(options: UseInspectorOptions): UseInspectorResult {
 
   const inspector = computed(() =>
     buildInspectorModel(snapshot.value, {
-      runtimeProblems: runtimeProblems.value
+      activeCameraViewId: requestedActiveCameraViewId.value,
+      runtimeProblems: runtimeProblems.value,
+      runtimeReady: editor.getRuntime() !== null
     })
   );
   const activeLightId = computed({
     get: () => inspector.value.lights.activeLightId,
     set: setActiveLightId
+  });
+  const activeCameraViewId = computed({
+    get: () => inspector.value.cameras.activeCameraViewId,
+    set: setActiveCameraViewId
   });
 
   function setActiveLightId(lightId: string | null): void {
@@ -74,6 +83,10 @@ export function useInspector(options: UseInspectorOptions): UseInspectorResult {
     }
   }
 
+  function setActiveCameraViewId(cameraViewId: string | null): void {
+    requestedActiveCameraViewId.value = resolveActiveCameraViewId(editor.getSnapshot(), cameraViewId);
+  }
+
   function dispose(): void {
     unsubscribeSnapshot?.();
     unsubscribeSnapshot = null;
@@ -89,6 +102,7 @@ export function useInspector(options: UseInspectorOptions): UseInspectorResult {
 
   return {
     activeLightId,
+    activeCameraViewId,
     snapshot,
     runtimeProblems,
     inspector,

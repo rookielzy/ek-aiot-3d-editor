@@ -3,6 +3,7 @@ import { deriveImportedRemapProblems } from "../runtime/remap-problems";
 import { getSelectedNodeIds, getSelectedObjectIds } from "../selection/selection";
 import type { SceneSnapshot } from "../snapshot/types";
 import { buildEnvironmentSection } from "./environment";
+import { buildCameraSection } from "./cameras";
 import { buildLightSection } from "./lights";
 import { buildMaterialSection } from "./material";
 import { getSelectedNodeTarget } from "./node-targets";
@@ -17,6 +18,7 @@ export function getInspectorSelection(snapshot: SceneSnapshot): InspectorSelecti
   const node = nodeTarget.node;
   const objectId = snapshot.selection.objectId;
   const objectIds = getSelectedObjectIds(snapshot);
+  const cameraViewId = node?.kind === "camera" && snapshot.cameras[node.cameraId] ? node.cameraId : null;
   return {
     nodeId,
     nodeIds,
@@ -26,6 +28,8 @@ export function getInspectorSelection(snapshot: SceneSnapshot): InspectorSelecti
     objectIds,
     lightId: node?.kind === "light" ? node.lightId : null,
     light: nodeTarget.light,
+    cameraViewId,
+    cameraView: cameraViewId ? snapshot.cameras[cameraViewId] : null,
     count: nodeIds.length,
     object: objectId ? snapshot.objects[objectId] ?? null : null,
     transformAvailable: nodeTarget.transformAvailable,
@@ -35,12 +39,18 @@ export function getInspectorSelection(snapshot: SceneSnapshot): InspectorSelecti
 
 export function buildInspectorModel(snapshot: SceneSnapshot, options: BuildInspectorModelOptions = {}): InspectorModel {
   const runtimeProblems = mergeProblems(options.runtimeProblems ?? [], deriveImportedRemapProblems(snapshot));
+  const selection = getInspectorSelection(snapshot);
+  const activeCameraViewId = selection.cameraViewId ?? options.activeCameraViewId;
   return {
-    selection: getInspectorSelection(snapshot),
+    selection,
     transform: buildTransformSection(snapshot),
     material: buildMaterialSection(snapshot, runtimeProblems),
     environment: buildEnvironmentSection(snapshot),
     lights: buildLightSection(snapshot, options.activeLightId),
+    cameras: buildCameraSection(snapshot, {
+      activeCameraViewId,
+      runtimeReady: options.runtimeReady
+    }),
     problems: buildProblemSection(snapshot, runtimeProblems)
   };
 }

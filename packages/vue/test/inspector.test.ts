@@ -1,7 +1,13 @@
 import { mount } from "@vue/test-utils";
 import { markRaw, nextTick } from "vue";
 import { describe, expect, it, vi } from "vitest";
-import { AssetResolverBridge, attachGlbImportManifestMetadata, createEditor, createGlbImportManifest } from "@ek-aiot/3d-editor-core";
+import {
+  AssetResolverBridge,
+  attachGlbImportManifestMetadata,
+  createEditor,
+  createGlbImportManifest,
+  type RendererLike
+} from "@ek-aiot/3d-editor-core";
 import InspectorPanel from "../src/components/InspectorPanel.vue";
 import { useInspector } from "../src/composables/use-inspector";
 
@@ -247,6 +253,78 @@ describe("Vue InspectorPanel", () => {
     expect(editor.getSnapshot().environment.environment.assetId).toBe("studio-hdr");
     wrapper.unmount();
   });
+
+  it("edits authored camera views through core inspector commands", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "create-camera-view", view: { id: "view-a", name: "Hero", projection: { kind: "perspective", fov: 60 } } });
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+    const wrapper = mount(InspectorPanel, { props: { editor } });
+
+    const fov = wrapper.findAll("label").find((label) => label.text().includes("FOV"))?.find('input[type="number"]');
+    if (!fov) {
+      throw new Error("FOV input was not rendered");
+    }
+    await fov.setValue("35");
+    await fov.trigger("blur");
+    await wrapper.findAll("button").find((button) => button.text() === "Set default")?.trigger("click");
+
+    expect(dispatchSpy).toHaveBeenCalledWith({
+      type: "update-camera-view",
+      viewId: "view-a",
+      patch: { projection: { kind: "perspective", fov: 35 } }
+    });
+    expect(editor.getSnapshot().presentation.defaultCameraId).toBe("view-a");
+    wrapper.unmount();
+  });
+
+  it("shows camera field validation problems without dispatching invalid camera commands", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "create-camera-view", view: { id: "view-a" } });
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+    const wrapper = mount(InspectorPanel, { props: { editor } });
+
+    const fov = wrapper.findAll("label").find((label) => label.text().includes("FOV"))?.find('input[type="number"]');
+    if (!fov) {
+      throw new Error("FOV input was not rendered");
+    }
+    await fov.setValue("180");
+    await fov.trigger("blur");
+
+    expect(wrapper.text()).toContain("less than or equal");
+    expect(dispatchSpy).not.toHaveBeenCalledWith(expect.objectContaining({ type: "update-camera-view" }));
+    wrapper.unmount();
+  });
+
+  it("wires standalone camera capture and apply through the mounted runtime", async () => {
+    const editor = markRaw(createEditor());
+    const runtime = editor.mountRuntime({
+      container: document.createElement("div"),
+      rendererFactory: fakeRenderer
+    });
+    const captureCameraView = vi.spyOn(runtime, "captureCameraView");
+    const applyCameraView = vi.spyOn(runtime, "applyCameraView");
+    captureCameraView.mockReturnValueOnce({
+      ok: true,
+      view: {
+        id: "view-a",
+        name: "Hero",
+        projection: { kind: "perspective", fov: 50 },
+        position: [1, 2, 3],
+        target: [0, 0, 0],
+        near: 0.1,
+        far: 1000
+      }
+    });
+    const wrapper = mount(InspectorPanel, { props: { editor } });
+
+    await wrapper.findAll("button").find((button) => button.text() === "Capture")?.trigger("click");
+    await nextTick();
+    await wrapper.findAll("button").find((button) => button.text() === "Apply")?.trigger("click");
+
+    expect(editor.getSnapshot().cameras["view-a"]).toBeDefined();
+    expect(applyCameraView).toHaveBeenCalledWith(editor.getSnapshot().cameras["view-a"]);
+    wrapper.unmount();
+  });
 });
 
 function createSlotEditor() {
@@ -295,4 +373,13 @@ function createSlotManifest() {
       }
     }
   });
+}
+
+function fakeRenderer(container: HTMLElement): RendererLike {
+  return {
+    domElement: container.ownerDocument.createElement("canvas"),
+    setSize() {},
+    render() {},
+    dispose() {}
+  };
 }

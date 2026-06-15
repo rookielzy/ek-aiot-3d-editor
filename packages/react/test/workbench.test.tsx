@@ -109,6 +109,8 @@ describe("React EditorWorkbench", () => {
     const runtime = editor.getRuntime();
     const resetCamera = vi.spyOn(runtime!, "resetCamera");
     const frameSelected = vi.spyOn(runtime!, "frameSelected");
+    const captureCameraView = vi.spyOn(runtime!, "captureCameraView");
+    const applyCameraView = vi.spyOn(runtime!, "applyCameraView");
     const duplicate = vi.spyOn(editor.operations, "duplicate");
 
     fireEvent.click(screen.getByTitle("Rotate mode"));
@@ -147,6 +149,23 @@ describe("React EditorWorkbench", () => {
     fireEvent.click(screen.getByTitle("Frame selected"));
     expect(resetCamera).toHaveBeenCalledTimes(1);
     expect(frameSelected).toHaveBeenCalledTimes(1);
+
+    captureCameraView.mockReturnValueOnce({
+      ok: true,
+      view: {
+        id: "view-a",
+        name: "Hero",
+        projection: { kind: "perspective", fov: 50 },
+        position: [1, 2, 3],
+        target: [0, 0, 0],
+        near: 0.1,
+        far: 1000
+      }
+    });
+    fireEvent.click(screen.getByTitle("Capture camera view"));
+    expect(editor.getSnapshot().cameras["view-a"]).toBeDefined();
+    fireEvent.click(screen.getByTitle("Apply camera view"));
+    expect(applyCameraView).toHaveBeenCalledWith(editor.getSnapshot().cameras["view-a"]);
 
     fireEvent.click(screen.getByTitle("Duplicate selection"));
     expect(duplicate).toHaveBeenCalledTimes(1);
@@ -677,7 +696,7 @@ describe("React EditorWorkbench", () => {
     unmount();
 
     expect(editor.disposed).toBe(false);
-    expect(editor.getSnapshot().version).toBe(5);
+    expect(editor.getSnapshot().version).toBe(6);
   });
 
   it("disposes a shell-created editor when the workbench unmounts", async () => {

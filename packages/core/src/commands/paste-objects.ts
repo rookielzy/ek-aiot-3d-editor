@@ -374,6 +374,8 @@ function cloneNodePayload(
         ...(sourceNode.transform ? { transform: cloneTransform(sourceNode.transform) } : {}),
         ...(sourceNode.metadata ? { metadata: { ...sourceNode.metadata } } : {})
       };
+    case "camera":
+      throw new Error("Camera nodes cannot be pasted from clipboard.");
     case "imported":
       return remapImportedNodeOwnerKeys({
         id,

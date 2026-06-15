@@ -120,6 +120,25 @@ describe("inspector model", () => {
     expect(model.transform.reason).toBe("Ambient lights do not have transform controls.");
   });
 
+  it("uses selected camera nodes as the active authored camera view", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "create-camera-view", view: { id: "view-a", name: "Default", projection: { kind: "perspective", fov: 60 } } });
+    editor.dispatch({ type: "create-camera-view", view: { id: "view-b", name: "Detail", projection: { kind: "perspective", fov: 35 } } });
+    editor.dispatch({ type: "set-default-camera-view", viewId: "view-a" });
+    editor.dispatch({ type: "select-node", nodeId: "view-b" });
+
+    const model = buildInspectorModel(editor.getSnapshot());
+
+    expect(model.selection.nodeKind).toBe("camera");
+    expect(model.selection.cameraViewId).toBe("view-b");
+    expect(model.selection.cameraView?.name).toBe("Detail");
+    expect(model.selection.transformAvailable).toBe(true);
+    expect(model.cameras.activeCameraViewId).toBe("view-b");
+    expect(model.cameras.defaultCameraViewId).toBe("view-a");
+    expect(model.cameras.fields.find((field) => field.id === "fov")?.value).toBe(35);
+    expect(model.transform.fields.map((field) => field.id)).toEqual(["position.x", "position.y", "position.z"]);
+  });
+
   it("filters asset options by supported inspector field kind", () => {
     const editor = createEditor();
     editor.dispatch({ type: "register-asset", asset: { id: "texture-a", kind: "texture", label: "Texture A" } });
@@ -151,7 +170,7 @@ function createGroupSnapshot(): SceneSnapshot {
 
   return {
     ...snapshot,
-    version: 5,
+    version: 6,
     scene: {
       id: "scene-a",
       name: "Scene"

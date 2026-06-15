@@ -2,7 +2,7 @@ import { Group } from "three";
 import { describe, expect, it } from "vitest";
 import { h, markRaw, nextTick } from "vue";
 import { mount } from "@vue/test-utils";
-import { createEditor, AssetResolverBridge, type RendererLike } from "@ek-aiot/3d-editor-core";
+import { createEditor, AssetResolverBridge, resolveDefaultPresentationView, type RendererLike } from "@ek-aiot/3d-editor-core";
 import EditorWorkbench from "../src/components/EditorWorkbench.vue";
 import { useEditor } from "../src/composables/use-editor";
 import VueProofLoopApp from "../../../examples/vue-proof-loop/src/App.vue";
@@ -30,6 +30,19 @@ describe("Vue proof-loop parity", () => {
     core.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
     core.dispatch({ type: "update-light", lightId: "light-a", patch: { intensity: 2 } });
     core.dispatch({ type: "set-transform", objectId: "object-a", transform: { position: [3, 0, 0] } });
+    core.dispatch({
+      type: "create-camera-view",
+      view: {
+        id: "hero-view",
+        name: "Hero view",
+        projection: { kind: "perspective", fov: 45 },
+        position: [3, 2, 6],
+        target: [0, 0, 0],
+        near: 0.1,
+        far: 200
+      }
+    });
+    core.dispatch({ type: "set-default-camera-view", viewId: "hero-view" });
     const vue = useEditor({ editor: markRaw(createEditor({ snapshot: core.serialize() })) });
     const wrapper = mount(EditorWorkbench, {
       props: {
@@ -51,6 +64,11 @@ describe("Vue proof-loop parity", () => {
     expect(vue.snapshot.value.materials.definitions["material:object:object-a"].override.textures?.map?.assetId).toBe("texture-a");
     expect(vue.snapshot.value.environment.environment.assetId).toBe("hdr-a");
     expect(vue.snapshot.value.lights["light-a"].intensity).toBe(2);
+    expect(resolveDefaultPresentationView(vue.editor.getSnapshot())).toMatchObject({
+      status: "resolved",
+      defaultCameraId: "hero-view",
+      view: { id: "hero-view", name: "Hero view" }
+    });
     expect(runtime?.getObject("object-a")).toBeTruthy();
     expect(runtime?.getProblems()).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: "material-texture-asset-unresolved", assetId: "texture-a" }),
@@ -93,6 +111,12 @@ describe("Vue proof-loop parity", () => {
       expect(wrapper.get('[data-testid="starter-overlay"]').text()).toContain("3 objects");
       expect(wrapper.text()).toContain("Selection Simple box");
 
+      await clickButton(wrapper, "Capture view");
+      await waitForVue(() => expect(wrapper.text()).toContain("Camera view 1"));
+      await clickButton(wrapper, "Set default");
+      expect(wrapper.text()).toContain("Default");
+      await clickButton(wrapper, "Apply view");
+
       await clickButton(wrapper, "Snap move");
       expect(buttonByText(toolbar, "Snap move").attributes("aria-pressed")).toBe("true");
 
@@ -100,7 +124,7 @@ describe("Vue proof-loop parity", () => {
       await positionX.setValue("2");
       await positionX.trigger("blur");
       await nextTick();
-      await waitForVue(() => expect(wrapper.text()).toContain("Undo 1"));
+      await waitForVue(() => expect(wrapper.text()).toContain("Undo 3"));
 
       await clickButton(wrapper, "Undo");
       expect(wrapper.text()).toContain("Redo 1");
@@ -124,6 +148,8 @@ describe("Vue proof-loop parity", () => {
       const openInput = toolbar.find('input[type="file"]');
       await uploadFile(openInput.element as HTMLInputElement, new File([copyBytes(bytes!)], "starter.ek3d", { type: "application/octet-stream" }));
       await waitForVue(() => expect(wrapper.text()).toContain("Opened starter.ek3d"));
+      await waitForVue(() => expect(wrapper.text()).toContain("Camera view 1"));
+      expect(wrapper.text()).toContain("Default");
 
       await waitForVue(() => expect(projectPanel.text()).toContain("Replace asset"));
       expect(projectPanel.text()).toContain("1 problems");

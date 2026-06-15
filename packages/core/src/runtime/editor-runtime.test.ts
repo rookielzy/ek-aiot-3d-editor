@@ -1,8 +1,9 @@
-import { AmbientLight, BoxGeometry, Group, Mesh, MeshBasicMaterial, PointLight, Texture, Vector3 } from "three";
+import { AmbientLight, BoxGeometry, Group, Mesh, MeshBasicMaterial, PerspectiveCamera, PointLight, Texture, Vector3 } from "three";
 import { describe, expect, it, vi } from "vitest";
 import { attachGlbImportManifestMetadata, createGlbImportManifest } from "../assets/import-pipeline";
 import { AssetResolverBridge } from "../assets/resolver";
 import { AssetRegistry } from "../assets/registry";
+import { createAuthoredCameraView } from "../cameras/defaults";
 import { CommandDispatcher } from "../commands/dispatcher";
 import { EditorMarqueeSelectionState } from "../editor/marquee-selection-state";
 import { EditorSnapState } from "../editor/snap-state";
@@ -165,6 +166,101 @@ describe("editor runtime", () => {
 
     expect(controls.target.toArray()).toEqual([0, 0, 0]);
     expect(JSON.stringify(store.getSnapshot())).toBe(serialized);
+    runtime.dispose();
+  });
+
+  it("captures and applies authored camera views without mutating snapshots", async () => {
+    const frames = createFrameScheduler();
+    const controls = createFakeControls();
+    const renderer = createFakeRenderer(document.createElement("div"));
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const runtime = new ThreeEditorRuntime({
+      container: document.createElement("div"),
+      store,
+      dispatcher,
+      interactions: { camera: true },
+      rendererFactory: () => renderer,
+      cameraControlsFactory: () => controls,
+      scheduleFrame: frames.schedule,
+      cancelFrame: frames.cancel
+    });
+    await runtime.project();
+    frames.flush();
+    const serialized = JSON.stringify(store.getSnapshot());
+
+    runtime.camera.position.set(7, 8, 9);
+    runtime.camera.fov = 60;
+    runtime.camera.near = 0.2;
+    runtime.camera.far = 700;
+    controls.target.set(1, 2, 3);
+    const captured = runtime.captureCameraView({ id: "view-a", name: "Runtime" });
+
+    expect(captured.ok).toBe(true);
+    expect(captured.ok ? captured.view : null).toMatchObject({
+      id: "view-a",
+      name: "Runtime",
+      projection: { kind: "perspective", fov: 60 },
+      position: [7, 8, 9],
+      target: [1, 2, 3],
+      near: 0.2,
+      far: 700
+    });
+
+    runtime.applyCameraView(createAuthoredCameraView({
+      id: "view-a",
+      projection: { kind: "perspective", fov: 35 },
+      position: [3, 4, 5],
+      target: [0, 1, 0],
+      near: 0.5,
+      far: 300
+    }));
+    frames.flush();
+
+    expect(runtime.camera.position.toArray()).toEqual([3, 4, 5]);
+    expect(runtime.camera.fov).toBe(35);
+    expect(controls.target.toArray()).toEqual([0, 1, 0]);
+    expect(renderer.render).toHaveBeenCalled();
+    expect(JSON.stringify(store.getSnapshot())).toBe(serialized);
+    runtime.dispose();
+  });
+
+  it("projects authored camera nodes as runtime targets distinct from the editor camera", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const runtime = new ThreeEditorRuntime({
+      container: document.createElement("div"),
+      store,
+      dispatcher,
+      rendererFactory: createFakeRenderer
+    });
+    dispatcher.dispatch({
+      type: "create-camera-view",
+      view: {
+        id: "view-a",
+        name: "Hero",
+        projection: { kind: "perspective", fov: 35 },
+        position: [1, 2, 3],
+        target: [0, 1, 0],
+        near: 0.5,
+        far: 300
+      }
+    });
+
+    await runtime.project();
+    const target = runtime.getNodeTarget("view-a");
+
+    expect(target).toBeInstanceOf(PerspectiveCamera);
+    expect(target).not.toBe(runtime.camera);
+    expect((target as PerspectiveCamera).fov).toBe(35);
+    expect((target as PerspectiveCamera).near).toBe(0.5);
+    expect((target as PerspectiveCamera).far).toBe(300);
+    expect(target?.position.toArray()).toEqual([1, 2, 3]);
+
+    dispatcher.dispatch({ type: "delete-camera-view", viewId: "view-a" });
+    await runtime.project();
+
+    expect(runtime.getNodeTarget("view-a")).toBeUndefined();
     runtime.dispose();
   });
 

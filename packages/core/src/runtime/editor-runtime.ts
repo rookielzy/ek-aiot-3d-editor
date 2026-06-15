@@ -6,6 +6,7 @@ import type { CommandResult } from "../commands/types";
 import type { SelectionMode } from "../selection/selection";
 import type { EditorStore } from "../editor/store";
 import type { SceneSnapshot } from "../snapshot/types";
+import type { AuthoredCameraView, AuthoredCameraViewInput } from "../cameras/types";
 import type { GltfLoaderAdapter } from "./gltf-loader-adapter";
 import type { RuntimePmremAdapter } from "./pmrem-adapter";
 import { ThreePmremAdapter } from "./pmrem-adapter";
@@ -23,6 +24,7 @@ import { RuntimeViewportHelpers } from "./viewport-helpers";
 import { TransformControlsAdapter, createThreeTransformControls, type RuntimeTransformControlsFactory } from "./transform/transform-controls-adapter";
 import { TransformController } from "./transform/transform-controller";
 import type { EditorTransformModeState } from "./transform/transform-mode";
+import { applyAuthoredCameraViewToRuntime, captureAuthoredCameraView, type RuntimeCameraViewCaptureResult } from "./authored-camera-view";
 import {
   createOrbitViewportCameraControls,
   frameCameraToObjects,
@@ -87,6 +89,8 @@ export interface EditorRuntime {
   resetCamera(): void;
   frameSelected(options?: RuntimeCameraFrameOptions): boolean;
   frameAll(options?: RuntimeCameraFrameOptions): boolean;
+  captureCameraView(input?: Pick<AuthoredCameraViewInput, "id" | "name" | "metadata">): RuntimeCameraViewCaptureResult;
+  applyCameraView(view: AuthoredCameraView): void;
   dispose(): void;
   readonly disposed: boolean;
 }
@@ -393,6 +397,17 @@ export class ThreeEditorRuntime implements EditorRuntime {
       this.invalidateRender();
     }
     return framed;
+  }
+
+  captureCameraView(input: Pick<AuthoredCameraViewInput, "id" | "name" | "metadata"> = {}): RuntimeCameraViewCaptureResult {
+    this.#assertActive();
+    return captureAuthoredCameraView(this.camera, this.#controls, input);
+  }
+
+  applyCameraView(view: AuthoredCameraView): void {
+    this.#assertActive();
+    applyAuthoredCameraViewToRuntime(this.camera, view, this.#controls);
+    this.invalidateRender();
   }
 
   dispose(): void {

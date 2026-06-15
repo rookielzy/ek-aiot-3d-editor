@@ -58,12 +58,13 @@ pnpm release:verify
 - 材质：持久化一小部分 `MeshStandardMaterial` override 与纹理槽资产引用。
 - 环境：持久化背景和环境光意图，支持 none / solid / texture / hdr 相关字段。
 - 灯光：持久化 ambient、directional、hemisphere、point、spot 五类灯光定义。
+- Camera views：持久化用户显式 capture 的 authored perspective camera view，并可设置默认 presentation view；普通 orbit/reset/frame camera 仍是 runtime-only。
 - Runtime：core 内置 Three.js 投影层，将 Snapshot 投影为 scene、camera、renderer、对象、环境、灯光和问题列表。
 - 问题：resolver、loader、PMREM、runtime、project package 等失败以结构化 problem 暴露，不写回为 runtime-only 状态。
 - 项目包：实验性 `.ek3d` ZIP 容器，包含 `project.json`、`scene.json` 和 `assets/*` payload。
 - React：`useEditor()`、`useEditorSnapshot()`、`useInspector()`、`useWorkbench()`、`EditorViewport`、`InspectorPanel`、`EditorWorkbench`。
 - Vue：`useEditor()`、`useInspector()`、`useWorkbench()`、`EditorViewport`、`InspectorPanel`、`EditorWorkbench`。
-- 本地 React/Vue proof-loop demo：提供交互 toolbar、Scene hierarchy、asset/problem surface 和派生 proof checklist，用于验证 camera、selection、transform、material inspector、history、hierarchy、project package 和缺失资产恢复流程。
+- 本地 React/Vue proof-loop demo：提供交互 toolbar、Scene hierarchy、Camera views inspector、asset/problem surface 和派生 proof checklist，用于验证 camera view authoring、selection、transform、material inspector、history、hierarchy、project package 和缺失资产恢复流程。
 
 ## 当前工作流边界
 
@@ -83,7 +84,7 @@ pnpm release:verify
 - Durable editor state 只存在于版本化 Scene Snapshot 中。
 - 禁止把 Three.js 对象、`File`、`Blob`、object URL、已加载 texture、PMREM render target、resolver 结果、framework component state 写入 Snapshot。
 - Core 是编辑行为来源；Vue/React 只负责生命周期、渲染和宿主集成。
-- 持久化编辑必须通过 command：`import-glb`、`register-asset`、`select-node`、`select-nodes`、`create-group`、`set-node-transform`、`delete-nodes`、`group-nodes`、`set-material`、`set-environment`、`add-light`、`update-light`、`remove-light`。旧 `select-object` / `set-transform` 等 object-only 命令是兼容路径。
+- 持久化编辑必须通过 command：`import-glb`、`register-asset`、`select-node`、`select-nodes`、`create-group`、`set-node-transform`、`delete-nodes`、`group-nodes`、`set-material`、`set-environment`、`add-light`、`update-light`、`remove-light`、`create-camera-view`、`update-camera-view`、`delete-camera-view`、`set-default-camera-view`。旧 `select-object` / `set-transform` 等 object-only 命令是兼容路径。
 - Snapshot 是 JSON-compatible 记录；二进制资产通过 `.ek3d` 项目包 payload 或宿主 resolver 管理。
 - runtime problem 是派生状态；除非未来新增显式恢复命令，否则不要把 resolver/loader 失败结果写回 Snapshot。
 - `@ek-aiot/3d-editor-core` 是 ESM only，并直接依赖 Three.js。

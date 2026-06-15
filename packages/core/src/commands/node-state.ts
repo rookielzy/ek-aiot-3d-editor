@@ -3,7 +3,7 @@ import { cloneTransform, normalizeTransform } from "../snapshot/transforms";
 import type { SceneNode, SceneSnapshot, Transform } from "../snapshot/types";
 
 export function nodeSupportsTransform(snapshot: SceneSnapshot, node: SceneNode): boolean {
-  if (node.kind === "object" || node.kind === "group" || node.kind === "imported") {
+  if (node.kind === "object" || node.kind === "group" || node.kind === "imported" || node.kind === "camera") {
     return true;
   }
 
@@ -34,6 +34,10 @@ export function setNodeTransformInSnapshot(
 }
 
 export function normalizeNodeTransformPatch(node: SceneNode, transform: Partial<Transform>): Transform {
+  if (node.kind === "camera" && (transform.rotation !== undefined || transform.scale !== undefined)) {
+    throw new Error("Camera node transforms only support position. Edit the camera target to change view direction.");
+  }
+
   if (node.kind === "imported") {
     return cloneTransform(normalizeTransform({
       ...(node.transform ?? {}),
@@ -54,12 +58,14 @@ export function normalizeNodeTransformPatch(node: SceneNode, transform: Partial<
 export function syncPayloadsFromNodes(snapshot: SceneSnapshot): SceneSnapshot {
   const objects = syncObjectsFromNodes(snapshot);
   const lights = syncLightsFromNodes(snapshot);
+  const cameras = syncCamerasFromNodes(snapshot);
 
   return {
     ...snapshot,
     objects,
-    rootObjectIds: collectRootObjectIds({ ...snapshot, objects, lights }),
-    lights
+    rootObjectIds: collectRootObjectIds({ ...snapshot, objects, lights, cameras }),
+    lights,
+    cameras
   };
 }
 
@@ -164,6 +170,30 @@ function syncLightsFromNodes(snapshot: SceneSnapshot): SceneSnapshot["lights"] {
   return lights;
 }
 
+function syncCamerasFromNodes(snapshot: SceneSnapshot): SceneSnapshot["cameras"] {
+  const cameras: SceneSnapshot["cameras"] = { ...snapshot.cameras };
+
+  for (const node of Object.values(snapshot.nodes)) {
+    if (node.kind !== "camera") {
+      continue;
+    }
+
+    const camera = cameras[node.cameraId];
+    if (!camera) {
+      continue;
+    }
+
+    cameras[node.cameraId] = {
+      ...camera,
+      name: node.name,
+      position: [...node.transform.position],
+      ...(node.metadata ? { metadata: { ...node.metadata } } : {})
+    };
+  }
+
+  return cameras;
+}
+
 function collectRootObjectIds(snapshot: SceneSnapshot): string[] {
   const rootObjectIds: string[] = [];
   const visited = new Set<string>();
@@ -206,6 +236,11 @@ function withTransform(node: SceneNode, transform: Transform): SceneNode {
         transform: cloneTransform(transform)
       };
     case "light":
+      return {
+        ...node,
+        transform: cloneTransform(transform)
+      };
+    case "camera":
       return {
         ...node,
         transform: cloneTransform(transform)

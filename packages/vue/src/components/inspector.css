@@ -204,30 +204,61 @@
   max-width: 8rem;
 }
 
-.ek-inspector-light-list {
+.ek-inspector-light-list,
+.ek-inspector-camera-list {
   display: grid;
   gap: 0.375rem;
 }
 
-.ek-inspector-light-list button {
+.ek-inspector-light-list button,
+.ek-inspector-camera-list button {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.45rem 0.55rem;
   cursor: pointer;
+  min-width: 0;
+  text-align: left;
 }
 
-.ek-inspector-light-list button.is-active {
+.ek-inspector-light-list button.is-active,
+.ek-inspector-camera-list button.is-active {
   border-color: var(--ek-panel-accent);
   background: #e8f3ff;
 }
 
+.ek-inspector-camera-list button[data-default="true"] {
+  border-color: #85d7ad;
+}
+
+.ek-inspector-light-list span,
+.ek-inspector-camera-list span,
 .ek-inspector-light-list small,
+.ek-inspector-camera-list small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ek-inspector-light-list small,
+.ek-inspector-camera-list small,
 .ek-inspector-problems small,
 .ek-inspector-count {
   color: var(--ek-panel-muted);
   font-size: 0.72rem;
+}
+
+.ek-inspector-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.ek-inspector-button-row button,
+.ek-inspector-compact-action {
+  padding-inline: 0.55rem;
+  cursor: pointer;
 }
 
 .ek-inspector-danger {

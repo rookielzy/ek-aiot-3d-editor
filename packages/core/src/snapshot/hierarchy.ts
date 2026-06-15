@@ -77,6 +77,12 @@ export function reparentNode(
   if (nextParentId === nodeId) {
     throw new Error("Node cannot be parented to itself.");
   }
+  if (node.kind === "camera" && nextParentId !== null) {
+    throw new Error("Camera nodes must remain root nodes.");
+  }
+  if (nextParentId && nodes[nextParentId]?.kind === "camera") {
+    throw new Error("Camera nodes cannot contain child nodes.");
+  }
   let ancestorId = nextParentId;
   while (ancestorId) {
     if (ancestorId === nodeId) {

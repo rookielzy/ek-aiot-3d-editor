@@ -89,6 +89,26 @@ describe("node mutation commands", () => {
     expect(getWorldNodeTransform(result.snapshot, "object-a").position).toEqual(worldBefore);
   });
 
+  it("rejects camera node parenting in both directions", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "create-group", nodeId: "group-a" });
+    editor.dispatch({ type: "create-camera-view", view: { id: "view-a" } });
+    const before = editor.getSnapshot();
+
+    const parentCamera = editor.dispatch({ type: "reparent-node", nodeId: "view-a", parentId: "group-a" });
+    const childUnderCamera = editor.dispatch({ type: "reparent-node", nodeId: "group-a", parentId: "view-a" });
+    editor.dispatch({ type: "select-nodes", mode: "replace", nodeIds: ["view-a", "group-a"], primaryNodeId: "view-a" });
+    const groupCamera = editor.dispatch({ type: "group-nodes", nodeId: "group-b" });
+
+    expect(parentCamera.ok).toBe(false);
+    expect(childUnderCamera.ok).toBe(false);
+    expect(groupCamera.ok).toBe(false);
+    expect(editor.getSnapshot().nodes["view-a"].parentId).toBeNull();
+    expect(editor.getSnapshot().nodes["view-a"].children).toEqual([]);
+    expect(editor.getSnapshot().nodes["group-a"].parentId).toBeNull();
+    expect(editor.getSnapshot().rootNodeIds).toEqual(before.rootNodeIds);
+  });
+
   it("rejects explicit reparent transforms for non-transformable light nodes", () => {
     const editor = createEditor();
     editor.dispatch({ type: "add-light", light: { id: "ambient-a", kind: "ambient" } });

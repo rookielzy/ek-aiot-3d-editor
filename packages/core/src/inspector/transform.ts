@@ -1,5 +1,5 @@
 import type { SetNodeTransformCommand } from "../commands/types";
-import type { SceneSnapshot, Transform } from "../snapshot/types";
+import type { SceneNode, SceneSnapshot, Transform } from "../snapshot/types";
 import { numberField } from "./fields";
 import { getSelectedNodeTarget } from "./node-targets";
 import type { InspectorCommandResult, InspectorSection, TransformAxis, TransformFieldId, TransformVectorName } from "./types";
@@ -18,7 +18,7 @@ export function buildTransformSection(snapshot: SceneSnapshot): InspectorSection
     enabled: !disabled,
     empty: disabled,
     reason: disabled ? target.transformUnavailableReason : undefined,
-    fields: VECTORS.flatMap((vector) =>
+    fields: getTransformVectors(target.node?.kind).flatMap((vector) =>
       AXES.map((axis, axisIndex) =>
         numberField(`${vector}.${axis}`, `${formatVector(vector)} ${axis.toUpperCase()}`, target.transform?.[vector][axisIndex] ?? defaultTransformValue(vector), {
           disabled,
@@ -36,6 +36,9 @@ export function buildSetTransformCommand(snapshot: SceneSnapshot, fieldId: Trans
   }
 
   const [vector, axis] = fieldId.split(".") as [TransformVectorName, TransformAxis];
+  if (target.node.kind === "camera" && vector !== "position") {
+    return problem(fieldId, "Camera node transforms only support position. Edit the camera target to change view direction.");
+  }
   const parsed = parseFiniteNumber(value, fieldId);
   if (!parsed.ok) {
     return problem(fieldId, parsed.message);
@@ -53,6 +56,10 @@ export function buildSetTransformCommand(snapshot: SceneSnapshot, fieldId: Trans
     } as Partial<Transform>
   };
   return { ok: true, command };
+}
+
+function getTransformVectors(kind: SceneNode["kind"] | undefined): readonly TransformVectorName[] {
+  return kind === "camera" ? ["position"] : VECTORS;
 }
 
 function defaultTransformValue(vector: TransformVectorName): number {

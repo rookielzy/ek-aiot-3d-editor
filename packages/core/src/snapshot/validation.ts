@@ -1,3 +1,5 @@
+import { validateCameras, validatePresentationState } from "../cameras/validation";
+import type { AuthoredCameraView } from "../cameras/types";
 import { validateSceneEnvironment } from "../environment/validation";
 import type { ImportedGlbMaterialSlotDescriptor, ImportedGlbSourceDescriptor } from "../imported-targets/types";
 import { validateLights } from "../lights/validation";
@@ -39,7 +41,7 @@ export function validateSceneSnapshot(value: unknown): ValidationResult {
     errors.push("Snapshot nodes must be a plain object map.");
   } else {
     for (const [id, node] of Object.entries(value.nodes)) {
-      validateNode(id, node, value.objects, value.lights, errors);
+      validateNode(id, node, value.objects, value.lights, value.cameras, errors);
     }
   }
 
@@ -79,10 +81,12 @@ export function validateSceneSnapshot(value: unknown): ValidationResult {
   const objectIds = isPlainRecord(value.objects) ? new Set(Object.keys(value.objects)) : new Set<string>();
   const assets = isPlainRecord(value.assets) ? value.assets as Record<string, AssetReference> : {};
   validateObjectReferences(value.objects, assets, errors);
-  validatePayloadCoverage(value.nodes, value.objects, value.lights, errors);
+  validatePayloadCoverage(value.nodes, value.objects, value.lights, value.cameras, errors);
   validateMaterialState(value.materials, { objectIds, assets }, errors);
   validateSceneEnvironment(value.environment, assets, errors);
   validateLights(value.lights, errors);
+  validateCameras(value.cameras, errors);
+  validatePresentationState(value.presentation, value.cameras, errors);
   validateAuthoredProblemState(value.problems, errors);
 
   if ("metadata" in value && !isJsonCompatible(value.metadata)) {
@@ -267,7 +271,7 @@ function validateObject(id: string, object: unknown, errors: string[]): void {
   }
 }
 
-function validateNode(id: string, node: unknown, objects: unknown, lights: unknown, errors: string[]): void {
+function validateNode(id: string, node: unknown, objects: unknown, lights: unknown, cameras: unknown, errors: string[]): void {
   if (!isPlainRecord(node)) {
     errors.push(`Node ${id} must be a plain object.`);
     return;
@@ -277,7 +281,7 @@ function validateNode(id: string, node: unknown, objects: unknown, lights: unkno
   if (sceneNode.id !== id) {
     errors.push(`Node ${id} must use a matching id field.`);
   }
-  if (sceneNode.kind !== "object" && sceneNode.kind !== "group" && sceneNode.kind !== "light" && sceneNode.kind !== "imported") {
+  if (sceneNode.kind !== "object" && sceneNode.kind !== "group" && sceneNode.kind !== "light" && sceneNode.kind !== "camera" && sceneNode.kind !== "imported") {
     errors.push(`Node ${id} kind is unsupported.`);
   }
   if (typeof sceneNode.name !== "string") {
@@ -318,6 +322,22 @@ function validateNode(id: string, node: unknown, objects: unknown, lights: unkno
         errors.push(`Light node ${id} light ${sceneNode.lightId} must exist in lights.`);
       }
       validateLightNodeTransform(id, sceneNode, lights, errors);
+      break;
+    case "camera":
+      if (typeof sceneNode.cameraId !== "string") {
+        errors.push(`Camera node ${id} must reference a cameraId.`);
+      } else if (isPlainRecord(cameras) && !cameras[sceneNode.cameraId]) {
+        errors.push(`Camera node ${id} camera ${sceneNode.cameraId} must exist in cameras.`);
+      }
+      if (sceneNode.parentId !== null) {
+        errors.push(`Camera node ${id} must be a root node.`);
+      }
+      if (Array.isArray(sceneNode.children) && sceneNode.children.length > 0) {
+        errors.push(`Camera node ${id} must not have child nodes.`);
+      }
+      if (!isTransform(sceneNode.transform)) {
+        errors.push(`Camera node ${id} transform must include position, rotation, and scale vectors.`);
+      }
       break;
     case "imported":
       validateImportedNode(id, sceneNode, errors);
@@ -487,13 +507,14 @@ function validateObjectReferences(objects: unknown, assets: Record<string, Asset
   }
 }
 
-function validatePayloadCoverage(nodes: unknown, objects: unknown, lights: unknown, errors: string[]): void {
+function validatePayloadCoverage(nodes: unknown, objects: unknown, lights: unknown, cameras: unknown, errors: string[]): void {
   if (!isPlainRecord(nodes)) {
     return;
   }
 
   const objectIdsWithNodes = new Set<string>();
   const lightIdsWithNodes = new Set<string>();
+  const cameraIdsWithNodes = new Set<string>();
   for (const [nodeId, node] of Object.entries(nodes)) {
     if (!isPlainRecord(node)) {
       continue;
@@ -509,6 +530,13 @@ function validatePayloadCoverage(nodes: unknown, objects: unknown, lights: unkno
         errors.push(`Light ${node.lightId} must not be referenced by multiple light nodes.`);
       }
       lightIdsWithNodes.add(node.lightId);
+    }
+    if (node.kind === "camera" && typeof node.cameraId === "string") {
+      if (cameraIdsWithNodes.has(node.cameraId)) {
+        errors.push(`Camera ${node.cameraId} must not be referenced by multiple camera nodes.`);
+      }
+      cameraIdsWithNodes.add(node.cameraId);
+      validateCameraNodeMirror(nodeId, node, cameras, errors);
     }
   }
 
@@ -527,6 +555,52 @@ function validatePayloadCoverage(nodes: unknown, objects: unknown, lights: unkno
       }
     }
   }
+
+  if (isPlainRecord(cameras)) {
+    for (const cameraId of Object.keys(cameras)) {
+      if (!cameraIdsWithNodes.has(cameraId)) {
+        errors.push(`Camera ${cameraId} must be referenced by a camera node.`);
+      }
+    }
+  }
+}
+
+function validateCameraNodeMirror(
+  nodeId: string,
+  node: Record<string, unknown>,
+  cameras: unknown,
+  errors: string[]
+): void {
+  if (!isPlainRecord(cameras) || typeof node.cameraId !== "string") {
+    return;
+  }
+  const camera = cameras[node.cameraId];
+  if (!isPlainRecord(camera)) {
+    return;
+  }
+  const authoredCamera = camera as Partial<AuthoredCameraView>;
+  if (typeof authoredCamera.name === "string" && node.name !== authoredCamera.name) {
+    errors.push(`Camera node ${nodeId} name must mirror camera ${node.cameraId}.`);
+  }
+  if (isPlainRecord(node.transform) && isVector(authoredCamera.position, 3) && !vectorsEqual(node.transform.position, authoredCamera.position)) {
+    errors.push(`Camera node ${nodeId} transform position must mirror camera ${node.cameraId} position.`);
+  }
+  if (!jsonRecordsEqual(node.metadata, authoredCamera.metadata)) {
+    errors.push(`Camera node ${nodeId} metadata must mirror camera ${node.cameraId} metadata.`);
+  }
+}
+
+function vectorsEqual(left: unknown, right: unknown): boolean {
+  return isVector(left, 3) && isVector(right, 3) && left.every((value, index) => value === right[index]);
+}
+
+function jsonRecordsEqual(left: unknown, right: unknown): boolean {
+  const normalizedLeft = left === undefined ? undefined : left;
+  const normalizedRight = right === undefined ? undefined : right;
+  if (!isJsonCompatible(normalizedLeft) || !isJsonCompatible(normalizedRight)) {
+    return true;
+  }
+  return JSON.stringify(normalizedLeft) === JSON.stringify(normalizedRight);
 }
 
 function validateNodeGraph(nodes: unknown, rootNodeIds: unknown, errors: string[]): void {

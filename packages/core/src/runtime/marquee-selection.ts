@@ -262,6 +262,7 @@ function defaultMarqueePickPriority(target: RuntimeNodeTarget): number {
     case "imported":
       return 20;
     case "light":
+    case "camera":
       return 15;
     case "object":
       return 10;

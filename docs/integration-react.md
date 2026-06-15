@@ -58,7 +58,7 @@ export function EditorPage() {
 }
 ```
 
-不传 `toolbar`、`leftPanel`、`rightPanel` 或 `status` 时，Workbench 会使用 package-owned 默认 UI。默认 toolbar 已包含 open/export、undo/redo、transform mode、snap、marquee selection 开关、grid/floor/axes/hover/bounds/snap guide helper、camera、copy/paste/duplicate/delete/group/ungroup/select controls；默认 viewport 开启 pointer picking，并保留左键拖拽给相机旋转。用户打开 toolbar 的 `Marquee` 后才启用 viewport marquee selection。默认左栏会显示 hierarchy、可批量导入的 asset workspace、project summary、project/runtime problems 和缺失资产恢复入口。
+不传 `toolbar`、`leftPanel`、`rightPanel` 或 `status` 时，Workbench 会使用 package-owned 默认 UI。默认 toolbar 已包含 open/export、undo/redo、transform mode、snap、marquee selection 开关、grid/floor/axes/hover/bounds/snap guide helper、camera reset/frame、camera view capture/apply、copy/paste/duplicate/delete/group/ungroup/select controls；默认 viewport 开启 pointer picking，并保留左键拖拽给相机旋转。用户打开 toolbar 的 `Marquee` 后才启用 viewport marquee selection。默认右侧 inspector 包含 Camera views section，可以编辑 authored camera view、设置 default presentation view、删除 view，或把 view 应用回 transient editor camera。默认左栏会显示 hierarchy、可批量导入的 asset workspace、project summary、project/runtime problems 和缺失资产恢复入口。
 
 ## 初始化场景
 
@@ -86,6 +86,8 @@ React StrictMode 下 effect 可能在开发环境重复执行，因此初始化�
 React app store 可以镜像可序列化的项目 metadata、当前 route、最近保存的 `SceneSnapshot` 或 `.ek3d` bytes。不要把 `Editor`、`EditorRuntime`、Three.js 对象、`File`、`Blob`、object URL、resolver 输出或 runtime problem 对象写进 durable store；这些对象应保持在 client-owned editor/runtime 边界内。
 
 如果需要把编辑状态同步给宿主 UI，优先通过 `useWorkbench()` 或 `EditorWorkbench` render props 读取派生 context，再把必要的 serializable projection 写入宿主 store。持久化变更仍通过 core commands、project import/export 和 snapshot/project package API 完成。
+
+Authored camera views 位于 `snapshot.cameras`，默认展示入口是 `snapshot.presentation.defaultCameraId`。默认 Workbench 的 Capture view 会把当前 runtime camera 转换成 plain JSON data 后 dispatch `create-camera-view`；Apply view 只调用 runtime apply helper，不会改变 Snapshot。自定义 React toolbar/inspector 应复用 context 中的 `activeCameraViewId`、`setActiveCameraViewId()`、`captureCameraView()`、`applyCameraView()` 或 core 的 `resolveDefaultPresentationView()`，不要保存 Three.js `Camera`、`OrbitControls` 或 controls target object。
 
 资产面板应优先读取 `workbench.model.assets.workspace`。该 workspace 已经合并 Snapshot asset registry、对象/材质/环境引用位置、项目包 payload 摘要、GLB import manifest diagnostics、GLB reimport remap problem 和资产问题，并提供 core 统一的搜索/过滤/排序 helper。`replaceAsset()` 这类 payload-only 更新不会改变 Snapshot，但 React hook 会订阅 core asset workspace 版本并重新计算 model；宿主不需要也不应该读取 transient project store、`Blob` 或 object URL。
 
@@ -154,6 +156,9 @@ interface WorkbenchContext {
   runtimeReady: boolean;
   activeLightId: string | null;
   activeLightNodeId: string | null;
+  activeCameraViewId: string | null;
+  selectedCameraViewId: string | null;
+  selection: { cameraViewId: string | null };
   operations: AdvancedEditorOperations;
   historyState: HistoryState;
   selectionCount: number;
@@ -167,6 +172,7 @@ interface WorkbenchContext {
   viewportHelperState: ViewportHelperStateSnapshot;
   transformMode: TransformMode;
   setActiveLightId(value: string | null): void;
+  setActiveCameraViewId(value: string | null): void;
   setTransformMode(mode: TransformMode): void;
   toggleSnap(channel: SnapChannel, increment?: number): SnapSettings;
   toggleViewportHelper(key: ViewportHelperKey): ViewportHelperStateSnapshot;
@@ -174,6 +180,8 @@ interface WorkbenchContext {
   resetCamera(): void;
   frameSelected(options?: RuntimeCameraFrameOptions): boolean;
   frameAll(options?: RuntimeCameraFrameOptions): boolean;
+  captureCameraView(input?: Pick<AuthoredCameraViewInput, "id" | "name" | "metadata">): AuthoredCameraViewInput | null;
+  applyCameraView(view: AuthoredCameraView): boolean;
   refreshProblems(): void;
   dispatch(command: Command): CommandResult;
   importProject(packageBytes: Uint8Array, options?: ProjectImportOptions): ProjectImportResult;
@@ -192,6 +200,8 @@ interface WorkbenchContext {
 }
 ```
 
+`activeCameraViewId` 是 inspector 当前编辑的 authored camera view；`selectedCameraViewId` / `selection.cameraViewId` 只在 hierarchy selection 指向 camera node 时有值。
+
 `viewportHelperState` 和 marquee overlay state 都是 session-only projection。Grid/floor/axes visibility、hover target、bounds toggle、snap guide feedback、drag rectangle 和 candidate IDs 不会写入 `SceneSnapshot` 或 `.ek3d`，也不会产生 undo history。Workbench 完成 marquee 时只把最终 ordered node IDs 通过 core `select-nodes` 命令写入 durable selection。
 
 ## 本地 proof-loop demo
@@ -204,7 +214,7 @@ pnpm --filter @ek-aiot/react-proof-loop dev
 
 示例首屏就是可操作 workbench，不是 landing page。示例代码只保留真实宿主通常需要拥有的部分：创建 editor、初始化 starter snapshot、配置 resolver/loader、选择可选 renderer factory，以及一个很薄的 viewport overlay。toolbar、hierarchy、assets、project status、missing-asset recovery、inspector 和 status 都来自 `@ek-aiot/3d-editor-react` 默认 Workbench。
 
-默认 UI 可以完成 starter flow：选择 hierarchy row、viewport picking 或打开 `Marquee` 后使用 marquee selection，编辑 Transform/Material inspector、在 expanded GLB 上选择 broad object 或 material slot target、切换 helper/snap/transform、undo/redo、duplicate、export partial package、通过 Open 重新载入 `.ek3d`、从左栏恢复缺失资产，以及对 registered GLB 执行 reimport。缺失资产恢复使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem；GLB reimport 使用 `context.assets.reimportGlbAsset()`，提交 replacement manifest 和 target remap，并在按钮反馈中显示 exact/remapped/new/unresolved summary。
+默认 UI 可以完成 starter flow：选择 hierarchy row、viewport picking 或打开 `Marquee` 后使用 marquee selection，capture/edit/default/apply authored camera view，编辑 Transform/Material inspector、在 expanded GLB 上选择 broad object 或 material slot target、切换 helper/snap/transform、undo/redo、duplicate、export partial package、通过 Open 重新载入 `.ek3d`、从左栏恢复缺失资产，以及对 registered GLB 执行 reimport。缺失资产恢复使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem；GLB reimport 使用 `context.assets.reimportGlbAsset()`，提交 replacement manifest 和 target remap，并在按钮反馈中显示 exact/remapped/new/unresolved summary。
 
 浏览器证据通过仓库根目录命令运行：
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { attachGlbImportManifestMetadata, createGlbImportManifest } from "../assets/import-pipeline";
+import { resolveDefaultPresentationView } from "../cameras/resolve";
 import { createMaterialAssignmentId } from "../materials/defaults";
 import { createEditor } from "../editor/create-editor";
 import type { SceneImportedGlbNode } from "../snapshot/types";
@@ -105,7 +106,7 @@ describe("project import", () => {
 
     expect(imported.ok).toBe(true);
     expect(imported.manifest?.version).toBe(1);
-    expect(fresh.getSnapshot().version).toBe(5);
+    expect(fresh.getSnapshot().version).toBe(6);
     expect(fresh.getSnapshot().nodes["group-a"]).toMatchObject({ kind: "group", children: ["object-a", "point-a"] });
     expect(fresh.getSnapshot().selection).toEqual({ nodeId: "group-a", nodeIds: ["group-a"], objectId: null, objectIds: [] });
     expect(fresh.getSnapshot().objects["object-a"].asset.id).toBe("asset-a");
@@ -153,6 +154,43 @@ describe("project import", () => {
     });
     expect(fresh.getSnapshot().materials.assignments["material-slot:object-a:glb:object-a/slot:meshes/0/primitives/0:material-0"]).toBeDefined();
     expect(fresh.exportProject().ok).toBe(true);
+  });
+
+  it("round-trips authored camera views and resolves the default presentation view", () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "create-camera-view",
+      view: {
+        id: "view-a",
+        name: "Hero view",
+        projection: { kind: "perspective", fov: 45 },
+        position: [4, 3, 2],
+        target: [0, 1, 0],
+        near: 0.1,
+        far: 250
+      }
+    });
+    editor.dispatch({ type: "set-default-camera-view", viewId: "view-a" });
+    const exported = editor.exportProject();
+    const fresh = createEditor();
+
+    const imported = fresh.importProject(exported.packageBytes as Uint8Array);
+
+    const resolution = resolveDefaultPresentationView(fresh.getSnapshot());
+    expect(imported.ok).toBe(true);
+    expect(fresh.getSnapshot().cameras["view-a"]).toMatchObject({
+      name: "Hero view",
+      projection: { kind: "perspective", fov: 45 },
+      position: [4, 3, 2],
+      target: [0, 1, 0]
+    });
+    expect(resolution).toMatchObject({
+      status: "resolved",
+      defaultCameraId: "view-a",
+      view: { id: "view-a", name: "Hero view" }
+    });
+    expect(JSON.stringify(fresh.serialize())).not.toContain("OrbitControls");
+    expect(JSON.stringify(fresh.serialize())).not.toContain("PerspectiveCamera");
   });
 
   it("round-trips reimported GLB remap metadata and replacement payloads through project import", async () => {

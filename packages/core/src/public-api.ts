@@ -57,8 +57,10 @@ export type {
   BatchCommand,
   Command,
   CommandResult,
+  CreateCameraViewCommand,
   CreateGroupCommand,
   CreateImportedGlbTargetsCommand,
+  DeleteCameraViewCommand,
   DeleteNodesCommand,
   DeleteObjectsCommand,
   DuplicateObjectsCommand,
@@ -76,12 +78,14 @@ export type {
   SelectObjectCommand,
   SelectObjectsCommand,
   SceneEnvironmentPatch,
+  SetDefaultCameraViewCommand,
   SetEnvironmentCommand,
   SetMaterialCommand,
   SetNodeTransformCommand,
   SetTransformCommand,
   UngroupNodesCommand,
   UngroupObjectsCommand,
+  UpdateCameraViewCommand,
   UpdateLightCommand
 } from "./commands/types";
 export type {
@@ -130,12 +134,25 @@ export type {
   EditorNodeClipboardPayload,
   EditorObjectClipboardPayload
 } from "./clipboard/types";
+export type {
+  AuthoredCameraView,
+  AuthoredCameraViewInput,
+  AuthoredCameraViewPatch,
+  AuthoredCameraViewProjection,
+  CameraViewId,
+  PerspectiveCameraViewProjection,
+  ScenePresentationState
+} from "./cameras/types";
+export type { DefaultPresentationViewResolution } from "./cameras/resolve";
 export type { BackgroundMode, EnvironmentMode, EnvironmentRotation, SceneEnvironment } from "./environment/types";
 export type { HistoryState } from "./history/history";
 export type { NodeSelectionInput, SelectionInput, SelectionMode, SelectionState } from "./selection/selection";
 export type {
   AssetOption,
   BuildInspectorModelOptions,
+  CameraInspectorSection,
+  CameraViewFieldId,
+  CameraViewListItem,
   EnvironmentFieldId,
   InspectorCommandProblem,
   InspectorCommandResult,
@@ -245,6 +262,7 @@ export type {
   RuntimeProblemSnapshot,
   RuntimeProblemSubscriber
 } from "./runtime/editor-runtime";
+export type { RuntimeCameraViewCaptureResult } from "./runtime/authored-camera-view";
 export type {
   GltfDecoderConfiguration,
   GltfDecoderProvider,
@@ -264,6 +282,7 @@ export type {
   RuntimeViewportHelperOptions
 } from "./runtime/viewport-controls";
 export type { RuntimeTransformControlsOptions } from "./runtime/transform/transform-controls-adapter";
+export { applyAuthoredCameraViewToRuntime, captureAuthoredCameraView } from "./runtime/authored-camera-view";
 export type { EditorTransformModeState, TransformMode, TransformModeSubscriber } from "./runtime/transform/transform-mode";
 export type { SnapSettings } from "./runtime/transform/snap";
 export type { EditorAction, ShortcutInput, ShortcutResolution } from "./shortcuts/types";
@@ -273,6 +292,7 @@ export type {
   JsonValue,
   LegacySceneSnapshot,
   NodeId,
+  SceneCameraNode,
   SceneGroupNode,
   SceneImportedGlbNode,
   SceneLightNode,
@@ -282,10 +302,14 @@ export type {
   SceneSnapshot,
   SerializedSceneSnapshot,
   Transform,
+  V5SceneNode,
+  V5SceneSnapshot,
   V4SceneSnapshot,
   V3SceneSnapshot
 } from "./snapshot/types";
 
+export { createAuthoredCameraView, createAuthoredCameraViewInput, createEmptyPresentationState } from "./cameras/defaults";
+export { resolveDefaultPresentationView } from "./cameras/resolve";
 export { createEditor } from "./editor/create-editor";
 export { createAdvancedEditorOperations, createMemoryClipboard } from "./editor/operations";
 export { createClipboardPayload, createNodeClipboardPayload } from "./clipboard/create-clipboard";
@@ -298,12 +322,19 @@ export {
 } from "./project/project-api";
 export {
   buildAddLightCommand,
+  buildCreateCameraViewCommand,
+  buildCreateCameraViewInput,
+  buildDeleteCameraViewCommand,
   buildRemoveLightCommand,
+  buildSetDefaultCameraViewCommand,
   buildSetEnvironmentCommand,
   buildSetMaterialCommand,
   buildSetTransformCommand,
+  buildUpdateCameraViewCommand,
   buildUpdateLightCommand,
+  getNextActiveCameraViewId,
   getNextActiveLightId,
+  resolveActiveCameraViewId,
   resolveActiveLightId
 } from "./inspector/commands";
 export {
@@ -348,6 +379,9 @@ export {
 export {
   buildWorkbenchModel
 } from "./workbench/workbench-model";
+export {
+  buildCameraSection
+} from "./inspector/cameras";
 export {
   buildEnvironmentSection
 } from "./inspector/environment";

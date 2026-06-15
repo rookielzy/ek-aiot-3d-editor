@@ -13,7 +13,7 @@ pnpm add @ek-aiot/3d-editor-core three
 ## 最小用法
 
 ```ts
-import { AssetResolverBridge, createEditor, ThreeGltfLoaderAdapter } from "@ek-aiot/3d-editor-core";
+import { AssetResolverBridge, createEditor, resolveDefaultPresentationView, ThreeGltfLoaderAdapter } from "@ek-aiot/3d-editor-core";
 
 const editor = createEditor();
 const loader = new ThreeGltfLoaderAdapter({
@@ -49,6 +49,7 @@ editor.dispatch({
 
 const saved = editor.serialize();
 const restored = createEditor({ snapshot: saved });
+const defaultView = resolveDefaultPresentationView(restored.getSnapshot());
 
 runtime.dispose();
 editor.dispose();
@@ -88,6 +89,27 @@ const unsubscribeProblems = runtime.subscribeProblems(({ problems }) => {
 ```
 
 runtime problem 是派生状态，不属于 durable Snapshot。
+
+## Authored camera views
+
+Core-only host 可以把当前 editor camera 显式保存为 authored view，再把某个 authored view 设为默认展示入口：
+
+```ts
+const captured = runtime.captureCameraView({ id: "hero-view", name: "Hero view" });
+
+if (captured.ok) {
+  editor.dispatch({ type: "create-camera-view", view: captured.view });
+  editor.dispatch({ type: "set-default-camera-view", viewId: "hero-view" });
+}
+
+const resolution = resolveDefaultPresentationView(editor.getSnapshot());
+
+if (resolution.status === "resolved") {
+  runtime.applyCameraView(resolution.view);
+}
+```
+
+`captureCameraView()` 返回的是 JSON-compatible authored view input；真正持久化只发生在 `create-camera-view` / `update-camera-view` / `delete-camera-view` / `set-default-camera-view` command。`applyCameraView()` 只更新 transient runtime camera 和 controls target，不写 Snapshot 或 history。不要把 Three.js `PerspectiveCamera`、`OrbitControls`、controls target object、renderer state 或 viewer resolver result 保存进 Snapshot 或 `.ek3d`。
 
 ## 本地资产 workspace
 
