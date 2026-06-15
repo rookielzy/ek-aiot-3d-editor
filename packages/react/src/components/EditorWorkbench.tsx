@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { resolveEditorShortcut, type AssetResolverBridge, type EditorRuntime, type EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
 import { useWorkbench, type UseWorkbenchOptions, type WorkbenchContext } from "../hooks/use-workbench";
 import { EditorViewport } from "./EditorViewport";
@@ -14,7 +14,7 @@ export type WorkbenchRegionName = "toolbar" | "leftPanel" | "sidePanel" | "viewp
 const DEFAULT_WORKBENCH_INTERACTIONS = {
   camera: true,
   pointerSelection: true,
-  marqueeSelection: true,
+  marqueeSelection: false,
   resize: true,
   selectionVisuals: true,
   transform: true,
@@ -66,6 +66,13 @@ export function EditorWorkbench({
   const workbench = useWorkbench({ editor: providedEditor, snapshot, loader });
   const pendingDisposeRef = useRef<{ dispose(): void; timer: ReturnType<typeof setTimeout> } | null>(null);
   const rootRef = useRef<HTMLElement | null>(null);
+  const [marqueeSelectionEnabled, setMarqueeSelectionEnabled] = useState(false);
+  const resolvedInteractions = useMemo(() => {
+    if (interactions !== DEFAULT_WORKBENCH_INTERACTIONS) {
+      return interactions;
+    }
+    return { ...DEFAULT_WORKBENCH_INTERACTIONS, marqueeSelection: marqueeSelectionEnabled };
+  }, [interactions, marqueeSelectionEnabled]);
 
   useEffect(() => {
     if (pendingDisposeRef.current?.dispose === workbench.dispose) {
@@ -126,7 +133,13 @@ export function EditorWorkbench({
     <main ref={rootRef} className={rootClassName} style={style} tabIndex={0}>
       {hasToolbar ? (
         <div className="ek-workbench__toolbar">
-          {showDefaultToolbar ? <WorkbenchToolbar context={workbench} /> : null}
+          {showDefaultToolbar ? (
+            <WorkbenchToolbar
+              context={workbench}
+              marqueeSelectionEnabled={marqueeSelectionEnabled}
+              onToggleMarqueeSelection={() => setMarqueeSelectionEnabled((enabled) => !enabled)}
+            />
+          ) : null}
           {toolbar ? <div className="ek-workbench__toolbar-region">{toolbar(workbench)}</div> : null}
         </div>
       ) : null}
@@ -136,7 +149,7 @@ export function EditorWorkbench({
           resolver={resolver}
           loader={loader}
           rendererFactory={rendererFactory}
-          interactions={interactions}
+          interactions={resolvedInteractions}
           onRuntimeReady={onRuntimeReady}
           className={viewportClassName ? `ek-workbench__viewport ${viewportClassName}` : "ek-workbench__viewport"}
         />

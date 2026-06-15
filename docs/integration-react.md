@@ -58,7 +58,7 @@ export function EditorPage() {
 }
 ```
 
-不传 `toolbar`、`leftPanel`、`rightPanel` 或 `status` 时，Workbench 会使用 package-owned 默认 UI。默认 toolbar 已包含 open/export、undo/redo、transform mode、snap、grid/floor/axes/hover/bounds/snap guide helper、camera、copy/paste/duplicate/delete/group/ungroup/select controls；默认 viewport 开启 pointer picking 和 marquee selection。默认左栏会显示 hierarchy、可批量导入的 asset workspace、project summary、project/runtime problems 和缺失资产恢复入口。
+不传 `toolbar`、`leftPanel`、`rightPanel` 或 `status` 时，Workbench 会使用 package-owned 默认 UI。默认 toolbar 已包含 open/export、undo/redo、transform mode、snap、marquee selection 开关、grid/floor/axes/hover/bounds/snap guide helper、camera、copy/paste/duplicate/delete/group/ungroup/select controls；默认 viewport 开启 pointer picking，并保留左键拖拽给相机旋转。用户打开 toolbar 的 `Marquee` 后才启用 viewport marquee selection。默认左栏会显示 hierarchy、可批量导入的 asset workspace、project summary、project/runtime problems 和缺失资产恢复入口。
 
 ## 初始化场景
 
@@ -204,7 +204,7 @@ pnpm --filter @ek-aiot/react-proof-loop dev
 
 示例首屏就是可操作 workbench，不是 landing page。示例代码只保留真实宿主通常需要拥有的部分：创建 editor、初始化 starter snapshot、配置 resolver/loader、选择可选 renderer factory，以及一个很薄的 viewport overlay。toolbar、hierarchy、assets、project status、missing-asset recovery、inspector 和 status 都来自 `@ek-aiot/3d-editor-react` 默认 Workbench。
 
-默认 UI 可以完成 starter flow：选择 hierarchy row、viewport picking 或 marquee selection，编辑 Transform/Material inspector、在 expanded GLB 上选择 broad object 或 material slot target、切换 helper/snap/transform、undo/redo、duplicate、export partial package、通过 Open 重新载入 `.ek3d`、从左栏恢复缺失资产，以及对 registered GLB 执行 reimport。缺失资产恢复使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem；GLB reimport 使用 `context.assets.reimportGlbAsset()`，提交 replacement manifest 和 target remap，并在按钮反馈中显示 exact/remapped/new/unresolved summary。
+默认 UI 可以完成 starter flow：选择 hierarchy row、viewport picking 或打开 `Marquee` 后使用 marquee selection，编辑 Transform/Material inspector、在 expanded GLB 上选择 broad object 或 material slot target、切换 helper/snap/transform、undo/redo、duplicate、export partial package、通过 Open 重新载入 `.ek3d`、从左栏恢复缺失资产，以及对 registered GLB 执行 reimport。缺失资产恢复使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem；GLB reimport 使用 `context.assets.reimportGlbAsset()`，提交 replacement manifest 和 target remap，并在按钮反馈中显示 exact/remapped/new/unresolved summary。
 
 浏览器证据通过仓库根目录命令运行：
 
