@@ -1,3 +1,4 @@
+import { createEmptyPresentationState } from "../cameras/defaults";
 import { createDefaultEnvironment } from "../environment/defaults";
 import type { LightDefinition } from "../lights/types";
 import { createEmptyMaterialState } from "../materials/defaults";
@@ -40,6 +41,7 @@ export function createEmptySnapshot(sceneId = createId("scene")): SceneSnapshot 
     materials: createEmptyMaterialState(),
     environment: createDefaultEnvironment(),
     lights: {},
+    presentation: createEmptyPresentationState(),
     problems: createEmptyAuthoredProblemState()
   };
 

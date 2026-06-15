@@ -2,7 +2,7 @@ import React from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Group } from "three";
 import { describe, expect, it } from "vitest";
-import { AssetResolverBridge, createEditor, type RendererLike } from "@ek-aiot/3d-editor-core";
+import { AssetResolverBridge, createEditor, resolveDefaultPresentationView, type RendererLike } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
 import { App as ReactProofLoopApp } from "../../../examples/react-proof-loop/src/App";
 
@@ -29,6 +29,19 @@ describe("React proof-loop parity", () => {
     editor.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
     editor.dispatch({ type: "update-light", lightId: "light-a", patch: { intensity: 2 } });
     editor.dispatch({ type: "set-transform", objectId: "object-a", transform: { position: [6, 0, 0] } });
+    editor.dispatch({
+      type: "create-camera-view",
+      view: {
+        id: "hero-view",
+        name: "Hero view",
+        projection: { kind: "perspective", fov: 45 },
+        position: [3, 2, 6],
+        target: [0, 0, 0],
+        near: 0.1,
+        far: 200
+      }
+    });
+    editor.dispatch({ type: "set-default-camera-view", viewId: "hero-view" });
     const restored = createEditor({ snapshot: editor.serialize() });
 
     render(
@@ -48,6 +61,11 @@ describe("React proof-loop parity", () => {
     expect(restored.getSnapshot().materials.definitions["material:object:object-a"].override.textures?.map?.assetId).toBe("texture-a");
     expect(restored.getSnapshot().environment.environment.assetId).toBe("hdr-a");
     expect(restored.getSnapshot().lights["light-a"].intensity).toBe(2);
+    expect(resolveDefaultPresentationView(restored.getSnapshot())).toMatchObject({
+      status: "resolved",
+      defaultViewId: "hero-view",
+      view: { id: "hero-view", name: "Hero view" }
+    });
     expect(restored.getRuntime()?.getObject("object-a")).toBeTruthy();
     expect(restored.getRuntime()?.getProblems()).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: "material-texture-asset-unresolved", assetId: "texture-a" }),
@@ -84,6 +102,18 @@ describe("React proof-loop parity", () => {
       expect(screen.getByText("Selection Simple box")).toBeTruthy();
 
       await act(async () => {
+        await clickButton("Capture view");
+      });
+      await waitFor(() => expect(screen.getByText("Camera view 1")).toBeTruthy());
+      await act(async () => {
+        await clickButton("Set default");
+      });
+      expect(screen.getByText(/Default/)).toBeTruthy();
+      await act(async () => {
+        await clickButton("Apply view");
+      });
+
+      await act(async () => {
         await clickButton("Snap move");
       });
       expect(within(toolbar).getByRole("button", { name: "Snap move" }).getAttribute("aria-pressed")).toBe("true");
@@ -92,7 +122,7 @@ describe("React proof-loop parity", () => {
       fireEvent.change(positionX, { target: { value: "2" } });
       fireEvent.blur(positionX);
       await act(async () => undefined);
-      await waitFor(() => expect(screen.getByText("Undo 1")).toBeTruthy());
+      await waitFor(() => expect(screen.getByText("Undo 3")).toBeTruthy());
 
       await act(async () => {
         await clickButton("Undo");
@@ -127,6 +157,8 @@ describe("React proof-loop parity", () => {
         fireEvent.change(openInput, { target: { files: [file] } });
       });
       await waitFor(() => expect(screen.getByText("Opened starter.ek3d")).toBeTruthy());
+      await waitFor(() => expect(screen.getByText("Camera view 1")).toBeTruthy());
+      expect(screen.getByText(/Default/)).toBeTruthy();
 
       await waitFor(() => expect(projectPanel.textContent).toContain("Replace asset"));
       expect(projectPanel.textContent).toContain("1 problems");

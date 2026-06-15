@@ -58,6 +58,42 @@ describe("workbench model", () => {
     });
   });
 
+  it("exposes camera view counts and runtime camera toolbar capabilities", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "create-camera-view", view: { id: "view-a", name: "Hero" } });
+    editor.dispatch({ type: "set-default-camera-view", viewId: "view-a" });
+    const snapshot = editor.getSnapshot();
+
+    const notReady = buildWorkbenchModel(snapshot, {
+      inspector: buildInspectorModel(snapshot, { activeCameraViewId: "view-a", runtimeReady: false }),
+      runtimeReady: false
+    });
+    const ready = buildWorkbenchModel(snapshot, {
+      inspector: buildInspectorModel(snapshot, { activeCameraViewId: "view-a", runtimeReady: true }),
+      runtimeReady: true
+    });
+
+    expect(notReady.project).toMatchObject({
+      cameraViewCount: 1,
+      defaultCameraViewId: "view-a"
+    });
+    expect(notReady.toolbar.canCaptureCameraView).toBe(false);
+    expect(notReady.toolbar.canApplyCameraView).toBe(false);
+    expect(ready.toolbar.canCaptureCameraView).toBe(true);
+    expect(ready.toolbar.canApplyCameraView).toBe(true);
+  });
+
+  it("passes runtime readiness to the fallback inspector model", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "create-camera-view", view: { id: "view-a", name: "Hero" } });
+    editor.dispatch({ type: "set-default-camera-view", viewId: "view-a" });
+
+    const model = buildWorkbenchModel(editor.getSnapshot(), { runtimeReady: true });
+
+    expect(model.toolbar.canCaptureCameraView).toBe(true);
+    expect(model.toolbar.canApplyCameraView).toBe(true);
+  });
+
   it("shows registered assets and missing-asset recovery state without resolver outputs", () => {
     const editor = createEditor();
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a", label: "Known" } });

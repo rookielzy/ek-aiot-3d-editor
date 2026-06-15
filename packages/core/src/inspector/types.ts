@@ -1,11 +1,12 @@
 import type { Command } from "../commands/types";
+import type { AuthoredCameraView } from "../cameras/types";
 import type { LightKind } from "../lights/types";
 import type { MaterialAssignmentTarget, MaterialSide, TextureSlotName } from "../materials/types";
 import type { Problem, ProblemRecoverability, ProblemSeverity, ProblemSource, ProblemTarget } from "../problems/types";
 import type { AssetKind, AssetReference, SceneNode, SceneObject } from "../snapshot/types";
 import type { LightDefinition } from "../lights/types";
 
-export type InspectorSectionId = "transform" | "material" | "environment" | "lights" | "problems";
+export type InspectorSectionId = "transform" | "material" | "environment" | "lights" | "cameras" | "problems";
 export type InspectorFieldKind = "number" | "color" | "select" | "checkbox" | "asset" | "text";
 
 export interface InspectorFieldOption<T extends string = string> {
@@ -120,6 +121,18 @@ export type LightFieldId =
   | "angle"
   | "penumbra";
 
+export type CameraViewFieldId =
+  | "name"
+  | "fov"
+  | "near"
+  | "far"
+  | "position.x"
+  | "position.y"
+  | "position.z"
+  | "target.x"
+  | "target.y"
+  | "target.z";
+
 export interface InspectorSelectionModel {
   nodeId: string | null;
   nodeIds: string[];
@@ -159,6 +172,23 @@ export interface LightInspectorSection extends InspectorSection {
   addOptions: InspectorFieldOption<LightKind>[];
 }
 
+export interface CameraViewListItem {
+  id: string;
+  label: string;
+  active: boolean;
+  default: boolean;
+  projection: AuthoredCameraView["projection"]["kind"];
+  summary: string;
+}
+
+export interface CameraInspectorSection extends InspectorSection {
+  activeCameraViewId: string | null;
+  defaultCameraViewId: string | null;
+  cameraViews: CameraViewListItem[];
+  canCapture: boolean;
+  canApply: boolean;
+}
+
 export interface InspectorProblemItem {
   id: string;
   severity: ProblemSeverity;
@@ -189,6 +219,7 @@ export interface InspectorModel {
   material: MaterialInspectorSection;
   environment: InspectorSection;
   lights: LightInspectorSection;
+  cameras: CameraInspectorSection;
   problems: ProblemInspectorSection;
 }
 
@@ -197,6 +228,8 @@ export interface BuildInspectorModelOptions {
    * @deprecated Light inspector targeting is derived from node selection.
    */
   activeLightId?: string | null;
+  activeCameraViewId?: string | null;
+  runtimeReady?: boolean;
   runtimeProblems?: readonly Problem[];
 }
 

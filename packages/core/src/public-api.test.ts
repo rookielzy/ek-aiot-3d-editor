@@ -8,10 +8,17 @@ import {
   createAdvancedEditorOperations,
   createClipboardPayload,
   createNodeClipboardPayload,
+  createAuthoredCameraView,
+  createAuthoredCameraViewInput,
   createEmptySnapshot,
+  resolveDefaultPresentationView,
   buildAssetWorkspaceModel,
   buildInspectorModel,
   buildWorkbenchModel,
+  buildCameraSection,
+  buildCreateCameraViewCommand,
+  buildCreateCameraViewInput,
+  buildSetDefaultCameraViewCommand,
   buildMaterialFieldsForTarget,
   classifyWorkbenchAssetImportFile,
   filterAssetWorkspaceItems,
@@ -33,9 +40,11 @@ import {
   type AssetWorkspaceReferenceKind,
   type AssetWorkspaceStatus,
   type BatchCommand,
+  type CreateCameraViewCommand,
   type CreateGroupCommand,
   type CreateImportedGlbTargetsCommand,
   type DeleteNodesCommand,
+  type DeleteCameraViewCommand,
   type DeleteObjectsCommand,
   type DuplicateObjectsCommand,
   type EditorAction,
@@ -98,6 +107,7 @@ import {
   type SelectNodesCommand,
   type SelectObjectsCommand,
   type SetEnvironmentCommand,
+  type SetDefaultCameraViewCommand,
   type SetNodeTransformCommand,
   type SnapSettings,
   type TextureSlot,
@@ -105,7 +115,13 @@ import {
   type TransformMode,
   type TransformVectorName,
   type UngroupNodesCommand,
+  type UpdateCameraViewCommand,
   type UpdateLightCommand,
+  type AuthoredCameraView,
+  type AuthoredCameraViewProjection,
+  type CameraViewId,
+  type DefaultPresentationViewResolution,
+  type ScenePresentationState,
   type WorkbenchAssetImportOptions,
   type WorkbenchAssetImportResult,
   type WorkbenchModel,
@@ -207,6 +223,19 @@ describe("core public API", () => {
     const addLight: AddLightCommand = { type: "add-light", light: { kind: "ambient" } };
     const updateLight: UpdateLightCommand = { type: "update-light", lightId: "light-a", patch: { intensity: 2 } };
     const removeLight: RemoveLightCommand = { type: "remove-light", lightId: "light-a" };
+    const cameraViewId: CameraViewId = "view-a";
+    const cameraProjection: AuthoredCameraViewProjection = { kind: "perspective", fov: 50 };
+    const authoredCameraView: AuthoredCameraView = createAuthoredCameraView({ id: cameraViewId, projection: cameraProjection });
+    const authoredCameraViewInput = createAuthoredCameraViewInput({ "camera-view-1": createAuthoredCameraView({ id: "camera-view-1" }) });
+    const presentationState: ScenePresentationState = { cameraViews: { [cameraViewId]: authoredCameraView }, defaultViewId: cameraViewId };
+    const createCameraView: CreateCameraViewCommand = { type: "create-camera-view", view: authoredCameraView };
+    const updateCameraView: UpdateCameraViewCommand = { type: "update-camera-view", viewId: cameraViewId, patch: { name: "Detail" } };
+    const deleteCameraView: DeleteCameraViewCommand = { type: "delete-camera-view", viewId: cameraViewId };
+    const setDefaultCameraView: SetDefaultCameraViewCommand = { type: "set-default-camera-view", viewId: cameraViewId };
+    const defaultResolution: DefaultPresentationViewResolution = resolveDefaultPresentationView({
+      ...createEmptySnapshot("scene-camera"),
+      presentation: presentationState
+    });
     const batch: BatchCommand = { type: "batch", commands: [removeLight] };
     const selectNode: SelectNodeCommand = { type: "select-node", nodeId: "node-a" };
     const selectNodes: SelectNodesCommand = { type: "select-nodes", mode: "replace", nodeIds: ["node-a"], primaryNodeId: "node-a" };
@@ -409,6 +438,13 @@ describe("core public API", () => {
     expect(addLight.light.kind).toBe("ambient");
     expect(updateLight.patch.intensity).toBe(2);
     expect(removeLight.lightId).toBe("light-a");
+    expect(createCameraView.view?.id).toBe(cameraViewId);
+    expect(authoredCameraViewInput.id).toMatch(/^camera-view-/);
+    expect(authoredCameraViewInput.id).not.toBe("camera-view-1");
+    expect(updateCameraView.patch.name).toBe("Detail");
+    expect(deleteCameraView.viewId).toBe(cameraViewId);
+    expect(setDefaultCameraView.viewId).toBe(cameraViewId);
+    expect(defaultResolution.status).toBe("resolved");
     expect(batch.commands).toHaveLength(1);
     expect(selectNode.nodeId).toBe("node-a");
     expect(selectNodes.primaryNodeId).toBe("node-a");
@@ -506,6 +542,17 @@ describe("core public API", () => {
     const snapshot = createEmptySnapshot("scene-a");
     const inspector: InspectorModel = buildInspectorModel(snapshot);
     const command: InspectorCommandResult = buildSetTransformCommand(snapshot, "position.x", 1);
+    const cameraView = buildCreateCameraViewInput(snapshot, { id: "view-a", name: "Hero" });
+    const createCameraCommand = buildCreateCameraViewCommand(cameraView);
+    const cameraSnapshot = {
+      ...snapshot,
+      presentation: {
+        cameraViews: { "view-a": createAuthoredCameraView(cameraView) },
+        defaultViewId: null
+      }
+    };
+    const cameraSection = buildCameraSection(cameraSnapshot, { activeCameraViewId: "view-a", runtimeReady: true });
+    const setDefaultCameraCommand = buildSetDefaultCameraViewCommand(cameraSnapshot, "view-a");
     const materialFields = buildMaterialFieldsForTarget(snapshot, inspector.material.targets[0] ?? null, inspector.material.empty);
     const workbenchOptions: BuildWorkbenchModelOptions = { inspector };
     const workspace = buildAssetWorkspaceModel(snapshot);
@@ -513,6 +560,9 @@ describe("core public API", () => {
 
     expect(inspector.environment.enabled).toBe(true);
     expect(command.ok).toBe(false);
+    expect(createCameraCommand.ok ? createCameraCommand.command.type : null).toBe("create-camera-view");
+    expect(cameraSection.canApply).toBe(true);
+    expect(setDefaultCameraCommand.ok ? setDefaultCameraCommand.command.type : null).toBe("set-default-camera-view");
     expect(materialFields[0]?.id).toBe("color");
     expect(filterAssetWorkspaceItems(workspace.items, { query: "missing" })).toEqual([]);
     expect(sortAssetWorkspaceItems(workspace.items)).toEqual([]);

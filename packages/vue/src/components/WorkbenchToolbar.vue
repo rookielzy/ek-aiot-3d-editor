@@ -83,6 +83,12 @@
       <button type="button" title="Frame all" :disabled="!toolbar.canFrameAll" @click="context.frameAll()">
         Frame all
       </button>
+      <button type="button" title="Capture camera view" :disabled="!toolbar.canCaptureCameraView" @click="captureCameraView">
+        Capture view
+      </button>
+      <button type="button" title="Apply camera view" :disabled="!toolbar.canApplyCameraView" @click="applyCameraView">
+        Apply view
+      </button>
     </div>
 
     <div class="ek-workbench__tool-group" aria-label="Node operations">
@@ -120,7 +126,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import type { ProjectExportResult } from "@ek-aiot/3d-editor-core";
+import { createAuthoredCameraViewInput, type ProjectExportResult } from "@ek-aiot/3d-editor-core";
 import type { WorkbenchContext } from "../composables/use-workbench";
 
 type ProjectActionStatus = {
@@ -181,6 +187,28 @@ async function exportProject(partial: boolean): Promise<void> {
     };
   } catch (error) {
     projectStatus.value = { tone: "error", label: error instanceof Error ? error.message : "Project export failed" };
+  }
+}
+
+function captureCameraView(): void {
+  const captured = props.context.captureCameraView({ name: `Camera view ${props.context.model.project.cameraViewCount + 1}` });
+  if (!captured) {
+    return;
+  }
+
+  const view = createAuthoredCameraViewInput(props.context.snapshot.presentation.cameraViews, captured);
+  const result = props.context.dispatch({ type: "create-camera-view", view });
+  if (result.ok) {
+    props.context.setActiveCameraViewId(view.id ?? null);
+  }
+}
+
+function applyCameraView(): void {
+  const view = props.context.activeCameraViewId
+    ? props.context.snapshot.presentation.cameraViews[props.context.activeCameraViewId]
+    : null;
+  if (view) {
+    props.context.applyCameraView(view);
   }
 }
 

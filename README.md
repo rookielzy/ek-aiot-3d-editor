@@ -4,11 +4,12 @@ Experimental `0.x` workspace for a snapshot-first 3D editor contract.
 
 Detailed Chinese project documentation starts at [docs/README.md](docs/README.md).
 
-The core contract now stores a versioned scene snapshot. Version 4 uses a shared `SceneNode` / `NodeId` graph as the durable hierarchy and target layer for GLB object nodes, empty group nodes, and light nodes. Object and light payload maps remain separate compatibility surfaces, while hierarchy, selection, transform targeting, inspector targeting, and runtime picking route through nodes. The current snapshot also stores:
+The core contract now stores a versioned scene snapshot. Version 4 introduced a shared `SceneNode` / `NodeId` graph as the durable hierarchy and target layer for GLB object nodes, empty group nodes, and light nodes. Object and light payload maps remain separate compatibility surfaces, while hierarchy, selection, transform targeting, inspector targeting, and runtime picking route through nodes. The current snapshot also stores:
 
 - object-level `MeshStandardMaterial` overrides and texture-slot asset references
 - scene background/environment intent, including image and HDR asset references
 - editable light definitions for ambient, directional, hemisphere, point, and spot lights
+- authored perspective camera views and the default presentation view pointer
 - richer framework-neutral problem metadata for validation, resolver, and runtime diagnostics
 
 The proof loop remains intentionally narrow, but the local React and Vue demos now expose it as an interactive workbench:
@@ -16,6 +17,7 @@ The proof loop remains intentionally narrow, but the local React and Vue demos n
 - import a GLB through a stable asset reference
 - select object, group, or light nodes through the shared hierarchy
 - orbit/reset/frame the transient camera without serializing camera state
+- capture, edit, default, and re-apply authored camera views as durable presentation state
 - click/select through the viewport or hierarchy
 - commit one transform command, including visual gizmo-backed transactions in the runtime
 - undo and redo that transform

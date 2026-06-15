@@ -7,6 +7,8 @@ import {
   createEditor,
   executeEditorAction,
   type AdvancedEditorOperations,
+  type AuthoredCameraView,
+  type AuthoredCameraViewInput,
   type AssetWorkspacePayloadSummary,
   type Command,
   type Editor,
@@ -71,6 +73,8 @@ export interface WorkbenchCameraContext {
   reset(): void;
   frameSelected(options?: RuntimeCameraFrameOptions): boolean;
   frameAll(options?: RuntimeCameraFrameOptions): boolean;
+  capture(input?: Pick<AuthoredCameraViewInput, "id" | "name" | "metadata">): AuthoredCameraViewInput | null;
+  apply(view: AuthoredCameraView): boolean;
 }
 
 export interface WorkbenchProjectContext {
@@ -113,6 +117,7 @@ export interface WorkbenchContext {
   runtimeReady: boolean;
   activeLightId: string | null;
   activeLightNodeId: string | null;
+  activeCameraViewId: string | null;
   operations: AdvancedEditorOperations;
   historyState: HistoryState;
   selectionCount: number;
@@ -122,10 +127,12 @@ export interface WorkbenchContext {
   selectedObjectId: string | null;
   selectedObjectIds: string[];
   selectedLightId: string | null;
+  selectedCameraViewId: string | null;
   snap: SnapSettings;
   viewportHelperState: ViewportHelperStateSnapshot;
   transformMode: TransformMode;
   setActiveLightId(value: string | null): void;
+  setActiveCameraViewId(value: string | null): void;
   setTransformMode(mode: TransformMode): void;
   toggleSnap(channel: SnapChannel, increment?: number): SnapSettings;
   toggleViewportHelper(key: ViewportHelperKey): ViewportHelperStateSnapshot;
@@ -133,6 +140,8 @@ export interface WorkbenchContext {
   resetCamera(): void;
   frameSelected(options?: RuntimeCameraFrameOptions): boolean;
   frameAll(options?: RuntimeCameraFrameOptions): boolean;
+  captureCameraView(input?: Pick<AuthoredCameraViewInput, "id" | "name" | "metadata">): AuthoredCameraViewInput | null;
+  applyCameraView(view: AuthoredCameraView): boolean;
   refreshProblems(): void;
   dispatch(command: Command): ReturnType<Editor["dispatch"]>;
   importProject(packageBytes: Uint8Array, options?: ProjectImportOptions): ProjectImportResult;
@@ -149,12 +158,14 @@ export interface UseWorkbenchResult {
   runtimeProblems: ShallowRef<Problem[]>;
   runtime: ShallowRef<EditorRuntime | null>;
   activeLightId: Ref<string | null>;
+  activeCameraViewId: Ref<string | null>;
   snap: ShallowRef<SnapSettings>;
   viewportHelperState: ShallowRef<ViewportHelperStateSnapshot>;
   transformMode: Ref<TransformMode>;
   context: ComputedRef<WorkbenchContext>;
   ownsEditor: boolean;
   setActiveLightId(value: string | null): void;
+  setActiveCameraViewId(value: string | null): void;
   setTransformMode(mode: TransformMode): void;
   toggleSnap(channel: SnapChannel, increment?: number): SnapSettings;
   toggleViewportHelper(key: ViewportHelperKey): ViewportHelperStateSnapshot;
@@ -162,6 +173,8 @@ export interface UseWorkbenchResult {
   resetCamera(): void;
   frameSelected(options?: RuntimeCameraFrameOptions): boolean;
   frameAll(options?: RuntimeCameraFrameOptions): boolean;
+  captureCameraView(input?: Pick<AuthoredCameraViewInput, "id" | "name" | "metadata">): AuthoredCameraViewInput | null;
+  applyCameraView(view: AuthoredCameraView): boolean;
   refreshProblems(): void;
   dispatch(command: Command): ReturnType<Editor["dispatch"]>;
   importProject(packageBytes: Uint8Array, options?: ProjectImportOptions): ProjectImportResult;
@@ -185,6 +198,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   const transformMode = ref<TransformMode>(currentEditor.value.transformMode.get());
   const runtime = shallowRef<EditorRuntime | null>(markRuntimeRaw(currentEditor.value.getRuntime()));
   const runtimeProblems = shallowRef<Problem[]>(currentEditor.value.getRuntime()?.getProblems() ?? []);
+  const requestedActiveCameraViewId = ref<string | null>(null);
   const assetWorkspaceVersion = shallowRef(getAssetWorkspaceVersion(currentEditor.value));
   let unsubscribeSnapshot: (() => void) | null = null;
   let unsubscribeRuntime: (() => void) | null = null;
@@ -285,6 +299,16 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     }
   }
 
+  function setActiveCameraViewId(value: string | null): void {
+    const cameraViews = currentEditor.value.getSnapshot().presentation.cameraViews;
+    const defaultViewId = currentEditor.value.getSnapshot().presentation.defaultViewId;
+    requestedActiveCameraViewId.value = value && cameraViews[value]
+      ? value
+      : defaultViewId && cameraViews[defaultViewId]
+        ? defaultViewId
+        : Object.keys(cameraViews)[0] ?? null;
+  }
+
   function setTransformMode(mode: TransformMode): void {
     currentEditor.value.transformMode.set(mode);
   }
@@ -311,6 +335,20 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
 
   function frameAll(options?: RuntimeCameraFrameOptions): boolean {
     return currentEditor.value.getRuntime()?.frameAll(options) ?? false;
+  }
+
+  function captureCameraView(input: Pick<AuthoredCameraViewInput, "id" | "name" | "metadata"> = {}): AuthoredCameraViewInput | null {
+    const result = currentEditor.value.getRuntime()?.captureCameraView(input);
+    return result?.ok ? result.view : null;
+  }
+
+  function applyCameraView(view: AuthoredCameraView): boolean {
+    const currentRuntime = currentEditor.value.getRuntime();
+    if (!currentRuntime) {
+      return false;
+    }
+    currentRuntime.applyCameraView(view);
+    return true;
   }
 
   function dispatch(command: Command): ReturnType<Editor["dispatch"]> {
@@ -360,7 +398,9 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
 
   const inspector = computed(() =>
     buildInspectorModel(snapshot.value, {
-      runtimeProblems: runtimeProblems.value
+      activeCameraViewId: requestedActiveCameraViewId.value,
+      runtimeProblems: runtimeProblems.value,
+      runtimeReady: runtime.value !== null
     })
   );
   const model = computed(() => {
@@ -379,6 +419,10 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   const activeLightId = computed({
     get: () => inspector.value.lights.activeLightId,
     set: setActiveLightId
+  });
+  const activeCameraViewId = computed({
+    get: () => inspector.value.cameras.activeCameraViewId,
+    set: setActiveCameraViewId
   });
   const context = computed<WorkbenchContext>(() => ({
     editor: currentEditor.value,
@@ -409,7 +453,9 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
       ready: runtime.value !== null,
       reset: resetCamera,
       frameSelected,
-      frameAll
+      frameAll,
+      capture: captureCameraView,
+      apply: applyCameraView
     },
     project: {
       importProject,
@@ -435,6 +481,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     runtimeReady: runtime.value !== null,
     activeLightId: activeLightId.value,
     activeLightNodeId: inspector.value.lights.activeLightNodeId,
+    activeCameraViewId: activeCameraViewId.value,
     operations: currentEditor.value.operations,
     historyState: currentEditor.value.getHistoryState(),
     selectionCount: model.value.selection.count,
@@ -444,10 +491,12 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     selectedObjectId: model.value.selection.objectId,
     selectedObjectIds: model.value.selection.objectIds,
     selectedLightId: model.value.selection.lightId,
+    selectedCameraViewId: activeCameraViewId.value,
     snap: snap.value,
     viewportHelperState: viewportHelperState.value,
     transformMode: transformMode.value,
     setActiveLightId,
+    setActiveCameraViewId,
     setTransformMode,
     toggleSnap,
     toggleViewportHelper,
@@ -455,6 +504,8 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     resetCamera,
     frameSelected,
     frameAll,
+    captureCameraView,
+    applyCameraView,
     refreshProblems: subscribeRuntimeProblems,
     dispatch,
     importProject,
@@ -473,6 +524,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     runtimeProblems,
     runtime,
     activeLightId,
+    activeCameraViewId,
     snap,
     viewportHelperState,
     transformMode,
@@ -481,6 +533,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
       return ownsCurrentEditor.value;
     },
     setActiveLightId,
+    setActiveCameraViewId,
     setTransformMode,
     toggleSnap,
     toggleViewportHelper,
@@ -488,6 +541,8 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     resetCamera,
     frameSelected,
     frameAll,
+    captureCameraView,
+    applyCameraView,
     refreshProblems: subscribeRuntimeProblems,
     dispatch,
     importProject,

@@ -1,5 +1,5 @@
 import { useRef, useState, type ChangeEvent } from "react";
-import type { ProjectExportResult } from "@ek-aiot/3d-editor-core";
+import { createAuthoredCameraViewInput, type ProjectExportResult } from "@ek-aiot/3d-editor-core";
 import type { WorkbenchContext } from "../hooks/use-workbench";
 
 export interface WorkbenchToolbarProps {
@@ -142,6 +142,36 @@ export function WorkbenchToolbar({ context }: WorkbenchToolbarProps) {
         </button>
         <button type="button" onClick={() => context.frameAll()} disabled={!toolbar.canFrameAll} title="Frame all">
           Frame all
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const captured = context.captureCameraView({ name: `Camera view ${context.model.project.cameraViewCount + 1}` });
+            if (captured) {
+              const view = createAuthoredCameraViewInput(context.snapshot.presentation.cameraViews, captured);
+              const result = context.dispatch({ type: "create-camera-view", view });
+              if (result.ok) {
+                context.setActiveCameraViewId(view.id ?? null);
+              }
+            }
+          }}
+          disabled={!toolbar.canCaptureCameraView}
+          title="Capture camera view"
+        >
+          Capture view
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const view = context.activeCameraViewId ? context.snapshot.presentation.cameraViews[context.activeCameraViewId] : null;
+            if (view) {
+              context.applyCameraView(view);
+            }
+          }}
+          disabled={!toolbar.canApplyCameraView}
+          title="Apply camera view"
+        >
+          Apply view
         </button>
       </div>
       <div className="ek-workbench__tool-group" aria-label="Node operations">

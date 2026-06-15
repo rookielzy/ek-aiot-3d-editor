@@ -4,19 +4,20 @@ Scene Snapshot 是本项目的 durable editor state。它必须是 JSON-compatib
 
 当前版本：
 
-- `SceneSnapshot.version = 5`
+- `SceneSnapshot.version = 6`
+- `V5SceneSnapshot.version = 5`
 - `V4SceneSnapshot.version = 4`
 - `V3SceneSnapshot.version = 3`
 - `PreviousSceneSnapshot.version = 2`
 - `LegacySceneSnapshot.version = 1`
 
-Version 1/2/3/4 snapshot 会通过 migration 规范化为当前 schema。v4 scene node graph 会原样升级到 v5；migration 不会根据已有 GLB object metadata 自动生成 imported targets。
+Version 1/2/3/4/5 snapshot 会通过 migration 规范化为当前 schema。v4 scene node graph 会原样升级到 v5，再补齐 v6 presentation state；migration 不会根据已有 GLB object metadata 自动生成 imported targets，也不会根据 transient runtime camera 自动生成 authored camera view。
 
 ## 顶层结构
 
 ```ts
 interface SceneSnapshot {
-  version: 5;
+  version: 6;
   scene: {
     id: string;
     name: string;
@@ -35,12 +36,13 @@ interface SceneSnapshot {
   materials: MaterialState;
   environment: SceneEnvironment;
   lights: Record<string, LightDefinition>;
+  presentation: ScenePresentationState;
   problems: AuthoredProblemState;
   metadata?: Record<string, JsonValue>;
 }
 ```
 
-`nodes` / `rootNodeIds` 是 current canonical hierarchy 和 target layer。`objects`、`lights` 仍保存 payload；`rootObjectIds` 与 `selection.objectId/objectIds` 是当前兼容镜像，供旧 object-only API 使用，新的 durable target 应使用 `NodeId`。
+`nodes` / `rootNodeIds` 是 current canonical hierarchy 和 target layer。`objects`、`lights` 仍保存 payload；`rootObjectIds` 与 `selection.objectId/objectIds` 是当前兼容镜像，供旧 object-only API 使用，新的 durable target 应使用 `NodeId`。`presentation` 保存用户显式 author 的展示入口，例如命名 camera view 和默认展示视角；普通 OrbitControls 导航不写入这里。
 
 ## JSON-compatible 约束
 
@@ -67,6 +69,48 @@ Snapshot 内只允许 JSON-compatible 数据：
 - resolver 返回值
 - loader 结果
 - PMREM 输出
+
+## Presentation / authored camera views
+
+v6 新增 `presentation`：
+
+```ts
+interface ScenePresentationState {
+  cameraViews: Record<string, AuthoredCameraView>;
+  defaultViewId: string | null;
+}
+
+interface AuthoredCameraView {
+  id: string;
+  name: string;
+  projection: {
+    kind: "perspective";
+    fov: number;
+  };
+  position: [number, number, number];
+  target: [number, number, number];
+  near: number;
+  far: number;
+  metadata?: Record<string, JsonValue>;
+}
+```
+
+Camera view 是 durable presentation resource，不是 scene node，也不是 Three.js camera instance。当前可编辑投影类型是 perspective；`projection.kind` 是 discriminated field，方便后续增加 orthographic。
+
+Validation 规则：
+
+- `cameraViews` 是以 camera view ID 为 key 的 plain object map。
+- 每个 view 的 `id` 必须和 map key 一致。
+- `position` 和 `target` 必须是 3 个 finite number。
+- `projection.kind` 当前必须是 `"perspective"`。
+- `projection.fov` 必须大于 0 且小于 180。
+- `near` 必须大于 0；`far` 必须大于 `near`。
+- `metadata` 必须 JSON-compatible。
+- `defaultViewId` 只能是现有 camera view ID 或 `null`。
+
+`defaultViewId` 是 scene-level pointer，不是 view 自身的 marker。删除默认 view 时 command 会把 `defaultViewId` 清为 `null`。Core 暴露 `resolveDefaultPresentationView(snapshot)` 给未来 viewer 或 host startup 使用；resolver 只读取 durable snapshot，不挂载 runtime。
+
+Runtime helper 可以把当前 `PerspectiveCamera` 和可选 controls target capture 为 plain authored view data，也可以把 authored view apply 回 transient editor camera。Capture/apply 本身不改变 Snapshot、history、clipboard 或 `.ek3d`；只有显式 dispatch `create-camera-view`、`update-camera-view`、`delete-camera-view` 或 `set-default-camera-view` 才会持久化。
 
 ## Transform
 
@@ -170,11 +214,11 @@ type SceneNode =
 - v3 object 默认迁移为同 ID 的 object node。
 - v3 light 默认迁移为同 ID 的 light node。
 - 如果 object ID 与 light ID 冲突，object node 保留 object ID，light payload ID 不变，light node ID 会稳定生成为类似 `light-a:light` 的 collision-safe ID。
-- v4 node graph 默认升级为 v5，不会为已有 GLB object 合成 imported node。
+- v4 node graph 默认升级为 v5，再补齐 v6 empty presentation state，不会为已有 GLB object 合成 imported node 或 authored camera view。
 
 ## Imported GLB Targets
 
-Imported GLB target 是 v5 新增的 durable node kind，用来表示某个 GLB object 内部的 scene/node/mesh/primitive/camera 等可寻址目标。它只保存稳定 ID、manifest-derived source descriptor、owner 关系、可选 authored transform override、material slot descriptor 和 JSON-compatible remap metadata；不保存 glTF runtime graph。
+Imported GLB target 是 v5 新增的 durable node kind，用来表示某个 GLB object 内部的 scene/node/mesh/primitive/camera 等可寻址目标。它只保存稳定 ID、manifest-derived source descriptor、owner 关系、可选 authored transform override、material slot descriptor 和 JSON-compatible remap metadata；不保存 glTF runtime graph。Imported glTF camera descriptor 不会自动变成 v6 authored camera view；需要显式 camera view authoring command。
 
 ```ts
 interface ImportedGlbSourceDescriptor {

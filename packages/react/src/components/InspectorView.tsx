@@ -1,4 +1,6 @@
 import type { Editor, InspectorModel, SceneSnapshot } from "@ek-aiot/3d-editor-core";
+import type { WorkbenchCameraContext } from "../hooks/use-workbench";
+import { CameraInspector } from "./CameraInspector";
 import { EnvironmentInspector } from "./EnvironmentInspector";
 import { LightInspector } from "./LightInspector";
 import { MaterialInspector } from "./MaterialInspector";
@@ -11,17 +13,26 @@ export interface InspectorViewProps {
   snapshot: SceneSnapshot;
   inspector: InspectorModel;
   setActiveLightId(value: string | null): void;
+  setActiveCameraViewId?(value: string | null): void;
+  camera?: WorkbenchCameraContext;
   onReplaceAsset?(assetId: string, file: File): void | Promise<void>;
   className?: string;
 }
 
-export function InspectorView({ editor, snapshot, inspector, setActiveLightId, onReplaceAsset, className }: InspectorViewProps) {
+export function InspectorView({ editor, snapshot, inspector, setActiveLightId, setActiveCameraViewId, camera, onReplaceAsset, className }: InspectorViewProps) {
   return (
     <aside className={className ? `ek-inspector ${className}` : "ek-inspector"} aria-label="Scene inspector">
       <TransformInspector editor={editor} snapshot={snapshot} section={inspector.transform} />
       <MaterialInspector editor={editor} snapshot={snapshot} section={inspector.material} />
       <EnvironmentInspector editor={editor} snapshot={snapshot} section={inspector.environment} />
       <LightInspector editor={editor} snapshot={snapshot} section={inspector.lights} onActiveLightIdChange={setActiveLightId} />
+      <CameraInspector
+        editor={editor}
+        snapshot={snapshot}
+        section={inspector.cameras}
+        camera={camera}
+        onActiveCameraViewIdChange={setActiveCameraViewId ?? (() => {})}
+      />
       <ProblemsPanel section={inspector.problems} onReplaceAsset={onReplaceAsset} />
     </aside>
   );

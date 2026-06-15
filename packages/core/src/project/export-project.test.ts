@@ -217,6 +217,47 @@ describe("project export", () => {
     expect(serializedScene).not.toContain("PointerEvent");
   });
 
+  it("exports authored camera views as durable presentation state without runtime camera objects", () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "create-camera-view",
+      view: {
+        id: "view-a",
+        name: "Hero view",
+        projection: { kind: "perspective", fov: 52 },
+        position: [1, 2, 3],
+        target: [0, 0.5, 0],
+        near: 0.2,
+        far: 500,
+        metadata: { source: "author" }
+      }
+    });
+    editor.dispatch({ type: "set-default-camera-view", viewId: "view-a" });
+
+    const result = editor.exportProject();
+
+    expect(result.ok).toBe(true);
+    const archiveEntries = defaultArchiveAdapter.read(result.packageBytes as Uint8Array);
+    const serializedScene = new TextDecoder().decode(archiveEntries.find((entry) => entry.path === PROJECT_SCENE_PATH)!.bytes);
+    const scene = JSON.parse(serializedScene);
+    expect(scene.presentation.defaultViewId).toBe("view-a");
+    expect(scene.presentation.cameraViews["view-a"]).toMatchObject({
+      id: "view-a",
+      name: "Hero view",
+      projection: { kind: "perspective", fov: 52 },
+      position: [1, 2, 3],
+      target: [0, 0.5, 0],
+      near: 0.2,
+      far: 500
+    });
+    expect(serializedScene).not.toContain("PerspectiveCamera");
+    expect(serializedScene).not.toContain("OrbitControls");
+    expect(serializedScene).not.toContain("Object3D");
+    expect(serializedScene).not.toContain("resolver");
+    expect(serializedScene).not.toContain("object URL");
+    expect(serializedScene).not.toContain("runtime");
+  });
+
   it("exports material-slot assignments and texture references without runtime material values", () => {
     const editor = createEditor();
     editor.dispatch({

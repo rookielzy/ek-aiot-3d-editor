@@ -2,20 +2,21 @@ import { describe, expect, it } from "vitest";
 import { Object3D } from "three";
 import { createEmptySnapshot, createTransform } from "./defaults";
 import { migrateSerializedSnapshot } from "./migrations";
-import type { SceneSnapshot, V4SceneSnapshot } from "./types";
+import type { SceneSnapshot, V5SceneSnapshot, V4SceneSnapshot } from "./types";
 import { isJsonCompatible, validateSceneSnapshot } from "./validation";
 
 describe("scene snapshot contract", () => {
   it("creates a versioned JSON-compatible empty snapshot", () => {
     const snapshot = createEmptySnapshot("scene-a");
 
-    expect(snapshot.version).toBe(5);
+    expect(snapshot.version).toBe(6);
     expect(snapshot.scene.id).toBe("scene-a");
     expect(snapshot.nodes).toEqual({});
     expect(snapshot.rootNodeIds).toEqual([]);
     expect(snapshot.materials).toEqual({ definitions: {}, assignments: {} });
     expect(snapshot.environment.mode).toBe("none");
     expect(snapshot.lights).toEqual({});
+    expect(snapshot.presentation).toEqual({ cameraViews: {}, defaultViewId: null });
     expect(snapshot.problems).toEqual({ acknowledged: {} });
     expect(snapshot.selection).toEqual({ nodeId: null, nodeIds: [], objectId: null, objectIds: [] });
     expect(isJsonCompatible(snapshot)).toBe(true);
@@ -185,6 +186,19 @@ describe("scene snapshot contract", () => {
     expect(result.errors.join("\n")).toContain("label must be a string");
   });
 
+  it("migrates v5 snapshots by adding empty presentation state", () => {
+    const { presentation: _presentation, ...v5 } = createValidObjectSnapshot();
+    const migrated = migrateSerializedSnapshot({
+      ...v5,
+      version: 5
+    } satisfies V5SceneSnapshot);
+
+    expect(migrated.version).toBe(6);
+    expect(migrated.presentation).toEqual({ cameraViews: {}, defaultViewId: null });
+    expect(migrated.nodes["object-a"]).toEqual(v5.nodes["object-a"]);
+    expect(migrated.objects["object-a"]).toEqual(v5.objects["object-a"]);
+  });
+
   it("migrates v4 snapshots without inventing imported targets", () => {
     const v4: V4SceneSnapshot = {
       ...createValidObjectSnapshot(),
@@ -197,7 +211,8 @@ describe("scene snapshot contract", () => {
 
     const migrated = migrateSerializedSnapshot(v4);
 
-    expect(migrated.version).toBe(5);
+    expect(migrated.version).toBe(6);
+    expect(migrated.presentation).toEqual({ cameraViews: {}, defaultViewId: null });
     expect(Object.values(migrated.nodes).some((node) => node.kind === "imported")).toBe(false);
     expect(migrated.nodes["object-a"]).toEqual(v4.nodes["object-a"]);
   });

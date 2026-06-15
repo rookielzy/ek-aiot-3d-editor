@@ -1,3 +1,4 @@
+import { validatePresentationState } from "../cameras/validation";
 import { validateSceneEnvironment } from "../environment/validation";
 import type { ImportedGlbMaterialSlotDescriptor, ImportedGlbSourceDescriptor } from "../imported-targets/types";
 import { validateLights } from "../lights/validation";
@@ -83,6 +84,7 @@ export function validateSceneSnapshot(value: unknown): ValidationResult {
   validateMaterialState(value.materials, { objectIds, assets }, errors);
   validateSceneEnvironment(value.environment, assets, errors);
   validateLights(value.lights, errors);
+  validatePresentationState(value.presentation, errors);
   validateAuthoredProblemState(value.problems, errors);
 
   if ("metadata" in value && !isJsonCompatible(value.metadata)) {

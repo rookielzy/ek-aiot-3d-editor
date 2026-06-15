@@ -151,7 +151,7 @@ function createGroupSnapshot(): SceneSnapshot {
 
   return {
     ...snapshot,
-    version: 5,
+    version: 6,
     scene: {
       id: "scene-a",
       name: "Scene"

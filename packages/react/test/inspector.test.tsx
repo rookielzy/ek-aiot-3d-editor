@@ -1,7 +1,12 @@
 import React from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { attachGlbImportManifestMetadata, createEditor, createGlbImportManifest } from "@ek-aiot/3d-editor-core";
+import {
+  attachGlbImportManifestMetadata,
+  createEditor,
+  createGlbImportManifest,
+  type RendererLike
+} from "@ek-aiot/3d-editor-core";
 import { InspectorPanel } from "../src/components/InspectorPanel";
 
 describe("React InspectorPanel", () => {
@@ -229,6 +234,66 @@ describe("React InspectorPanel", () => {
 
     expect(Object.values(editor.getSnapshot().lights).filter((light) => light.kind === "point")).toHaveLength(2);
   });
+
+  it("edits authored camera views through core inspector commands", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "create-camera-view", view: { id: "view-a", name: "Hero", projection: { kind: "perspective", fov: 60 } } });
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+
+    render(<InspectorPanel editor={editor} />);
+    fireEvent.change(screen.getByLabelText("FOV"), { target: { value: "35" } });
+    fireEvent.blur(screen.getByLabelText("FOV"));
+    fireEvent.click(screen.getByText("Set default"));
+
+    expect(dispatchSpy).toHaveBeenCalledWith({
+      type: "update-camera-view",
+      viewId: "view-a",
+      patch: { projection: { kind: "perspective", fov: 35 } }
+    });
+    expect(editor.getSnapshot().presentation.defaultViewId).toBe("view-a");
+  });
+
+  it("shows camera field validation problems without dispatching invalid camera commands", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "create-camera-view", view: { id: "view-a" } });
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+
+    render(<InspectorPanel editor={editor} />);
+    fireEvent.change(screen.getByLabelText("FOV"), { target: { value: "180" } });
+    fireEvent.blur(screen.getByLabelText("FOV"));
+
+    expect(screen.getByText(/less than or equal/)).toBeTruthy();
+    expect(dispatchSpy).not.toHaveBeenCalledWith(expect.objectContaining({ type: "update-camera-view" }));
+  });
+
+  it("wires standalone camera capture and apply through the mounted runtime", () => {
+    const editor = createEditor();
+    const runtime = editor.mountRuntime({
+      container: document.createElement("div"),
+      rendererFactory: fakeRenderer
+    });
+    const captureCameraView = vi.spyOn(runtime, "captureCameraView");
+    const applyCameraView = vi.spyOn(runtime, "applyCameraView");
+    captureCameraView.mockReturnValueOnce({
+      ok: true,
+      view: {
+        id: "view-a",
+        name: "Hero",
+        projection: { kind: "perspective", fov: 50 },
+        position: [1, 2, 3],
+        target: [0, 0, 0],
+        near: 0.1,
+        far: 1000
+      }
+    });
+
+    render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByText("Capture"));
+    fireEvent.click(screen.getByText("Apply"));
+
+    expect(editor.getSnapshot().presentation.cameraViews["view-a"]).toBeDefined();
+    expect(applyCameraView).toHaveBeenCalledWith(editor.getSnapshot().presentation.cameraViews["view-a"]);
+  });
 });
 
 function createSlotEditor() {
@@ -277,4 +342,13 @@ function createSlotManifest() {
       }
     }
   });
+}
+
+function fakeRenderer(container: HTMLElement): RendererLike {
+  return {
+    domElement: container.ownerDocument.createElement("canvas"),
+    setSize() {},
+    render() {},
+    dispose() {}
+  };
 }

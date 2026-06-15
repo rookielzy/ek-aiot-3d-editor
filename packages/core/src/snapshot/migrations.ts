@@ -1,3 +1,4 @@
+import { createEmptyPresentationState } from "../cameras/defaults";
 import { createDefaultEnvironment } from "../environment/defaults";
 import { createEmptyMaterialState } from "../materials/defaults";
 import { createEmptyAuthoredProblemState } from "../problems/defaults";
@@ -10,6 +11,7 @@ import {
   type SceneNode,
   type SceneSnapshot,
   type SerializedSceneSnapshot,
+  type V5SceneSnapshot,
   type V4SceneSnapshot,
   type V3SceneSnapshot
 } from "./types";
@@ -19,6 +21,12 @@ export function migrateSerializedSnapshot(serialized: SerializedSceneSnapshot): 
   if (serialized.version === SNAPSHOT_VERSION) {
     assertValidSceneSnapshot(serialized);
     return immutableClone(serialized);
+  }
+
+  if (serialized.version === 5) {
+    const migrated = migrateV5Snapshot(serialized);
+    assertValidSceneSnapshot(migrated);
+    return immutableClone(migrated);
   }
 
   if (serialized.version === 4) {
@@ -49,33 +57,18 @@ export function migrateSerializedSnapshot(serialized: SerializedSceneSnapshot): 
   throw new Error(`Unsupported snapshot version: ${String(version)}.`);
 }
 
-export function migrateV4Snapshot(serialized: V4SceneSnapshot): SceneSnapshot {
+export function migrateV5Snapshot(serialized: V5SceneSnapshot): SceneSnapshot {
   return {
     ...serialized,
-    version: SNAPSHOT_VERSION
+    version: SNAPSHOT_VERSION,
+    presentation: createEmptyPresentationState()
   };
 }
 
-export function migrateV1Snapshot(serialized: LegacySceneSnapshot): SceneSnapshot {
-  return migrateV2Snapshot({
+export function migrateV4Snapshot(serialized: V4SceneSnapshot): SceneSnapshot {
+  return migrateV5Snapshot({
     ...serialized,
-    version: 2,
-    materials: createEmptyMaterialState(),
-    environment: createDefaultEnvironment(),
-    lights: {},
-    problems: createEmptyAuthoredProblemState()
-  });
-}
-
-export function migrateV2Snapshot(serialized: PreviousSceneSnapshot): SceneSnapshot {
-  const selectedObjectId = serialized.selection.objectId;
-  return migrateV3Snapshot({
-    ...serialized,
-    version: 3,
-    selection: {
-      objectId: selectedObjectId,
-      objectIds: selectedObjectId ? [selectedObjectId] : []
-    }
+    version: 5
   });
 }
 
@@ -102,9 +95,9 @@ export function migrateV3Snapshot(serialized: V3SceneSnapshot): SceneSnapshot {
     ? serialized.selection.objectId
     : nodeIds[0] ?? null;
 
-  return {
+  return migrateV5Snapshot({
     ...serialized,
-    version: SNAPSHOT_VERSION,
+    version: 5,
     nodes,
     rootNodeIds,
     selection: {
@@ -113,7 +106,30 @@ export function migrateV3Snapshot(serialized: V3SceneSnapshot): SceneSnapshot {
       objectId: nodeId,
       objectIds: nodeIds
     }
-  };
+  });
+}
+
+export function migrateV1Snapshot(serialized: LegacySceneSnapshot): SceneSnapshot {
+  return migrateV2Snapshot({
+    ...serialized,
+    version: 2,
+    materials: createEmptyMaterialState(),
+    environment: createDefaultEnvironment(),
+    lights: {},
+    problems: createEmptyAuthoredProblemState()
+  });
+}
+
+export function migrateV2Snapshot(serialized: PreviousSceneSnapshot): SceneSnapshot {
+  const selectedObjectId = serialized.selection.objectId;
+  return migrateV3Snapshot({
+    ...serialized,
+    version: 3,
+    selection: {
+      objectId: selectedObjectId,
+      objectIds: selectedObjectId ? [selectedObjectId] : []
+    }
+  });
 }
 
 export function validateSerializedSceneSnapshot(value: unknown): ValidationResult {

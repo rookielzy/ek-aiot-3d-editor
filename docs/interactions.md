@@ -21,12 +21,13 @@
 React 和 Vue proof-loop demo 的可见验证路径保持一致：
 
 1. 使用 camera helper（Reset camera / Frame selected / Frame all）验证 transient camera controls。
-2. 通过 viewport picking 或 Scene hierarchy 选择 object、group、light node，并在层级中看到 selected / primary 标记。
-3. 通过 TransformControls 或 demo toolbar 提交一次 transform，并验证 undo/redo。
-4. 通过 Material inspector 修改支持的 object-level 或 material-slot-level `MeshStandardMaterial` 字段，并确认 runtime 投影更新。
-5. 通过 Node operations 执行 duplicate、copy/paste、delete、group、ungroup 等 hierarchy 操作。
-6. 导出并重新导入 `.ek3d` 项目包。
-7. 观察 recoverable missing-asset problem，然后用 stable asset ID 替换资产并清除 problem。
+2. 使用 Camera views inspector capture 当前视角，编辑名称/FOV/near/far/position/target，设置 default，并用 Apply view 对齐 transient editor camera。
+3. 通过 viewport picking 或 Scene hierarchy 选择 object、group、light node，并在层级中看到 selected / primary 标记。
+4. 通过 TransformControls 或 demo toolbar 提交一次 transform，并验证 undo/redo。
+5. 通过 Material inspector 修改支持的 object-level 或 material-slot-level `MeshStandardMaterial` 字段，并确认 runtime 投影更新。
+6. 通过 Node operations 执行 duplicate、copy/paste、delete、group、ungroup 等 hierarchy 操作。
+7. 导出并重新导入 `.ek3d` 项目包。
+8. 观察 recoverable missing-asset problem，然后用 stable asset ID 替换资产并清除 problem。
 
 `pnpm test:browser` 使用 headless Chromium 跑 browser-level evidence：runtime picking、TransformControls smoke、React/Vue demo checklist parity、hierarchy/status/problem badge 断言，以及 canvas 非空渲染 smoke。测试避免像素级 WebGL 比对，优先验证用户可观察且稳定的状态。
 
@@ -131,6 +132,25 @@ Helper visibility、hover target、snap feedback status、guide geometry、marqu
 
 Snap feedback 从同一 transform transaction 和 `snapTransform()` 路径派生。Status bar 可以显示当前 mode/increment 和 snapped 状态；最终持久化的仍只有 commit 后的 transform 值。
 
+## Authored camera views
+
+编辑器 camera navigation 分两层：
+
+- Orbit/pan/zoom、Reset camera、Frame selected、Frame all 是 runtime/session state。
+- Authored camera view 是用户显式 capture/update 后进入 `SceneSnapshot.presentation.cameraViews` 的 durable presentation state。
+
+默认 React/Vue Workbench 在 Camera toolbar 和 Camera views inspector 中提供：
+
+- Capture view：把当前 runtime `PerspectiveCamera` 和 controls target 转换成 JSON-compatible camera view data，并 dispatch `create-camera-view`。
+- Update：用当前 runtime camera 覆盖当前 authored view 的 position/target/FOV/near/far。
+- Apply：把当前 authored view apply 回 transient editor camera；该动作不写 Snapshot，也不进入 undo history。
+- Set default / Clear default：dispatch `set-default-camera-view`，更新 scene-level `presentation.defaultViewId`。
+- Delete view：dispatch `delete-camera-view`；删除默认 view 时 default pointer 会被清空。
+
+Camera view 字段包括 name、perspective FOV、near、far、position 和 target。Core command/inspector builder 会校验 finite vector、FOV/near/far 范围、default reference 和 JSON-compatible metadata。当前 editable path 只支持 perspective authored views；orthographic authoring 是后续扩展。
+
+`resolveDefaultPresentationView(snapshot)` 是读取默认展示入口的 pure resolver。未来 viewer startup 或 host 自定义 preview 可以用它找到默认 authored view，再调用 runtime apply helper 对齐 camera。不要把 Three.js `Camera`、`OrbitControls`、controls target object、camera helper、renderer state、resolver output 或 runtime problem 保存进 Snapshot 或 `.ek3d`。
+
 ## Inspector 编辑
 
 React/Vue inspector 当前覆盖：
@@ -139,6 +159,7 @@ React/Vue inspector 当前覆盖：
 - Material broad object override 和 imported material-slot target override
 - Environment/background
 - Light list/add/update/remove
+- Camera view list/capture/apply/default/edit/delete
 - Problems
 
 Inspector 的字段模型和 command builder 来自 core，因此两个框架 shell 的编辑语义一致。
@@ -219,7 +240,7 @@ React 和 Vue proof-loop demo 的侧栏包含：
 - Asset workspace：默认左栏支持多文件本地导入、raster image/texture intent、搜索、kind/status filter、sort、reference summary、payload/package status、GLB import diagnostics、stable-ID missing payload replacement 和 registered GLB reimport。
 - Proof checklist：从当前 selection、material assignment、history、transform mode、snap、runtime problems 和本次 demo session 派生验证进度。
 
-Checklist 和 asset import queue 都不是 durable project state。导出 `.ek3d`、导入 `.ek3d` 或序列化 Scene Snapshot 时，不会保存 checklist 进度、camera/control 状态、runtime problems、drag hover、file input value、queue row、`File`、`Blob`、object URL 或 resolver 结果。
+Checklist 和 asset import queue 都不是 durable project state。导出 `.ek3d`、导入 `.ek3d` 或序列化 Scene Snapshot 时，不会保存 checklist 进度、transient camera/control 状态、runtime problems、drag hover、file input value、queue row、`File`、`Blob`、object URL 或 resolver 结果。只有显式 authored camera view command 产生的 `presentation.cameraViews/defaultViewId` 会持久化。
 
 ## 快捷键
 

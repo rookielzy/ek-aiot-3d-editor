@@ -76,6 +76,13 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
     await clickByText(host, "Snap move");
     expect(button(host, "Snap move")?.getAttribute("aria-pressed")).toBe("true");
 
+    await clickByText(host, "Capture view");
+    await waitFor(() => expect(text(host)).toContain("Camera view 1"));
+    await clickByText(host, "Set default");
+    expect(text(host)).toContain("Default");
+    await clickByText(host, "Apply view");
+    assertCameraLayout(host);
+
     const positionX = findFieldInput(host, "Position X", 'input[type="number"]') as HTMLInputElement | null;
     expect(positionX, "Expected transform Position X input").toBeTruthy();
     positionX!.focus();
@@ -106,6 +113,7 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
     await waitFor(() => expect(window.__lastDownloadedProject).toBeInstanceOf(Uint8Array));
     expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("asset-unresolved");
     expectExportedMarqueeSelection(window.__lastDownloadedProject!);
+    expectExportedPresentation(window.__lastDownloadedProject!);
 
     const openInput = section(host, "Project actions").querySelector('input[type="file"]') as HTMLInputElement | null;
     expect(openInput, "Expected default Open project file input").toBeTruthy();
@@ -115,6 +123,10 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
       expect(text(host)).toContain("Selection 2 nodes");
       expect(text(section(host, "Hierarchy"))).toContain("Detail block selected");
       expect(text(section(host, "Hierarchy"))).toContain("Simple box selected primary");
+    });
+    await waitFor(() => {
+      expect(text(host)).toContain("Camera view 1");
+      expect(text(host)).toContain("Default");
     });
 
     await waitFor(() => {
@@ -328,6 +340,25 @@ function expectExportedMarqueeSelection(bytes: Uint8Array): void {
   expect(serialized).not.toContain("PointerEvent");
 }
 
+function expectExportedPresentation(bytes: Uint8Array): void {
+  const files = defaultArchiveAdapter.read(bytes);
+  const scene = decodeArchiveJson(files.find((entry) => entry.path === "scene.json")!.bytes) as {
+    presentation: {
+      cameraViews: Record<string, { id: string; name: string; projection: { kind: string; fov: number } }>;
+      defaultViewId: string | null;
+    };
+  };
+  expect(scene.presentation.defaultViewId).toBeTruthy();
+  const defaultView = scene.presentation.defaultViewId ? scene.presentation.cameraViews[scene.presentation.defaultViewId] : null;
+  expect(defaultView).toMatchObject({
+    id: scene.presentation.defaultViewId,
+    name: "Camera view 1",
+    projection: { kind: "perspective" }
+  });
+  expect(JSON.stringify(scene.presentation)).not.toContain("Object3D");
+  expect(JSON.stringify(scene.presentation)).not.toContain("blob:");
+}
+
 function button(host: HTMLElement, label: string): HTMLButtonElement | null {
   return [...host.querySelectorAll("button")].find((candidate) => text(candidate) === label) ?? null;
 }
@@ -373,6 +404,35 @@ function assertAssetWorkspaceLayout(host: HTMLElement): void {
   } finally {
     host.style.width = originalWidth;
     window.dispatchEvent(new Event("resize"));
+  }
+}
+
+function assertCameraLayout(host: HTMLElement): void {
+  const cameraToolbar = section(host, "Camera");
+  const cameraInspector = [...host.querySelectorAll(".ek-inspector-section")]
+    .find((candidate) => text(candidate).includes("Camera views")) as HTMLElement | undefined;
+  expect(cameraInspector, "Expected Camera views inspector section").toBeTruthy();
+  const originalWidth = host.style.width;
+  try {
+    for (const width of ["1280px", "390px"]) {
+      host.style.width = width;
+      window.dispatchEvent(new Event("resize"));
+      assertChildrenInside(cameraToolbar, "Camera toolbar");
+      assertChildrenInside(cameraInspector!, "Camera inspector");
+    }
+  } finally {
+    host.style.width = originalWidth;
+    window.dispatchEvent(new Event("resize"));
+  }
+}
+
+function assertChildrenInside(container: HTMLElement, label: string): void {
+  const parent = container.getBoundingClientRect();
+  expect(parent.width, label).toBeGreaterThan(0);
+  for (const child of container.querySelectorAll("button, input, .ek-inspector-camera-list")) {
+    const rect = child.getBoundingClientRect();
+    expect(rect.left, `${label} child left`).toBeGreaterThanOrEqual(parent.left - 1);
+    expect(rect.right, `${label} child right`).toBeLessThanOrEqual(parent.right + 1);
   }
 }
 

@@ -123,6 +123,8 @@ export interface WorkbenchToolbarModel {
   canClearSelection: boolean;
   canFrameSelected: boolean;
   canFrameAll: boolean;
+  canCaptureCameraView: boolean;
+  canApplyCameraView: boolean;
   transformMode: TransformMode;
   snapEnabled: Record<keyof SnapSettings, boolean>;
   viewportHelpers: ViewportHelperVisibility;
@@ -150,6 +152,8 @@ export interface WorkbenchProjectModel {
   nodeCount: number;
   objectCount: number;
   lightCount: number;
+  cameraViewCount: number;
+  defaultCameraViewId: string | null;
   assetCount: number;
   completeness: ProjectCompleteness;
   problemCount: number;
@@ -177,7 +181,10 @@ const SEVERITY_RANK: Record<ProblemSeverity, number> = {
 
 export function buildWorkbenchModel(snapshot: SceneSnapshot, options: BuildWorkbenchModelOptions = {}): WorkbenchModel {
   const runtimeProblems = mergeProblems(options.runtimeProblems ?? [], deriveImportedRemapProblems(snapshot));
-  const inspector = options.inspector ?? buildInspectorModel(snapshot, { runtimeProblems });
+  const inspector = options.inspector ?? buildInspectorModel(snapshot, {
+    runtimeProblems,
+    runtimeReady: options.runtimeReady
+  });
   const history = options.history ?? EMPTY_HISTORY;
   const snap = options.snap ?? EMPTY_SNAP;
   const viewportHelpers = options.viewportHelpers;
@@ -426,6 +433,8 @@ function buildWorkbenchToolbar(
     canClearSelection: selectionCount > 0,
     canFrameSelected: options.runtimeReady && selectionCount > 0,
     canFrameAll: options.runtimeReady && Object.keys(snapshot.nodes).length > 0,
+    canCaptureCameraView: inspector.cameras.canCapture,
+    canApplyCameraView: inspector.cameras.canApply,
     transformMode: options.transformMode,
     snapEnabled: {
       translate: isSnapEnabled(options.snap.translate),
@@ -489,6 +498,8 @@ function buildWorkbenchProject(
     nodeCount: Object.keys(snapshot.nodes).length,
     objectCount: Object.keys(snapshot.objects).length,
     lightCount: Object.keys(snapshot.lights).length,
+    cameraViewCount: Object.keys(snapshot.presentation.cameraViews).length,
+    defaultCameraViewId: snapshot.presentation.defaultViewId,
     assetCount: Object.keys(snapshot.assets).length,
     completeness,
     problemCount,

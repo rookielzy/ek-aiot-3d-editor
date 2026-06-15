@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   buildInspectorModel,
+  resolveActiveCameraViewId,
   type Editor,
   type InspectorModel,
   type Problem,
@@ -15,6 +16,8 @@ export interface UseInspectorOptions {
 export interface UseInspectorResult {
   activeLightId: string | null;
   setActiveLightId(value: string | null): void;
+  activeCameraViewId: string | null;
+  setActiveCameraViewId(value: string | null): void;
   runtimeProblems: Problem[];
   inspector: InspectorModel;
   snapshot: SceneSnapshot;
@@ -24,6 +27,7 @@ export interface UseInspectorResult {
 export function useInspector({ editor }: UseInspectorOptions): UseInspectorResult {
   const snapshot = useEditorSnapshot(editor);
   const [runtimeProblems, setRuntimeProblems] = useState<Problem[]>(() => editor.getRuntime()?.getProblems() ?? []);
+  const [activeCameraViewId, setActiveCameraViewIdState] = useState<string | null>(null);
 
   const refreshProblems = useCallback(() => {
     setRuntimeProblems(editor.getRuntime()?.getProblems() ?? []);
@@ -48,10 +52,15 @@ export function useInspector({ editor }: UseInspectorOptions): UseInspectorResul
   }, [editor]);
 
   const inspector = useMemo(
-    () => buildInspectorModel(snapshot, { runtimeProblems }),
-    [snapshot, runtimeProblems]
+    () => buildInspectorModel(snapshot, {
+      activeCameraViewId,
+      runtimeProblems,
+      runtimeReady: editor.getRuntime() !== null
+    }),
+    [snapshot, activeCameraViewId, runtimeProblems, editor]
   );
   const activeLightId = inspector.lights.activeLightId;
+  const resolvedActiveCameraViewId = inspector.cameras.activeCameraViewId;
   const setActiveLightId = useCallback((lightId: string | null) => {
     if (!lightId) {
       const snapshot = editor.getSnapshot();
@@ -68,10 +77,15 @@ export function useInspector({ editor }: UseInspectorOptions): UseInspectorResul
       editor.dispatch({ type: "select-node", nodeId: target.id });
     }
   }, [editor]);
+  const setActiveCameraViewId = useCallback((cameraViewId: string | null) => {
+    setActiveCameraViewIdState(resolveActiveCameraViewId(editor.getSnapshot(), cameraViewId));
+  }, [editor]);
 
   return {
     activeLightId,
     setActiveLightId,
+    activeCameraViewId: resolvedActiveCameraViewId,
+    setActiveCameraViewId,
     runtimeProblems,
     inspector,
     snapshot,

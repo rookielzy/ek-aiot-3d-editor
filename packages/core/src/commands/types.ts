@@ -1,3 +1,4 @@
+import type { AuthoredCameraViewInput, AuthoredCameraViewPatch } from "../cameras/types";
 import type { AssetInput } from "../assets/types";
 import type { GlbImportManifest } from "../assets/import-pipeline";
 import type { GlbImportRemapPlan } from "../assets/import-remap";
@@ -35,6 +36,10 @@ export type SingleCommand =
   | SetTransformCommand
   | SetMaterialCommand
   | SetEnvironmentCommand
+  | CreateCameraViewCommand
+  | UpdateCameraViewCommand
+  | DeleteCameraViewCommand
+  | SetDefaultCameraViewCommand
   | AddLightCommand
   | UpdateLightCommand
   | RemoveLightCommand;
@@ -194,6 +199,27 @@ export interface SetMaterialCommand {
 export interface SetEnvironmentCommand {
   type: "set-environment";
   environment: SceneEnvironmentPatch;
+}
+
+export interface CreateCameraViewCommand {
+  type: "create-camera-view";
+  view?: AuthoredCameraViewInput;
+}
+
+export interface UpdateCameraViewCommand {
+  type: "update-camera-view";
+  viewId: string;
+  patch: AuthoredCameraViewPatch;
+}
+
+export interface DeleteCameraViewCommand {
+  type: "delete-camera-view";
+  viewId: string;
+}
+
+export interface SetDefaultCameraViewCommand {
+  type: "set-default-camera-view";
+  viewId: string | null;
 }
 
 export interface SceneEnvironmentPatch extends Partial<Omit<SceneEnvironment, "background" | "environment">> {

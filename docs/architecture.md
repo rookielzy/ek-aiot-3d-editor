@@ -81,6 +81,7 @@ Snapshot 保存：
 - material overrides
 - environment/background authoring intent
 - light definitions and their light node targets
+- presentation state, including authored camera views and the default presentation view pointer
 - imported GLB target identity, owner hierarchy constraints, source descriptors, optional transform overrides, imported material slot descriptors, and JSON-compatible reimport remap metadata
 - authored problem metadata
 - JSON-compatible metadata
@@ -93,6 +94,7 @@ Runtime 保存或派生：
 - loaded texture / HDR texture
 - PMREM render target
 - renderer / camera / scene
+- editor camera navigation, OrbitControls state, camera helper output, and controls target object
 - resolver output
 - recoverable runtime problem
 - imported target match records linking durable imported nodes to loaded GLB descendants
@@ -100,6 +102,8 @@ Runtime 保存或派生：
 Runtime 派生结果不得写回 Snapshot。
 
 Imported GLB target 是 durable target identity，不是 runtime traversal cache。Runtime projector 会把 imported node 解析成 loaded owner GLB scene 内的 descendant link，并把该 link 注册到 `ThreeObjectMap`。Pointer picking、selection bounds、camera framing 和 TransformControls 都复用这张 runtime target map。Core 不会把 loaded glTF scene graph、Three.js `Object3D`、material/texture、loader parser、resolver result、base transform cache 或 runtime problem 写回 Snapshot。Reimport remap 和 slot-aware material projection 必须从 v5 imported target key/slot key contract 派生，而不是重新发明一套 runtime-only ID。无法解析的 reimport target/slot 会保留 durable marker，并投影为 runtime/workbench problem。
+
+Authored camera view 是 presentation resource，不是 runtime camera。Runtime capture/apply helper 负责在 plain JSON view data 和 transient `PerspectiveCamera`/controls target 之间转换；只有 camera view commands 会写入 `SceneSnapshot.presentation`。`resolveDefaultPresentationView()` 是 pure resolver，供 viewer startup 或 host preview 找到默认 authored view，但不会挂载 renderer 或启用 editor controls。
 
 Material projection 只消费 durable material assignment、imported slot descriptor 和 runtime target map。Object-level assignment 是 broad pass；material-slot assignment 是 narrower pass，只覆盖匹配 primitive mesh 或 material array index 的 projection-owned clone。Texture loader result、shared texture resource owner、slot resolver result、cloned material 和 projection problem 都属于 runtime projection，不能写回 Snapshot 或 `.ek3d`。
 
@@ -135,6 +139,7 @@ Core 的 `buildInspectorModel()` 生成框架无关 inspector model。React/Vue 
 - selected object node material override
 - scene environment/background
 - selected light node editing and light list operations
+- authored camera view list, fields, capture/apply/default/delete affordances
 - runtime/authored problems
 
 这样做的原因是保证 React 和 Vue 的字段、默认值、校验和 command 语义一致。
@@ -151,6 +156,8 @@ Workbench context 包含：
 - `runtimeProblems`
 - `activeLightId`
 - `activeLightNodeId`
+- `activeCameraViewId`
+- `selectedCameraViewId`
 - `operations`
 - `selectionCount`
 - `selectedNodeId`
@@ -161,6 +168,9 @@ Workbench context 包含：
 - `selectedLightId`
 - `snap`
 - `setActiveLightId()`
+- `setActiveCameraViewId()`
+- `captureCameraView()`
+- `applyCameraView()`
 - `refreshProblems()`
 - `dispatch()`
 - `importProject()`

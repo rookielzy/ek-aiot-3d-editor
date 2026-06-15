@@ -3,6 +3,7 @@ import { deriveImportedRemapProblems } from "../runtime/remap-problems";
 import { getSelectedNodeIds, getSelectedObjectIds } from "../selection/selection";
 import type { SceneSnapshot } from "../snapshot/types";
 import { buildEnvironmentSection } from "./environment";
+import { buildCameraSection } from "./cameras";
 import { buildLightSection } from "./lights";
 import { buildMaterialSection } from "./material";
 import { getSelectedNodeTarget } from "./node-targets";
@@ -41,6 +42,10 @@ export function buildInspectorModel(snapshot: SceneSnapshot, options: BuildInspe
     material: buildMaterialSection(snapshot, runtimeProblems),
     environment: buildEnvironmentSection(snapshot),
     lights: buildLightSection(snapshot, options.activeLightId),
+    cameras: buildCameraSection(snapshot, {
+      activeCameraViewId: options.activeCameraViewId,
+      runtimeReady: options.runtimeReady
+    }),
     problems: buildProblemSection(snapshot, runtimeProblems)
   };
 }

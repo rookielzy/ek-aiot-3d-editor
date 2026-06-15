@@ -31,7 +31,7 @@ describe("project package validation", () => {
     });
 
     expect("problems" in parsed).toBe(false);
-    expect("scene" in parsed ? parsed.scene.version : 0).toBe(5);
+    expect("scene" in parsed ? parsed.scene.version : 0).toBe(6);
     expect("scene" in parsed ? parsed.scene.nodes["object-a"].kind : "").toBe("object");
   });
 

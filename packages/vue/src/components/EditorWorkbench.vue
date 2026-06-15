@@ -35,8 +35,10 @@
         :editor="workbench.editor"
         :snapshot="currentSnapshot"
         :inspector="currentInspector"
+        :camera="context.camera"
         :class="inspectorClassName"
         @update:active-light-id="workbench.setActiveLightId"
+        @update:active-camera-view-id="workbench.setActiveCameraViewId"
         @replace-asset="replaceAsset"
       />
     </aside>

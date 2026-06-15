@@ -5,6 +5,7 @@ export { default as TransformInspector } from "./components/TransformInspector.v
 export { default as MaterialInspector } from "./components/MaterialInspector.vue";
 export { default as EnvironmentInspector } from "./components/EnvironmentInspector.vue";
 export { default as LightInspector } from "./components/LightInspector.vue";
+export { default as CameraInspector } from "./components/CameraInspector.vue";
 export { default as ProblemsPanel } from "./components/ProblemsPanel.vue";
 export type { EditorWorkbenchEmits, EditorWorkbenchProps, EditorWorkbenchSlots, WorkbenchRegionName } from "./components/EditorWorkbench.types";
 export { useEditor } from "./composables/use-editor";
