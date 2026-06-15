@@ -56,20 +56,12 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
 
     const viewport = host.querySelector(".starter-viewport") as HTMLElement | null;
     expect(viewport).toBeTruthy();
-    const canvas = viewport!.querySelector("canvas") as HTMLCanvasElement | null;
-    expect(canvas).toBeTruthy();
-    await waitFor(() => {
-      expect(canvas!.width).toBeGreaterThan(1);
-      expect(canvas!.height).toBeGreaterThan(1);
-      expect(canvas!.getBoundingClientRect().width).toBeGreaterThan(100);
-      expect(canvas!.getBoundingClientRect().height).toBeGreaterThan(100);
-      expect(hasNonBlankCanvasPixel(canvas!)).toBe(true);
-    });
+    await findReadyCanvas(viewport!);
 
     expect(button(host, "Marquee")?.getAttribute("aria-pressed")).toBe("false");
     await clickByText(host, "Marquee");
     expect(button(host, "Marquee")?.getAttribute("aria-pressed")).toBe("true");
-    await dragMarqueeStarterObjects(canvas!);
+    await dragMarqueeStarterObjects(await findReadyCanvas(viewport!));
     await waitFor(() => {
       expect(text(host)).toContain("Selection 2 nodes");
       expect(text(section(host, "Hierarchy"))).toContain("Detail block selected");
@@ -225,6 +217,20 @@ function hasNonBlankCanvasPixel(canvas: HTMLCanvasElement): boolean {
     }
   }
   return false;
+}
+
+async function findReadyCanvas(viewport: HTMLElement): Promise<HTMLCanvasElement> {
+  let canvas: HTMLCanvasElement | null = null;
+  await waitFor(() => {
+    canvas = viewport.querySelector("canvas") as HTMLCanvasElement | null;
+    expect(canvas).toBeTruthy();
+    expect(canvas!.width).toBeGreaterThan(1);
+    expect(canvas!.height).toBeGreaterThan(1);
+    expect(canvas!.getBoundingClientRect().width).toBeGreaterThan(100);
+    expect(canvas!.getBoundingClientRect().height).toBeGreaterThan(100);
+    expect(hasNonBlankCanvasPixel(canvas!)).toBe(true);
+  });
+  return canvas!;
 }
 
 async function clickByText(host: HTMLElement, label: string): Promise<void> {
