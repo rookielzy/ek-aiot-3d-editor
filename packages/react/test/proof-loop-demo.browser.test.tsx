@@ -64,8 +64,8 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
     await dragMarqueeStarterObjects(await findReadyCanvas(viewport!));
     await waitFor(() => {
       expect(text(host)).toContain("Selection 2 nodes");
-      expect(text(section(host, "Hierarchy"))).toContain("Detail block selected");
-      expect(text(section(host, "Hierarchy"))).toContain("Simple box selected primary");
+      expect(hierarchyRow(host, "Detail block").getAttribute("data-selected")).toBe("true");
+      expect(hierarchyRow(host, "Simple box").getAttribute("data-selected")).toBe("true");
     });
 
     await clickByText(host, "Snap move");
@@ -116,8 +116,8 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
     await waitFor(() => expect(text(host)).toContain("Opened starter.ek3d"));
     await waitFor(() => {
       expect(text(host)).toContain("Selection 2 nodes");
-      expect(text(section(host, "Hierarchy"))).toContain("Detail block selected");
-      expect(text(section(host, "Hierarchy"))).toContain("Simple box selected primary");
+      expect(hierarchyRow(host, "Detail block").getAttribute("data-selected")).toBe("true");
+      expect(hierarchyRow(host, "Simple box").getAttribute("data-selected")).toBe("true");
     });
     await waitFor(() => {
       expect(text(host)).toContain("Camera view 1");
@@ -376,6 +376,13 @@ function section(host: HTMLElement, label: string): HTMLElement {
   const element = host.querySelector(`[aria-label="${label}"]`) as HTMLElement | null;
   expect(element, `Expected [aria-label="${label}"]`).toBeTruthy();
   return element!;
+}
+
+function hierarchyRow(host: HTMLElement, label: string): HTMLButtonElement {
+  const row = [...section(host, "Hierarchy").querySelectorAll<HTMLButtonElement>(".ek-workbench__tree-row")]
+    .find((candidate) => text(candidate).startsWith(label));
+  expect(row, `Expected hierarchy row ${label}`).toBeTruthy();
+  return row!;
 }
 
 function testId(host: HTMLElement, id: string): HTMLElement {
