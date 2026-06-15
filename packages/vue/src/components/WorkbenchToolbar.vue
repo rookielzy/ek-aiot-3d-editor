@@ -52,6 +52,12 @@
       </button>
     </div>
 
+    <div class="ek-workbench__tool-group" aria-label="Selection tools">
+      <button type="button" title="Toggle marquee selection" :aria-pressed="marqueeSelectionEnabled" @click="emit('toggleMarqueeSelection')">
+        Marquee
+      </button>
+    </div>
+
     <div class="ek-workbench__tool-group" aria-label="Viewport helpers">
       <button type="button" title="Toggle viewport grid" :aria-pressed="toolbar.viewportHelpers.grid" @click="context.toggleViewportHelper('grid')">
         Grid
@@ -138,6 +144,10 @@ const ACCEPT_PROJECT_PACKAGE = ".ek3d,application/octet-stream";
 
 const props = defineProps<{
   context: WorkbenchContext;
+  marqueeSelectionEnabled?: boolean;
+}>();
+const emit = defineEmits<{
+  toggleMarqueeSelection: [];
 }>();
 
 const fileInput = ref<HTMLInputElement | null>(null);

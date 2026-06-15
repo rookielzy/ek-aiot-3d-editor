@@ -66,6 +66,9 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
       expect(hasNonBlankCanvasPixel(canvas!)).toBe(true);
     });
 
+    expect(button(host, "Marquee")?.getAttribute("aria-pressed")).toBe("false");
+    await clickByText(host, "Marquee");
+    expect(button(host, "Marquee")?.getAttribute("aria-pressed")).toBe("true");
     await dragMarqueeStarterObjects(canvas!);
     await waitFor(() => {
       expect(text(host)).toContain("Selection 2 nodes");

@@ -594,7 +594,7 @@ describe("Vue EditorWorkbench", () => {
     expect(wrapper.emitted("runtimeReady")?.at(-1)?.[0]).toBeNull();
   });
 
-  it("enables marquee selection in the default Workbench interactions", async () => {
+  it("keeps marquee selection off by default and enables it from the toolbar", async () => {
     const editor = markRaw(createEditor());
     const mountRuntime = vi.spyOn(editor, "mountRuntime");
     const wrapper = mount(EditorWorkbench, {
@@ -607,12 +607,23 @@ describe("Vue EditorWorkbench", () => {
     expect(mountRuntime).toHaveBeenCalledWith(expect.objectContaining({
       interactions: expect.objectContaining({
         pointerSelection: true,
-        marqueeSelection: true,
+        marqueeSelection: false,
         viewportHelpers: true
       })
     }));
     const viewport = wrapper.find(".ek-workbench__viewport");
     expect(viewport.exists()).toBe(true);
+    const marqueeButton = wrapper.findAll("button").find((candidate) => candidate.text() === "Marquee");
+    expect(marqueeButton?.attributes("aria-pressed")).toBe("false");
+
+    await marqueeButton!.trigger("click");
+
+    expect(wrapper.findAll("button").find((candidate) => candidate.text() === "Marquee")?.attributes("aria-pressed")).toBe("true");
+    expect(mountRuntime).toHaveBeenLastCalledWith(expect.objectContaining({
+      interactions: expect.objectContaining({
+        marqueeSelection: true
+      })
+    }));
 
     wrapper.unmount();
   });
@@ -631,7 +642,7 @@ describe("Vue EditorWorkbench", () => {
     expect(mountRuntime).toHaveBeenCalledWith(expect.objectContaining({
       interactions: expect.objectContaining({
         pointerSelection: true,
-        marqueeSelection: true,
+        marqueeSelection: false,
         viewportHelpers: true
       })
     }));

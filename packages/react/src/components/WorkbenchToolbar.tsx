@@ -4,6 +4,8 @@ import type { WorkbenchContext } from "../hooks/use-workbench";
 
 export interface WorkbenchToolbarProps {
   context: WorkbenchContext;
+  marqueeSelectionEnabled?: boolean;
+  onToggleMarqueeSelection?(): void;
 }
 
 type ProjectActionStatus = {
@@ -13,7 +15,7 @@ type ProjectActionStatus = {
 
 const ACCEPT_PROJECT_PACKAGE = ".ek3d,application/octet-stream";
 
-export function WorkbenchToolbar({ context }: WorkbenchToolbarProps) {
+export function WorkbenchToolbar({ context, marqueeSelectionEnabled = false, onToggleMarqueeSelection }: WorkbenchToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [projectStatus, setProjectStatus] = useState<ProjectActionStatus>({
     tone: "neutral",
@@ -111,6 +113,11 @@ export function WorkbenchToolbar({ context }: WorkbenchToolbarProps) {
         </button>
         <button type="button" onClick={() => context.runAction("toggle-scale-snap")} aria-pressed={toolbar.snapEnabled.scale} title="Toggle scale snap">
           Snap scale
+        </button>
+      </div>
+      <div className="ek-workbench__tool-group" aria-label="Selection tools">
+        <button type="button" onClick={onToggleMarqueeSelection} aria-pressed={marqueeSelectionEnabled} title="Toggle marquee selection">
+          Marquee
         </button>
       </div>
       <div className="ek-workbench__tool-group" aria-label="Viewport helpers">

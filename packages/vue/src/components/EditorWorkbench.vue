@@ -1,7 +1,12 @@
 <template>
   <main ref="root" :class="rootClassName" tabindex="0">
     <div v-if="showDefaultToolbar || $slots.toolbar" class="ek-workbench__toolbar">
-      <WorkbenchToolbar v-if="showDefaultToolbar" :context="context" />
+      <WorkbenchToolbar
+        v-if="showDefaultToolbar"
+        :context="context"
+        :marquee-selection-enabled="marqueeSelectionEnabled"
+        @toggle-marquee-selection="marqueeSelectionEnabled = !marqueeSelectionEnabled"
+      />
       <div v-if="$slots.toolbar" class="ek-workbench__toolbar-region">
         <slot name="toolbar" v-bind="context" />
       </div>
@@ -65,7 +70,7 @@ import "./workbench.css";
 const DEFAULT_WORKBENCH_INTERACTIONS = {
   camera: true,
   pointerSelection: true,
-  marqueeSelection: true,
+  marqueeSelection: false,
   resize: true,
   selectionVisuals: true,
   transform: true,
@@ -91,7 +96,12 @@ const currentSnapshot = computed(() => workbench.snapshot.value);
 const currentInspector = computed(() => workbench.inspector.value);
 const rootClassName = computed(() => props.class ? `ek-workbench ${props.class}` : "ek-workbench");
 const interactions = computed(() => !hasProp("interactions") || props.interactions === undefined ? DEFAULT_WORKBENCH_INTERACTIONS : props.interactions);
-const resolvedInteractions = computed(() => interactions.value);
+const marqueeSelectionEnabled = ref(false);
+const resolvedInteractions = computed(() =>
+  interactions.value === DEFAULT_WORKBENCH_INTERACTIONS
+    ? { ...DEFAULT_WORKBENCH_INTERACTIONS, marqueeSelection: marqueeSelectionEnabled.value }
+    : interactions.value
+);
 const showDefaultToolbar = computed(() => props.showDefaultToolbar);
 const root = ref<HTMLElement | null>(null);
 
