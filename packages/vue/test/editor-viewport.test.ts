@@ -137,6 +137,36 @@ describe("EditorViewport", () => {
 
     wrapper.unmount();
   });
+
+  it("renders a pointer-transparent marquee overlay from core session state", async () => {
+    const editor = markRaw(createEditor());
+    const wrapper = mount(EditorViewport, {
+      props: {
+        editor,
+        interactions: { marqueeSelection: true },
+        rendererFactory: sizedFakeRenderer
+      }
+    });
+    const canvas = wrapper.element.querySelector("canvas");
+
+    canvas?.dispatchEvent(new PointerEvent("pointerdown", { clientX: 20, clientY: 30, button: 0 }));
+    canvas?.dispatchEvent(new PointerEvent("pointermove", { clientX: 90, clientY: 110, button: 0, buttons: 1 }));
+    await nextTick();
+
+    const overlay = wrapper.find(".ek-editor-viewport__marquee");
+    expect(overlay.exists()).toBe(true);
+    expect(overlay.attributes("aria-hidden")).toBe("true");
+    expect(overlay.attributes("style")).toContain("left: 20px");
+    expect(overlay.attributes("style")).toContain("top: 30px");
+    expect(overlay.attributes("style")).toContain("width: 70px");
+    expect(overlay.attributes("style")).toContain("height: 80px");
+
+    canvas?.dispatchEvent(new PointerEvent("pointerup", { clientX: 90, clientY: 110, button: 0 }));
+    await nextTick();
+
+    expect(wrapper.find(".ek-editor-viewport__marquee").exists()).toBe(false);
+    wrapper.unmount();
+  });
 });
 
 function fakeRenderer(container: HTMLElement, dispose: () => void = () => {}): RendererLike {
@@ -146,4 +176,21 @@ function fakeRenderer(container: HTMLElement, dispose: () => void = () => {}): R
     render() {},
     dispose
   };
+}
+
+function sizedFakeRenderer(container: HTMLElement): RendererLike {
+  Object.defineProperty(container, "clientWidth", { configurable: true, value: 200 });
+  Object.defineProperty(container, "clientHeight", { configurable: true, value: 200 });
+  container.getBoundingClientRect = () => ({
+    x: 0,
+    y: 0,
+    left: 0,
+    top: 0,
+    right: 200,
+    bottom: 200,
+    width: 200,
+    height: 200,
+    toJSON() {}
+  });
+  return fakeRenderer(container);
 }

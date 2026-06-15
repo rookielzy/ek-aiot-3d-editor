@@ -33,7 +33,7 @@ assets/
 - `scene.json`：普通 `SceneSnapshot`。当前导出是 v5 node graph；导入旧 v1/v2/v3/v4 scene 会先迁移到当前 schema。
 - `assets/*`：资产 payload bytes。
 
-GLB import analysis 产生的 `glbImportManifest` 属于 `scene.json` 中 asset metadata 的 JSON-compatible authoring data。Imported GLB target node、source descriptor、slot key、authored transform override 和 remap metadata 也保存在 `scene.json`。GLB reimport 会更新同一稳定 asset ID 的 manifest metadata，并保留 matched imported node identity；unresolved target/slot 只保存 JSON-compatible remap marker，不保存 replacement loader result。它们不改变 ZIP 布局，也不在 `assets/*` 下创建额外记录。Runtime imported target links、base transform caches、viewport grid/floor/axes helpers、selection/hover/snap guide helpers、helper visibility、hover target、snap feedback state、loader results、resolver output 和 runtime problems 不会进入 `scene.json` 或 `project.json`。
+GLB import analysis 产生的 `glbImportManifest` 属于 `scene.json` 中 asset metadata 的 JSON-compatible authoring data。Imported GLB target node、source descriptor、slot key、authored transform override 和 remap metadata 也保存在 `scene.json`。GLB reimport 会更新同一稳定 asset ID 的 manifest metadata，并保留 matched imported node identity；unresolved target/slot 只保存 JSON-compatible remap marker，不保存 replacement loader result。它们不改变 ZIP 布局，也不在 `assets/*` 下创建额外记录。Runtime imported target links、base transform caches、viewport grid/floor/axes helpers、selection/hover/snap guide helpers、helper visibility、hover target、snap feedback state、marquee overlay/drag rectangle/candidate IDs、loader results、resolver output 和 runtime problems 不会进入 `scene.json` 或 `project.json`。
 
 ## project.json
 

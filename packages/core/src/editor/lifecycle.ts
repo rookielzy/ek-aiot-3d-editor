@@ -27,6 +27,7 @@ import { disposeObjectTree } from "../runtime/disposal";
 import { GlbImportError, ThreeGltfLoaderAdapter } from "../runtime/gltf-loader-adapter";
 import { EditorTransformModeState, type TransformModeSubscriber } from "../runtime/transform/transform-mode";
 import type { SceneImportedGlbNode, SceneSnapshot, SerializedSceneSnapshot } from "../snapshot/types";
+import { EditorMarqueeSelectionState, type MarqueeSelectionSubscriber } from "./marquee-selection-state";
 import { createAdvancedEditorOperations, createMemoryClipboard, type AdvancedEditorOperations, type EditorClipboard } from "./operations";
 import { EditorSnapState, type SnapSubscriber } from "./snap-state";
 import { EditorViewportHelperState, IDLE_VIEWPORT_SNAP_FEEDBACK, type ViewportHelperSubscriber } from "./viewport-helper-state";
@@ -43,6 +44,7 @@ export class CoreEditor implements EditorWithGlbImport {
   readonly clipboard: EditorClipboard = createMemoryClipboard();
   readonly operations: AdvancedEditorOperations;
   readonly snap = new EditorSnapState();
+  readonly marqueeSelection = new EditorMarqueeSelectionState();
   readonly viewportHelpers = new EditorViewportHelperState();
   readonly transformMode = new EditorTransformModeState();
   #runtime: EditorRuntime | null = null;
@@ -69,6 +71,11 @@ export class CoreEditor implements EditorWithGlbImport {
   subscribeSnap(subscriber: SnapSubscriber): () => void {
     this.#assertActive();
     return this.snap.subscribe(subscriber);
+  }
+
+  subscribeMarqueeSelection(subscriber: MarqueeSelectionSubscriber): () => void {
+    this.#assertActive();
+    return this.marqueeSelection.subscribe(subscriber);
   }
 
   subscribeViewportHelpers(subscriber: ViewportHelperSubscriber): () => void {
@@ -124,6 +131,7 @@ export class CoreEditor implements EditorWithGlbImport {
     this.projectAssets.clear();
     this.clipboard.clear();
     this.snap.set({});
+    this.marqueeSelection.reset();
     this.viewportHelpers.reset();
     this.transformMode.reset();
     const nextSnapshot = this.store.replaceSnapshot(restored);
@@ -178,6 +186,7 @@ export class CoreEditor implements EditorWithGlbImport {
     }
 
     this.history.clear();
+    this.marqueeSelection.reset();
     this.viewportHelpers.setHover(null);
     this.viewportHelpers.setSnapFeedback(IDLE_VIEWPORT_SNAP_FEEDBACK);
     const snapshot = this.store.replaceSnapshot(result.snapshot);
@@ -483,6 +492,7 @@ export class CoreEditor implements EditorWithGlbImport {
       dispatcher: this.dispatcher,
       resolver: this.#resolver,
       snap: this.snap,
+      marqueeSelection: this.marqueeSelection,
       viewportHelpers: this.viewportHelpers,
       transformMode: this.transformMode
     });
@@ -509,6 +519,7 @@ export class CoreEditor implements EditorWithGlbImport {
     this.projectAssets.clear();
     this.clipboard.clear();
     this.snap.clear();
+    this.marqueeSelection.clear();
     this.viewportHelpers.clear();
     this.transformMode.clear();
     this.store.dispose();

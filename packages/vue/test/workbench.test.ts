@@ -547,6 +547,7 @@ describe("Vue EditorWorkbench", () => {
     const interactions: EditorRuntimeOptions["interactions"] = {
       camera: { enableDamping: true },
       pointerSelection: true,
+      marqueeSelection: { defaultMode: "add" },
       resize: true,
       selectionVisuals: true,
       transform: true
@@ -571,6 +572,51 @@ describe("Vue EditorWorkbench", () => {
     wrapper.unmount();
 
     expect(wrapper.emitted("runtimeReady")?.at(-1)?.[0]).toBeNull();
+  });
+
+  it("enables marquee selection in the default Workbench interactions", async () => {
+    const editor = markRaw(createEditor());
+    const mountRuntime = vi.spyOn(editor, "mountRuntime");
+    const wrapper = mount(EditorWorkbench, {
+      props: {
+        editor,
+        rendererFactory: fakeRenderer
+      }
+    });
+
+    expect(mountRuntime).toHaveBeenCalledWith(expect.objectContaining({
+      interactions: expect.objectContaining({
+        pointerSelection: true,
+        marqueeSelection: true,
+        viewportHelpers: true
+      })
+    }));
+    const viewport = wrapper.find(".ek-workbench__viewport");
+    expect(viewport.exists()).toBe(true);
+
+    wrapper.unmount();
+  });
+
+  it("uses default Workbench interactions when the interactions prop is explicitly undefined", () => {
+    const editor = markRaw(createEditor());
+    const mountRuntime = vi.spyOn(editor, "mountRuntime");
+    const wrapper = mount(EditorWorkbench, {
+      props: {
+        editor,
+        interactions: undefined,
+        rendererFactory: fakeRenderer
+      }
+    });
+
+    expect(mountRuntime).toHaveBeenCalledWith(expect.objectContaining({
+      interactions: expect.objectContaining({
+        pointerSelection: true,
+        marqueeSelection: true,
+        viewportHelpers: true
+      })
+    }));
+
+    wrapper.unmount();
   });
 
   it("moves viewport, inspector, and slot context when the editor prop changes", async () => {

@@ -2,7 +2,9 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { createApp, type App as VueApp } from "vue";
 import { afterEach, describe, expect, it } from "vitest";
+import { PerspectiveCamera, Vector3 } from "three";
 import type { RendererLike } from "@ek-aiot/3d-editor-core";
+import { decodeArchiveJson, defaultArchiveAdapter } from "../../core/src/project/archive-adapter";
 import { App as ReactProofLoopApp } from "../../../examples/react-proof-loop/src/App";
 import ReactDemoStyles from "../../../examples/react-proof-loop/src/styles.css?raw";
 import VueProofLoopApp from "../../../examples/vue-proof-loop/src/App.vue";
@@ -64,6 +66,13 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
       expect(hasNonBlankCanvasPixel(canvas!)).toBe(true);
     });
 
+    await dragMarqueeStarterObjects(canvas!);
+    await waitFor(() => {
+      expect(text(host)).toContain("Selection 2 nodes");
+      expect(text(section(host, "Hierarchy"))).toContain("Detail block selected");
+      expect(text(section(host, "Hierarchy"))).toContain("Simple box selected primary");
+    });
+
     await clickByText(host, "Snap move");
     expect(button(host, "Snap move")?.getAttribute("aria-pressed")).toBe("true");
 
@@ -96,11 +105,17 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
     await waitFor(() => expect(text(host)).toContain("Exported partial project"));
     await waitFor(() => expect(window.__lastDownloadedProject).toBeInstanceOf(Uint8Array));
     expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("asset-unresolved");
+    expectExportedMarqueeSelection(window.__lastDownloadedProject!);
 
     const openInput = section(host, "Project actions").querySelector('input[type="file"]') as HTMLInputElement | null;
     expect(openInput, "Expected default Open project file input").toBeTruthy();
     await uploadFile(openInput!, new File([copyBytes(window.__lastDownloadedProject!)], "starter.ek3d", { type: "application/octet-stream" }));
     await waitFor(() => expect(text(host)).toContain("Opened starter.ek3d"));
+    await waitFor(() => {
+      expect(text(host)).toContain("Selection 2 nodes");
+      expect(text(section(host, "Hierarchy"))).toContain("Detail block selected");
+      expect(text(section(host, "Hierarchy"))).toContain("Simple box selected primary");
+    });
 
     await waitFor(() => {
       expect(text(section(host, "Missing asset recovery"))).toContain("Replace asset");
@@ -202,6 +217,115 @@ async function clickByText(host: HTMLElement, label: string): Promise<void> {
   expect(target, `Expected button ${label}`).toBeTruthy();
   target!.click();
   await waitForAnimationFrame();
+}
+
+async function dragMarquee(canvas: HTMLCanvasElement, start: { x: number; y: number }, end: { x: number; y: number }): Promise<void> {
+  const rect = canvas.getBoundingClientRect();
+  const pointer = {
+    pointerId: 1,
+    pointerType: "mouse",
+    button: 0,
+    buttons: 1,
+    bubbles: true,
+    cancelable: true
+  };
+  canvas.dispatchEvent(new PointerEvent("pointerdown", {
+    ...pointer,
+    clientX: rect.left + start.x,
+    clientY: rect.top + start.y
+  }));
+  await waitForAnimationFrame();
+  canvas.dispatchEvent(new PointerEvent("pointermove", {
+    ...pointer,
+    clientX: rect.left + end.x,
+    clientY: rect.top + end.y
+  }));
+  await waitForAnimationFrame();
+  canvas.dispatchEvent(new PointerEvent("pointerup", {
+    ...pointer,
+    buttons: 0,
+    clientX: rect.left + end.x,
+    clientY: rect.top + end.y
+  }));
+  await waitForAnimationFrame();
+}
+
+async function dragMarqueeStarterObjects(canvas: HTMLCanvasElement): Promise<void> {
+  const rect = canvas.getBoundingClientRect();
+  const detailRect = projectStarterBoxRect(-1.35, rect.width, rect.height);
+  const boxRect = projectStarterBoxRect(0, rect.width, rect.height);
+  const recoverableRect = projectStarterBoxRect(1.35, rect.width, rect.height);
+  const ambientPoint = projectStarterPoint(0, 0, 0, rect.width, rect.height);
+  const paddingX = Math.max(2, rect.width * 0.01);
+  const paddingY = Math.min(8, Math.max(2, rect.height * 0.02));
+  const start = {
+    x: Math.max(4, Math.min(detailRect.left, boxRect.left) - paddingX),
+    y: Math.max(4, ambientPoint.y + paddingY)
+  };
+  const end = {
+    x: Math.min(rect.width - 4, recoverableRect.left - paddingX, Math.max(detailRect.right, boxRect.right) + paddingX),
+    y: Math.min(rect.height - 4, Math.max(detailRect.bottom, boxRect.bottom) + paddingY)
+  };
+
+  expect(end.x).toBeGreaterThan(start.x + 4);
+  expect(end.y).toBeGreaterThan(start.y + 4);
+  expect(start.y).toBeGreaterThan(ambientPoint.y);
+
+  await dragMarquee(canvas, start, end);
+}
+
+function projectStarterBoxRect(centerX: number, width: number, height: number): { left: number; top: number; right: number; bottom: number } {
+  const camera = new PerspectiveCamera(50, width / height, 0.1, 1000);
+  camera.position.set(0, 2, 5);
+  camera.lookAt(0, 0, 0);
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld();
+
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (const x of [centerX - 0.5, centerX + 0.5]) {
+    for (const y of [-0.5, 0.5]) {
+      for (const z of [-0.5, 0.5]) {
+        const point = new Vector3(x, y, z).project(camera);
+        const projected = toViewportPoint(point, width, height);
+        xs.push(projected.x);
+        ys.push(projected.y);
+      }
+    }
+  }
+
+  return {
+    left: Math.min(...xs),
+    top: Math.min(...ys),
+    right: Math.max(...xs),
+    bottom: Math.max(...ys)
+  };
+}
+
+function projectStarterPoint(x: number, y: number, z: number, width: number, height: number): { x: number; y: number } {
+  const camera = new PerspectiveCamera(50, width / height, 0.1, 1000);
+  camera.position.set(0, 2, 5);
+  camera.lookAt(0, 0, 0);
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld();
+  return toViewportPoint(new Vector3(x, y, z).project(camera), width, height);
+}
+
+function toViewportPoint(point: Vector3, width: number, height: number): { x: number; y: number } {
+  return {
+    x: (point.x + 1) / 2 * width,
+    y: (1 - point.y) / 2 * height
+  };
+}
+
+function expectExportedMarqueeSelection(bytes: Uint8Array): void {
+  const files = defaultArchiveAdapter.read(bytes);
+  const scene = decodeArchiveJson(files.find((entry) => entry.path === "scene.json")!.bytes) as { selection: { nodeIds: string[] } };
+  expect(scene.selection.nodeIds).toEqual(["detail", "box"]);
+  const serialized = JSON.stringify(scene);
+  expect(serialized).not.toContain("marquee");
+  expect(serialized).not.toContain("candidateNodeIds");
+  expect(serialized).not.toContain("PointerEvent");
 }
 
 function button(host: HTMLElement, label: string): HTMLButtonElement | null {

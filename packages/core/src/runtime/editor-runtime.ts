@@ -13,9 +13,11 @@ import { SceneProjector } from "./scene-projector";
 import { ObjectPicker } from "./picking";
 import type { RuntimeTextureLoaderAdapter } from "./texture-loader-adapter";
 import type { Unsubscribe } from "../editor/subscription";
+import { normalizeMarqueeSelectionRect, type EditorMarqueeSelectionState, type MarqueeSelectionPoint, type MarqueeSelectionRect } from "../editor/marquee-selection-state";
 import type { EditorSnapState } from "../editor/snap-state";
 import { IDLE_VIEWPORT_SNAP_FEEDBACK, type EditorViewportHelperState, type ViewportHelperStateSnapshot } from "../editor/viewport-helper-state";
 import { RuntimeSelectionVisuals } from "./selection-visuals";
+import { RuntimeMarqueeSelection } from "./marquee-selection";
 import type { RuntimeNodeTarget } from "./three-object-map";
 import { RuntimeViewportHelpers } from "./viewport-helpers";
 import { TransformControlsAdapter, createThreeTransformControls, type RuntimeTransformControlsFactory } from "./transform/transform-controls-adapter";
@@ -63,6 +65,7 @@ interface ThreeEditorRuntimeOptions extends EditorRuntimeOptions {
   cameraControlsFactory?: ViewportCameraControlsFactory;
   transformControlsFactory?: RuntimeTransformControlsFactory;
   snap?: EditorSnapState;
+  marqueeSelection?: EditorMarqueeSelectionState;
   viewportHelpers?: EditorViewportHelperState;
   transformMode?: EditorTransformModeState;
   resizeObserverFactory?: ResizeObserverFactory;
@@ -96,6 +99,13 @@ export interface RuntimeProblemSnapshot {
 export type RuntimeProblemSubscriber = (snapshot: RuntimeProblemSnapshot) => void;
 export type ResizeObserverFactory = (callback: ResizeObserverCallback) => Pick<ResizeObserver, "observe" | "disconnect">;
 
+interface RuntimeViewportMetrics {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 export class ThreeEditorRuntime implements EditorRuntime {
   readonly scene = new Scene();
   readonly camera = new PerspectiveCamera(50, 1, 0.1, 1000);
@@ -109,6 +119,7 @@ export class ThreeEditorRuntime implements EditorRuntime {
   #transformControls: TransformControlsAdapter | null = null;
   #transformController: TransformController;
   #selectionVisuals: RuntimeSelectionVisuals | null = null;
+  #marqueeSelectionState: EditorMarqueeSelectionState | null = null;
   #viewportHelpers: RuntimeViewportHelpers | null = null;
   #viewportHelperState: EditorViewportHelperState | null = null;
   #currentHelperSnapshot: ViewportHelperStateSnapshot | null = null;
@@ -125,10 +136,41 @@ export class ThreeEditorRuntime implements EditorRuntime {
   #disposed = false;
   #projectGeneration = 0;
   #pointerStart: { clientX: number; clientY: number; button: number } | null = null;
+  #marqueeStart: {
+    clientX: number;
+    clientY: number;
+    point: MarqueeSelectionPoint;
+    viewport: RuntimeViewportMetrics;
+    button: number;
+    pointerId: number;
+    mode: SelectionMode;
+    cameraControlsEnabled: boolean | null;
+  } | null = null;
+  #marqueeDragging = false;
   #handleControlsChange = () => {
     this.invalidateRender();
   };
   #handlePointerDown = (event: PointerEvent) => {
+    if (this.#interactions.marqueeSelection && event.button === this.#interactions.marqueeSelection.button && !this.#transformControls?.dragging) {
+      const viewport = this.#viewportMetrics();
+      const point = this.#clientPointToContainerPoint(event.clientX, event.clientY, viewport);
+      this.#marqueeStart = {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        point,
+        viewport,
+        button: event.button,
+        pointerId: event.pointerId,
+        mode: resolvePointerSelectionMode(event, this.#interactions.marqueeSelection.defaultMode),
+        cameraControlsEnabled: this.#controls?.enabled ?? null
+      };
+      if (this.#controls) {
+        this.#controls.enabled = false;
+      }
+      this.#capturePointer(event.pointerId);
+      this.#marqueeSelectionState?.start(point, this.#marqueeStart.mode);
+    }
+
     if (!this.#interactions.pointerSelection || event.button !== this.#interactions.pointerSelection.button) {
       return;
     }
@@ -139,6 +181,13 @@ export class ThreeEditorRuntime implements EditorRuntime {
     };
   };
   #handlePointerUp = (event: PointerEvent) => {
+    if (this.#marqueeStart && event.button === this.#marqueeStart.button) {
+      const handled = this.#completeMarquee(event);
+      if (handled) {
+        return;
+      }
+    }
+
     const options = this.#interactions.pointerSelection;
     const pointerStart = this.#pointerStart;
     this.#pointerStart = null;
@@ -157,14 +206,34 @@ export class ThreeEditorRuntime implements EditorRuntime {
     });
   };
   #handlePointerMove = (event: PointerEvent) => {
+    if (this.#marqueeStart) {
+      this.#updateMarquee(event);
+      if (this.#marqueeDragging) {
+        return;
+      }
+    }
+
     if (!this.#viewportHelperState || !this.#currentHelperSnapshot?.visibility.hover) {
       return;
     }
     const nodeId = this.#hitNodeFromPointer(event.clientX, event.clientY);
     this.#viewportHelperState.setHover(nodeId);
   };
+  #handlePointerCancel = () => {
+    this.#cancelMarquee();
+    this.#pointerStart = null;
+  };
   #handlePointerLeave = () => {
+    if (this.#marqueeDragging) {
+      return;
+    }
     this.#viewportHelperState?.setHover(null);
+  };
+  #handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Escape") {
+      this.#cancelMarquee();
+      this.#pointerStart = null;
+    }
   };
 
   constructor(options: ThreeEditorRuntimeOptions) {
@@ -199,6 +268,8 @@ export class ThreeEditorRuntime implements EditorRuntime {
   async project(snapshot: SceneSnapshot = this.#store.getSnapshot()): Promise<void> {
     this.#assertActive();
     const generation = this.#beginProject();
+    this.#cancelMarquee();
+    this.#pointerStart = null;
     await this.projector.project(snapshot);
     if (this.#disposed || generation !== this.#projectGeneration) {
       return;
@@ -382,6 +453,11 @@ export class ThreeEditorRuntime implements EditorRuntime {
       this.#selectionVisuals = new RuntimeSelectionVisuals(this.scene, this.projector.objects, this.#interactions.selectionVisuals);
     }
 
+    if (this.#interactions.marqueeSelection) {
+      this.#marqueeSelectionState = options.marqueeSelection ?? null;
+      this.#marqueeSelectionState?.reset();
+    }
+
     if (this.#interactions.viewportHelpers) {
       this.#viewportHelpers = new RuntimeViewportHelpers(this.scene, this.projector.objects, this.#interactions.viewportHelpers);
       this.#viewportHelperState = options.viewportHelpers ?? null;
@@ -431,12 +507,14 @@ export class ThreeEditorRuntime implements EditorRuntime {
       }) ?? null;
     }
 
-    if (this.#interactions.pointerSelection) {
-      this.#renderer.domElement.addEventListener("pointerdown", this.#handlePointerDown);
+    if (this.#interactions.pointerSelection || this.#interactions.marqueeSelection) {
+      this.#renderer.domElement.addEventListener("pointerdown", this.#handlePointerDown, true);
       this.#renderer.domElement.addEventListener("pointerup", this.#handlePointerUp);
+      this.#renderer.domElement.addEventListener("pointercancel", this.#handlePointerCancel);
+      this.#renderer.domElement.ownerDocument?.addEventListener("keydown", this.#handleKeyDown);
     }
 
-    if (this.#interactions.viewportHelpers) {
+    if (this.#interactions.viewportHelpers || this.#interactions.marqueeSelection) {
       this.#renderer.domElement.addEventListener("pointermove", this.#handlePointerMove);
       this.#renderer.domElement.addEventListener("pointerleave", this.#handlePointerLeave);
     }
@@ -456,10 +534,12 @@ export class ThreeEditorRuntime implements EditorRuntime {
   }
 
   #unmountInteractions(): void {
-    this.#renderer.domElement.removeEventListener("pointerdown", this.#handlePointerDown);
+    this.#renderer.domElement.removeEventListener("pointerdown", this.#handlePointerDown, true);
     this.#renderer.domElement.removeEventListener("pointerup", this.#handlePointerUp);
+    this.#renderer.domElement.removeEventListener("pointercancel", this.#handlePointerCancel);
     this.#renderer.domElement.removeEventListener("pointermove", this.#handlePointerMove);
     this.#renderer.domElement.removeEventListener("pointerleave", this.#handlePointerLeave);
+    this.#renderer.domElement.ownerDocument?.removeEventListener("keydown", this.#handleKeyDown);
     this.#resizeObserver?.disconnect();
     this.#resizeObserver = null;
     this.#controls?.removeEventListener("change", this.#handleControlsChange);
@@ -473,6 +553,8 @@ export class ThreeEditorRuntime implements EditorRuntime {
     this.#unsubscribeTransformMode = null;
     this.#transformControls?.dispose();
     this.#transformControls = null;
+    this.#cancelMarquee();
+    this.#marqueeSelectionState = null;
     this.#clearViewportHelperSessionTargets();
     this.#selectionVisuals?.dispose();
     this.#selectionVisuals = null;
@@ -487,6 +569,134 @@ export class ThreeEditorRuntime implements EditorRuntime {
       .filter(([, target]) => target.pickable && !target.object.userData.problem)
       .map(([, target]) => target.object);
     return this.picker.hitNodeFromClientPoint(this.#container, clientX, clientY, candidates);
+  }
+
+  #updateMarquee(event: PointerEvent): void {
+    const options = this.#interactions.marqueeSelection;
+    const start = this.#marqueeStart;
+    if (!options || !start || event.button !== start.button && event.buttons === 0) {
+      return;
+    }
+
+    const distance = Math.hypot(event.clientX - start.clientX, event.clientY - start.clientY);
+    if (!this.#marqueeDragging && distance <= options.dragThreshold) {
+      return;
+    }
+
+    if (!this.#marqueeDragging) {
+      this.#marqueeDragging = true;
+      this.#viewportHelperState?.setHover(null);
+    }
+
+    const current = this.#clientPointToContainerPoint(event.clientX, event.clientY, start.viewport);
+    const rect = normalizeMarqueeSelectionRect(start.point, current);
+    const result = options.previewCandidates
+      ? this.#selectMarqueeRect(rect, start.viewport)
+      : { nodeIds: [] };
+    this.#marqueeSelectionState?.drag(current, result.nodeIds);
+    event.preventDefault();
+  }
+
+  #completeMarquee(event: PointerEvent): boolean {
+    const options = this.#interactions.marqueeSelection;
+    const start = this.#marqueeStart;
+    if (!options || !start) {
+      return false;
+    }
+
+    const wasDragging = this.#marqueeDragging;
+    if (!wasDragging) {
+      this.#cancelMarquee();
+      return false;
+    }
+
+    const rect = normalizeMarqueeSelectionRect(
+      start.point,
+      this.#clientPointToContainerPoint(event.clientX, event.clientY, start.viewport)
+    );
+    const largeEnough = rect.width >= options.minSize && rect.height >= options.minSize;
+    const result = largeEnough ? this.#selectMarqueeRect(rect, start.viewport) : null;
+    const mode = resolvePointerSelectionMode(event, options.defaultMode);
+    const commandResult = result
+      ? this.#dispatchMarqueeSelection(result.nodeIds, mode, result.primaryNodeId)
+      : { ok: true as const, snapshot: this.#store.getSnapshot() };
+    this.#releasePointer(start.pointerId);
+    this.#restoreMarqueeCameraControls();
+    this.#pointerStart = null;
+    this.#marqueeStart = null;
+    this.#marqueeDragging = false;
+    this.#marqueeSelectionState?.reset();
+    event.preventDefault();
+    return commandResult.ok || wasDragging;
+  }
+
+  #dispatchMarqueeSelection(nodeIds: string[], mode: SelectionMode, primaryNodeId: string | null = nodeIds[0] ?? null): CommandResult {
+    if (mode === "replace" && nodeIds.length === 0) {
+      return this.picker.selectNode(null, "replace");
+    }
+    return this.picker.selectNodes(nodeIds, mode, primaryNodeId);
+  }
+
+  #cancelMarquee(): void {
+    if (!this.#marqueeStart && !this.#marqueeDragging) {
+      return;
+    }
+    const pointerId = this.#marqueeStart?.pointerId;
+    this.#restoreMarqueeCameraControls();
+    if (pointerId !== undefined) {
+      this.#releasePointer(pointerId);
+    }
+    this.#marqueeStart = null;
+    this.#marqueeDragging = false;
+    this.#marqueeSelectionState?.reset();
+  }
+
+  #restoreMarqueeCameraControls(): void {
+    const enabled = this.#marqueeStart?.cameraControlsEnabled;
+    if (this.#controls && enabled !== null && enabled !== undefined) {
+      this.#controls.enabled = enabled;
+    }
+  }
+
+  #selectMarqueeRect(rect: MarqueeSelectionRect, viewport: RuntimeViewportMetrics = this.#viewportMetrics()): { nodeIds: string[]; primaryNodeId: string | null } {
+    return new RuntimeMarqueeSelection({
+      camera: this.camera,
+      objects: this.projector.objects,
+      viewport
+    }).select(rect);
+  }
+
+  #clientPointToContainerPoint(clientX: number, clientY: number, viewport: RuntimeViewportMetrics = this.#viewportMetrics()): MarqueeSelectionPoint {
+    return {
+      x: clamp(clientX - viewport.left, 0, viewport.width),
+      y: clamp(clientY - viewport.top, 0, viewport.height)
+    };
+  }
+
+  #viewportMetrics(): RuntimeViewportMetrics {
+    const rect = this.#container.getBoundingClientRect();
+    return {
+      left: rect.left,
+      top: rect.top,
+      width: rect.width || this.#container.clientWidth || 1,
+      height: rect.height || this.#container.clientHeight || 1
+    };
+  }
+
+  #capturePointer(pointerId: number): void {
+    try {
+      this.#renderer.domElement.setPointerCapture?.(pointerId);
+    } catch {
+      // jsdom and detached canvases may reject pointer capture.
+    }
+  }
+
+  #releasePointer(pointerId: number): void {
+    try {
+      this.#renderer.domElement.releasePointerCapture?.(pointerId);
+    } catch {
+      // Pointer capture may not have been acquired.
+    }
   }
 
   #clearStaleViewportHelperTargets(): void {
@@ -593,4 +803,8 @@ function isFrameableTarget(target: RuntimeNodeTarget | undefined): target is Run
 
 function uniqueObjects(objects: Object3D[]): Object3D[] {
   return [...new Set(objects)];
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
 }

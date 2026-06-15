@@ -98,6 +98,14 @@ export type {
   SnapshotSubscriber
 } from "./editor/editor-api";
 export type { AdvancedEditorOperations, EditorClipboard } from "./editor/operations";
+export type {
+  EditorMarqueeSelectionStateSnapshot,
+  MarqueeSelectionPoint,
+  MarqueeSelectionRect,
+  MarqueeSelectionStatus,
+  MarqueeSelectionSubscriber,
+  ReadonlyEditorMarqueeSelectionState
+} from "./editor/marquee-selection-state";
 export type { SnapChannel, SnapSubscriber } from "./editor/snap-state";
 export type {
   ViewportHelperKey,
@@ -106,6 +114,10 @@ export type {
   ViewportHelperVisibility,
   ViewportSnapFeedbackState
 } from "./editor/viewport-helper-state";
+export {
+  IDLE_MARQUEE_SELECTION_STATE,
+  normalizeMarqueeSelectionRect
+} from "./editor/marquee-selection-state";
 export {
   EditorViewportHelperState,
   DEFAULT_WORKBENCH_VIEWPORT_HELPER_VISIBILITY
@@ -244,6 +256,7 @@ export type {
   RuntimeCameraControlsOptions,
   RuntimeCameraFrameOptions,
   RuntimeInteractionOptions,
+  RuntimeMarqueeSelectionOptions,
   RuntimePointerSelectionInput,
   RuntimePointerSelectionModifiers,
   RuntimePointerSelectionOptions,

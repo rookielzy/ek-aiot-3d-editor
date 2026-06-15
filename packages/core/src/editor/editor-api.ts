@@ -4,6 +4,7 @@ import type { GlbImportRemapPlan } from "../assets/import-remap";
 import type { WorkbenchAssetImportOptions, WorkbenchAssetImportResult } from "../assets/workspace-import";
 import type { Command, CommandResult } from "../commands/types";
 import type { AdvancedEditorOperations, EditorClipboard } from "./operations";
+import type { MarqueeSelectionSubscriber, ReadonlyEditorMarqueeSelectionState } from "./marquee-selection-state";
 import type { EditorSnapState, SnapSubscriber } from "./snap-state";
 import type { EditorViewportHelperState, ViewportHelperSubscriber } from "./viewport-helper-state";
 import type { EditorTransformModeState, TransformModeSubscriber } from "../runtime/transform/transform-mode";
@@ -67,6 +68,7 @@ export interface Editor {
   readonly operations: AdvancedEditorOperations;
   readonly clipboard: EditorClipboard;
   readonly snap: EditorSnapState;
+  readonly marqueeSelection?: ReadonlyEditorMarqueeSelectionState;
   readonly viewportHelpers?: EditorViewportHelperState;
   readonly transformMode: EditorTransformModeState;
   subscribeSnap(subscriber: SnapSubscriber): () => void;
@@ -77,6 +79,7 @@ export interface Editor {
   getHistoryState(): HistoryState;
   serialize(): SerializedSceneSnapshot;
   restore(snapshot: SerializedSceneSnapshot): SceneSnapshot;
+  subscribeMarqueeSelection?(subscriber: MarqueeSelectionSubscriber): () => void;
   registerAsset(asset: Parameters<import("../assets/registry").AssetRegistry["register"]>[0]): AssetReference;
   getAssetWorkspacePayloads?(): ProjectAssetPayloadSummary[];
   getAssetWorkspaceVersion?(): number;

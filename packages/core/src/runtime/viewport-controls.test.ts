@@ -13,6 +13,7 @@ describe("viewport controls", () => {
     expect(normalizeRuntimeInteractionOptions(undefined)).toMatchObject({
       camera: false,
       pointerSelection: false,
+      marqueeSelection: false,
       resize: false,
       selectionVisuals: false,
       transform: false,
@@ -22,6 +23,7 @@ describe("viewport controls", () => {
     expect(normalizeRuntimeInteractionOptions(true)).toMatchObject({
       camera: {},
       pointerSelection: { button: 0, clickTolerance: 4, defaultMode: "replace" },
+      marqueeSelection: { button: 0, dragThreshold: 4, minSize: 4, defaultMode: "replace", previewCandidates: false },
       resize: true,
       selectionVisuals: { selectedColor: 0x4f8cff, primarySelectedColor: 0xffc247, hoverColor: 0x7dd3fc },
       transform: {},
@@ -40,6 +42,7 @@ describe("viewport controls", () => {
     expect(normalizeRuntimeInteractionOptions({ resize: true })).toMatchObject({
       camera: false,
       pointerSelection: false,
+      marqueeSelection: false,
       resize: true,
       selectionVisuals: false,
       transform: false,
@@ -51,6 +54,34 @@ describe("viewport controls", () => {
     expect(normalizeRuntimeInteractionOptions({ transform: true }).transform).toEqual({});
     expect(normalizeRuntimeInteractionOptions({ transform: { size: 0.8, space: "local" } }).transform).toEqual({ size: 0.8, space: "local" });
     expect(normalizeRuntimeInteractionOptions({ transform: { enabled: false } }).transform).toBe(false);
+  });
+
+  it("normalizes marquee selection options without leaking disabled payloads", () => {
+    expect(normalizeRuntimeInteractionOptions({ marqueeSelection: true }).marqueeSelection).toEqual({
+      enabled: true,
+      button: 0,
+      dragThreshold: 4,
+      minSize: 4,
+      defaultMode: "replace",
+      previewCandidates: false
+    });
+    expect(normalizeRuntimeInteractionOptions({
+      marqueeSelection: {
+        button: 1,
+        dragThreshold: 9,
+        minSize: 6,
+        defaultMode: "toggle",
+        previewCandidates: false
+      }
+    }).marqueeSelection).toEqual({
+      enabled: true,
+      button: 1,
+      dragThreshold: 9,
+      minSize: 6,
+      defaultMode: "toggle",
+      previewCandidates: false
+    });
+    expect(normalizeRuntimeInteractionOptions({ marqueeSelection: { enabled: false, dragThreshold: 20 } }).marqueeSelection).toBe(false);
   });
 
   it("normalizes viewport helpers without leaking disabled option payloads", () => {

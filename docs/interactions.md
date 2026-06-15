@@ -42,7 +42,9 @@ Core runtime 提供 node-aware picking；命中普通 GLB object 时会选择所
 
 `mode` 也可使用 `toggle`、`add`、`remove`、`clear`、`all`，对应 `select-nodes` 命令。Snapshot 中 `selection.nodeId` 是 primary selection，`selection.nodeIds` 是有序多选集合。`selection.objectId/objectIds` 是当前兼容镜像，只包含选中 object node 的 object payload ID。选中 imported GLB target 时，`objectId/objectIds` 不会被 owner object 自动填充；这避免 object-only host code 把 GLB internal target 误当作整对象操作。Inspector 根据 selected node kind 显示 transform、material 或 light section 的可用状态，同时暴露 selection count 给 workbench。
 
-Raycaster picking 能从 client point 解析候选 node；React/Vue workbench 默认开启 viewport pointer selection，示例中也可以从层级面板按钮触发同一套 selection command。框选和 lasso selection 仍未实现。
+Raycaster picking 能从 client point 解析候选 node；React/Vue workbench 默认开启 viewport pointer selection，示例中也可以从层级面板按钮触发同一套 selection command。
+
+默认 Workbench 也开启 viewport marquee selection。用户按住主按钮拖出矩形后，runtime 会从 `ThreeObjectMap` 的 pickable target entries 计算可见候选，而不是遍历 raw Three.js scene；因此 imported GLB target specificity、light/group target、helper 排除和 owner fallback 都与 pointer picking 保持一致。完成拖拽时仍派发 `select-nodes`：默认 replace，shift add，ctrl/meta toggle，alt remove。拖拽过程中的矩形 overlay、candidate preview、pointer capture、camera/hover suppression 和 DOM event 都是 runtime/session state，不写入 Snapshot。
 
 ## 高级节点操作
 
@@ -123,9 +125,9 @@ Imported target TransformControls 只会附着到 runtime map 标记为可独立
 - hover：pointer hover 命中 target 时的 transient 边界反馈。
 - guide：TransformControls drag 期间的 snap feedback 参考线/状态。
 
-这些 helper 都由 core runtime/session 管理。Grid、floor、axes、hover 和 guide 会被标记为 `runtimeOnly`，不会进入 `ThreeObjectMap.targetEntries()`，因此不会成为 picking/selection target。Bounds 继续使用 runtime target map；选择 imported GLB target 时，边界框包围 matched imported target object，而不是 owner GLB object。
+这些 helper 都由 core runtime/session 管理。Grid、floor、axes、hover 和 guide 会被标记为 `runtimeOnly`，不会进入 `ThreeObjectMap.targetEntries()`，因此不会成为 picking/marquee selection target。Bounds 继续使用 runtime target map；选择 imported GLB target 时，边界框包围 matched imported target object，而不是 owner GLB object。
 
-Helper visibility、hover target、snap feedback status、guide geometry、Three.js helper object 和 TransformControls helper 都不属于 durable scene authoring state。它们不会进入 `SceneSnapshot`、history command、`editor.serialize()` 或 `.ek3d` `scene.json`。React/Vue toolbar 只通过 core session API 切换这些 helper，不拥有 selection、transform 或 snap 语义。
+Helper visibility、hover target、snap feedback status、guide geometry、marquee overlay/drag rectangle/candidate IDs、Three.js helper object 和 TransformControls helper 都不属于 durable scene authoring state。它们不会进入 `SceneSnapshot`、history command、`editor.serialize()` 或 `.ek3d` `scene.json`。React/Vue toolbar 和 viewport overlay 只通过 core session API 渲染/切换这些 transient 状态，不拥有 selection、transform 或 snap 语义。
 
 Snap feedback 从同一 transform transaction 和 `snapTransform()` 路径派生。Status bar 可以显示当前 mode/increment 和 snapped 状态；最终持久化的仍只有 commit 后的 transform 值。
 
@@ -229,10 +231,9 @@ Core 提供 `resolveEditorShortcut()` 和 `executeEditorAction()`。React/Vue wo
 
 以下能力不要在文档或产品承诺中描述为已完成：
 
-- 框选。
 - durable imported target row 之外的 Workbench hierarchy UI polish。
 - 系统剪贴板集成和外部 paste 格式。
-- 框选/lasso 之外的高级选择 gizmo。
+- lasso、paint selection、crossing/window selection mode、selection filter 和高级选择 gizmo。
 - 推断对象边/中心关系的对齐辅助线。
 - CAD 式测量、标尺和单位系统。
 - 持久化快捷键配置和命令面板 UI。

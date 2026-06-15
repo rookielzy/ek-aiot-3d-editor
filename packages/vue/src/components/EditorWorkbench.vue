@@ -49,7 +49,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, toRef } from "vue";
+import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, toRef } from "vue";
 import { resolveEditorShortcut, type EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
 import { useWorkbench, type WorkbenchContext } from "../composables/use-workbench";
 import type { EditorWorkbenchEmits, EditorWorkbenchProps, EditorWorkbenchSlots } from "./EditorWorkbench.types";
@@ -63,6 +63,7 @@ import "./workbench.css";
 const DEFAULT_WORKBENCH_INTERACTIONS = {
   camera: true,
   pointerSelection: true,
+  marqueeSelection: true,
   resize: true,
   selectionVisuals: true,
   transform: true,
@@ -75,6 +76,7 @@ const props = withDefaults(defineProps<EditorWorkbenchProps>(), {
 
 const emit = defineEmits<EditorWorkbenchEmits>();
 defineSlots<EditorWorkbenchSlots>();
+const instance = getCurrentInstance();
 
 const workbench = useWorkbench({
   editor: toRef(props, "editor"),
@@ -86,13 +88,22 @@ const context = computed(() => workbench.context.value);
 const currentSnapshot = computed(() => workbench.snapshot.value);
 const currentInspector = computed(() => workbench.inspector.value);
 const rootClassName = computed(() => props.class ? `ek-workbench ${props.class}` : "ek-workbench");
-const interactions = computed(() => props.interactions ?? DEFAULT_WORKBENCH_INTERACTIONS);
+const interactions = computed(() => !hasProp("interactions") || props.interactions === undefined ? DEFAULT_WORKBENCH_INTERACTIONS : props.interactions);
 const resolvedInteractions = computed(() => interactions.value);
 const showDefaultToolbar = computed(() => props.showDefaultToolbar);
 const root = ref<HTMLElement | null>(null);
 
 function replaceAsset(assetId: string, file: File): void {
   void workbench.replaceAsset({ assetId, source: file, label: file.name, mimeType: file.type });
+}
+
+function hasProp(name: string): boolean {
+  const vnodeProps = instance?.vnode.props;
+  return Boolean(vnodeProps && (name in vnodeProps || kebabCase(name) in vnodeProps));
+}
+
+function kebabCase(value: string): string {
+  return value.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`);
 }
 
 function onKeyDown(event: KeyboardEvent): void {
