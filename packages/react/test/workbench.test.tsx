@@ -552,7 +552,7 @@ describe("React EditorWorkbench", () => {
     expect(editor.disposed).toBe(false);
   });
 
-  it("enables marquee selection in the default Workbench interactions", () => {
+  it("keeps marquee selection off by default and enables it from the toolbar", () => {
     const editor = createEditor();
     const mountRuntime = vi.spyOn(editor, "mountRuntime");
     const { container, unmount } = render(
@@ -565,12 +565,22 @@ describe("React EditorWorkbench", () => {
     expect(mountRuntime).toHaveBeenCalledWith(expect.objectContaining({
       interactions: expect.objectContaining({
         pointerSelection: true,
-        marqueeSelection: true,
+        marqueeSelection: false,
         viewportHelpers: true
       })
     }));
     const viewport = container.querySelector(".ek-workbench__viewport");
     expect(viewport).not.toBeNull();
+    expect(screen.getByText("Marquee").getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(screen.getByText("Marquee"));
+
+    expect(screen.getByText("Marquee").getAttribute("aria-pressed")).toBe("true");
+    expect(mountRuntime).toHaveBeenLastCalledWith(expect.objectContaining({
+      interactions: expect.objectContaining({
+        marqueeSelection: true
+      })
+    }));
 
     unmount();
   });

@@ -44,7 +44,7 @@ Core runtime 提供 node-aware picking；命中普通 GLB object 时会选择所
 
 Raycaster picking 能从 client point 解析候选 node；React/Vue workbench 默认开启 viewport pointer selection，示例中也可以从层级面板按钮触发同一套 selection command。
 
-默认 Workbench 也开启 viewport marquee selection。用户按住主按钮拖出矩形后，runtime 会从 `ThreeObjectMap` 的 pickable target entries 计算可见候选，而不是遍历 raw Three.js scene；因此 imported GLB target specificity、light/group target、helper 排除和 owner fallback 都与 pointer picking 保持一致。完成拖拽时仍派发 `select-nodes`：默认 replace，shift add，ctrl/meta toggle，alt remove。拖拽过程中的矩形 overlay、candidate preview、pointer capture、camera/hover suppression 和 DOM event 都是 runtime/session state，不写入 Snapshot。
+默认 Workbench 为了保留左键拖拽旋转镜头，会先关闭 viewport marquee selection；toolbar 中的 `Marquee` 开关打开后，用户按住主按钮拖出矩形即可框选。Runtime 会从 `ThreeObjectMap` 的 pickable target entries 计算可见候选，而不是遍历 raw Three.js scene；因此 imported GLB target specificity、light/group target、helper 排除和 owner fallback 都与 pointer picking 保持一致。完成拖拽时仍派发 `select-nodes`：默认 replace，shift add，ctrl/meta toggle，alt remove。拖拽过程中的矩形 overlay、candidate preview、pointer capture、camera/hover suppression 和 DOM event 都是 runtime/session state，不写入 Snapshot。
 
 ## 高级节点操作
 
