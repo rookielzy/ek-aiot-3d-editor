@@ -58,6 +58,15 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
     expect(viewport).toBeTruthy();
     await findReadyCanvas(viewport!);
 
+    await waitFor(() => {
+      expect(findFieldInput(host, "Base color", 'input[type="color"]'), "Expected material inspector Base color input").toBeTruthy();
+    });
+    const colorInput = findFieldInput(host, "Base color", 'input[type="color"]') as HTMLInputElement;
+    colorInput.value = "#00aa88";
+    colorInput.dispatchEvent(new Event("input", { bubbles: true }));
+    colorInput.dispatchEvent(new Event("change", { bubbles: true }));
+    await waitFor(() => expect(text(host)).toContain("Dirty"));
+
     expect(button(host, "Marquee")?.getAttribute("aria-pressed")).toBe("false");
     await clickByText(host, "Marquee");
     expect(button(host, "Marquee")?.getAttribute("aria-pressed")).toBe("true");
@@ -92,13 +101,6 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
     await clickByText(host, "Undo");
     await waitFor(() => expect(text(host)).toContain("Redo 1"));
     await clickByText(host, "Redo");
-
-    const colorInput = findFieldInput(host, "Base color", 'input[type="color"]') as HTMLInputElement | null;
-    expect(colorInput, "Expected material inspector Base color input").toBeTruthy();
-    colorInput!.value = "#00aa88";
-    colorInput!.dispatchEvent(new Event("input", { bubbles: true }));
-    colorInput!.dispatchEvent(new Event("change", { bubbles: true }));
-    await waitFor(() => expect(text(host)).toContain("Dirty"));
 
     await clickByText(host, "Duplicate");
     await waitFor(() => expect(text(section(host, "Project"))).toContain("Objects4"));
