@@ -66,7 +66,7 @@ describe("Vue proof-loop parity", () => {
     expect(vue.snapshot.value.lights["light-a"].intensity).toBe(2);
     expect(resolveDefaultPresentationView(vue.editor.getSnapshot())).toMatchObject({
       status: "resolved",
-      defaultViewId: "hero-view",
+      defaultCameraId: "hero-view",
       view: { id: "hero-view", name: "Hero view" }
     });
     expect(runtime?.getObject("object-a")).toBeTruthy();

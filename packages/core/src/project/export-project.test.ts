@@ -240,8 +240,8 @@ describe("project export", () => {
     const archiveEntries = defaultArchiveAdapter.read(result.packageBytes as Uint8Array);
     const serializedScene = new TextDecoder().decode(archiveEntries.find((entry) => entry.path === PROJECT_SCENE_PATH)!.bytes);
     const scene = JSON.parse(serializedScene);
-    expect(scene.presentation.defaultViewId).toBe("view-a");
-    expect(scene.presentation.cameraViews["view-a"]).toMatchObject({
+    expect(scene.presentation.defaultCameraId).toBe("view-a");
+    expect(scene.cameras["view-a"]).toMatchObject({
       id: "view-a",
       name: "Hero view",
       projection: { kind: "perspective", fov: 52 },

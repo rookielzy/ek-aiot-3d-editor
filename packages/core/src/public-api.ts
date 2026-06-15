@@ -292,6 +292,7 @@ export type {
   JsonValue,
   LegacySceneSnapshot,
   NodeId,
+  SceneCameraNode,
   SceneGroupNode,
   SceneImportedGlbNode,
   SceneLightNode,
@@ -301,6 +302,7 @@ export type {
   SceneSnapshot,
   SerializedSceneSnapshot,
   Transform,
+  V5SceneNode,
   V5SceneSnapshot,
   V4SceneSnapshot,
   V3SceneSnapshot

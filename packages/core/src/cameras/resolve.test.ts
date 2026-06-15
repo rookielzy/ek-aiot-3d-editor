@@ -10,7 +10,7 @@ describe("default presentation view resolver", () => {
     expect(resolveDefaultPresentationView(snapshot)).toMatchObject({
       status: "none",
       view: null,
-      defaultViewId: null
+      defaultCameraId: null
     });
   });
 
@@ -18,64 +18,56 @@ describe("default presentation view resolver", () => {
     const view = createAuthoredCameraView({ id: "view-a", name: "Hero" });
     const snapshot = {
       ...createEmptySnapshot("scene-a"),
-      presentation: {
-        cameraViews: { "view-a": view },
-        defaultViewId: "view-a"
-      }
+      cameras: { "view-a": view },
+      presentation: { defaultCameraId: "view-a" }
     };
 
     expect(resolveDefaultPresentationView(snapshot)).toEqual({
       status: "resolved",
       view,
-      defaultViewId: "view-a"
+      defaultCameraId: "view-a"
     });
   });
 
   it("reports missing references for defensive callers", () => {
     const snapshot = {
       ...createEmptySnapshot("scene-a"),
-      presentation: {
-        cameraViews: {},
-        defaultViewId: "missing"
-      }
+      cameras: {},
+      presentation: { defaultCameraId: "missing" }
     };
 
     expect(resolveDefaultPresentationView(snapshot)).toMatchObject({
       status: "missing",
       view: null,
-      defaultViewId: "missing"
+      defaultCameraId: "missing"
     });
   });
 
   it("does not resolve inherited camera view keys", () => {
     const snapshot = {
       ...createEmptySnapshot("scene-a"),
-      presentation: {
-        cameraViews: {},
-        defaultViewId: "constructor"
-      }
+      cameras: {},
+      presentation: { defaultCameraId: "constructor" }
     };
 
     expect(resolveDefaultPresentationView(snapshot)).toMatchObject({
       status: "missing",
       view: null,
-      defaultViewId: "constructor"
+      defaultCameraId: "constructor"
     });
   });
 
   it("treats empty-string defaults as missing for defensive callers", () => {
     const snapshot = {
       ...createEmptySnapshot("scene-a"),
-      presentation: {
-        cameraViews: {},
-        defaultViewId: ""
-      }
+      cameras: {},
+      presentation: { defaultCameraId: "" }
     };
 
     expect(resolveDefaultPresentationView(snapshot)).toMatchObject({
       status: "missing",
       view: null,
-      defaultViewId: ""
+      defaultCameraId: ""
     });
   });
 });

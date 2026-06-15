@@ -6,45 +6,45 @@ export type DefaultPresentationViewResolution =
   | {
       status: "resolved";
       view: AuthoredCameraView;
-      defaultViewId: string;
+      defaultCameraId: string;
     }
   | {
       status: "none";
       view: null;
-      defaultViewId: null;
+      defaultCameraId: null;
       reason: string;
     }
   | {
       status: "missing";
       view: null;
-      defaultViewId: string;
+      defaultCameraId: string;
       reason: string;
     };
 
 export function resolveDefaultPresentationView(snapshot: SceneSnapshot): DefaultPresentationViewResolution {
-  const defaultViewId = snapshot.presentation.defaultViewId;
-  if (defaultViewId === null) {
+  const defaultCameraId = snapshot.presentation.defaultCameraId;
+  if (defaultCameraId === null) {
     return {
       status: "none",
       view: null,
-      defaultViewId: null,
+      defaultCameraId: null,
       reason: "No default presentation camera view is set."
     };
   }
 
-  const view = getAuthoredCameraView(snapshot.presentation.cameraViews, defaultViewId);
+  const view = getAuthoredCameraView(snapshot.cameras, defaultCameraId);
   if (!view) {
     return {
       status: "missing",
       view: null,
-      defaultViewId,
-      reason: `Default presentation camera view ${defaultViewId} does not exist.`
+      defaultCameraId,
+      reason: `Default presentation camera view ${defaultCameraId} does not exist.`
     };
   }
 
   return {
     status: "resolved",
     view,
-    defaultViewId
+    defaultCameraId
   };
 }

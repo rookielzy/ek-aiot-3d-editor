@@ -250,7 +250,7 @@ describe("React InspectorPanel", () => {
       viewId: "view-a",
       patch: { projection: { kind: "perspective", fov: 35 } }
     });
-    expect(editor.getSnapshot().presentation.defaultViewId).toBe("view-a");
+    expect(editor.getSnapshot().presentation.defaultCameraId).toBe("view-a");
   });
 
   it("shows camera field validation problems without dispatching invalid camera commands", () => {
@@ -291,8 +291,8 @@ describe("React InspectorPanel", () => {
     fireEvent.click(screen.getByText("Capture"));
     fireEvent.click(screen.getByText("Apply"));
 
-    expect(editor.getSnapshot().presentation.cameraViews["view-a"]).toBeDefined();
-    expect(applyCameraView).toHaveBeenCalledWith(editor.getSnapshot().presentation.cameraViews["view-a"]);
+    expect(editor.getSnapshot().cameras["view-a"]).toBeDefined();
+    expect(applyCameraView).toHaveBeenCalledWith(editor.getSnapshot().cameras["view-a"]);
   });
 });
 

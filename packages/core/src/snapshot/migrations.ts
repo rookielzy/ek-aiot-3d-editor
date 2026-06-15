@@ -1,4 +1,4 @@
-import { createEmptyPresentationState } from "../cameras/defaults";
+import { createEmptyCameraState, createEmptyPresentationState } from "../cameras/defaults";
 import { createDefaultEnvironment } from "../environment/defaults";
 import { createEmptyMaterialState } from "../materials/defaults";
 import { createEmptyAuthoredProblemState } from "../problems/defaults";
@@ -8,9 +8,9 @@ import {
   SNAPSHOT_VERSION,
   type LegacySceneSnapshot,
   type PreviousSceneSnapshot,
-  type SceneNode,
   type SceneSnapshot,
   type SerializedSceneSnapshot,
+  type V5SceneNode,
   type V5SceneSnapshot,
   type V4SceneSnapshot,
   type V3SceneSnapshot
@@ -61,6 +61,7 @@ export function migrateV5Snapshot(serialized: V5SceneSnapshot): SceneSnapshot {
   return {
     ...serialized,
     version: SNAPSHOT_VERSION,
+    cameras: createEmptyCameraState(),
     presentation: createEmptyPresentationState()
   };
 }
@@ -73,7 +74,7 @@ export function migrateV4Snapshot(serialized: V4SceneSnapshot): SceneSnapshot {
 }
 
 export function migrateV3Snapshot(serialized: V3SceneSnapshot): SceneSnapshot {
-  const nodes: Record<string, SceneNode> = {};
+  const nodes: Record<string, V5SceneNode> = {};
   const usedNodeIds = new Set<string>();
 
   for (const object of Object.values(serialized.objects)) {

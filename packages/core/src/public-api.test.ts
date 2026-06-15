@@ -99,6 +99,7 @@ import {
   type RuntimeSelectionVisualOptions,
   type RuntimeTransformControlsOptions,
   type RuntimeViewportHelperOptions,
+  type SceneCameraNode,
   type SceneEnvironmentPatch,
   type SceneImportedGlbNode,
   type SceneNode,
@@ -226,14 +227,28 @@ describe("core public API", () => {
     const cameraViewId: CameraViewId = "view-a";
     const cameraProjection: AuthoredCameraViewProjection = { kind: "perspective", fov: 50 };
     const authoredCameraView: AuthoredCameraView = createAuthoredCameraView({ id: cameraViewId, projection: cameraProjection });
+    const cameraNode: SceneCameraNode = {
+      id: "view-a",
+      kind: "camera",
+      name: "Hero",
+      cameraId: cameraViewId,
+      parentId: null,
+      children: [],
+      transform: {
+        position: [0, 2, 5],
+        rotation: [0, 0, 0],
+        scale: [1, 1, 1]
+      }
+    };
     const authoredCameraViewInput = createAuthoredCameraViewInput({ "camera-view-1": createAuthoredCameraView({ id: "camera-view-1" }) });
-    const presentationState: ScenePresentationState = { cameraViews: { [cameraViewId]: authoredCameraView }, defaultViewId: cameraViewId };
+    const presentationState: ScenePresentationState = { defaultCameraId: cameraViewId };
     const createCameraView: CreateCameraViewCommand = { type: "create-camera-view", view: authoredCameraView };
     const updateCameraView: UpdateCameraViewCommand = { type: "update-camera-view", viewId: cameraViewId, patch: { name: "Detail" } };
     const deleteCameraView: DeleteCameraViewCommand = { type: "delete-camera-view", viewId: cameraViewId };
     const setDefaultCameraView: SetDefaultCameraViewCommand = { type: "set-default-camera-view", viewId: cameraViewId };
     const defaultResolution: DefaultPresentationViewResolution = resolveDefaultPresentationView({
       ...createEmptySnapshot("scene-camera"),
+      cameras: { [cameraViewId]: authoredCameraView },
       presentation: presentationState
     });
     const batch: BatchCommand = { type: "batch", commands: [removeLight] };
@@ -439,6 +454,7 @@ describe("core public API", () => {
     expect(updateLight.patch.intensity).toBe(2);
     expect(removeLight.lightId).toBe("light-a");
     expect(createCameraView.view?.id).toBe(cameraViewId);
+    expect(cameraNode.cameraId).toBe(cameraViewId);
     expect(authoredCameraViewInput.id).toMatch(/^camera-view-/);
     expect(authoredCameraViewInput.id).not.toBe("camera-view-1");
     expect(updateCameraView.patch.name).toBe("Detail");
@@ -546,10 +562,8 @@ describe("core public API", () => {
     const createCameraCommand = buildCreateCameraViewCommand(cameraView);
     const cameraSnapshot = {
       ...snapshot,
-      presentation: {
-        cameraViews: { "view-a": createAuthoredCameraView(cameraView) },
-        defaultViewId: null
-      }
+      cameras: { "view-a": createAuthoredCameraView(cameraView) },
+      presentation: { defaultCameraId: null }
     };
     const cameraSection = buildCameraSection(cameraSnapshot, { activeCameraViewId: "view-a", runtimeReady: true });
     const setDefaultCameraCommand = buildSetDefaultCameraViewCommand(cameraSnapshot, "view-a");

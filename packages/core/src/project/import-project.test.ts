@@ -178,7 +178,7 @@ describe("project import", () => {
 
     const resolution = resolveDefaultPresentationView(fresh.getSnapshot());
     expect(imported.ok).toBe(true);
-    expect(fresh.getSnapshot().presentation.cameraViews["view-a"]).toMatchObject({
+    expect(fresh.getSnapshot().cameras["view-a"]).toMatchObject({
       name: "Hero view",
       projection: { kind: "perspective", fov: 45 },
       position: [4, 3, 2],
@@ -186,7 +186,7 @@ describe("project import", () => {
     });
     expect(resolution).toMatchObject({
       status: "resolved",
-      defaultViewId: "view-a",
+      defaultCameraId: "view-a",
       view: { id: "view-a", name: "Hero view" }
     });
     expect(JSON.stringify(fresh.serialize())).not.toContain("OrbitControls");

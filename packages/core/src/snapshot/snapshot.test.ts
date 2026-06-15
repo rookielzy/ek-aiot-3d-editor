@@ -16,7 +16,8 @@ describe("scene snapshot contract", () => {
     expect(snapshot.materials).toEqual({ definitions: {}, assignments: {} });
     expect(snapshot.environment.mode).toBe("none");
     expect(snapshot.lights).toEqual({});
-    expect(snapshot.presentation).toEqual({ cameraViews: {}, defaultViewId: null });
+    expect(snapshot.cameras).toEqual({});
+    expect(snapshot.presentation).toEqual({ defaultCameraId: null });
     expect(snapshot.problems).toEqual({ acknowledged: {} });
     expect(snapshot.selection).toEqual({ nodeId: null, nodeIds: [], objectId: null, objectIds: [] });
     expect(isJsonCompatible(snapshot)).toBe(true);
@@ -168,6 +169,44 @@ describe("scene snapshot contract", () => {
     expect(result.ok).toBe(false);
   });
 
+  it("rejects camera payload and node mirror divergence", () => {
+    const snapshot: SceneSnapshot = {
+      ...createEmptySnapshot("scene-a"),
+      cameras: {
+        "view-a": {
+          id: "view-a",
+          name: "Hero",
+          projection: { kind: "perspective", fov: 50 },
+          position: [1, 2, 3],
+          target: [0, 0, 0],
+          near: 0.1,
+          far: 1000,
+          metadata: { tag: "payload" }
+        }
+      },
+      nodes: {
+        "view-a": {
+          id: "view-a",
+          kind: "camera",
+          name: "Different",
+          cameraId: "view-a",
+          parentId: null,
+          children: [],
+          transform: createTransform({ position: [3, 2, 1] }),
+          metadata: { tag: "node" }
+        }
+      },
+      rootNodeIds: ["view-a"]
+    };
+
+    const result = validateSceneSnapshot(snapshot);
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.join("\n")).toContain("name must mirror");
+    expect(result.errors.join("\n")).toContain("transform position must mirror");
+    expect(result.errors.join("\n")).toContain("metadata must mirror");
+  });
+
   it("rejects non-string asset labels", () => {
     const snapshot = {
       ...createEmptySnapshot("scene-a"),
@@ -187,14 +226,15 @@ describe("scene snapshot contract", () => {
   });
 
   it("migrates v5 snapshots by adding empty presentation state", () => {
-    const { presentation: _presentation, ...v5 } = createValidObjectSnapshot();
+    const { cameras: _cameras, presentation: _presentation, ...v5 } = createValidObjectSnapshot();
     const migrated = migrateSerializedSnapshot({
       ...v5,
       version: 5
     } satisfies V5SceneSnapshot);
 
     expect(migrated.version).toBe(6);
-    expect(migrated.presentation).toEqual({ cameraViews: {}, defaultViewId: null });
+    expect(migrated.cameras).toEqual({});
+    expect(migrated.presentation).toEqual({ defaultCameraId: null });
     expect(migrated.nodes["object-a"]).toEqual(v5.nodes["object-a"]);
     expect(migrated.objects["object-a"]).toEqual(v5.objects["object-a"]);
   });
@@ -212,7 +252,8 @@ describe("scene snapshot contract", () => {
     const migrated = migrateSerializedSnapshot(v4);
 
     expect(migrated.version).toBe(6);
-    expect(migrated.presentation).toEqual({ cameraViews: {}, defaultViewId: null });
+    expect(migrated.cameras).toEqual({});
+    expect(migrated.presentation).toEqual({ defaultCameraId: null });
     expect(Object.values(migrated.nodes).some((node) => node.kind === "imported")).toBe(false);
     expect(migrated.nodes["object-a"]).toEqual(v4.nodes["object-a"]);
   });

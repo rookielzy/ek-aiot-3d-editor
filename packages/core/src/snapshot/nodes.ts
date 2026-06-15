@@ -20,6 +20,25 @@ export function createLightNodeId(lightId: string, nodes: Record<string, SceneNo
   return candidate;
 }
 
+export function createCameraNodeId(cameraId: string, nodes: Record<string, SceneNode>): string {
+  if (!nodes[cameraId]) {
+    return cameraId;
+  }
+
+  const preferred = `${cameraId}:camera`;
+  if (!nodes[preferred]) {
+    return preferred;
+  }
+
+  let index = 2;
+  let candidate = `${preferred}-${index}`;
+  while (nodes[candidate]) {
+    index += 1;
+    candidate = `${preferred}-${index}`;
+  }
+  return candidate;
+}
+
 export function findObjectNodeId(snapshot: SceneSnapshot, objectId: string): string | null {
   for (const node of Object.values(snapshot.nodes)) {
     if (node.kind === "object" && node.objectId === objectId) {
@@ -32,6 +51,15 @@ export function findObjectNodeId(snapshot: SceneSnapshot, objectId: string): str
 export function findLightNodeId(snapshot: SceneSnapshot, lightId: string): string | null {
   for (const node of Object.values(snapshot.nodes)) {
     if (node.kind === "light" && node.lightId === lightId) {
+      return node.id;
+    }
+  }
+  return null;
+}
+
+export function findCameraNodeId(snapshot: SceneSnapshot, cameraId: string): string | null {
+  for (const node of Object.values(snapshot.nodes)) {
+    if (node.kind === "camera" && node.cameraId === cameraId) {
       return node.id;
     }
   }

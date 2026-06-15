@@ -148,7 +148,7 @@ export function WorkbenchToolbar({ context }: WorkbenchToolbarProps) {
           onClick={() => {
             const captured = context.captureCameraView({ name: `Camera view ${context.model.project.cameraViewCount + 1}` });
             if (captured) {
-              const view = createAuthoredCameraViewInput(context.snapshot.presentation.cameraViews, captured);
+              const view = createAuthoredCameraViewInput(context.snapshot.cameras, captured);
               const result = context.dispatch({ type: "create-camera-view", view });
               if (result.ok) {
                 context.setActiveCameraViewId(view.id ?? null);
@@ -163,7 +163,7 @@ export function WorkbenchToolbar({ context }: WorkbenchToolbarProps) {
         <button
           type="button"
           onClick={() => {
-            const view = context.activeCameraViewId ? context.snapshot.presentation.cameraViews[context.activeCameraViewId] : null;
+            const view = context.activeCameraViewId ? context.snapshot.cameras[context.activeCameraViewId] : null;
             if (view) {
               context.applyCameraView(view);
             }

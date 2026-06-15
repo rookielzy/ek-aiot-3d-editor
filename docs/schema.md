@@ -36,6 +36,7 @@ interface SceneSnapshot {
   materials: MaterialState;
   environment: SceneEnvironment;
   lights: Record<string, LightDefinition>;
+  cameras: Record<string, AuthoredCameraView>;
   presentation: ScenePresentationState;
   problems: AuthoredProblemState;
   metadata?: Record<string, JsonValue>;
@@ -70,14 +71,18 @@ Snapshot 内只允许 JSON-compatible 数据：
 - loader 结果
 - PMREM 输出
 
-## Presentation / authored camera views
+## Authored cameras and presentation
 
-v6 新增 `presentation`：
+v6 新增顶层 `cameras` map 和 `presentation.defaultCameraId`：
 
 ```ts
+interface SceneSnapshot {
+  cameras: Record<string, AuthoredCameraView>;
+  presentation: ScenePresentationState;
+}
+
 interface ScenePresentationState {
-  cameraViews: Record<string, AuthoredCameraView>;
-  defaultViewId: string | null;
+  defaultCameraId: string | null;
 }
 
 interface AuthoredCameraView {
@@ -95,20 +100,23 @@ interface AuthoredCameraView {
 }
 ```
 
-Camera view 是 durable presentation resource，不是 scene node，也不是 Three.js camera instance。当前可编辑投影类型是 perspective；`projection.kind` 是 discriminated field，方便后续增加 orthographic。
+Camera view 是 durable camera payload，并通过 `SceneCameraNode` 进入 hierarchy；它不是 Three.js camera instance。当前可编辑投影类型是 perspective；`projection.kind` 是 discriminated field，方便后续增加 orthographic。
 
 Validation 规则：
 
-- `cameraViews` 是以 camera view ID 为 key 的 plain object map。
+- `cameras` 是以 camera view ID 为 key 的 plain object map。
 - 每个 view 的 `id` 必须和 map key 一致。
+- 每个 camera payload 必须有且只有一个 matching `SceneCameraNode`。
+- `SceneCameraNode` 必须是 root leaf node；它不能有 parent，也不能作为组织容器包含 child nodes。
+- `SceneCameraNode.name`、`transform.position` 和 `metadata` 必须 mirror 对应 camera payload，避免 hierarchy/runtime 和 default resolver 读到不同 pose。
 - `position` 和 `target` 必须是 3 个 finite number。
 - `projection.kind` 当前必须是 `"perspective"`。
 - `projection.fov` 必须大于 0 且小于 180。
 - `near` 必须大于 0；`far` 必须大于 `near`。
 - `metadata` 必须 JSON-compatible。
-- `defaultViewId` 只能是现有 camera view ID 或 `null`。
+- `defaultCameraId` 只能是现有 camera view ID 或 `null`。
 
-`defaultViewId` 是 scene-level pointer，不是 view 自身的 marker。删除默认 view 时 command 会把 `defaultViewId` 清为 `null`。Core 暴露 `resolveDefaultPresentationView(snapshot)` 给未来 viewer 或 host startup 使用；resolver 只读取 durable snapshot，不挂载 runtime。
+`defaultCameraId` 是 scene-level pointer，不是 view 自身的 marker。删除默认 view 时 command 会把 `defaultCameraId` 清为 `null`。Core 暴露 `resolveDefaultPresentationView(snapshot)` 给未来 viewer 或 host startup 使用；resolver 只读取 durable snapshot，不挂载 runtime。
 
 Runtime helper 可以把当前 `PerspectiveCamera` 和可选 controls target capture 为 plain authored view data，也可以把 authored view apply 回 transient editor camera。Capture/apply 本身不改变 Snapshot、history、clipboard 或 `.ek3d`；只有显式 dispatch `create-camera-view`、`update-camera-view`、`delete-camera-view` 或 `set-default-camera-view` 才会持久化。
 
@@ -189,6 +197,16 @@ type SceneNode =
       parentId: NodeId | null;
       children: NodeId[];
       transform?: Transform;
+      metadata?: Record<string, JsonValue>;
+    }
+  | {
+      id: NodeId;
+      kind: "camera";
+      name: string;
+      cameraId: string;
+      parentId: NodeId | null;
+      children: NodeId[];
+      transform: Transform;
       metadata?: Record<string, JsonValue>;
     }
   | {

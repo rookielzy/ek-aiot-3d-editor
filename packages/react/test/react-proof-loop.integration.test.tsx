@@ -63,7 +63,7 @@ describe("React proof-loop parity", () => {
     expect(restored.getSnapshot().lights["light-a"].intensity).toBe(2);
     expect(resolveDefaultPresentationView(restored.getSnapshot())).toMatchObject({
       status: "resolved",
-      defaultViewId: "hero-view",
+      defaultCameraId: "hero-view",
       view: { id: "hero-view", name: "Hero view" }
     });
     expect(restored.getRuntime()?.getObject("object-a")).toBeTruthy();
@@ -104,7 +104,7 @@ describe("React proof-loop parity", () => {
       await act(async () => {
         await clickButton("Capture view");
       });
-      await waitFor(() => expect(screen.getByText("Camera view 1")).toBeTruthy());
+      await waitFor(() => expect(screen.getAllByText("Camera view 1").length).toBeGreaterThan(0));
       await act(async () => {
         await clickButton("Set default");
       });
@@ -157,7 +157,7 @@ describe("React proof-loop parity", () => {
         fireEvent.change(openInput, { target: { files: [file] } });
       });
       await waitFor(() => expect(screen.getByText("Opened starter.ek3d")).toBeTruthy());
-      await waitFor(() => expect(screen.getByText("Camera view 1")).toBeTruthy());
+      await waitFor(() => expect(screen.getAllByText("Camera view 1").length).toBeGreaterThan(0));
       expect(screen.getByText(/Default/)).toBeTruthy();
 
       await waitFor(() => expect(projectPanel.textContent).toContain("Replace asset"));

@@ -137,14 +137,14 @@ Snap feedback 从同一 transform transaction 和 `snapTransform()` 路径派生
 编辑器 camera navigation 分两层：
 
 - Orbit/pan/zoom、Reset camera、Frame selected、Frame all 是 runtime/session state。
-- Authored camera view 是用户显式 capture/update 后进入 `SceneSnapshot.presentation.cameraViews` 的 durable presentation state。
+- Authored camera view 是用户显式 capture/update 后进入 `SceneSnapshot.cameras` 的 durable presentation state。
 
 默认 React/Vue Workbench 在 Camera toolbar 和 Camera views inspector 中提供：
 
 - Capture view：把当前 runtime `PerspectiveCamera` 和 controls target 转换成 JSON-compatible camera view data，并 dispatch `create-camera-view`。
 - Update：用当前 runtime camera 覆盖当前 authored view 的 position/target/FOV/near/far。
 - Apply：把当前 authored view apply 回 transient editor camera；该动作不写 Snapshot，也不进入 undo history。
-- Set default / Clear default：dispatch `set-default-camera-view`，更新 scene-level `presentation.defaultViewId`。
+- Set default / Clear default：dispatch `set-default-camera-view`，更新 scene-level `presentation.defaultCameraId`。
 - Delete view：dispatch `delete-camera-view`；删除默认 view 时 default pointer 会被清空。
 
 Camera view 字段包括 name、perspective FOV、near、far、position 和 target。Core command/inspector builder 会校验 finite vector、FOV/near/far 范围、default reference 和 JSON-compatible metadata。当前 editable path 只支持 perspective authored views；orthographic authoring 是后续扩展。
@@ -240,7 +240,7 @@ React 和 Vue proof-loop demo 的侧栏包含：
 - Asset workspace：默认左栏支持多文件本地导入、raster image/texture intent、搜索、kind/status filter、sort、reference summary、payload/package status、GLB import diagnostics、stable-ID missing payload replacement 和 registered GLB reimport。
 - Proof checklist：从当前 selection、material assignment、history、transform mode、snap、runtime problems 和本次 demo session 派生验证进度。
 
-Checklist 和 asset import queue 都不是 durable project state。导出 `.ek3d`、导入 `.ek3d` 或序列化 Scene Snapshot 时，不会保存 checklist 进度、transient camera/control 状态、runtime problems、drag hover、file input value、queue row、`File`、`Blob`、object URL 或 resolver 结果。只有显式 authored camera view command 产生的 `presentation.cameraViews/defaultViewId` 会持久化。
+Checklist 和 asset import queue 都不是 durable project state。导出 `.ek3d`、导入 `.ek3d` 或序列化 Scene Snapshot 时，不会保存 checklist 进度、transient camera/control 状态、runtime problems、drag hover、file input value、queue row、`File`、`Blob`、object URL 或 resolver 结果。只有显式 authored camera view command 产生的 `cameras/presentation.defaultCameraId` 会持久化。
 
 ## 快捷键
 

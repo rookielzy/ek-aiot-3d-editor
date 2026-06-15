@@ -1,4 +1,4 @@
-import { AmbientLight, BoxGeometry, Group, Mesh, MeshBasicMaterial, PointLight, Texture, Vector3 } from "three";
+import { AmbientLight, BoxGeometry, Group, Mesh, MeshBasicMaterial, PerspectiveCamera, PointLight, Texture, Vector3 } from "three";
 import { describe, expect, it, vi } from "vitest";
 import { attachGlbImportManifestMetadata, createGlbImportManifest } from "../assets/import-pipeline";
 import { AssetResolverBridge } from "../assets/resolver";
@@ -222,6 +222,45 @@ describe("editor runtime", () => {
     expect(controls.target.toArray()).toEqual([0, 1, 0]);
     expect(renderer.render).toHaveBeenCalled();
     expect(JSON.stringify(store.getSnapshot())).toBe(serialized);
+    runtime.dispose();
+  });
+
+  it("projects authored camera nodes as runtime targets distinct from the editor camera", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const runtime = new ThreeEditorRuntime({
+      container: document.createElement("div"),
+      store,
+      dispatcher,
+      rendererFactory: createFakeRenderer
+    });
+    dispatcher.dispatch({
+      type: "create-camera-view",
+      view: {
+        id: "view-a",
+        name: "Hero",
+        projection: { kind: "perspective", fov: 35 },
+        position: [1, 2, 3],
+        target: [0, 1, 0],
+        near: 0.5,
+        far: 300
+      }
+    });
+
+    await runtime.project();
+    const target = runtime.getNodeTarget("view-a");
+
+    expect(target).toBeInstanceOf(PerspectiveCamera);
+    expect(target).not.toBe(runtime.camera);
+    expect((target as PerspectiveCamera).fov).toBe(35);
+    expect((target as PerspectiveCamera).near).toBe(0.5);
+    expect((target as PerspectiveCamera).far).toBe(300);
+    expect(target?.position.toArray()).toEqual([1, 2, 3]);
+
+    dispatcher.dispatch({ type: "delete-camera-view", viewId: "view-a" });
+    await runtime.project();
+
+    expect(runtime.getNodeTarget("view-a")).toBeUndefined();
     runtime.dispose();
   });
 

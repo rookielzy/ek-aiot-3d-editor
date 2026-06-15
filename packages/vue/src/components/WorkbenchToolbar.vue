@@ -196,7 +196,7 @@ function captureCameraView(): void {
     return;
   }
 
-  const view = createAuthoredCameraViewInput(props.context.snapshot.presentation.cameraViews, captured);
+  const view = createAuthoredCameraViewInput(props.context.snapshot.cameras, captured);
   const result = props.context.dispatch({ type: "create-camera-view", view });
   if (result.ok) {
     props.context.setActiveCameraViewId(view.id ?? null);
@@ -205,7 +205,7 @@ function captureCameraView(): void {
 
 function applyCameraView(): void {
   const view = props.context.activeCameraViewId
-    ? props.context.snapshot.presentation.cameraViews[props.context.activeCameraViewId]
+    ? props.context.snapshot.cameras[props.context.activeCameraViewId]
     : null;
   if (view) {
     props.context.applyCameraView(view);

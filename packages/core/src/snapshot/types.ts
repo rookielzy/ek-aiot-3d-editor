@@ -1,4 +1,4 @@
-import type { ScenePresentationState } from "../cameras/types";
+import type { AuthoredCameraMap, ScenePresentationState } from "../cameras/types";
 import type { SceneEnvironment } from "../environment/types";
 import type { ImportedGlbMaterialSlotDescriptor, ImportedGlbRemapMetadata, ImportedGlbSourceDescriptor } from "../imported-targets/types";
 import type { LightDefinition } from "../lights/types";
@@ -48,6 +48,13 @@ export type SceneNode =
   | SceneObjectNode
   | SceneGroupNode
   | SceneLightNode
+  | SceneCameraNode
+  | SceneImportedGlbNode;
+
+export type V5SceneNode =
+  | SceneObjectNode
+  | SceneGroupNode
+  | SceneLightNode
   | SceneImportedGlbNode;
 
 interface BaseSceneNode {
@@ -73,6 +80,12 @@ export interface SceneLightNode extends BaseSceneNode {
   kind: "light";
   lightId: string;
   transform?: Transform;
+}
+
+export interface SceneCameraNode extends BaseSceneNode {
+  kind: "camera";
+  cameraId: string;
+  transform: Transform;
 }
 
 export interface SceneImportedGlbNode extends BaseSceneNode {
@@ -115,13 +128,15 @@ export interface SceneSnapshot {
   materials: MaterialState;
   environment: SceneEnvironment;
   lights: Record<string, LightDefinition>;
+  cameras: AuthoredCameraMap;
   presentation: ScenePresentationState;
   problems: AuthoredProblemState;
   metadata?: Record<string, JsonValue>;
 }
 
-export interface V5SceneSnapshot extends Omit<SceneSnapshot, "version" | "presentation"> {
+export interface V5SceneSnapshot extends Omit<SceneSnapshot, "version" | "nodes" | "cameras" | "presentation"> {
   version: typeof V5_SNAPSHOT_VERSION;
+  nodes: Record<NodeId, V5SceneNode>;
 }
 
 export interface V4SceneSnapshot extends Omit<V5SceneSnapshot, "version" | "nodes"> {

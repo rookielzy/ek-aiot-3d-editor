@@ -158,6 +158,7 @@ Workbench context 包含：
 - `activeLightNodeId`
 - `activeCameraViewId`
 - `selectedCameraViewId`
+- `selection.cameraViewId`
 - `operations`
 - `selectionCount`
 - `selectedNodeId`

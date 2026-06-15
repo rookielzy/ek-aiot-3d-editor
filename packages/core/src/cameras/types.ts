@@ -1,6 +1,7 @@
 import type { JsonValue } from "../snapshot/types";
 
-export type CameraViewId = string;
+export type CameraId = string;
+export type CameraViewId = CameraId;
 
 export interface PerspectiveCameraViewProjection {
   kind: "perspective";
@@ -8,11 +9,12 @@ export interface PerspectiveCameraViewProjection {
 }
 
 export type AuthoredCameraViewProjection = PerspectiveCameraViewProjection;
+export type AuthoredCameraProjection = AuthoredCameraViewProjection;
 
-export interface AuthoredCameraView {
-  id: CameraViewId;
+export interface AuthoredCameraDefinition {
+  id: CameraId;
   name: string;
-  projection: AuthoredCameraViewProjection;
+  projection: AuthoredCameraProjection;
   position: [number, number, number];
   target: [number, number, number];
   near: number;
@@ -20,13 +22,16 @@ export interface AuthoredCameraView {
   metadata?: Record<string, JsonValue>;
 }
 
+export type AuthoredCameraView = AuthoredCameraDefinition;
+
+export type AuthoredCameraMap = Record<CameraId, AuthoredCameraDefinition>;
+
 export interface ScenePresentationState {
-  cameraViews: Record<CameraViewId, AuthoredCameraView>;
-  defaultViewId: CameraViewId | null;
+  defaultCameraId: CameraId | null;
 }
 
 export type AuthoredCameraViewInput = {
-  id?: CameraViewId;
+  id?: CameraId;
   name?: string;
   projection?: Partial<PerspectiveCameraViewProjection> & { kind?: "perspective" };
   position?: readonly [number, number, number];
@@ -37,3 +42,5 @@ export type AuthoredCameraViewInput = {
 };
 
 export type AuthoredCameraViewPatch = Partial<Omit<AuthoredCameraViewInput, "id">>;
+export type AuthoredCameraInput = AuthoredCameraViewInput;
+export type AuthoredCameraPatch = AuthoredCameraViewPatch;

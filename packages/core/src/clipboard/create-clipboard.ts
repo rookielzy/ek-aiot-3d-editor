@@ -55,7 +55,9 @@ export function createNodeClipboardPayload(snapshot: SceneSnapshot, nodeIds = ge
 
   for (const nodeId of topLevelNodeIds) {
     for (const subtreeNodeId of collectNodeSubtreeIds(snapshot, nodeId)) {
-      copiedNodeIds.add(subtreeNodeId);
+      if (snapshot.nodes[subtreeNodeId]?.kind !== "camera") {
+        copiedNodeIds.add(subtreeNodeId);
+      }
     }
   }
 
@@ -103,7 +105,7 @@ export function createNodeClipboardPayload(snapshot: SceneSnapshot, nodeIds = ge
   const payload: EditorNodeClipboardPayload = {
     kind: "ek-aiot-3d-editor-nodes",
     version: 2,
-    rootNodeIds: topLevelNodeIds,
+    rootNodeIds: topLevelNodeIds.filter((nodeId) => copiedNodeIds.has(nodeId)),
     nodes,
     objects,
     lights,
@@ -163,6 +165,8 @@ function cloneClipboardNode(
         ...(node.transform ? { transform: cloneTransform(node.transform) } : {}),
         ...(node.metadata ? { metadata: { ...node.metadata } } : {})
       };
+    case "camera":
+      throw new Error("Camera nodes cannot be copied to clipboard.");
     case "imported":
       return {
         ...cloneImportedGlbNode(node),

@@ -142,6 +142,8 @@ export interface InspectorSelectionModel {
   objectIds: string[];
   lightId: string | null;
   light: LightDefinition | null;
+  cameraViewId: string | null;
+  cameraView: AuthoredCameraView | null;
   count: number;
   object: SceneObject | null;
   transformAvailable: boolean;

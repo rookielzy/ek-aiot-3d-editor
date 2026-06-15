@@ -79,7 +79,8 @@ describe("snapshot serialization", () => {
     expect(restored.materials).toEqual({ definitions: {}, assignments: {} });
     expect(restored.environment.mode).toBe("none");
     expect(restored.lights).toEqual({});
-    expect(restored.presentation).toEqual({ cameraViews: {}, defaultViewId: null });
+    expect(restored.cameras).toEqual({});
+    expect(restored.presentation).toEqual({ defaultCameraId: null });
     expect(restored.problems).toEqual({ acknowledged: {} });
   });
 

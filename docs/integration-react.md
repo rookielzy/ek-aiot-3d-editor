@@ -87,7 +87,7 @@ React app store 可以镜像可序列化的项目 metadata、当前 route、最�
 
 如果需要把编辑状态同步给宿主 UI，优先通过 `useWorkbench()` 或 `EditorWorkbench` render props 读取派生 context，再把必要的 serializable projection 写入宿主 store。持久化变更仍通过 core commands、project import/export 和 snapshot/project package API 完成。
 
-Authored camera views 位于 `snapshot.presentation.cameraViews`，默认展示入口是 `snapshot.presentation.defaultViewId`。默认 Workbench 的 Capture view 会把当前 runtime camera 转换成 plain JSON data 后 dispatch `create-camera-view`；Apply view 只调用 runtime apply helper，不会改变 Snapshot。自定义 React toolbar/inspector 应复用 context 中的 `activeCameraViewId`、`setActiveCameraViewId()`、`captureCameraView()`、`applyCameraView()` 或 core 的 `resolveDefaultPresentationView()`，不要保存 Three.js `Camera`、`OrbitControls` 或 controls target object。
+Authored camera views 位于 `snapshot.cameras`，默认展示入口是 `snapshot.presentation.defaultCameraId`。默认 Workbench 的 Capture view 会把当前 runtime camera 转换成 plain JSON data 后 dispatch `create-camera-view`；Apply view 只调用 runtime apply helper，不会改变 Snapshot。自定义 React toolbar/inspector 应复用 context 中的 `activeCameraViewId`、`setActiveCameraViewId()`、`captureCameraView()`、`applyCameraView()` 或 core 的 `resolveDefaultPresentationView()`，不要保存 Three.js `Camera`、`OrbitControls` 或 controls target object。
 
 资产面板应优先读取 `workbench.model.assets.workspace`。该 workspace 已经合并 Snapshot asset registry、对象/材质/环境引用位置、项目包 payload 摘要、GLB import manifest diagnostics、GLB reimport remap problem 和资产问题，并提供 core 统一的搜索/过滤/排序 helper。`replaceAsset()` 这类 payload-only 更新不会改变 Snapshot，但 React hook 会订阅 core asset workspace 版本并重新计算 model；宿主不需要也不应该读取 transient project store、`Blob` 或 object URL。
 
@@ -158,6 +158,7 @@ interface WorkbenchContext {
   activeLightNodeId: string | null;
   activeCameraViewId: string | null;
   selectedCameraViewId: string | null;
+  selection: { cameraViewId: string | null };
   operations: AdvancedEditorOperations;
   historyState: HistoryState;
   selectionCount: number;
@@ -198,6 +199,8 @@ interface WorkbenchContext {
   };
 }
 ```
+
+`activeCameraViewId` 是 inspector 当前编辑的 authored camera view；`selectedCameraViewId` / `selection.cameraViewId` 只在 hierarchy selection 指向 camera node 时有值。
 
 `viewportHelperState` 和 marquee overlay state 都是 session-only projection。Grid/floor/axes visibility、hover target、bounds toggle、snap guide feedback、drag rectangle 和 candidate IDs 不会写入 `SceneSnapshot` 或 `.ek3d`，也不会产生 undo history。Workbench 完成 marquee 时只把最终 ordered node IDs 通过 core `select-nodes` 命令写入 durable selection。
 

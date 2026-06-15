@@ -343,15 +343,15 @@ function expectExportedMarqueeSelection(bytes: Uint8Array): void {
 function expectExportedPresentation(bytes: Uint8Array): void {
   const files = defaultArchiveAdapter.read(bytes);
   const scene = decodeArchiveJson(files.find((entry) => entry.path === "scene.json")!.bytes) as {
+    cameras: Record<string, { id: string; name: string; projection: { kind: string; fov: number } }>;
     presentation: {
-      cameraViews: Record<string, { id: string; name: string; projection: { kind: string; fov: number } }>;
-      defaultViewId: string | null;
+      defaultCameraId: string | null;
     };
   };
-  expect(scene.presentation.defaultViewId).toBeTruthy();
-  const defaultView = scene.presentation.defaultViewId ? scene.presentation.cameraViews[scene.presentation.defaultViewId] : null;
+  expect(scene.presentation.defaultCameraId).toBeTruthy();
+  const defaultView = scene.presentation.defaultCameraId ? scene.cameras[scene.presentation.defaultCameraId] : null;
   expect(defaultView).toMatchObject({
-    id: scene.presentation.defaultViewId,
+    id: scene.presentation.defaultCameraId,
     name: "Camera view 1",
     projection: { kind: "perspective" }
   });

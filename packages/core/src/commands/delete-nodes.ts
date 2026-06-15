@@ -26,6 +26,7 @@ export function applyDeleteNodes(snapshot: SceneSnapshot, command: DeleteNodesCo
 
   const removedObjectIds = new Set<string>();
   const removedLightIds = new Set<string>();
+  const removedCameraIds = new Set<string>();
   const removedImportedNodeIds = new Set<string>();
   for (const nodeId of removedNodeIds) {
     const node = snapshot.nodes[nodeId];
@@ -34,6 +35,9 @@ export function applyDeleteNodes(snapshot: SceneSnapshot, command: DeleteNodesCo
     }
     if (node?.kind === "light") {
       removedLightIds.add(node.lightId);
+    }
+    if (node?.kind === "camera") {
+      removedCameraIds.add(node.cameraId);
     }
     if (node?.kind === "imported") {
       removedImportedNodeIds.add(nodeId);
@@ -47,6 +51,9 @@ export function applyDeleteNodes(snapshot: SceneSnapshot, command: DeleteNodesCo
   );
   const lights = Object.fromEntries(
     Object.entries(snapshot.lights).filter(([lightId]) => !removedLightIds.has(lightId))
+  );
+  const cameras = Object.fromEntries(
+    Object.entries(snapshot.cameras).filter(([cameraId]) => !removedCameraIds.has(cameraId))
   );
   const assignments = Object.fromEntries(
     Object.entries(snapshot.materials.assignments).filter(([, assignment]) => {
@@ -65,6 +72,13 @@ export function applyDeleteNodes(snapshot: SceneSnapshot, command: DeleteNodesCo
     objects,
     rootObjectIds: snapshot.rootObjectIds.filter((objectId) => !removedObjectIds.has(objectId)),
     lights,
+    cameras,
+    presentation: {
+      ...snapshot.presentation,
+      defaultCameraId: snapshot.presentation.defaultCameraId && removedCameraIds.has(snapshot.presentation.defaultCameraId)
+        ? null
+        : snapshot.presentation.defaultCameraId
+    },
     materials: {
       ...snapshot.materials,
       assignments

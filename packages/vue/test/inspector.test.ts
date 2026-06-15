@@ -273,7 +273,7 @@ describe("Vue InspectorPanel", () => {
       viewId: "view-a",
       patch: { projection: { kind: "perspective", fov: 35 } }
     });
-    expect(editor.getSnapshot().presentation.defaultViewId).toBe("view-a");
+    expect(editor.getSnapshot().presentation.defaultCameraId).toBe("view-a");
     wrapper.unmount();
   });
 
@@ -321,8 +321,8 @@ describe("Vue InspectorPanel", () => {
     await nextTick();
     await wrapper.findAll("button").find((button) => button.text() === "Apply")?.trigger("click");
 
-    expect(editor.getSnapshot().presentation.cameraViews["view-a"]).toBeDefined();
-    expect(applyCameraView).toHaveBeenCalledWith(editor.getSnapshot().presentation.cameraViews["view-a"]);
+    expect(editor.getSnapshot().cameras["view-a"]).toBeDefined();
+    expect(applyCameraView).toHaveBeenCalledWith(editor.getSnapshot().cameras["view-a"]);
     wrapper.unmount();
   });
 });

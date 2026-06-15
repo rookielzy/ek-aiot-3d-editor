@@ -1,28 +1,31 @@
 import { isJsonCompatible, isPlainRecord } from "../snapshot/json";
 import { isFiniteRange, isVector } from "../snapshot/primitives";
 import { hasAuthoredCameraView } from "./defaults";
-import type { AuthoredCameraView, ScenePresentationState } from "./types";
+import type { AuthoredCameraMap, AuthoredCameraView, ScenePresentationState } from "./types";
 
-export function validatePresentationState(value: unknown, errors: string[]): asserts value is ScenePresentationState {
+export function validateCameras(value: unknown, errors: string[]): asserts value is AuthoredCameraMap {
+  if (!isPlainRecord(value)) {
+    errors.push("Snapshot cameras must be a plain object map.");
+    return;
+  }
+
+  for (const [id, camera] of Object.entries(value)) {
+    validateAuthoredCameraView(id, camera, errors);
+  }
+}
+
+export function validatePresentationState(value: unknown, cameras: unknown, errors: string[]): asserts value is ScenePresentationState {
   if (!isPlainRecord(value)) {
     errors.push("Snapshot presentation must be a plain object.");
     return;
   }
 
-  if (!isPlainRecord(value.cameraViews)) {
-    errors.push("Snapshot presentation cameraViews must be a plain object map.");
-  } else {
-    for (const [id, cameraView] of Object.entries(value.cameraViews)) {
-      validateAuthoredCameraView(id, cameraView, errors);
-    }
-  }
-
-  if (!(typeof value.defaultViewId === "string" || value.defaultViewId === null)) {
-    errors.push("Snapshot presentation defaultViewId must be a camera view ID or null.");
-  } else if (typeof value.defaultViewId === "string" && value.defaultViewId.trim().length === 0) {
-    errors.push("Snapshot presentation defaultViewId must be a non-empty camera view ID or null.");
-  } else if (typeof value.defaultViewId === "string" && isPlainRecord(value.cameraViews) && !hasAuthoredCameraView(value.cameraViews as ScenePresentationState["cameraViews"], value.defaultViewId)) {
-    errors.push(`Default camera view ${value.defaultViewId} must exist in presentation cameraViews.`);
+  if (!(typeof value.defaultCameraId === "string" || value.defaultCameraId === null)) {
+    errors.push("Snapshot presentation defaultCameraId must be a camera ID or null.");
+  } else if (typeof value.defaultCameraId === "string" && value.defaultCameraId.trim().length === 0) {
+    errors.push("Snapshot presentation defaultCameraId must be a non-empty camera ID or null.");
+  } else if (typeof value.defaultCameraId === "string" && isPlainRecord(cameras) && !hasAuthoredCameraView(cameras as AuthoredCameraMap, value.defaultCameraId)) {
+    errors.push(`Default camera ${value.defaultCameraId} must exist in cameras.`);
   }
 }
 

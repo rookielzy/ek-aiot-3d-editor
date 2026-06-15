@@ -53,6 +53,7 @@ export interface WorkbenchSelectionContext {
   objectId: string | null;
   objectIds: string[];
   lightId: string | null;
+  cameraViewId: string | null;
 }
 
 export interface WorkbenchTransformContext {
@@ -250,6 +251,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   const selectedObjectId = model.selection.objectId;
   const selectedObjectIds = model.selection.objectIds;
   const selectedLightId = model.selection.lightId;
+  const selectedCameraViewId = model.selection.cameraViewId;
   const selectionCount = model.selection.count;
   const selection: WorkbenchSelectionContext = {
     count: selectionCount,
@@ -258,7 +260,8 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     nodeKind: selectedNodeKind,
     objectId: selectedObjectId,
     objectIds: selectedObjectIds,
-    lightId: selectedLightId
+    lightId: selectedLightId,
+    cameraViewId: selectedCameraViewId
   };
   const transform: WorkbenchTransformContext = {
     mode: transformMode,
@@ -326,7 +329,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     selectedObjectId,
     selectedObjectIds,
     selectedLightId,
-    selectedCameraViewId: inspector.activeCameraViewId,
+    selectedCameraViewId,
     snap,
     viewportHelperState,
     transformMode,

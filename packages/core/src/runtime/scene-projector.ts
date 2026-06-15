@@ -1,10 +1,10 @@
-import { BoxGeometry, Group, Mesh, MeshBasicMaterial, Object3D, Scene } from "three";
+import { BoxGeometry, Group, Mesh, MeshBasicMaterial, Object3D, PerspectiveCamera, Scene } from "three";
 import { getGlbImportManifestFromMetadata, glbImportDiagnosticToProblem, normalizeGltfLoaderOutput, type GlbImportDiagnostic, type GlbImportManifest } from "../assets/import-pipeline";
 import { AssetResolverBridge } from "../assets/resolver";
 import { createMissingAssetProblem, type Problem } from "../assets/problems";
 import type { ResolvedAsset } from "../assets/types";
 import type { AssetReference } from "../snapshot/types";
-import type { SceneImportedGlbNode, SceneLightNode, SceneNode, SceneObject, SceneObjectNode, SceneSnapshot } from "../snapshot/types";
+import type { SceneCameraNode, SceneImportedGlbNode, SceneLightNode, SceneNode, SceneObject, SceneObjectNode, SceneSnapshot } from "../snapshot/types";
 import { cloneTransform } from "../snapshot/transforms";
 import { EnvironmentProjector } from "./environment-projector";
 import type { GltfLoaderAdapter } from "./gltf-loader-adapter";
@@ -146,6 +146,9 @@ export class SceneProjector {
         break;
       case "light":
         runtimeObject = this.#projectLightNode(node, snapshot, parent, activeLightIds);
+        break;
+      case "camera":
+        runtimeObject = this.#projectCameraNode(node, snapshot);
         break;
       case "imported":
         runtimeObject = this.#projectImportedNode(node, snapshot);
@@ -387,6 +390,62 @@ export class SceneProjector {
       };
     }
     return projected.light;
+  }
+
+  #projectCameraNode(node: SceneCameraNode, snapshot: SceneSnapshot): Object3D | null {
+    const camera = snapshot.cameras[node.cameraId];
+    if (!camera) {
+      return null;
+    }
+
+    let runtimeObject: PerspectiveCamera;
+    const previousRuntimeObject = this.objects.get(node.id);
+    if (previousRuntimeObject && !(previousRuntimeObject instanceof PerspectiveCamera)) {
+      disposeObjectTree(previousRuntimeObject);
+      this.objects.delete(node.id);
+    }
+    if (!(previousRuntimeObject instanceof PerspectiveCamera)) {
+      runtimeObject = new PerspectiveCamera(camera.projection.fov, 1, camera.near, camera.far);
+      this.objects.set(node.id, runtimeObject, {
+        kind: "camera",
+        cameraId: camera.id,
+        transformable: true,
+        pickable: true,
+        selected: snapshot.selection.nodeIds.includes(node.id),
+        primarySelected: snapshot.selection.nodeId === node.id
+      });
+    } else {
+      runtimeObject = previousRuntimeObject;
+      this.objects.set(node.id, runtimeObject, {
+        kind: "camera",
+        cameraId: camera.id,
+        transformable: true,
+        pickable: true,
+        selected: snapshot.selection.nodeIds.includes(node.id),
+        primarySelected: snapshot.selection.nodeId === node.id
+      });
+    }
+
+    runtimeObject.name = node.name;
+    runtimeObject.fov = camera.projection.fov;
+    runtimeObject.near = camera.near;
+    runtimeObject.far = camera.far;
+    runtimeObject.position.set(...node.transform.position);
+    runtimeObject.rotation.set(...node.transform.rotation);
+    runtimeObject.scale.set(...node.transform.scale);
+    runtimeObject.lookAt(...camera.target);
+    runtimeObject.updateProjectionMatrix();
+    runtimeObject.updateMatrixWorld(true);
+    runtimeObject.userData = {
+      ...runtimeObject.userData,
+      sceneNodeId: node.id,
+      nodeKind: node.kind,
+      authoredCameraId: camera.id,
+      selected: snapshot.selection.nodeIds.includes(node.id),
+      primarySelected: snapshot.selection.nodeId === node.id
+    };
+
+    return runtimeObject;
   }
 
   dispose(): void {
@@ -726,6 +785,8 @@ export class SceneProjector {
         return true;
       case "light":
         return target.lightId === node.lightId && Boolean(snapshot.lights[node.lightId]);
+      case "camera":
+        return target.cameraId === node.cameraId && Boolean(snapshot.cameras[node.cameraId]);
       case "imported":
         return target.kind === "imported" && Boolean(snapshot.objects[node.ownerObjectId]);
       default:

@@ -175,9 +175,9 @@ describe("Vue EditorWorkbench", () => {
     });
     await wrapper.find('[title="Capture camera view"]').trigger("click");
     await nextTick();
-    expect(editor.getSnapshot().presentation.cameraViews["view-a"]).toBeDefined();
+    expect(editor.getSnapshot().cameras["view-a"]).toBeDefined();
     await wrapper.find('[title="Apply camera view"]').trigger("click");
-    expect(applyCameraView).toHaveBeenCalledWith(editor.getSnapshot().presentation.cameraViews["view-a"]);
+    expect(applyCameraView).toHaveBeenCalledWith(editor.getSnapshot().cameras["view-a"]);
 
     await wrapper.find('[title="Duplicate selection"]').trigger("click");
     expect(duplicate).toHaveBeenCalledTimes(1);

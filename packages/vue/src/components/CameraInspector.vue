@@ -73,7 +73,7 @@ const emit = defineEmits<{
 }>();
 
 const problem = ref<string | null>(null);
-const activeView = computed(() => props.section.activeCameraViewId ? props.snapshot.presentation.cameraViews[props.section.activeCameraViewId] : null);
+const activeView = computed(() => props.section.activeCameraViewId ? props.snapshot.cameras[props.section.activeCameraViewId] : null);
 
 function captureNewView(): void {
   const captured = props.camera?.capture({ name: nextCameraViewName(props.snapshot) });
@@ -165,6 +165,6 @@ function blurOnEnter(event: KeyboardEvent): void {
 }
 
 function nextCameraViewName(snapshot: SceneSnapshot): string {
-  return `Camera view ${Object.keys(snapshot.presentation.cameraViews).length + 1}`;
+  return `Camera view ${Object.keys(snapshot.cameras).length + 1}`;
 }
 </script>

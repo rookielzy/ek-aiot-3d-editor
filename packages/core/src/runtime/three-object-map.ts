@@ -9,6 +9,7 @@ export interface RuntimeNodeTarget {
   object: Object3D;
   objectId?: string;
   lightId?: string;
+  cameraId?: string;
   ownerObjectId?: string;
   importKey?: string;
   source?: ImportedGlbSourceDescriptor;
@@ -25,6 +26,7 @@ export class ThreeObjectMap {
   #targets = new Map<string, RuntimeNodeTarget>();
   #objectNodeIds = new Map<string, string>();
   #lightNodeIds = new Map<string, string>();
+  #cameraNodeIds = new Map<string, string>();
   #ids = new WeakMap<Object3D, Set<string>>();
   #links = new Map<string, Set<Object3D>>();
   #runtimeOnlyObjects = new WeakSet<Object3D>();
@@ -36,6 +38,9 @@ export class ThreeObjectMap {
     }
     if (previous?.lightId) {
       this.#lightNodeIds.delete(previous.lightId);
+    }
+    if (previous?.cameraId) {
+      this.#cameraNodeIds.delete(previous.cameraId);
     }
     this.#unlinkNode(nodeId);
 
@@ -49,6 +54,7 @@ export class ThreeObjectMap {
       pickable: target?.pickable ?? true,
       ...(objectId ? { objectId } : {}),
       ...(target?.lightId ? { lightId: target.lightId } : {}),
+      ...(target?.cameraId ? { cameraId: target.cameraId } : {}),
       ...(target?.ownerObjectId ? { ownerObjectId: target.ownerObjectId } : {}),
       ...(target?.importKey ? { importKey: target.importKey } : {}),
       ...(target?.source ? { source: target.source } : {}),
@@ -65,6 +71,9 @@ export class ThreeObjectMap {
     }
     if (entry.lightId) {
       this.#lightNodeIds.set(entry.lightId, nodeId);
+    }
+    if (entry.cameraId) {
+      this.#cameraNodeIds.set(entry.cameraId, nodeId);
     }
     this.#linkObject(nodeId, object);
   }
@@ -104,6 +113,15 @@ export class ThreeObjectMap {
 
   getLightNodeId(lightId: string): string | undefined {
     return this.#lightNodeIds.get(lightId);
+  }
+
+  getCamera(cameraId: string): Object3D | undefined {
+    const nodeId = this.#cameraNodeIds.get(cameraId);
+    return nodeId ? this.get(nodeId) : undefined;
+  }
+
+  getCameraNodeId(cameraId: string): string | undefined {
+    return this.#cameraNodeIds.get(cameraId);
   }
 
   getId(object: Object3D): string | undefined {
@@ -153,6 +171,9 @@ export class ThreeObjectMap {
       if (target.lightId) {
         this.#lightNodeIds.delete(target.lightId);
       }
+      if (target.cameraId) {
+        this.#cameraNodeIds.delete(target.cameraId);
+      }
       this.#unlinkNode(nodeId);
     }
     return target?.object;
@@ -174,6 +195,7 @@ export class ThreeObjectMap {
     this.#targets.clear();
     this.#objectNodeIds.clear();
     this.#lightNodeIds.clear();
+    this.#cameraNodeIds.clear();
     this.#ids = new WeakMap<Object3D, Set<string>>();
     this.#links.clear();
     this.#runtimeOnlyObjects = new WeakSet<Object3D>();
@@ -239,6 +261,8 @@ function defaultPickPriority(target: RuntimeNodeTarget): number {
     case "imported":
       return 20;
     case "light":
+      return 15;
+    case "camera":
       return 15;
     case "object":
       return 10;

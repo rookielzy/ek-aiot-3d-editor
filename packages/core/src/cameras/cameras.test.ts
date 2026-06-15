@@ -1,13 +1,13 @@
 import { Object3D } from "three";
 import { describe, expect, it } from "vitest";
-import { createEmptySnapshot } from "../snapshot/defaults";
+import { createCameraNode, createEmptySnapshot } from "../snapshot/defaults";
 import { validateSceneSnapshot } from "../snapshot/validation";
 import { createAuthoredCameraView } from "./defaults";
 
-describe("authored camera view contract", () => {
-  it("creates JSON-compatible perspective authored camera views", () => {
-    const view = createAuthoredCameraView({
-      id: "view-a",
+describe("authored camera contract", () => {
+  it("validates JSON-compatible perspective authored cameras with node mirrors", () => {
+    const camera = createAuthoredCameraView({
+      id: "camera-a",
       name: "Hero",
       projection: { kind: "perspective", fov: 60 },
       position: [1, 2, 3],
@@ -16,16 +16,40 @@ describe("authored camera view contract", () => {
       far: 500,
       metadata: { role: "default" }
     });
+    const cameraNode = createCameraNode(camera);
     const snapshot = {
       ...createEmptySnapshot("scene-a"),
-      presentation: {
-        cameraViews: { "view-a": view },
-        defaultViewId: "view-a"
-      }
+      cameras: { "camera-a": camera },
+      nodes: { [cameraNode.id]: cameraNode },
+      rootNodeIds: [cameraNode.id],
+      presentation: { defaultCameraId: "camera-a" }
     };
 
     expect(validateSceneSnapshot(snapshot)).toEqual({ ok: true, errors: [] });
-    expect(JSON.parse(JSON.stringify(snapshot)).presentation.cameraViews["view-a"]).toEqual(view);
+    expect(JSON.parse(JSON.stringify(snapshot)).cameras["camera-a"]).toEqual(camera);
+  });
+
+  it("rejects camera payloads without matching camera nodes", () => {
+    const result = validateSceneSnapshot({
+      ...createEmptySnapshot("scene-a"),
+      cameras: { "camera-a": createAuthoredCameraView({ id: "camera-a" }) }
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.join("\n")).toContain("Camera camera-a must be referenced by a camera node.");
+  });
+
+  it("rejects camera nodes that reference missing camera payloads", () => {
+    const camera = createAuthoredCameraView({ id: "camera-a" });
+    const cameraNode = createCameraNode(camera);
+    const result = validateSceneSnapshot({
+      ...createEmptySnapshot("scene-a"),
+      nodes: { [cameraNode.id]: cameraNode },
+      rootNodeIds: [cameraNode.id]
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.join("\n")).toContain("Camera node camera-a camera camera-a must exist in cameras.");
   });
 
   it.each([
@@ -37,17 +61,17 @@ describe("authored camera view contract", () => {
     ["near zero", { near: 0 }],
     ["far before near", { near: 10, far: 1 }],
     ["unsupported projection", { projection: { kind: "orthographic", fov: 50 } }]
-  ])("rejects invalid camera view data: %s", (_label, patch) => {
-    const view = {
-      ...createAuthoredCameraView({ id: "view-a" }),
+  ])("rejects invalid authored camera data: %s", (_label, patch) => {
+    const camera = {
+      ...createAuthoredCameraView({ id: "camera-a" }),
       ...patch
     };
+    const cameraNode = createCameraNode(createAuthoredCameraView({ id: "camera-a" }));
     const result = validateSceneSnapshot({
       ...createEmptySnapshot("scene-a"),
-      presentation: {
-        cameraViews: { "view-a": view },
-        defaultViewId: null
-      }
+      cameras: { "camera-a": camera },
+      nodes: { [cameraNode.id]: cameraNode },
+      rootNodeIds: [cameraNode.id]
     });
 
     expect(result.ok).toBe(false);
@@ -59,60 +83,51 @@ describe("authored camera view contract", () => {
     ["cyclic object", createCyclicObject()],
     ["Blob", typeof Blob === "undefined" ? new Object3D() : new Blob(["runtime"])]
   ])("rejects runtime metadata as non-JSON-compatible: %s", (_label, value) => {
+    const camera = createAuthoredCameraView({
+      id: "camera-a",
+      metadata: { value } as never
+    });
+    const cameraNode = createCameraNode(camera);
     const result = validateSceneSnapshot({
       ...createEmptySnapshot("scene-a"),
-      presentation: {
-        cameraViews: {
-          "view-a": createAuthoredCameraView({
-            id: "view-a",
-            metadata: { value } as never
-          })
-        },
-        defaultViewId: null
-      }
+      cameras: { "camera-a": camera },
+      nodes: { [cameraNode.id]: cameraNode },
+      rootNodeIds: [cameraNode.id]
     });
 
     expect(result.ok).toBe(false);
     expect(result.errors.join("\n")).toContain("JSON-compatible");
   });
 
-  it("rejects missing default camera view references", () => {
+  it("rejects missing default camera references", () => {
     const result = validateSceneSnapshot({
       ...createEmptySnapshot("scene-a"),
-      presentation: {
-        cameraViews: {},
-        defaultViewId: "missing"
-      }
+      presentation: { defaultCameraId: "missing" }
     });
 
     expect(result.ok).toBe(false);
-    expect(result.errors.join("\n")).toContain("Default camera view missing");
+    expect(result.errors.join("\n")).toContain("Default camera missing");
   });
 
-  it("rejects default camera view references resolved only through the prototype chain", () => {
+  it("rejects default camera references resolved only through the prototype chain", () => {
     const result = validateSceneSnapshot({
       ...createEmptySnapshot("scene-a"),
-      presentation: {
-        cameraViews: {},
-        defaultViewId: "constructor"
-      }
+      presentation: { defaultCameraId: "constructor" }
     });
 
     expect(result.ok).toBe(false);
-    expect(result.errors.join("\n")).toContain("Default camera view constructor");
+    expect(result.errors.join("\n")).toContain("Default camera constructor");
   });
 
   it.each([
     ["empty map key", ""],
     ["blank map key", "   "]
-  ])("rejects %s camera view ids", (_label, viewId) => {
+  ])("rejects %s camera ids", (_label, cameraId) => {
+    const camera = createAuthoredCameraView({ id: cameraId });
     const result = validateSceneSnapshot({
       ...createEmptySnapshot("scene-a"),
-      presentation: {
-        cameraViews: {
-          [viewId]: createAuthoredCameraView({ id: viewId })
-        },
-        defaultViewId: null
+      cameras: {
+        [cameraId]: camera
       }
     });
 
@@ -123,34 +138,31 @@ describe("authored camera view contract", () => {
   it.each([
     ["empty default", ""],
     ["blank default", "   "]
-  ])("rejects %s camera view defaults", (_label, defaultViewId) => {
+  ])("rejects %s camera defaults", (_label, defaultCameraId) => {
     const result = validateSceneSnapshot({
       ...createEmptySnapshot("scene-a"),
-      presentation: {
-        cameraViews: {},
-        defaultViewId
-      }
+      presentation: { defaultCameraId }
     });
 
     expect(result.ok).toBe(false);
-    expect(result.errors.join("\n")).toContain("defaultViewId must be a non-empty camera view ID or null");
+    expect(result.errors.join("\n")).toContain("defaultCameraId must be a non-empty camera ID or null");
   });
 
   it.each([
+    ["non-object cameras", { cameras: [] }, "Snapshot cameras must be a plain object map."],
     ["non-object presentation", { presentation: null }, "Snapshot presentation must be a plain object."],
-    ["non-object cameraViews", { presentation: { cameraViews: [], defaultViewId: null } }, "Snapshot presentation cameraViews must be a plain object map."],
-    ["non-string defaultViewId", { presentation: { cameraViews: {}, defaultViewId: 42 } }, "Snapshot presentation defaultViewId must be a camera view ID or null."],
+    ["non-string defaultCameraId", { presentation: { defaultCameraId: 42 } }, "Snapshot presentation defaultCameraId must be a camera ID or null."],
     [
-      "camera view key/id mismatch",
-      { presentation: { cameraViews: { "view-a": createAuthoredCameraView({ id: "view-b" }) }, defaultViewId: null } },
-      "Camera view view-a must use a matching id field."
+      "camera key/id mismatch",
+      { cameras: { "camera-a": createAuthoredCameraView({ id: "camera-b" }) } },
+      "Camera view camera-a must use a matching id field."
     ],
     [
-      "missing camera view name",
-      { presentation: { cameraViews: { "view-a": { ...createAuthoredCameraView({ id: "view-a" }), name: undefined } }, defaultViewId: null } },
-      "Camera view view-a must include a name."
+      "missing camera name",
+      { cameras: { "camera-a": { ...createAuthoredCameraView({ id: "camera-a" }), name: undefined } } },
+      "Camera view camera-a must include a name."
     ]
-  ])("reports malformed presentation schema: %s", (_label, patch, expected) => {
+  ])("reports malformed camera schema: %s", (_label, patch, expected) => {
     const result = validateSceneSnapshot({
       ...createEmptySnapshot("scene-a"),
       ...patch

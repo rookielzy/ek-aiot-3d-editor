@@ -232,6 +232,7 @@ export type {
   TransformMode,
   TransformModeSubscriber,
   TransformVectorName,
+  SceneCameraNode,
   ViewportHelperKey,
   EditorMarqueeSelectionStateSnapshot,
   MarqueeSelectionPoint,
@@ -265,6 +266,7 @@ export type {
   WorkbenchSelectionModel,
   WorkbenchStatusModel,
   WorkbenchToolbarModel,
+  V5SceneNode,
   V5SceneSnapshot,
   V4SceneSnapshot,
   V3SceneSnapshot

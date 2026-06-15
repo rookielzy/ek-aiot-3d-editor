@@ -54,6 +54,7 @@ export interface WorkbenchSelectionContext {
   objectId: string | null;
   objectIds: string[];
   lightId: string | null;
+  cameraViewId: string | null;
 }
 
 export interface WorkbenchTransformContext {
@@ -300,12 +301,12 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   }
 
   function setActiveCameraViewId(value: string | null): void {
-    const cameraViews = currentEditor.value.getSnapshot().presentation.cameraViews;
-    const defaultViewId = currentEditor.value.getSnapshot().presentation.defaultViewId;
+    const cameraViews = currentEditor.value.getSnapshot().cameras;
+    const defaultCameraId = currentEditor.value.getSnapshot().presentation.defaultCameraId;
     requestedActiveCameraViewId.value = value && cameraViews[value]
       ? value
-      : defaultViewId && cameraViews[defaultViewId]
-        ? defaultViewId
+      : defaultCameraId && cameraViews[defaultCameraId]
+        ? defaultCameraId
         : Object.keys(cameraViews)[0] ?? null;
   }
 
@@ -436,7 +437,8 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
       nodeKind: model.value.selection.nodeKind,
       objectId: model.value.selection.objectId,
       objectIds: model.value.selection.objectIds,
-      lightId: model.value.selection.lightId
+      lightId: model.value.selection.lightId,
+      cameraViewId: model.value.selection.cameraViewId
     },
     history: currentEditor.value.getHistoryState(),
     transform: {
@@ -491,7 +493,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     selectedObjectId: model.value.selection.objectId,
     selectedObjectIds: model.value.selection.objectIds,
     selectedLightId: model.value.selection.lightId,
-    selectedCameraViewId: activeCameraViewId.value,
+    selectedCameraViewId: model.value.selection.cameraViewId,
     snap: snap.value,
     viewportHelperState: viewportHelperState.value,
     transformMode: transformMode.value,

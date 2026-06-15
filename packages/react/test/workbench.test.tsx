@@ -163,9 +163,9 @@ describe("React EditorWorkbench", () => {
       }
     });
     fireEvent.click(screen.getByTitle("Capture camera view"));
-    expect(editor.getSnapshot().presentation.cameraViews["view-a"]).toBeDefined();
+    expect(editor.getSnapshot().cameras["view-a"]).toBeDefined();
     fireEvent.click(screen.getByTitle("Apply camera view"));
-    expect(applyCameraView).toHaveBeenCalledWith(editor.getSnapshot().presentation.cameraViews["view-a"]);
+    expect(applyCameraView).toHaveBeenCalledWith(editor.getSnapshot().cameras["view-a"]);
 
     fireEvent.click(screen.getByTitle("Duplicate selection"));
     expect(duplicate).toHaveBeenCalledTimes(1);

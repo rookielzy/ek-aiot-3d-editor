@@ -1,9 +1,10 @@
-import { createEmptyPresentationState } from "../cameras/defaults";
+import { createEmptyCameraState, createEmptyPresentationState } from "../cameras/defaults";
+import type { AuthoredCameraDefinition } from "../cameras/types";
 import { createDefaultEnvironment } from "../environment/defaults";
 import type { LightDefinition } from "../lights/types";
 import { createEmptyMaterialState } from "../materials/defaults";
 import { createEmptyAuthoredProblemState } from "../problems/defaults";
-import { SNAPSHOT_VERSION, type SceneLightNode, type SceneObject, type SceneObjectNode, type SceneSnapshot, type Transform } from "./types";
+import { SNAPSHOT_VERSION, type SceneCameraNode, type SceneLightNode, type SceneObject, type SceneObjectNode, type SceneSnapshot, type Transform } from "./types";
 
 let nextId = 0;
 
@@ -41,6 +42,7 @@ export function createEmptySnapshot(sceneId = createId("scene")): SceneSnapshot 
     materials: createEmptyMaterialState(),
     environment: createDefaultEnvironment(),
     lights: {},
+    cameras: createEmptyCameraState(),
     presentation: createEmptyPresentationState(),
     problems: createEmptyAuthoredProblemState()
   };
@@ -73,6 +75,25 @@ export function createLightNode(light: LightDefinition, id = light.id): SceneLig
     ...(transform ? { transform: createTransform(transform) } : {}),
     ...(light.metadata ? { metadata: { ...light.metadata } } : {})
   };
+}
+
+export function createCameraNode(camera: AuthoredCameraDefinition, id = camera.id): SceneCameraNode {
+  return {
+    id,
+    kind: "camera",
+    name: camera.name,
+    cameraId: camera.id,
+    parentId: null,
+    children: [],
+    transform: createCameraTransform(camera),
+    ...(camera.metadata ? { metadata: { ...camera.metadata } } : {})
+  };
+}
+
+function createCameraTransform(camera: AuthoredCameraDefinition): Transform {
+  return createTransform({
+    position: camera.position
+  });
 }
 
 function getLightNodeTransform(light: LightDefinition): Transform | undefined {

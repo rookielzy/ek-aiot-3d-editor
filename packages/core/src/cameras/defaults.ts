@@ -1,15 +1,18 @@
-import type { AuthoredCameraView, AuthoredCameraViewInput, ScenePresentationState } from "./types";
+import type { AuthoredCameraDefinition, AuthoredCameraInput, AuthoredCameraMap, AuthoredCameraView, AuthoredCameraViewInput, ScenePresentationState } from "./types";
 
 let nextCameraViewId = 0;
 
+export function createEmptyCameraState(): AuthoredCameraMap {
+  return {};
+}
+
 export function createEmptyPresentationState(): ScenePresentationState {
   return {
-    cameraViews: {},
-    defaultViewId: null
+    defaultCameraId: null
   };
 }
 
-export function createAuthoredCameraView(input: AuthoredCameraViewInput = {}): AuthoredCameraView {
+export function createAuthoredCamera(input: AuthoredCameraInput = {}): AuthoredCameraDefinition {
   return {
     id: input.id ?? createCameraViewId(),
     name: input.name ?? "Camera view",
@@ -25,8 +28,12 @@ export function createAuthoredCameraView(input: AuthoredCameraViewInput = {}): A
   };
 }
 
+export function createAuthoredCameraView(input: AuthoredCameraViewInput = {}): AuthoredCameraView {
+  return createAuthoredCamera(input);
+}
+
 export function createAuthoredCameraViewInput(
-  existingViews: ScenePresentationState["cameraViews"],
+  existingViews: AuthoredCameraMap,
   input: AuthoredCameraViewInput = {}
 ): AuthoredCameraViewInput {
   return {
@@ -35,21 +42,42 @@ export function createAuthoredCameraViewInput(
   };
 }
 
+export function createAuthoredCameraInput(
+  existingCameras: AuthoredCameraMap,
+  input: AuthoredCameraInput = {}
+): AuthoredCameraInput {
+  return createAuthoredCameraViewInput(existingCameras, input);
+}
+
+export function hasAuthoredCamera(
+  cameras: AuthoredCameraMap,
+  cameraId: string
+): boolean {
+  return Object.prototype.hasOwnProperty.call(cameras, cameraId);
+}
+
 export function hasAuthoredCameraView(
-  cameraViews: ScenePresentationState["cameraViews"],
+  cameraViews: AuthoredCameraMap,
   viewId: string
 ): boolean {
-  return Object.prototype.hasOwnProperty.call(cameraViews, viewId);
+  return hasAuthoredCamera(cameraViews, viewId);
+}
+
+export function getAuthoredCamera(
+  cameras: AuthoredCameraMap,
+  cameraId: string
+): AuthoredCameraDefinition | undefined {
+  return hasAuthoredCamera(cameras, cameraId) ? cameras[cameraId] : undefined;
 }
 
 export function getAuthoredCameraView(
-  cameraViews: ScenePresentationState["cameraViews"],
+  cameraViews: AuthoredCameraMap,
   viewId: string
 ): AuthoredCameraView | undefined {
-  return hasAuthoredCameraView(cameraViews, viewId) ? cameraViews[viewId] : undefined;
+  return getAuthoredCamera(cameraViews, viewId);
 }
 
-export function copyCameraView(view: AuthoredCameraView): AuthoredCameraView {
+export function copyCamera(view: AuthoredCameraDefinition): AuthoredCameraDefinition {
   return {
     id: view.id,
     name: view.name,
@@ -62,12 +90,16 @@ export function copyCameraView(view: AuthoredCameraView): AuthoredCameraView {
   };
 }
 
-function createCameraViewId(existingViews: ScenePresentationState["cameraViews"] = {}): string {
+export function copyCameraView(view: AuthoredCameraView): AuthoredCameraView {
+  return copyCamera(view);
+}
+
+function createCameraViewId(existingViews: AuthoredCameraMap = {}): string {
   let candidate: string;
   do {
     nextCameraViewId += 1;
     candidate = `camera-view-${nextCameraViewId.toString(36)}`;
-  } while (hasAuthoredCameraView(existingViews, candidate));
+  } while (hasAuthoredCamera(existingViews, candidate));
   return candidate;
 }
 

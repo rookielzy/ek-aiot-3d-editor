@@ -23,7 +23,7 @@ export interface CameraInspectorProps {
 
 export function CameraInspector({ editor, snapshot, section, camera, onActiveCameraViewIdChange }: CameraInspectorProps) {
   const targetKey = section.activeCameraViewId ?? "none";
-  const activeView = section.activeCameraViewId ? snapshot.presentation.cameraViews[section.activeCameraViewId] : null;
+  const activeView = section.activeCameraViewId ? snapshot.cameras[section.activeCameraViewId] : null;
   const [problem, setProblem] = useState<string | null>(null);
 
   function captureNewView() {
@@ -181,6 +181,6 @@ export function CameraInspector({ editor, snapshot, section, camera, onActiveCam
 }
 
 function nextCameraViewName(snapshot: SceneSnapshot): string {
-  const count = Object.keys(snapshot.presentation.cameraViews).length + 1;
+  const count = Object.keys(snapshot.cameras).length + 1;
   return `Camera view ${count}`;
 }

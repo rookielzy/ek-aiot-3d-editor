@@ -68,10 +68,8 @@ describe("camera inspector commands", () => {
   it("ignores inherited camera view keys when resolving active/default state", () => {
     const snapshot = {
       ...createEditor().getSnapshot(),
-      presentation: {
-        cameraViews: {},
-        defaultViewId: "constructor"
-      }
+      cameras: {},
+      presentation: { defaultCameraId: "constructor" }
     };
 
     expect(resolveActiveCameraViewId(snapshot, "constructor")).toBeNull();

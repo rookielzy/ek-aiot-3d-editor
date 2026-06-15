@@ -23,7 +23,7 @@ describe("camera view commands", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(store.getSnapshot().presentation.cameraViews["view-a"]).toMatchObject({
+    expect(store.getSnapshot().cameras["view-a"]).toMatchObject({
       id: "view-a",
       name: "Hero",
       projection: { kind: "perspective", fov: 65 },
@@ -33,9 +33,9 @@ describe("camera view commands", () => {
       far: 800
     });
     dispatcher.undo();
-    expect(store.getSnapshot().presentation.cameraViews["view-a"]).toBeUndefined();
+    expect(store.getSnapshot().cameras["view-a"]).toBeUndefined();
     dispatcher.redo();
-    expect(store.getSnapshot().presentation.cameraViews["view-a"].name).toBe("Hero");
+    expect(store.getSnapshot().cameras["view-a"].name).toBe("Hero");
   });
 
   it("generates a stable camera view ID when none is provided", () => {
@@ -45,9 +45,22 @@ describe("camera view commands", () => {
     const result = dispatcher.dispatch({ type: "create-camera-view" });
 
     expect(result.ok).toBe(true);
-    const [view] = Object.values(result.snapshot.presentation.cameraViews);
+    const [view] = Object.values(result.snapshot.cameras);
     expect(view.id).toMatch(/^camera-view-/);
-    expect(result.snapshot.presentation.cameraViews[view.id]).toBe(view);
+    expect(result.snapshot.cameras[view.id]).toBe(view);
+  });
+
+  it("uses a non-conflicting camera node ID when the camera ID is already a node ID", () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "create-group", nodeId: "view-a" });
+
+    const result = dispatcher.dispatch({ type: "create-camera-view", view: { id: "view-a" } });
+
+    expect(result.ok).toBe(true);
+    expect(result.snapshot.cameras["view-a"]).toBeDefined();
+    expect(result.snapshot.nodes["view-a"]).toMatchObject({ kind: "group" });
+    expect(result.snapshot.nodes["view-a:camera"]).toMatchObject({ kind: "camera", cameraId: "view-a" });
   });
 
   it("generates a non-conflicting camera view ID after restoring existing generated IDs", () => {
@@ -59,10 +72,10 @@ describe("camera view commands", () => {
     const result = dispatcher.dispatch({ type: "create-camera-view" });
 
     expect(result.ok).toBe(true);
-    expect(Object.keys(result.snapshot.presentation.cameraViews)).toHaveLength(3);
-    expect(result.snapshot.presentation.cameraViews["camera-view-1"]).toBeDefined();
-    expect(result.snapshot.presentation.cameraViews["camera-view-2"]).toBeDefined();
-    const generatedIds = Object.keys(result.snapshot.presentation.cameraViews)
+    expect(Object.keys(result.snapshot.cameras)).toHaveLength(3);
+    expect(result.snapshot.cameras["camera-view-1"]).toBeDefined();
+    expect(result.snapshot.cameras["camera-view-2"]).toBeDefined();
+    const generatedIds = Object.keys(result.snapshot.cameras)
       .filter((viewId) => viewId !== "camera-view-1" && viewId !== "camera-view-2");
     expect(generatedIds).toHaveLength(1);
     expect(generatedIds[0]).toMatch(/^camera-view-/);
@@ -81,8 +94,8 @@ describe("camera view commands", () => {
 
     expect(result.ok).toBe(false);
     expect(store.getSnapshot()).toBe(before);
-    expect(store.getSnapshot().presentation.cameraViews["view-a"].name).toBe("Original");
-    expect(store.getSnapshot().presentation.defaultViewId).toBe("view-a");
+    expect(store.getSnapshot().cameras["view-a"].name).toBe("Original");
+    expect(store.getSnapshot().presentation.defaultCameraId).toBe("view-a");
     expect(history.state.undoCount).toBe(undoCount);
   });
 
@@ -106,8 +119,8 @@ describe("camera view commands", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(result.snapshot.presentation.defaultViewId).toBe("view-a");
-    expect(result.snapshot.presentation.cameraViews["view-a"]).toMatchObject({
+    expect(result.snapshot.presentation.defaultCameraId).toBe("view-a");
+    expect(result.snapshot.cameras["view-a"]).toMatchObject({
       name: "Detail",
       projection: { kind: "perspective", fov: 35 },
       position: [5, 6, 7],
@@ -117,19 +130,38 @@ describe("camera view commands", () => {
     });
   });
 
+  it("rejects unsupported projection kind updates without mutating state or history", () => {
+    const store = new EditorStore();
+    const history = new CommandHistory();
+    const dispatcher = new CommandDispatcher(store, history, new AssetRegistry());
+    dispatcher.dispatch({ type: "create-camera-view", view: { id: "view-a" } });
+    const before = store.getSnapshot();
+    const undoCount = history.state.undoCount;
+
+    const result = dispatcher.dispatch({
+      type: "update-camera-view",
+      viewId: "view-a",
+      patch: { projection: { kind: "orthographic" } as never }
+    });
+
+    expect(result.ok).toBe(false);
+    expect(store.getSnapshot()).toBe(before);
+    expect(history.state.undoCount).toBe(undoCount);
+  });
+
   it("sets and clears the default camera view reference", () => {
     const store = new EditorStore();
     const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
     dispatcher.dispatch({ type: "create-camera-view", view: { id: "view-a" } });
 
     expect(dispatcher.dispatch({ type: "set-default-camera-view", viewId: "view-a" }).ok).toBe(true);
-    expect(store.getSnapshot().presentation.defaultViewId).toBe("view-a");
+    expect(store.getSnapshot().presentation.defaultCameraId).toBe("view-a");
 
     expect(dispatcher.dispatch({ type: "set-default-camera-view", viewId: null }).ok).toBe(true);
-    expect(store.getSnapshot().presentation.defaultViewId).toBeNull();
+    expect(store.getSnapshot().presentation.defaultCameraId).toBeNull();
   });
 
-  it("clears defaultViewId when the default camera view is deleted", () => {
+  it("clears defaultCameraId when the default camera view is deleted", () => {
     const store = new EditorStore();
     const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
     dispatcher.dispatch({ type: "create-camera-view", view: { id: "view-a" } });
@@ -138,8 +170,55 @@ describe("camera view commands", () => {
     const result = dispatcher.dispatch({ type: "delete-camera-view", viewId: "view-a" });
 
     expect(result.ok).toBe(true);
-    expect(result.snapshot.presentation.cameraViews["view-a"]).toBeUndefined();
-    expect(result.snapshot.presentation.defaultViewId).toBeNull();
+    expect(result.snapshot.cameras["view-a"]).toBeUndefined();
+    expect(result.snapshot.presentation.defaultCameraId).toBeNull();
+  });
+
+  it("keeps camera nodes as root leaves and deletes only the camera mirror", () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "create-camera-view", view: { id: "view-a" } });
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    const reparentUnderCamera = dispatcher.dispatch({ type: "reparent-node", nodeId: "object-a", parentId: "view-a" });
+    const reparentCamera = dispatcher.dispatch({ type: "reparent-node", nodeId: "view-a", parentId: "object-a" });
+    dispatcher.dispatch({ type: "select-nodes", mode: "replace", nodeIds: ["view-a"], primaryNodeId: "view-a" });
+
+    const result = dispatcher.dispatch({ type: "delete-camera-view", viewId: "view-a" });
+
+    expect(reparentUnderCamera.ok).toBe(false);
+    expect(reparentCamera.ok).toBe(false);
+    expect(result.ok).toBe(true);
+    expect(result.snapshot.cameras["view-a"]).toBeUndefined();
+    expect(result.snapshot.nodes["view-a"]).toBeUndefined();
+    expect(result.snapshot.objects["object-a"]).toBeDefined();
+    expect(result.snapshot.selection).toEqual({ nodeId: null, nodeIds: [], objectId: null, objectIds: [] });
+  });
+
+  it("syncs camera node position but rejects rotation and scale transforms", () => {
+    const store = new EditorStore();
+    const history = new CommandHistory();
+    const dispatcher = new CommandDispatcher(store, history, new AssetRegistry());
+    dispatcher.dispatch({ type: "create-camera-view", view: { id: "view-a", position: [0, 2, 5], target: [0, 0, 0] } });
+
+    const moved = dispatcher.dispatch({
+      type: "set-node-transform",
+      nodeId: "view-a",
+      transform: { position: [3, 4, 5] }
+    });
+    const beforeInvalid = store.getSnapshot();
+    const undoCount = history.state.undoCount;
+    const rotated = dispatcher.dispatch({
+      type: "set-node-transform",
+      nodeId: "view-a",
+      transform: { rotation: [0, 1, 0] }
+    });
+
+    expect(moved.ok).toBe(true);
+    expect(moved.snapshot.cameras["view-a"].position).toEqual([3, 4, 5]);
+    expect(moved.snapshot.cameras["view-a"].target).toEqual([0, 0, 0]);
+    expect(rotated.ok).toBe(false);
+    expect(store.getSnapshot()).toBe(beforeInvalid);
+    expect(history.state.undoCount).toBe(undoCount);
   });
 
   it.each([
@@ -178,9 +257,9 @@ describe("camera view commands", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(result.snapshot.presentation.defaultViewId).toBe("view-a");
+    expect(result.snapshot.presentation.defaultCameraId).toBe("view-a");
     dispatcher.undo();
-    expect(store.getSnapshot().presentation.cameraViews).toEqual({});
-    expect(store.getSnapshot().presentation.defaultViewId).toBeNull();
+    expect(store.getSnapshot().cameras).toEqual({});
+    expect(store.getSnapshot().presentation.defaultCameraId).toBeNull();
   });
 });

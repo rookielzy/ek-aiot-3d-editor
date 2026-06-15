@@ -83,6 +83,62 @@ describe("workbench model", () => {
     expect(ready.toolbar.canApplyCameraView).toBe(true);
   });
 
+  it("marks selected camera hierarchy rows and disables node copy duplication", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "create-camera-view", view: { id: "view-a", name: "Hero" } });
+    editor.dispatch({ type: "select-node", nodeId: "view-a" });
+    const snapshot = editor.getSnapshot();
+
+    const model = buildWorkbenchModel(snapshot, {
+      inspector: buildInspectorModel(snapshot, { runtimeReady: true }),
+      runtimeReady: true
+    });
+
+    expect(model.selection).toMatchObject({
+      nodeId: "view-a",
+      nodeKind: "camera",
+      cameraViewId: "view-a"
+    });
+    expect(model.hierarchy.rows.find((row) => row.id === "view-a")).toMatchObject({
+      kind: "camera",
+      cameraViewId: "view-a",
+      selected: true
+    });
+    expect(model.toolbar.canCopy).toBe(false);
+    expect(model.toolbar.canDuplicate).toBe(false);
+    expect(model.toolbar.canGroup).toBe(false);
+    expect(model.toolbar.canDelete).toBe(true);
+    expect(model.toolbar.canApplyCameraView).toBe(true);
+  });
+
+  it("disables copy duplication when a selected subtree contains camera nodes", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "create-group", nodeId: "group-a" });
+    editor.dispatch({ type: "create-camera-view", view: { id: "view-a", name: "Hero" } });
+    const snapshot = {
+      ...editor.getSnapshot(),
+      nodes: {
+        ...editor.getSnapshot().nodes,
+        "group-a": { ...editor.getSnapshot().nodes["group-a"], children: ["view-a"] },
+        "view-a": { ...editor.getSnapshot().nodes["view-a"], parentId: "group-a" }
+      },
+      rootNodeIds: ["group-a"],
+      selection: {
+        nodeId: "group-a",
+        nodeIds: ["group-a"],
+        objectId: null,
+        objectIds: []
+      }
+    };
+
+    const model = buildWorkbenchModel(snapshot, {
+      inspector: buildInspectorModel(snapshot)
+    });
+
+    expect(model.toolbar.canCopy).toBe(false);
+    expect(model.toolbar.canDuplicate).toBe(false);
+  });
+
   it("passes runtime readiness to the fallback inspector model", () => {
     const editor = createEditor();
     editor.dispatch({ type: "create-camera-view", view: { id: "view-a", name: "Hero" } });

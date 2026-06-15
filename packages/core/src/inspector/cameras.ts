@@ -15,13 +15,13 @@ const NUMBER_RANGES = {
 type CameraPatchResult = { ok: true; patch: UpdateCameraViewCommand["patch"] } | { ok: false; problem: InspectorCommandProblem };
 
 export function resolveActiveCameraViewId(snapshot: SceneSnapshot, activeCameraViewId?: string | null): string | null {
-  if (activeCameraViewId !== null && activeCameraViewId !== undefined && hasAuthoredCameraView(snapshot.presentation.cameraViews, activeCameraViewId)) {
+  if (activeCameraViewId !== null && activeCameraViewId !== undefined && hasAuthoredCameraView(snapshot.cameras, activeCameraViewId)) {
     return activeCameraViewId;
   }
-  if (snapshot.presentation.defaultViewId !== null && hasAuthoredCameraView(snapshot.presentation.cameraViews, snapshot.presentation.defaultViewId)) {
-    return snapshot.presentation.defaultViewId;
+  if (snapshot.presentation.defaultCameraId !== null && hasAuthoredCameraView(snapshot.cameras, snapshot.presentation.defaultCameraId)) {
+    return snapshot.presentation.defaultCameraId;
   }
-  return Object.keys(snapshot.presentation.cameraViews)[0] ?? null;
+  return Object.keys(snapshot.cameras)[0] ?? null;
 }
 
 export function buildCameraSection(
@@ -29,7 +29,7 @@ export function buildCameraSection(
   options: { activeCameraViewId?: string | null; runtimeReady?: boolean } = {}
 ): CameraInspectorSection {
   const activeCameraViewId = resolveActiveCameraViewId(snapshot, options.activeCameraViewId);
-  const activeCameraView = activeCameraViewId ? getAuthoredCameraView(snapshot.presentation.cameraViews, activeCameraViewId) : null;
+  const activeCameraView = activeCameraViewId ? getAuthoredCameraView(snapshot.cameras, activeCameraViewId) : null;
   const runtimeReady = options.runtimeReady ?? false;
 
   return {
@@ -39,7 +39,7 @@ export function buildCameraSection(
     empty: !activeCameraView,
     reason: activeCameraView ? undefined : "Capture a camera view to author presentation state.",
     activeCameraViewId,
-    defaultCameraViewId: snapshot.presentation.defaultViewId,
+    defaultCameraViewId: snapshot.presentation.defaultCameraId,
     cameraViews: buildCameraViewList(snapshot, activeCameraViewId),
     canCapture: runtimeReady,
     canApply: runtimeReady && Boolean(activeCameraView),
@@ -58,7 +58,7 @@ export function buildCreateCameraViewCommand(view?: CreateCameraViewCommand["vie
 }
 
 export function buildCreateCameraViewInput(snapshot: SceneSnapshot, view?: CreateCameraViewCommand["view"]): CreateCameraViewCommand["view"] {
-  return createAuthoredCameraViewInput(snapshot.presentation.cameraViews, view);
+  return createAuthoredCameraViewInput(snapshot.cameras, view);
 }
 
 export function buildUpdateCameraViewCommand(
@@ -67,7 +67,7 @@ export function buildUpdateCameraViewCommand(
   fieldId: CameraViewFieldId,
   value: unknown
 ): InspectorCommandResult {
-  const view = getAuthoredCameraView(snapshot.presentation.cameraViews, viewId);
+  const view = getAuthoredCameraView(snapshot.cameras, viewId);
   if (!view) {
     return problem(fieldId, "Camera view does not exist.");
   }
@@ -88,7 +88,7 @@ export function buildUpdateCameraViewCommand(
 }
 
 export function buildDeleteCameraViewCommand(snapshot: SceneSnapshot, viewId: string): InspectorCommandResult {
-  if (!hasAuthoredCameraView(snapshot.presentation.cameraViews, viewId)) {
+  if (!hasAuthoredCameraView(snapshot.cameras, viewId)) {
     return problem("viewId", "Camera view does not exist.");
   }
   const command: DeleteCameraViewCommand = {
@@ -99,8 +99,8 @@ export function buildDeleteCameraViewCommand(snapshot: SceneSnapshot, viewId: st
 }
 
 export function buildSetDefaultCameraViewCommand(snapshot: SceneSnapshot, viewId: string | null): InspectorCommandResult {
-  if (viewId !== null && !hasAuthoredCameraView(snapshot.presentation.cameraViews, viewId)) {
-    return problem("defaultViewId", "Camera view does not exist.");
+  if (viewId !== null && !hasAuthoredCameraView(snapshot.cameras, viewId)) {
+    return problem("defaultCameraId", "Camera view does not exist.");
   }
   const command: SetDefaultCameraViewCommand = {
     type: "set-default-camera-view",
@@ -110,18 +110,18 @@ export function buildSetDefaultCameraViewCommand(snapshot: SceneSnapshot, viewId
 }
 
 export function getNextActiveCameraViewId(snapshot: SceneSnapshot, removedViewId: string): string | null {
-  if (snapshot.presentation.defaultViewId !== null && snapshot.presentation.defaultViewId !== removedViewId) {
-    return snapshot.presentation.defaultViewId;
+  if (snapshot.presentation.defaultCameraId !== null && snapshot.presentation.defaultCameraId !== removedViewId) {
+    return snapshot.presentation.defaultCameraId;
   }
-  return Object.keys(snapshot.presentation.cameraViews).find((viewId) => viewId !== removedViewId) ?? null;
+  return Object.keys(snapshot.cameras).find((viewId) => viewId !== removedViewId) ?? null;
 }
 
 function buildCameraViewList(snapshot: SceneSnapshot, activeCameraViewId: string | null): CameraViewListItem[] {
-  return Object.values(snapshot.presentation.cameraViews).map((view) => ({
+  return Object.values(snapshot.cameras).map((view) => ({
     id: view.id,
     label: view.name,
     active: view.id === activeCameraViewId,
-    default: view.id === snapshot.presentation.defaultViewId,
+    default: view.id === snapshot.presentation.defaultCameraId,
     projection: view.projection.kind,
     summary: `${Math.round(view.projection.fov)}deg FOV`
   }));
