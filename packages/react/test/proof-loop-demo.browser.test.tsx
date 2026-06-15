@@ -62,9 +62,7 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
       expect(findFieldInput(host, "Base color", 'input[type="color"]'), "Expected material inspector Base color input").toBeTruthy();
     });
     const colorInput = findFieldInput(host, "Base color", 'input[type="color"]') as HTMLInputElement;
-    colorInput.value = "#00aa88";
-    colorInput.dispatchEvent(new Event("input", { bubbles: true }));
-    colorInput.dispatchEvent(new Event("change", { bubbles: true }));
+    setInputValue(colorInput, "#00aa88");
     await waitFor(() => expect(text(host)).toContain("Dirty"));
 
     expect(button(host, "Marquee")?.getAttribute("aria-pressed")).toBe("false");
@@ -102,9 +100,6 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
     await waitFor(() => expect(text(host)).toContain("Redo 1"));
     await clickByText(host, "Redo");
 
-    await clickByText(host, "Duplicate");
-    await waitFor(() => expect(text(section(host, "Project"))).toContain("Objects4"));
-
     await clickByText(host, "Export partial");
     await waitFor(() => expect(text(host)).toContain("Exported partial project"));
     await waitFor(() => expect(window.__lastDownloadedProject).toBeInstanceOf(Uint8Array));
@@ -125,6 +120,9 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
       expect(text(host)).toContain("Camera view 1");
       expect(text(host)).toContain("Default");
     });
+
+    await clickByText(host, "Duplicate");
+    await waitFor(() => expect(text(section(host, "Project"))).toContain("Objects5"));
 
     await waitFor(() => {
       expect(text(section(host, "Missing asset recovery"))).toContain("Replace asset");
@@ -466,6 +464,17 @@ async function uploadFile(input: HTMLInputElement, file: File): Promise<void> {
   });
   input.dispatchEvent(new Event("change", { bubbles: true }));
   await waitForAnimationFrame();
+}
+
+function setInputValue(input: HTMLInputElement, value: string): void {
+  const prototypeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  if (prototypeSetter) {
+    prototypeSetter.call(input, value);
+  } else {
+    input.value = value;
+  }
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 async function waitFor(assertion: () => void, timeout = 4000): Promise<void> {
