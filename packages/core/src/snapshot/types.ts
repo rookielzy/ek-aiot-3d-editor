@@ -1,13 +1,14 @@
 import type { AuthoredCameraMap, ScenePresentationState } from "../cameras/types";
 import type { LegacySceneEnvironment, SceneEnvironment } from "../environment/types";
 import type { ImportedGlbMaterialSlotDescriptor, ImportedGlbRemapMetadata, ImportedGlbSourceDescriptor } from "../imported-targets/types";
-import type { LightDefinition } from "../lights/types";
+import type { LegacyLightDefinition, LightDefinition } from "../lights/types";
 import type { MaterialState } from "../materials/types";
 import type { AuthoredProblemState } from "../problems/types";
 import type { JsonPrimitive, JsonValue } from "./json";
 import type { ASSET_KINDS } from "./primitives";
 
-export const SNAPSHOT_VERSION = 7;
+export const SNAPSHOT_VERSION = 8;
+export const V7_SNAPSHOT_VERSION = 7;
 export const V6_SNAPSHOT_VERSION = 6;
 export const V5_SNAPSHOT_VERSION = 5;
 export const V4_SNAPSHOT_VERSION = 4;
@@ -135,12 +136,17 @@ export interface SceneSnapshot {
   metadata?: Record<string, JsonValue>;
 }
 
-export interface V6SceneSnapshot extends Omit<SceneSnapshot, "version" | "environment"> {
+export interface V7SceneSnapshot extends Omit<SceneSnapshot, "version" | "lights"> {
+  version: typeof V7_SNAPSHOT_VERSION;
+  lights: Record<string, LegacyLightDefinition>;
+}
+
+export interface V6SceneSnapshot extends Omit<V7SceneSnapshot, "version" | "environment"> {
   version: typeof V6_SNAPSHOT_VERSION;
   environment: LegacySceneEnvironment;
 }
 
-export interface V5SceneSnapshot extends Omit<SceneSnapshot, "version" | "nodes" | "cameras" | "presentation" | "environment"> {
+export interface V5SceneSnapshot extends Omit<V7SceneSnapshot, "version" | "nodes" | "cameras" | "presentation" | "environment"> {
   version: typeof V5_SNAPSHOT_VERSION;
   nodes: Record<NodeId, V5SceneNode>;
   environment: LegacySceneEnvironment;
@@ -166,7 +172,7 @@ export interface V3SceneSnapshot {
   assets: Record<string, AssetReference>;
   materials: MaterialState;
   environment: LegacySceneEnvironment;
-  lights: Record<string, LightDefinition>;
+  lights: Record<string, LegacyLightDefinition>;
   problems: AuthoredProblemState;
   metadata?: Record<string, JsonValue>;
 }
@@ -185,7 +191,7 @@ export interface PreviousSceneSnapshot {
   assets: Record<string, AssetReference>;
   materials: MaterialState;
   environment: LegacySceneEnvironment;
-  lights: Record<string, LightDefinition>;
+  lights: Record<string, LegacyLightDefinition>;
   problems: AuthoredProblemState;
   metadata?: Record<string, JsonValue>;
 }
@@ -223,4 +229,12 @@ export interface LegacySceneSnapshot {
   metadata?: Record<string, JsonValue>;
 }
 
-export type SerializedSceneSnapshot = SceneSnapshot | V6SceneSnapshot | V5SceneSnapshot | V4SceneSnapshot | V3SceneSnapshot | PreviousSceneSnapshot | LegacySceneSnapshot;
+export type SerializedSceneSnapshot =
+  | SceneSnapshot
+  | V7SceneSnapshot
+  | V6SceneSnapshot
+  | V5SceneSnapshot
+  | V4SceneSnapshot
+  | V3SceneSnapshot
+  | PreviousSceneSnapshot
+  | LegacySceneSnapshot;

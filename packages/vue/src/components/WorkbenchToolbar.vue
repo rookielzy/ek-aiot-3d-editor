@@ -77,6 +77,15 @@
       <button type="button" title="Toggle snap feedback" :aria-pressed="toolbar.viewportHelpers.snapFeedback" @click="context.toggleViewportHelper('snapFeedback')">
         Guide
       </button>
+      <button type="button" title="Toggle light gizmos" :aria-pressed="toolbar.viewportHelpers.lightGizmos" @click="context.toggleViewportHelper('lightGizmos')">
+        Lights
+      </button>
+      <button type="button" title="Toggle light targets" :aria-pressed="toolbar.viewportHelpers.lightTargets" @click="context.toggleViewportHelper('lightTargets')">
+        Targets
+      </button>
+      <button type="button" title="Toggle shadow camera helpers" :aria-pressed="toolbar.viewportHelpers.shadowCameras" @click="context.toggleViewportHelper('shadowCameras')">
+        Shadow cam
+      </button>
     </div>
 
     <div class="ek-workbench__tool-group" aria-label="Camera">

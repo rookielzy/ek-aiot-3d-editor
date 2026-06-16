@@ -211,13 +211,24 @@ export type {
 } from "./imported-targets/slots";
 export type {
   AmbientLightDefinition,
+  BaseLightShadowSettings,
   DirectionalLightDefinition,
+  DirectionalLightShadowSettings,
   HemisphereLightDefinition,
   LightDefinition,
   LightKind,
+  LightShadowMapSize,
+  LightShadowSettings,
   PointLightDefinition,
+  PointLightShadowSettings,
+  ShadowCapableLightKind,
+  SpotLightShadowSettings,
   SpotLightDefinition
 } from "./lights/types";
+export type {
+  LightingPresetId,
+  LightingPresetResult
+} from "./lights/presets";
 export type {
   MaterialAssignment,
   MaterialAssignmentTarget,
@@ -322,6 +333,8 @@ export type {
   SceneSnapshot,
   SerializedSceneSnapshot,
   Transform,
+  V7SceneSnapshot,
+  V6SceneSnapshot,
   V5SceneNode,
   V5SceneSnapshot,
   V4SceneSnapshot,
@@ -366,6 +379,9 @@ export {
   resolveActiveCameraViewId,
   resolveActiveLightId
 } from "./inspector/commands";
+export {
+  buildLightingPresetCommands
+} from "./lights/presets";
 export {
   buildInspectorModel,
   getInspectorSelection

@@ -15,7 +15,21 @@ describe("light inspector commands", () => {
     const directional = buildLightSection(editor.getSnapshot(), "sun");
 
     expect(ambient.fields.map((field) => field.id)).not.toContain("target.x");
+    expect(ambient.fields.map((field) => field.id)).not.toContain("shadow.enabled");
     expect(directional.fields.map((field) => field.id)).toContain("target.x");
+    expect(directional.fields.map((field) => field.id)).toEqual(expect.arrayContaining([
+      "shadow.enabled",
+      "shadow.mapSize.width",
+      "shadow.bias",
+      "shadow.normalBias",
+      "shadow.radius",
+      "shadow.camera.near",
+      "shadow.camera.far",
+      "shadow.camera.left",
+      "shadow.camera.right",
+      "shadow.camera.top",
+      "shadow.camera.bottom"
+    ]));
   });
 
   it("normalizes rgb light colors for browser color inputs", () => {
@@ -119,5 +133,36 @@ describe("light inspector commands", () => {
 
     expect(result.ok).toBe(false);
     expect(result.ok ? undefined : result.problem.message).toContain("less than or equal");
+  });
+
+  it("builds shadow update commands and leaves validation to dispatch", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "add-light", light: { id: "sun", kind: "directional" } });
+
+    const enable = buildUpdateLightCommand(editor.getSnapshot(), "sun", "shadow.enabled", true);
+    if (!enable.ok) {
+      throw new Error(enable.problem.message);
+    }
+    editor.dispatch(enable.command);
+    expect(editor.getSnapshot().lights.sun).toMatchObject({ shadow: { enabled: true } });
+
+    const invalidMapSize = buildUpdateLightCommand(editor.getSnapshot(), "sun", "shadow.mapSize.width", 1000);
+    if (!invalidMapSize.ok) {
+      throw new Error(invalidMapSize.problem.message);
+    }
+    const result = editor.dispatch(invalidMapSize.command);
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("power-of-two");
+    expect(editor.getSnapshot().lights.sun).toMatchObject({ shadow: { mapSize: { width: 1024 } } });
+  });
+
+  it("rejects shadow field drafts for unsupported light kinds before dispatch", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "add-light", light: { id: "ambient-a", kind: "ambient" } });
+
+    const result = buildUpdateLightCommand(editor.getSnapshot(), "ambient-a", "shadow.enabled", true);
+
+    expect(result.ok).toBe(false);
+    expect(result.ok ? undefined : result.problem.message).toContain("not supported");
   });
 });

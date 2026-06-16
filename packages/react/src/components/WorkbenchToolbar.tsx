@@ -139,6 +139,15 @@ export function WorkbenchToolbar({ context, marqueeSelectionEnabled = false, onT
         <button type="button" onClick={() => context.toggleViewportHelper("snapFeedback")} aria-pressed={toolbar.viewportHelpers.snapFeedback} title="Toggle snap feedback">
           Guide
         </button>
+        <button type="button" onClick={() => context.toggleViewportHelper("lightGizmos")} aria-pressed={toolbar.viewportHelpers.lightGizmos} title="Toggle light gizmos">
+          Lights
+        </button>
+        <button type="button" onClick={() => context.toggleViewportHelper("lightTargets")} aria-pressed={toolbar.viewportHelpers.lightTargets} title="Toggle light targets">
+          Targets
+        </button>
+        <button type="button" onClick={() => context.toggleViewportHelper("shadowCameras")} aria-pressed={toolbar.viewportHelpers.shadowCameras} title="Toggle shadow camera helpers">
+          Shadow cam
+        </button>
       </div>
       <div className="ek-workbench__tool-group" aria-label="Camera">
         <button type="button" onClick={context.resetCamera} disabled={!context.camera.ready} title="Reset camera">

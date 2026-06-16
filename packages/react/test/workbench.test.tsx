@@ -139,10 +139,10 @@ describe("React EditorWorkbench", () => {
       fireEvent.click(screen.getByTitle(title));
       expect(screen.getByTitle(title).getAttribute("aria-pressed")).toBe("false");
     }
-    expect(Object.values(editor.viewportHelpers.get().visibility)).toEqual([false, false, false, false, false, false]);
+    expect(Object.values(editor.viewportHelpers.get().visibility)).toEqual([false, false, false, false, false, false, true, true, false]);
 
     fireEvent.click(screen.getByTitle("Move mode"));
-    expect(Object.values(editor.viewportHelpers.get().visibility)).toEqual([false, false, false, false, false, false]);
+    expect(Object.values(editor.viewportHelpers.get().visibility)).toEqual([false, false, false, false, false, false, true, true, false]);
     expect(JSON.stringify(editor.serialize())).not.toContain("viewportHelpers");
 
     fireEvent.click(screen.getByTitle("Reset camera"));
@@ -696,7 +696,7 @@ describe("React EditorWorkbench", () => {
     unmount();
 
     expect(editor.disposed).toBe(false);
-    expect(editor.getSnapshot().version).toBe(7);
+    expect(editor.getSnapshot().version).toBe(8);
   });
 
   it("disposes a shell-created editor when the workbench unmounts", async () => {

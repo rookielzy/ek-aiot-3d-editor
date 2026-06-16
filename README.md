@@ -8,7 +8,7 @@ The core contract now stores a versioned scene snapshot. Version 4 introduced a 
 
 - object-level `MeshStandardMaterial` overrides and texture-slot asset references
 - scene background/environment intent, including image and HDR asset references
-- editable light definitions for ambient, directional, hemisphere, point, and spot lights
+- editable light definitions for ambient, directional, hemisphere, point, and spot lights, including shadow settings for directional, point, and spot lights
 - authored perspective camera views and the default presentation view pointer
 - richer framework-neutral problem metadata for validation, resolver, and runtime diagnostics
 
@@ -19,6 +19,7 @@ The proof loop remains intentionally narrow, but the local React and Vue demos n
 - orbit/reset/frame the transient camera without serializing camera state
 - capture, edit, default, and re-apply authored camera views as durable presentation state
 - click/select through the viewport or hierarchy
+- tune light shadows, light helpers, target helpers, and shadow camera helpers as runtime/session aids
 - commit one transform command, including visual gizmo-backed transactions in the runtime
 - undo and redo that transform
 - edit supported object-level `MeshStandardMaterial` overrides and project them visibly at runtime
@@ -35,11 +36,11 @@ The proof loop remains intentionally narrow, but the local React and Vue demos n
 
 The packages are prepared for public npm publication as experimental `0.x` packages. Versioning and changelogs use Changesets, and publishable artifacts are verified from packed npm tarballs before publishing. See [docs/release.md](docs/release.md) for the release workflow, trusted publishing setup, token fallback, and first-release checklist.
 
-Durable editor state lives only in the versioned scene snapshot. Three.js objects, framework component state, `File`, `Blob`, object URLs, loaded textures, PMREM outputs, and resolver outputs are runtime inputs, not serializable state.
+Durable editor state lives only in the versioned scene snapshot. Three.js objects, framework component state, `File`, `Blob`, object URLs, loaded textures, PMREM outputs, renderer shadow maps, helper objects, and resolver outputs are runtime inputs, not serializable state.
 
 Portable local projects use a separate `.ek3d` package surface. A package contains `project.json`, `scene.json`, and `assets/*` payload entries. Core validates package manifests and archive paths, registers packaged payloads into a transient project asset store, and lets recoverable problem UI replace a missing payload by stable asset ID. JSON snapshots remain binary-free.
 
-The core Three.js runtime now consumes the environment and light parts of that snapshot. Solid backgrounds, texture/HDR backgrounds, HDR or image-based scene environment lighting, PMREM output when backed by the default WebGL renderer, and ambient/hemisphere/directional/point/spot lights are projected from durable asset references and light definitions. Resolver, loader, and PMREM failures are exposed as runtime problems instead of being written back into the snapshot.
+The core Three.js runtime now consumes the environment and light parts of that snapshot. Solid backgrounds, texture/HDR backgrounds, HDR or image-based scene environment lighting, PMREM output when backed by the default WebGL renderer, ambient/hemisphere/directional/point/spot lights, and authored shadows are projected from durable asset references and light definitions. Resolver, loader, PMREM, and lighting diagnostics are exposed as runtime problems instead of being written back into the snapshot.
 
 Vue and React packages now include a shared inspector surface over the core contract. The inspector can edit transformable selected nodes, object-only material overrides, scene environment/background settings, and selected light nodes through core commands. It also displays runtime/authored problem metadata without serializing transient runtime failures.
 
@@ -64,4 +65,4 @@ In each framework demo, the visible validation path is camera helper use, hierar
 
 ## Current Non-Goals
 
-Box/lasso selection, system clipboard formats, full asset libraries, cloud asset storage, model marketplaces, local import queues, dockable or persisted layouts, schema-driven inspector plugins, per-submesh material slot discovery, full GLTF material graph editing, shadows, advanced light helpers, animation timelines, data binding, event orchestration, hosted publishing, stable non-`0.x` API guarantees, and Le5le-style low-code runtime workflows are deferred follow-up work.
+Box/lasso selection, system clipboard formats, full asset libraries, cloud asset storage, model marketplaces, local import queues, dockable or persisted layouts, schema-driven inspector plugins, per-submesh material slot discovery, full GLTF material graph editing, advanced render pipelines beyond basic shadows, animation timelines, data binding, event orchestration, hosted publishing, stable non-`0.x` API guarantees, and Le5le-style low-code runtime workflows are deferred follow-up work.

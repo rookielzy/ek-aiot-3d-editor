@@ -70,6 +70,9 @@ export interface RuntimeViewportHelperOptions {
   selectionBounds?: boolean;
   hover?: boolean;
   snapFeedback?: boolean;
+  lightGizmos?: boolean;
+  lightTargets?: boolean;
+  shadowCameras?: boolean;
   gridSize?: number;
   gridDivisions?: number;
   gridColor?: number | string;
@@ -360,7 +363,10 @@ function normalizeViewportHelperOptions(
     axes: normalized.visibility?.axes ?? normalized.axes ?? true,
     selectionBounds: normalized.visibility?.selectionBounds ?? normalized.selectionBounds ?? true,
     hover: normalized.visibility?.hover ?? normalized.hover ?? true,
-    snapFeedback: normalized.visibility?.snapFeedback ?? normalized.snapFeedback ?? true
+    snapFeedback: normalized.visibility?.snapFeedback ?? normalized.snapFeedback ?? true,
+    lightGizmos: normalized.visibility?.lightGizmos ?? normalized.lightGizmos ?? true,
+    lightTargets: normalized.visibility?.lightTargets ?? normalized.lightTargets ?? true,
+    shadowCameras: normalized.visibility?.shadowCameras ?? normalized.shadowCameras ?? false
   };
   return {
     enabled: true,
@@ -371,6 +377,9 @@ function normalizeViewportHelperOptions(
     selectionBounds: visibility.selectionBounds,
     hover: visibility.hover,
     snapFeedback: visibility.snapFeedback,
+    lightGizmos: visibility.lightGizmos,
+    lightTargets: visibility.lightTargets,
+    shadowCameras: visibility.shadowCameras,
     gridSize: normalized.gridSize ?? 20,
     gridDivisions: normalized.gridDivisions ?? 20,
     gridColor: normalized.gridColor ?? 0x475569,

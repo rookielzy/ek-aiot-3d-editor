@@ -18,6 +18,7 @@ import {
   buildSolidBackgroundPreset,
   buildEnvironmentSharedAssetPreset,
   buildEnvironmentWithConservativeLightsPreset,
+  buildLightingPresetCommands,
   buildCameraSection,
   buildCreateCameraViewCommand,
   buildCreateCameraViewInput,
@@ -73,6 +74,8 @@ import {
   type ImportedGlbTargetBindingDescriptor,
   type ImportedGlbTargetDescriptor,
   type LightDefinition,
+  type LightingPresetId,
+  type LightingPresetResult,
   type MaterialInspectorTarget,
   type Problem,
   PROJECT_PACKAGE_VERSION,
@@ -135,7 +138,10 @@ import {
   type WorkbenchAssetImportOptions,
   type WorkbenchAssetImportResult,
   type WorkbenchModel,
-  type WorkbenchRasterImportKind
+  type WorkbenchRasterImportKind,
+  type DirectionalLightShadowSettings,
+  type LightShadowMapSize,
+  type ShadowCapableLightKind
 } from "./index";
 
 describe("core public API", () => {
@@ -217,6 +223,18 @@ describe("core public API", () => {
       color: "#ffffff",
       intensity: 1
     };
+    const shadowMapSize: LightShadowMapSize = { width: 1024, height: 1024 };
+    const directionalShadow: DirectionalLightShadowSettings = {
+      enabled: true,
+      mapSize: shadowMapSize,
+      bias: -0.0001,
+      normalBias: 0.01,
+      radius: 1,
+      camera: { near: 0.5, far: 80, left: -8, right: 8, top: 8, bottom: -8 }
+    };
+    const shadowCapableKind: ShadowCapableLightKind = "directional";
+    const lightingPresetId: LightingPresetId = "conservative-key-light";
+    const lightingPreset: LightingPresetResult = buildLightingPresetCommands({}, lightingPresetId);
     const problem: Problem = {
       id: "asset-unresolved:asset-a:object-a",
       severity: "warning",
@@ -474,6 +492,9 @@ describe("core public API", () => {
     expect(backgroundSource.kind).toBe("solid");
     expect(cubemapFace.role).toBe("positive-x");
     expect(environmentPresetResult.ok).toBe(true);
+    expect(lightingPreset.ok).toBe(true);
+    expect(directionalShadow.mapSize.width).toBe(1024);
+    expect(shadowCapableKind).toBe("directional");
     expect(inspectorAction.command?.type).toBe("set-environment");
     expect(addLight.light.kind).toBe("ambient");
     expect(updateLight.patch.intensity).toBe(2);

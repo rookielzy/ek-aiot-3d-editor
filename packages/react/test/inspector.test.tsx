@@ -245,6 +245,44 @@ describe("React InspectorPanel", () => {
     expect(Object.values(editor.getSnapshot().lights).filter((light) => light.kind === "point")).toHaveLength(2);
   });
 
+  it("edits light shadow controls through core inspector commands", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "add-light", light: { id: "sun", kind: "directional" } });
+    editor.dispatch({ type: "select-node", nodeId: "sun" });
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+
+    render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByLabelText("Cast shadows"));
+    fireEvent.change(screen.getByLabelText("Shadow map width"), { target: { value: "2048" } });
+    fireEvent.blur(screen.getByLabelText("Shadow map width"));
+
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({
+      type: "update-light",
+      lightId: "sun",
+      patch: expect.objectContaining({
+        shadow: expect.objectContaining({ enabled: true })
+      })
+    }));
+    expect(editor.getSnapshot().lights.sun.shadow).toMatchObject({
+      enabled: true,
+      mapSize: { width: 2048 }
+    });
+  });
+
+  it("shows light shadow validation problems without dispatching invalid drafts", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "add-light", light: { id: "sun", kind: "directional" } });
+    editor.dispatch({ type: "select-node", nodeId: "sun" });
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+
+    render(<InspectorPanel editor={editor} />);
+    fireEvent.change(screen.getByLabelText("Shadow map width"), { target: { value: "0" } });
+    fireEvent.blur(screen.getByLabelText("Shadow map width"));
+
+    expect(screen.getByText(/greater than or equal to 1/)).toBeTruthy();
+    expect(dispatchSpy).not.toHaveBeenCalledWith(expect.objectContaining({ type: "update-light" }));
+  });
+
   it("edits authored camera views through core inspector commands", () => {
     const editor = createEditor();
     editor.dispatch({ type: "create-camera-view", view: { id: "view-a", name: "Hero", projection: { kind: "perspective", fov: 60 } } });

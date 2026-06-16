@@ -50,7 +50,7 @@ describe("environment schema validation", () => {
 
     const migrated = migrateSerializedSnapshot(v6);
 
-    expect(migrated.version).toBe(7);
+    expect(migrated.version).toBe(8);
     expect(migrated.environment.lighting).toEqual({
       source: { kind: "hdr", assetId: "hdr-a" },
       intensity: 1.5,

@@ -254,6 +254,39 @@ describe("workbench model", () => {
     expect(JSON.stringify(model)).not.toContain("Object3D");
   });
 
+  it("attributes light-targeted runtime diagnostics to light hierarchy rows", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "add-light", light: { id: "point-a", kind: "point", name: "Point shadow" } });
+    const runtimeProblems: Problem[] = [{
+      id: "lighting-point-shadow-cost:point-a",
+      severity: "warning",
+      code: "lighting-point-shadow-cost",
+      source: "runtime",
+      target: { kind: "light", lightId: "point-a" },
+      recoverability: "user-action",
+      message: "Point shadows render six faces.",
+      display: { title: "Point light shadow is expensive" }
+    }];
+    const snapshot = editor.getSnapshot();
+
+    const model = buildWorkbenchModel(snapshot, {
+      inspector: buildInspectorModel(snapshot, { runtimeProblems }),
+      runtimeProblems,
+      history: editor.getHistoryState(),
+      snap: editor.snap.get(),
+      transformMode: editor.transformMode.get(),
+      runtimeReady: true
+    });
+
+    expect(model.hierarchy.rows.find((row) => row.lightId === "point-a")).toMatchObject({
+      problemCount: 1,
+      problemIds: ["lighting-point-shadow-cost:point-a"],
+      highestProblemSeverity: "warning"
+    });
+    expect(model.problems.runtimeCount).toBe(1);
+    expect(snapshot.problems.acknowledged).toEqual({});
+  });
+
   it("derives unresolved GLB reimport problems from durable remap metadata", () => {
     const editor = createEditor();
     const manifest = createGlbImportManifest({

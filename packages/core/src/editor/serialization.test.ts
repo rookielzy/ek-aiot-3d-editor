@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createEmptySnapshot, createTransform } from "../snapshot/defaults";
+import { createLightDefinition } from "../lights/defaults";
+import { createEmptySnapshot, createLightNode, createTransform } from "../snapshot/defaults";
 import type { SceneSnapshot, V3SceneSnapshot } from "../snapshot/types";
 import { validateSerializedSceneSnapshot } from "../snapshot/migrations";
 import { createLegacyProofLoopSnapshot } from "../../test/fixtures/legacy-proof-loop";
@@ -67,7 +68,7 @@ describe("snapshot serialization", () => {
     const legacy = createLegacyProofLoopSnapshot();
     const restored = restoreSnapshot(legacy);
 
-    expect(restored.version).toBe(7);
+    expect(restored.version).toBe(8);
     expect(restored.scene).toEqual(legacy.scene);
     expect(restored.objects["object-a"].transform.position).toEqual([4, 5, 6]);
     expect(restored.nodes["object-a"]).toMatchObject({ kind: "object", objectId: "object-a" });
@@ -115,7 +116,7 @@ describe("snapshot serialization", () => {
 
     const restored = restoreSnapshot(version2);
 
-    expect(restored.version).toBe(7);
+    expect(restored.version).toBe(8);
     expect(restored.selection).toEqual({ nodeId: "object-a", nodeIds: ["object-a"], objectId: "object-a", objectIds: ["object-a"] });
   });
 
@@ -181,7 +182,7 @@ describe("snapshot serialization", () => {
 
     const restored = restoreSnapshot(version3);
 
-    expect(restored.version).toBe(7);
+    expect(restored.version).toBe(8);
     expect(restored.nodes["object-a"]).toMatchObject({ kind: "object", objectId: "object-a", children: ["light-a"] });
     expect(restored.nodes["light-a"]).toMatchObject({ kind: "object", objectId: "light-a", parentId: "object-a" });
     expect(restored.nodes["light-a:light"]).toMatchObject({ kind: "light", lightId: "light-a", parentId: null });
@@ -196,5 +197,48 @@ describe("snapshot serialization", () => {
 
     expect(validateSceneSnapshot(legacy).ok).toBe(false);
     expect(validateSerializedSceneSnapshot(legacy)).toEqual({ ok: true, errors: [] });
+  });
+
+  it("round-trips durable shadow settings without runtime shadow objects", () => {
+    const sun = createLightDefinition("directional", {
+      id: "sun",
+      shadow: {
+        enabled: true,
+        mapSize: { width: 2048, height: 1024 },
+        bias: -0.0001,
+        normalBias: 0.01,
+        radius: 2,
+        camera: {
+          near: 0.2,
+          far: 80,
+          left: -8,
+          right: 8,
+          top: 6,
+          bottom: -6
+        }
+      }
+    });
+    const snapshot: SceneSnapshot = {
+      ...createEmptySnapshot("scene-a"),
+      lights: {
+        sun
+      },
+      nodes: {
+        sun: createLightNode(sun)
+      },
+      rootNodeIds: ["sun"]
+    };
+
+    const serialized = serializeSnapshot(snapshot);
+    const serializedText = JSON.stringify(serialized);
+    const restored = restoreSnapshot(serialized);
+
+    expect(restored.lights.sun).toMatchObject(snapshot.lights.sun);
+    expect(serializedText).toContain("\"shadow\"");
+    expect(serializedText).not.toContain("LightShadow");
+    expect(serializedText).not.toContain("CameraHelper");
+    expect(serializedText).not.toContain("WebGLRenderTarget");
+    expect(serializedText).not.toContain("shadowMap");
+    expect(serializedText).not.toContain("runtimeOnly");
   });
 });

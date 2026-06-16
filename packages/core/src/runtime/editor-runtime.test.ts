@@ -67,6 +67,63 @@ describe("editor runtime", () => {
     expect(renderer.domElement.parentElement).toBeNull();
   });
 
+  it("enables and disables renderer shadow maps from projected shadow summary", async () => {
+    const renderer = {
+      ...createFakeRenderer(document.createElement("div")),
+      shadowMap: {
+        enabled: false,
+        autoUpdate: true,
+        needsUpdate: false
+      }
+    };
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const runtime = new ThreeEditorRuntime({
+      container: document.createElement("div"),
+      store,
+      dispatcher,
+      rendererFactory: () => renderer
+    });
+
+    dispatcher.dispatch({ type: "add-light", light: { id: "sun", kind: "directional", shadow: { enabled: true } } });
+    await runtime.project();
+
+    expect(renderer.shadowMap.enabled).toBe(true);
+    expect(renderer.shadowMap.needsUpdate).toBe(true);
+
+    dispatcher.dispatch({
+      type: "update-light",
+      lightId: "sun",
+      patch: { shadow: { ...store.getSnapshot().lights.sun.shadow, enabled: false } }
+    });
+    await runtime.project();
+
+    expect(renderer.shadowMap.enabled).toBe(false);
+    expect(renderer.shadowMap.needsUpdate).toBe(false);
+    runtime.dispose();
+  });
+
+  it("publishes lighting diagnostics when the renderer cannot display authored shadows", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    const runtime = new ThreeEditorRuntime({
+      container: document.createElement("div"),
+      store,
+      dispatcher,
+      rendererFactory: createFakeRenderer
+    });
+
+    dispatcher.dispatch({ type: "add-light", light: { id: "point-a", kind: "point", shadow: { enabled: true } } });
+    await runtime.project();
+
+    expect(runtime.getProblems().map((problem) => problem.code)).toEqual(expect.arrayContaining([
+      "lighting-shadow-renderer-missing",
+      "lighting-point-shadow-cost"
+    ]));
+    expect(store.getSnapshot().problems.acknowledged).toEqual({});
+    runtime.dispose();
+  });
+
   it("renders once when camera controls invalidate the viewport without mutating snapshots", async () => {
     const frames = createFrameScheduler();
     const controls = createFakeControls();

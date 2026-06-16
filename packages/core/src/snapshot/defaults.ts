@@ -1,7 +1,7 @@
 import { createEmptyCameraState, createEmptyPresentationState } from "../cameras/defaults";
 import type { AuthoredCameraDefinition } from "../cameras/types";
 import { createDefaultEnvironment } from "../environment/defaults";
-import type { LightDefinition } from "../lights/types";
+import type { LegacyLightDefinition, LightDefinition } from "../lights/types";
 import { createEmptyMaterialState } from "../materials/defaults";
 import { createEmptyAuthoredProblemState } from "../problems/defaults";
 import { SNAPSHOT_VERSION, type SceneCameraNode, type SceneLightNode, type SceneObject, type SceneObjectNode, type SceneSnapshot, type Transform } from "./types";
@@ -63,7 +63,7 @@ export function createObjectNode(object: SceneObject): SceneObjectNode {
   };
 }
 
-export function createLightNode(light: LightDefinition, id = light.id): SceneLightNode {
+export function createLightNode(light: LightDefinition | LegacyLightDefinition, id = light.id): SceneLightNode {
   const transform = getLightNodeTransform(light);
   return {
     id,
@@ -96,7 +96,7 @@ function createCameraTransform(camera: AuthoredCameraDefinition): Transform {
   });
 }
 
-function getLightNodeTransform(light: LightDefinition): Transform | undefined {
+function getLightNodeTransform(light: LightDefinition | LegacyLightDefinition): Transform | undefined {
   switch (light.kind) {
     case "directional":
     case "point":
@@ -106,7 +106,7 @@ function getLightNodeTransform(light: LightDefinition): Transform | undefined {
     case "hemisphere":
       return undefined;
     default:
-      return assertNever(light);
+      return assertNever(light as never);
   }
 }
 

@@ -4,7 +4,8 @@ Scene Snapshot 是本项目的 durable editor state。它必须是 JSON-compatib
 
 当前版本：
 
-- `SceneSnapshot.version = 7`
+- `SceneSnapshot.version = 8`
+- `V7SceneSnapshot.version = 7`
 - `V6SceneSnapshot.version = 6`
 - `V5SceneSnapshot.version = 5`
 - `V4SceneSnapshot.version = 4`
@@ -12,13 +13,13 @@ Scene Snapshot 是本项目的 durable editor state。它必须是 JSON-compatib
 - `PreviousSceneSnapshot.version = 2`
 - `LegacySceneSnapshot.version = 1`
 
-Version 1/2/3/4/5/6 snapshot 会通过 migration 规范化为当前 schema。v4 scene node graph 会原样升级到 v5，再补齐 v6 presentation state，最后把 v6 environment `mode`/`background.mode` 迁移为 v7 source-based environment；migration 不会根据已有 GLB object metadata 自动生成 imported targets，也不会根据 transient runtime camera 自动生成 authored camera view。
+Version 1/2/3/4/5/6/7 snapshot 会通过 migration 规范化为当前 schema。v4 scene node graph 会原样升级到 v5，再补齐 v6 presentation state，v6 environment `mode`/`background.mode` 会迁移为 v7 source-based environment，v7 shadow-capable lights 会补齐 disabled shadow defaults 并升级为 v8；migration 不会根据已有 GLB object metadata 自动生成 imported targets，也不会根据 transient runtime camera 自动生成 authored camera view，也不会自动开启 shadows。
 
 ## 顶层结构
 
 ```ts
 interface SceneSnapshot {
-  version: 7;
+  version: 8;
   scene: {
     id: string;
     name: string;
@@ -298,7 +299,7 @@ editor.dispatch({
 
 Runtime projection 会把这些 durable imported nodes 解析为 loaded GLB scene 内的 transient `Object3D` descendant，并把结果放入 runtime node target map。该映射只在运行时存在：`Object3D`、base transform cache、loader result、parser association、selection helper 和 runtime problem 都不会写入 Snapshot。若 loaded GLB 中找不到对应 `importKey/source`，runtime 会暴露 target 为 `{ kind: "imported-target" }` 的 recoverable problem，并保留 durable imported node 与已 authored 的 transform override。若 GLB reimport 把 node 标记为 `remap.status: "unresolved"`，runtime/workbench 会暴露 `imported-target-unresolved`，而不是删除 node 或它的 authored transform。
 
-Viewport grid/floor/axes helpers, selection/hover/snap guide helper objects, helper visibility, hover target, snap feedback state, and marquee overlay/drag/candidate state are runtime/workbench session projection. They must not be serialized into Snapshot, history, clipboard payload, or `.ek3d` `scene.json`.
+Viewport grid/floor/axes helpers, light gizmos, light target helpers, shadow camera helpers, selection/hover/snap guide helper objects, helper visibility, hover target, snap feedback state, and marquee overlay/drag/candidate state are runtime/workbench session projection. They must not be serialized into Snapshot, history, clipboard payload, or `.ek3d` `scene.json`.
 
 或在 import 时 opt-in：
 
@@ -431,12 +432,37 @@ type LightKind = "ambient" | "directional" | "hemisphere" | "point" | "spot";
 五类灯光定义都属于 durable state：
 
 - ambient：颜色、强度。
-- directional：颜色、强度、transform、target。
+- directional：颜色、强度、transform、target、shadow settings。
 - hemisphere：颜色、groundColor、强度。
-- point：颜色、强度、transform、distance、decay。
-- spot：颜色、强度、transform、target、distance、angle、penumbra、decay。
+- point：颜色、强度、transform、distance、decay、shadow settings。
+- spot：颜色、强度、transform、target、distance、angle、penumbra、decay、shadow settings。
 
-Runtime 会把这些定义投影为 Three.js light object，并在更新/删除时清理旧对象。
+Directional、point 和 spot lights 可以保存 durable `shadow` authoring settings：
+
+```ts
+interface BaseLightShadowSettings {
+  enabled: boolean;
+  mapSize: { width: number; height: number };
+  bias: number;
+  normalBias: number;
+  radius: number;
+  camera: { near: number; far: number };
+  metadata?: Record<string, JsonValue>;
+}
+
+interface DirectionalLightShadowSettings extends BaseLightShadowSettings {
+  camera: BaseLightShadowSettings["camera"] & {
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+  };
+}
+```
+
+Ambient 和 hemisphere lights 不支持 shadow settings；validation 和 command layer 会拒绝这两类 light 上的 `shadow` 字段。Shadow map size 必须是正的 power-of-two，当前上限是 4096；camera near/far 必须 finite 且 `near < far`；directional bounds 必须 finite 且 left/right、bottom/top 不可倒置。
+
+Runtime 会把这些定义投影为 Three.js light object，并在更新/删除时清理旧对象。Shadow settings 会投影到 Three.js shadow-capable lights，并在至少一个 shadow enabled 时启用 renderer `shadowMap`。Projection-owned meshes 在 shadow-enabled scene 中默认参与 cast/receive shadow；helper、pick proxy 和 problem placeholder 不参与。PointLight shadow cost、高 map size、宽 shadow camera range、宽 directional frustum 和 renderer 缺少 shadowMap capability 都作为 derived runtime problems 暴露，不写入 `snapshot.problems.acknowledged`。
 
 每个 light payload 必须被一个 light node 引用。ambient 和 hemisphere light node 可被选择，但当前不暴露 transform capability；directional、point、spot light node 可以携带 transform。
 
@@ -511,7 +537,7 @@ Clipboard payload 是 transient JSON editor data，不属于 durable Snapshot：
 
 ```json
 {
-  "version": 5,
+  "version": 8,
   "scene": {
     "id": "scene",
     "name": "Untitled scene"

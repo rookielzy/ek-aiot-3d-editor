@@ -1,6 +1,6 @@
 import { BoxGeometry, Mesh, MeshBasicMaterial, Object3D, type Line } from "three";
 import { describe, expect, it } from "vitest";
-import { IDLE_VIEWPORT_SNAP_FEEDBACK } from "../editor/viewport-helper-state";
+import { IDLE_VIEWPORT_SNAP_FEEDBACK, type ViewportHelperVisibility } from "../editor/viewport-helper-state";
 import { ThreeObjectMap } from "./three-object-map";
 import { RuntimeViewportHelpers } from "./viewport-helpers";
 
@@ -11,14 +11,14 @@ describe("runtime viewport helpers", () => {
     const helpers = new RuntimeViewportHelpers(scene, objects, createOptions());
 
     expect(helpers.setState({
-      visibility: {
+      visibility: createVisibility({
         grid: true,
         floor: true,
         axes: true,
         selectionBounds: true,
         hover: false,
         snapFeedback: false
-      },
+      }),
       hoverNodeId: null,
       snapFeedback: IDLE_VIEWPORT_SNAP_FEEDBACK
     })).toBe(true);
@@ -40,14 +40,14 @@ describe("runtime viewport helpers", () => {
     const helpers = new RuntimeViewportHelpers(scene, objects, createOptions());
 
     helpers.setState({
-      visibility: {
+      visibility: createVisibility({
         grid: false,
         floor: false,
         axes: false,
         selectionBounds: true,
         hover: true,
         snapFeedback: false
-      },
+      }),
       hoverNodeId: "object-a",
       snapFeedback: IDLE_VIEWPORT_SNAP_FEEDBACK
     });
@@ -60,14 +60,14 @@ describe("runtime viewport helpers", () => {
     });
 
     helpers.setState({
-      visibility: {
+      visibility: createVisibility({
         grid: false,
         floor: false,
         axes: false,
         selectionBounds: true,
         hover: false,
         snapFeedback: false
-      },
+      }),
       hoverNodeId: "object-a",
       snapFeedback: IDLE_VIEWPORT_SNAP_FEEDBACK
     });
@@ -83,14 +83,14 @@ describe("runtime viewport helpers", () => {
     const helpers = new RuntimeViewportHelpers(scene, objects, createOptions());
 
     helpers.setState({
-      visibility: {
+      visibility: createVisibility({
         grid: false,
         floor: false,
         axes: false,
         selectionBounds: true,
         hover: false,
         snapFeedback: true
-      },
+      }),
       hoverNodeId: null,
       snapFeedback: {
         status: "dragging-snapped",
@@ -115,14 +115,14 @@ describe("runtime viewport helpers", () => {
     const originalGeometry = helper?.geometry;
 
     helpers.setState({
-      visibility: {
+      visibility: createVisibility({
         grid: false,
         floor: false,
         axes: false,
         selectionBounds: true,
         hover: false,
         snapFeedback: true
-      },
+      }),
       hoverNodeId: null,
       snapFeedback: {
         status: "dragging-unsnapped",
@@ -142,14 +142,14 @@ describe("runtime viewport helpers", () => {
     expect(updatedHelper?.userData.snapStatus).toBe("dragging-unsnapped");
 
     helpers.setState({
-      visibility: {
+      visibility: createVisibility({
         grid: false,
         floor: false,
         axes: false,
         selectionBounds: true,
         hover: false,
         snapFeedback: false
-      },
+      }),
       hoverNodeId: null,
       snapFeedback: {
         status: "dragging-unsnapped",
@@ -163,14 +163,14 @@ describe("runtime viewport helpers", () => {
     expect(scene.children.some((object) => object.userData.snapFeedbackHelper)).toBe(false);
 
     helpers.setState({
-      visibility: {
+      visibility: createVisibility({
         grid: false,
         floor: false,
         axes: false,
         selectionBounds: true,
         hover: false,
         snapFeedback: true
-      },
+      }),
       hoverNodeId: null,
       snapFeedback: {
         status: "dragging-snapped",
@@ -184,14 +184,14 @@ describe("runtime viewport helpers", () => {
     expect(scene.children.some((object) => object.userData.snapFeedbackHelper)).toBe(false);
 
     helpers.setState({
-      visibility: {
+      visibility: createVisibility({
         grid: false,
         floor: false,
         axes: false,
         selectionBounds: true,
         hover: false,
         snapFeedback: true
-      },
+      }),
       hoverNodeId: null,
       snapFeedback: {
         status: "dragging-snapped",
@@ -218,7 +218,10 @@ function createOptions() {
       axes: true,
       selectionBounds: true,
       hover: true,
-      snapFeedback: true
+      snapFeedback: true,
+      lightGizmos: true,
+      lightTargets: true,
+      shadowCameras: false
     },
     grid: true,
     floor: false,
@@ -226,6 +229,9 @@ function createOptions() {
     selectionBounds: true,
     hover: true,
     snapFeedback: true,
+    lightGizmos: true,
+    lightTargets: true,
+    shadowCameras: false,
     gridSize: 20,
     gridDivisions: 20,
     gridColor: 0x475569,
@@ -237,4 +243,19 @@ function createOptions() {
     hoverColor: 0x7dd3fc,
     snapColor: 0xf59e0b
   } as const;
+}
+
+function createVisibility(patch: Partial<ViewportHelperVisibility>): ViewportHelperVisibility {
+  return {
+    grid: false,
+    floor: false,
+    axes: false,
+    selectionBounds: false,
+    hover: false,
+    snapFeedback: false,
+    lightGizmos: false,
+    lightTargets: false,
+    shadowCameras: false,
+    ...patch
+  };
 }

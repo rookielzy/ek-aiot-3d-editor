@@ -30,10 +30,10 @@ assets/
 固定路径：
 
 - `project.json`：项目包 manifest。
-- `scene.json`：普通 `SceneSnapshot`。当前导出是 v7 scene schema；导入旧 v1/v2/v3/v4/v5/v6 scene 会先迁移到当前 schema。
+- `scene.json`：普通 `SceneSnapshot`。当前导出是 v8 scene schema；导入旧 v1/v2/v3/v4/v5/v6/v7 scene 会先迁移到当前 schema。
 - `assets/*`：资产 payload bytes。
 
-GLB import analysis 产生的 `glbImportManifest` 属于 `scene.json` 中 asset metadata 的 JSON-compatible authoring data。Imported GLB target node、source descriptor、slot key、authored transform override 和 remap metadata 也保存在 `scene.json`。Authored camera views 保存在 `scene.json.cameras`，默认展示视角保存在 `scene.json.presentation.defaultCameraId`；它们不需要额外 `assets/*` payload。GLB reimport 会更新同一稳定 asset ID 的 manifest metadata，并保留 matched imported node identity；unresolved target/slot 只保存 JSON-compatible remap marker，不保存 replacement loader result。它们不改变 ZIP 布局，也不在 `assets/*` 下创建额外记录。Runtime imported target links、base transform caches、viewport grid/floor/axes helpers、selection/hover/snap guide helpers、helper visibility、hover target、snap feedback state、marquee overlay/drag rectangle/candidate IDs、editor camera navigation、OrbitControls state、controls target object、loader results、resolver output 和 runtime problems 不会进入 `scene.json` 或 `project.json`。
+GLB import analysis 产生的 `glbImportManifest` 属于 `scene.json` 中 asset metadata 的 JSON-compatible authoring data。Imported GLB target node、source descriptor、slot key、authored transform override 和 remap metadata 也保存在 `scene.json`。Authored camera views 保存在 `scene.json.cameras`，默认展示视角保存在 `scene.json.presentation.defaultCameraId`；light shadow authoring fields 保存在 shadow-capable light payload 中；它们不需要额外 `assets/*` payload。GLB reimport 会更新同一稳定 asset ID 的 manifest metadata，并保留 matched imported node identity；unresolved target/slot 只保存 JSON-compatible remap marker，不保存 replacement loader result。它们不改变 ZIP 布局，也不在 `assets/*` 下创建额外记录。Runtime imported target links、base transform caches、viewport grid/floor/axes/light/shadow camera helpers、selection/hover/snap guide helpers、helper visibility、hover target、snap feedback state、marquee overlay/drag rectangle/candidate IDs、editor camera navigation、OrbitControls state、controls target object、renderer shadowMap state、Three.js LightShadow/shadow maps、loader results、resolver output 和 runtime problems 不会进入 `scene.json` 或 `project.json`。
 
 ## project.json
 
@@ -94,7 +94,7 @@ if (!result.ok) {
 - ZIP 结构。
 - entry path 是否安全。
 - manifest version 和字段。
-- `scene.json` Snapshot，并通过 snapshot migration 归一化为当前 v7 schema。
+- `scene.json` Snapshot，并通过 snapshot migration 归一化为当前 v8 schema。
 - asset record 与 payload 引用。
 - size limits。
 
@@ -161,5 +161,5 @@ Decoder-aware GLB runtime 使用 host 提供的 loader adapter。Draco、KTX2、
 - 不要信任外部 `.ek3d` 文件；导入前必须走 core validator。
 - 不要允许 ZIP entry path 跳出项目包范围。
 - 不要把 secret、tenant token、用户会话等运行时变量写入 manifest metadata。
-- project manifest 当前仍是 version 1；引入 v5 imported GLB target schema、v6 authored camera views 和 v7 source-based environment 只改变 `scene.json` 的 snapshot schema，不改变 `.ek3d` 包布局。
+- project manifest 当前仍是 version 1；引入 v5 imported GLB target schema、v6 authored camera views、v7 source-based environment 和 v8 light shadow authoring 只改变 `scene.json` 的 snapshot schema，不改变 `.ek3d` 包布局。
 - `.ek3d` 仍是实验性格式；在 `0.x` 阶段不保证长期兼容。

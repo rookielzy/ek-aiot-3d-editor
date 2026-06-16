@@ -4,6 +4,7 @@ import {
   buildRemoveLightCommand,
   buildUpdateLightCommand,
   type Editor,
+  type InspectorCommandProblem,
   type LightFieldId,
   type LightInspectorSection,
   type LightKind,
@@ -20,6 +21,7 @@ export interface LightInspectorProps {
 export function LightInspector({ editor, snapshot, section, onActiveLightIdChange }: LightInspectorProps) {
   const targetKey = section.activeLightId ?? "none";
   const [addKind, setAddKind] = useState<LightKind | "">("");
+  const [fieldProblem, setFieldProblem] = useState<InspectorCommandProblem | null>(null);
 
   function addLight(kind: LightKind | "") {
     if (!kind) {
@@ -40,7 +42,10 @@ export function LightInspector({ editor, snapshot, section, onActiveLightIdChang
     }
     const result = buildUpdateLightCommand(snapshot, section.activeLightId, fieldId, value);
     if (result.ok) {
+      setFieldProblem(null);
       editor.dispatch(result.command);
+    } else {
+      setFieldProblem(result.problem);
     }
   }
 
@@ -99,7 +104,7 @@ export function LightInspector({ editor, snapshot, section, onActiveLightIdChang
       {section.activeLightId ? (
         <div className="ek-inspector-grid">
           {section.fields.map((field) => (
-            <label key={field.id} className="ek-inspector-field">
+            <label key={field.id} className={field.kind === "checkbox" ? "ek-inspector-field ek-inspector-field--checkbox" : "ek-inspector-field"}>
               <span>{field.label}</span>
               {field.kind === "number" ? (
                 <input
@@ -109,13 +114,30 @@ export function LightInspector({ editor, snapshot, section, onActiveLightIdChang
                   min={field.min}
                   max={field.max}
                   step={field.step ?? 0.01}
+                  aria-invalid={fieldProblem?.fieldId === field.id ? true : undefined}
+                  aria-describedby={fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined}
                   onBlur={(event) => commit(field.id as LightFieldId, event.currentTarget.value)}
                 />
               ) : field.kind === "color" ? (
                 <input key={`${targetKey}:${field.id}:${String(field.value)}`} defaultValue={String(field.value)} type="color" onChange={(event) => commit(field.id as LightFieldId, event.currentTarget.value)} />
+              ) : field.kind === "checkbox" ? (
+                <input
+                  key={`${targetKey}:${field.id}:${String(field.value)}`}
+                  defaultChecked={Boolean(field.value)}
+                  type="checkbox"
+                  onChange={(event) => commit(field.id as LightFieldId, String(event.currentTarget.checked))}
+                />
               ) : (
-                <input key={`${targetKey}:${field.id}:${String(field.value)}`} defaultValue={String(field.value)} type="text" onBlur={(event) => commit(field.id as LightFieldId, event.currentTarget.value)} />
+                <input
+                  key={`${targetKey}:${field.id}:${String(field.value)}`}
+                  defaultValue={String(field.value)}
+                  type="text"
+                  aria-invalid={fieldProblem?.fieldId === field.id ? true : undefined}
+                  aria-describedby={fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined}
+                  onBlur={(event) => commit(field.id as LightFieldId, event.currentTarget.value)}
+                />
               )}
+              {fieldProblem?.fieldId === field.id ? <small id={problemId(field.id)} className="ek-inspector-field-problem" role="alert">{fieldProblem.message}</small> : null}
             </label>
           ))}
           <button className="ek-inspector-danger" type="button" onClick={removeActive}>
@@ -125,4 +147,8 @@ export function LightInspector({ editor, snapshot, section, onActiveLightIdChang
       ) : null}
     </section>
   );
+}
+
+function problemId(fieldId: string): string {
+  return `ek-light-${fieldId.replace(/[^a-z0-9_-]/gi, "-")}-problem`;
 }

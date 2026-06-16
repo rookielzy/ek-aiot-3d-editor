@@ -21,6 +21,7 @@ import { RuntimeSelectionVisuals } from "./selection-visuals";
 import { RuntimeMarqueeSelection } from "./marquee-selection";
 import type { RuntimeNodeTarget } from "./three-object-map";
 import { RuntimeViewportHelpers } from "./viewport-helpers";
+import { RuntimeLightHelpers } from "./light-helpers";
 import { TransformControlsAdapter, createThreeTransformControls, type RuntimeTransformControlsFactory } from "./transform/transform-controls-adapter";
 import { TransformController } from "./transform/transform-controller";
 import type { EditorTransformModeState } from "./transform/transform-mode";
@@ -40,6 +41,12 @@ import {
 
 export interface RendererLike {
   domElement: HTMLElement;
+  shadowMap?: {
+    enabled: boolean;
+    autoUpdate?: boolean;
+    needsUpdate?: boolean;
+    type?: number;
+  };
   setSize(width: number, height: number): void;
   render(scene: Scene, camera: PerspectiveCamera): void;
   dispose(): void;
@@ -125,6 +132,7 @@ export class ThreeEditorRuntime implements EditorRuntime {
   #selectionVisuals: RuntimeSelectionVisuals | null = null;
   #marqueeSelectionState: EditorMarqueeSelectionState | null = null;
   #viewportHelpers: RuntimeViewportHelpers | null = null;
+  #lightHelpers: RuntimeLightHelpers | null = null;
   #viewportHelperState: EditorViewportHelperState | null = null;
   #currentHelperSnapshot: ViewportHelperStateSnapshot | null = null;
   #resizeObserver: Pick<ResizeObserver, "observe" | "disconnect"> | null = null;
@@ -274,13 +282,16 @@ export class ThreeEditorRuntime implements EditorRuntime {
     const generation = this.#beginProject();
     this.#cancelMarquee();
     this.#pointerStart = null;
+    this.projector.setRendererShadowMapAvailable(Boolean(this.#renderer.shadowMap));
     await this.projector.project(snapshot);
     if (this.#disposed || generation !== this.#projectGeneration) {
       return;
     }
+    this.#syncRendererShadowMap();
     this.#clearStaleViewportHelperTargets();
     this.#syncSelectionVisuals();
     this.#viewportHelpers?.sync();
+    this.#lightHelpers?.sync();
     this.#transformControls?.sync(snapshot);
     this.invalidateRender();
     this.#publishProblems();
@@ -475,6 +486,7 @@ export class ThreeEditorRuntime implements EditorRuntime {
 
     if (this.#interactions.viewportHelpers) {
       this.#viewportHelpers = new RuntimeViewportHelpers(this.scene, this.projector.objects, this.#interactions.viewportHelpers);
+      this.#lightHelpers = new RuntimeLightHelpers(this.scene, this.projector.objects);
       this.#viewportHelperState = options.viewportHelpers ?? null;
       if (this.#viewportHelperState) {
         this.#viewportHelperState.seedVisibility(this.#interactions.viewportHelpers.visibility);
@@ -490,9 +502,13 @@ export class ThreeEditorRuntime implements EditorRuntime {
       this.#unsubscribeViewportHelpers = this.#viewportHelperState?.subscribe((snapshot) => {
         this.#currentHelperSnapshot = snapshot;
         this.#viewportHelpers?.setState(snapshot);
+        this.#lightHelpers?.setState(snapshot);
         this.#syncSelectionVisuals();
         this.invalidateRender();
       }) ?? null;
+      if (!this.#viewportHelperState && this.#currentHelperSnapshot) {
+        this.#lightHelpers.setState(this.#currentHelperSnapshot);
+      }
     }
 
     if (this.#interactions.transform) {
@@ -575,6 +591,8 @@ export class ThreeEditorRuntime implements EditorRuntime {
     this.#selectionVisuals = null;
     this.#viewportHelpers?.dispose();
     this.#viewportHelpers = null;
+    this.#lightHelpers?.dispose();
+    this.#lightHelpers = null;
     this.#viewportHelperState = null;
     this.#currentHelperSnapshot = null;
   }
@@ -751,6 +769,20 @@ export class ThreeEditorRuntime implements EditorRuntime {
     }
     this.#selectionVisuals ??= new RuntimeSelectionVisuals(this.scene, this.projector.objects, this.#interactions.selectionVisuals);
     this.#selectionVisuals.sync();
+  }
+
+  #syncRendererShadowMap(): void {
+    const shadowMap = this.#renderer.shadowMap;
+    if (!shadowMap) {
+      return;
+    }
+    const enabled = this.projector.shadowSummary.enabled;
+    shadowMap.enabled = enabled;
+    if (enabled) {
+      shadowMap.needsUpdate = true;
+    } else if (shadowMap.needsUpdate !== undefined) {
+      shadowMap.needsUpdate = false;
+    }
   }
 }
 

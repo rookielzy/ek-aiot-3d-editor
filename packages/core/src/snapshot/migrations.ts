@@ -1,5 +1,7 @@
 import { createEmptyCameraState, createEmptyPresentationState } from "../cameras/defaults";
 import { createLegacyDefaultEnvironment, migrateLegacySceneEnvironment } from "../environment/migration";
+import { createDefaultLightShadow } from "../lights/defaults";
+import type { LegacyLightDefinition, LightDefinition } from "../lights/types";
 import { createEmptyMaterialState } from "../materials/defaults";
 import { createEmptyAuthoredProblemState } from "../problems/defaults";
 import { createLightNode, createObjectNode } from "./defaults";
@@ -7,6 +9,7 @@ import { immutableClone } from "./immutability";
 import {
   SNAPSHOT_VERSION,
   type V6SceneSnapshot,
+  type V7SceneSnapshot,
   type LegacySceneSnapshot,
   type PreviousSceneSnapshot,
   type SceneSnapshot,
@@ -22,6 +25,12 @@ export function migrateSerializedSnapshot(serialized: SerializedSceneSnapshot): 
   if (serialized.version === SNAPSHOT_VERSION) {
     assertValidSceneSnapshot(serialized);
     return immutableClone(serialized);
+  }
+
+  if (serialized.version === 7) {
+    const migrated = migrateV7Snapshot(serialized);
+    assertValidSceneSnapshot(migrated);
+    return immutableClone(migrated);
   }
 
   if (serialized.version === 6) {
@@ -64,12 +73,53 @@ export function migrateSerializedSnapshot(serialized: SerializedSceneSnapshot): 
   throw new Error(`Unsupported snapshot version: ${String(version)}.`);
 }
 
-export function migrateV6Snapshot(serialized: V6SceneSnapshot): SceneSnapshot {
+export function migrateV7Snapshot(serialized: V7SceneSnapshot): SceneSnapshot {
   return {
     ...serialized,
     version: SNAPSHOT_VERSION,
-    environment: migrateLegacySceneEnvironment(serialized.environment)
+    lights: migrateLightShadows(serialized.lights)
   };
+}
+
+export function migrateV6Snapshot(serialized: V6SceneSnapshot): SceneSnapshot {
+  return migrateV7Snapshot({
+    ...serialized,
+    version: 7,
+    environment: migrateLegacySceneEnvironment(serialized.environment)
+  });
+}
+
+function migrateLightShadows(lights: Record<string, LegacyLightDefinition>): Record<string, LightDefinition> {
+  const migrated: Record<string, LightDefinition> = {};
+  for (const light of Object.values(lights)) {
+    switch (light.kind) {
+      case "ambient":
+      case "hemisphere":
+        migrated[light.id] = light;
+        break;
+      case "directional":
+        migrated[light.id] = {
+          ...light,
+          shadow: createDefaultLightShadow("directional", light.shadow)
+        };
+        break;
+      case "point":
+        migrated[light.id] = {
+          ...light,
+          shadow: createDefaultLightShadow("point", light.shadow)
+        };
+        break;
+      case "spot":
+        migrated[light.id] = {
+          ...light,
+          shadow: createDefaultLightShadow("spot", light.shadow)
+        };
+        break;
+      default:
+        assertNever(light);
+    }
+  }
+  return migrated;
 }
 
 export function migrateV5Snapshot(serialized: V5SceneSnapshot): SceneSnapshot {
@@ -174,4 +224,8 @@ function createCollisionSafeLightNodeId(lightId: string, usedNodeIds: Set<string
     candidate = `${preferred}-${index}`;
   }
   return candidate;
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unsupported migration value: ${JSON.stringify(value)}`);
 }

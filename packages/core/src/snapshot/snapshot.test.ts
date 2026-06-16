@@ -1,15 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { Object3D } from "three";
-import { createEmptySnapshot, createTransform } from "./defaults";
+import { createLightDefinition } from "../lights/defaults";
+import { createEmptySnapshot, createLightNode, createTransform } from "./defaults";
 import { migrateSerializedSnapshot } from "./migrations";
-import type { SceneSnapshot, V5SceneSnapshot, V4SceneSnapshot } from "./types";
+import type { SceneSnapshot, V5SceneSnapshot, V4SceneSnapshot, V7SceneSnapshot } from "./types";
 import { isJsonCompatible, validateSceneSnapshot } from "./validation";
 
 describe("scene snapshot contract", () => {
   it("creates a versioned JSON-compatible empty snapshot", () => {
     const snapshot = createEmptySnapshot("scene-a");
 
-    expect(snapshot.version).toBe(7);
+    expect(snapshot.version).toBe(8);
     expect(snapshot.scene.id).toBe("scene-a");
     expect(snapshot.nodes).toEqual({});
     expect(snapshot.rootNodeIds).toEqual([]);
@@ -233,7 +234,7 @@ describe("scene snapshot contract", () => {
       version: 5
     } satisfies V5SceneSnapshot);
 
-    expect(migrated.version).toBe(7);
+    expect(migrated.version).toBe(8);
     expect(migrated.cameras).toEqual({});
     expect(migrated.presentation).toEqual({ defaultCameraId: null });
     expect(migrated.nodes["object-a"]).toEqual(v5.nodes["object-a"]);
@@ -252,11 +253,89 @@ describe("scene snapshot contract", () => {
 
     const migrated = migrateSerializedSnapshot(v4);
 
-    expect(migrated.version).toBe(7);
+    expect(migrated.version).toBe(8);
     expect(migrated.cameras).toEqual({});
     expect(migrated.presentation).toEqual({ defaultCameraId: null });
     expect(Object.values(migrated.nodes).some((node) => node.kind === "imported")).toBe(false);
     expect(migrated.nodes["object-a"]).toEqual(v4.nodes["object-a"]);
+  });
+
+  it("migrates v7 lights by adding disabled shadow defaults to shadow-capable kinds", () => {
+    const { lights: _lights, ...base } = createEmptySnapshot("scene-a");
+    const ambient = createLightDefinition("ambient", { id: "ambient" });
+    const directional = {
+      id: "directional",
+      kind: "directional" as const,
+      name: "Sun",
+      color: "#ffffff",
+      intensity: 1,
+      transform: createTransform(),
+      target: [0, 0, 0] as [number, number, number]
+    };
+    const point = {
+      id: "point",
+      kind: "point" as const,
+      name: "Bulb",
+      color: "#ffffff",
+      intensity: 1,
+      transform: createTransform()
+    };
+    const spot = {
+      id: "spot",
+      kind: "spot" as const,
+      name: "Spot",
+      color: "#ffffff",
+      intensity: 1,
+      transform: createTransform(),
+      target: [0, 0, 0] as [number, number, number],
+      angle: Math.PI / 4
+    };
+    const v7: V7SceneSnapshot = {
+      ...base,
+      version: 7,
+      nodes: {
+        ambient: createLightNode(ambient),
+        directional: createLightNode(directional),
+        point: createLightNode(point),
+        spot: createLightNode(spot)
+      },
+      rootNodeIds: ["ambient", "directional", "point", "spot"],
+      lights: {
+        ambient,
+        directional,
+        point,
+        spot
+      }
+    };
+
+    const migrated = migrateSerializedSnapshot(v7);
+
+    expect(migrated.version).toBe(8);
+    expect("shadow" in migrated.lights.ambient).toBe(false);
+    expect(migrated.lights.directional).toMatchObject({
+      kind: "directional",
+      shadow: {
+        enabled: false,
+        mapSize: { width: 1024, height: 1024 },
+        camera: { near: 0.5, far: 500, left: -10, right: 10, top: 10, bottom: -10 }
+      }
+    });
+    expect(migrated.lights.point).toMatchObject({
+      kind: "point",
+      shadow: {
+        enabled: false,
+        mapSize: { width: 512, height: 512 },
+        camera: { near: 0.5, far: 100 }
+      }
+    });
+    expect(migrated.lights.spot).toMatchObject({
+      kind: "spot",
+      shadow: {
+        enabled: false,
+        mapSize: { width: 1024, height: 1024 },
+        camera: { near: 0.5, far: 100 }
+      }
+    });
   });
 
   it("accepts valid imported GLB target nodes owned by a GLB object", () => {

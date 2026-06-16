@@ -1,4 +1,13 @@
-export type ViewportHelperKey = "grid" | "floor" | "axes" | "selectionBounds" | "hover" | "snapFeedback";
+export type ViewportHelperKey =
+  | "grid"
+  | "floor"
+  | "axes"
+  | "selectionBounds"
+  | "hover"
+  | "snapFeedback"
+  | "lightGizmos"
+  | "lightTargets"
+  | "shadowCameras";
 
 export type ViewportHelperVisibility = Record<ViewportHelperKey, boolean>;
 
@@ -27,7 +36,10 @@ export const DEFAULT_VIEWPORT_HELPER_VISIBILITY: ViewportHelperVisibility = Obje
   axes: false,
   selectionBounds: false,
   hover: false,
-  snapFeedback: false
+  snapFeedback: false,
+  lightGizmos: false,
+  lightTargets: false,
+  shadowCameras: false
 });
 
 export const DEFAULT_WORKBENCH_VIEWPORT_HELPER_VISIBILITY: ViewportHelperVisibility = Object.freeze({
@@ -36,7 +48,10 @@ export const DEFAULT_WORKBENCH_VIEWPORT_HELPER_VISIBILITY: ViewportHelperVisibil
   axes: true,
   selectionBounds: true,
   hover: true,
-  snapFeedback: true
+  snapFeedback: true,
+  lightGizmos: true,
+  lightTargets: true,
+  shadowCameras: false
 });
 
 export const IDLE_VIEWPORT_SNAP_FEEDBACK: ViewportSnapFeedbackState = Object.freeze({
@@ -81,8 +96,8 @@ export class EditorViewportHelperState {
     this.#snapshot = freezeViewportHelperSnapshot({
       ...this.#snapshot,
       visibility,
-      hoverNodeId: visibility.hover ? this.#snapshot.hoverNodeId : null,
-      snapFeedback: visibility.snapFeedback ? this.#snapshot.snapFeedback : IDLE_VIEWPORT_SNAP_FEEDBACK
+    hoverNodeId: visibility.hover ? this.#snapshot.hoverNodeId : null,
+    snapFeedback: visibility.snapFeedback ? this.#snapshot.snapFeedback : IDLE_VIEWPORT_SNAP_FEEDBACK
     });
     this.#notify();
     return this.get();
@@ -160,7 +175,10 @@ export function normalizeViewportHelperVisibility(
     axes: visibility?.axes ?? DEFAULT_VIEWPORT_HELPER_VISIBILITY.axes,
     selectionBounds: visibility?.selectionBounds ?? DEFAULT_VIEWPORT_HELPER_VISIBILITY.selectionBounds,
     hover: visibility?.hover ?? DEFAULT_VIEWPORT_HELPER_VISIBILITY.hover,
-    snapFeedback: visibility?.snapFeedback ?? DEFAULT_VIEWPORT_HELPER_VISIBILITY.snapFeedback
+    snapFeedback: visibility?.snapFeedback ?? DEFAULT_VIEWPORT_HELPER_VISIBILITY.snapFeedback,
+    lightGizmos: visibility?.lightGizmos ?? DEFAULT_VIEWPORT_HELPER_VISIBILITY.lightGizmos,
+    lightTargets: visibility?.lightTargets ?? DEFAULT_VIEWPORT_HELPER_VISIBILITY.lightTargets,
+    shadowCameras: visibility?.shadowCameras ?? DEFAULT_VIEWPORT_HELPER_VISIBILITY.shadowCameras
   });
 }
 
@@ -178,5 +196,8 @@ function sameViewportHelperVisibility(left: ViewportHelperVisibility, right: Vie
     && left.axes === right.axes
     && left.selectionBounds === right.selectionBounds
     && left.hover === right.hover
-    && left.snapFeedback === right.snapFeedback;
+    && left.snapFeedback === right.snapFeedback
+    && left.lightGizmos === right.lightGizmos
+    && left.lightTargets === right.lightTargets
+    && left.shadowCameras === right.shadowCameras;
 }

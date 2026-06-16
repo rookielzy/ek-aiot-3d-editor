@@ -65,6 +65,11 @@
   min-width: 0;
 }
 
+.ek-inspector-field--checkbox {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
 .ek-inspector-field span {
   color: var(--ek-panel-muted);
   font-size: 0.75rem;
@@ -90,6 +95,13 @@
 
 .ek-inspector input[type="color"] {
   padding: 0.2rem;
+}
+
+.ek-inspector input[type="checkbox"] {
+  width: 1.1rem;
+  min-width: 1.1rem;
+  min-height: 1.1rem;
+  padding: 0;
 }
 
 .ek-inspector input:focus-visible,

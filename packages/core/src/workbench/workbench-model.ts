@@ -452,7 +452,10 @@ function buildWorkbenchToolbar(
       axes: false,
       selectionBounds: false,
       hover: false,
-      snapFeedback: false
+      snapFeedback: false,
+      lightGizmos: false,
+      lightTargets: false,
+      shadowCameras: false
     }
   };
 }
