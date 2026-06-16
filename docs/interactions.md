@@ -168,15 +168,28 @@ Inspector 的字段模型和 command builder 来自 core，因此两个框架 sh
 
 可编辑 authoring intent 包括：
 
-- environment mode：`none` / `solid` / `texture` / `hdr`
-- background mode：`none` / `solid` / `texture` / `hdr`
-- background color
-- asset ID
-- intensity
-- blur
-- rotation
+- Lighting source：`none` / `equirectangular` / `hdr` / `cubemap`。
+- Background source：`none` / `solid` / `flat-image` / `equirectangular` / `hdr` / `cubemap`。
+- Solid background color。
+- Lighting/background asset ID。
+- Cubemap face asset IDs：`positive-x`、`negative-x`、`positive-y`、`negative-y`、`positive-z`、`negative-z`。
+- Intensity、blur、rotation。
 
-Runtime 会尝试解析 texture/HDR 资产。解析失败只产生 runtime problem，不删除 Snapshot 字段。
+新的 public authoring path 使用 source-based `set-environment` patch：
+
+```ts
+editor.dispatch({
+  type: "set-environment",
+  environment: {
+    lighting: { source: { kind: "hdr", assetId: "studio-hdr" } },
+    background: { source: { kind: "solid", color: "#202530" } }
+  }
+});
+```
+
+旧 v6-style `mode` / `background.mode` patch 仍会被 command 层 normalize，用于兼容历史调用；默认 inspector、examples 和 docs 输出 source-based patch。Core 还导出 preset command builders，例如 `buildClearEnvironmentPreset()`、`buildSolidBackgroundPreset()`、`buildEnvironmentSharedAssetPreset()`、`buildEnvironmentCubemapPreset()` 和 `buildEnvironmentWithConservativeLightsPreset()`。Preset 只返回 normal core commands，不直接改 Three.js scene。
+
+Runtime 会按 source intent 解析 texture/HDR/cubemap face 资产：flat image 不会被强制当作 equirectangular sky；equirectangular/HDR/cubemap lighting 会通过 PMREM 产生 runtime-only environment texture。解析、加载或 PMREM 失败只产生 runtime problem，不删除 Snapshot 字段。`flat-image` 背景上的 blur 会显示不生效诊断，诊断和 form draft 都不进入 Snapshot。
 
 ## 灯光
 

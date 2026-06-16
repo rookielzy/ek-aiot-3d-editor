@@ -21,9 +21,8 @@ describe("React proof-loop parity", () => {
     editor.dispatch({
       type: "set-environment",
       environment: {
-        mode: "hdr",
-        environment: { assetId: "hdr-a", intensity: 1, rotation: { x: 0, y: 0, z: 0 } },
-        background: { mode: "hdr", assetId: "hdr-a" }
+        lighting: { source: { kind: "hdr", assetId: "hdr-a" }, intensity: 1, rotation: { x: 0, y: 0, z: 0 } },
+        background: { source: { kind: "hdr", assetId: "hdr-a" } }
       }
     });
     editor.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
@@ -59,7 +58,7 @@ describe("React proof-loop parity", () => {
 
     expect(restored.getSnapshot().objects["object-a"].transform.position).toEqual([6, 0, 0]);
     expect(restored.getSnapshot().materials.definitions["material:object:object-a"].override.textures?.map?.assetId).toBe("texture-a");
-    expect(restored.getSnapshot().environment.environment.assetId).toBe("hdr-a");
+    expect(restored.getSnapshot().environment.lighting.source).toEqual({ kind: "hdr", assetId: "hdr-a" });
     expect(restored.getSnapshot().lights["light-a"].intensity).toBe(2);
     expect(resolveDefaultPresentationView(restored.getSnapshot())).toMatchObject({
       status: "resolved",

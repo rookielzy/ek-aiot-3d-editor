@@ -22,9 +22,8 @@ describe("Vue proof-loop parity", () => {
     core.dispatch({
       type: "set-environment",
       environment: {
-        mode: "hdr",
-        environment: { assetId: "hdr-a", intensity: 1, rotation: { x: 0, y: 0, z: 0 } },
-        background: { mode: "hdr", assetId: "hdr-a" }
+        lighting: { source: { kind: "hdr", assetId: "hdr-a" }, intensity: 1, rotation: { x: 0, y: 0, z: 0 } },
+        background: { source: { kind: "hdr", assetId: "hdr-a" } }
       }
     });
     core.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
@@ -62,7 +61,7 @@ describe("Vue proof-loop parity", () => {
 
     expect(vue.snapshot.value.objects["object-a"].transform.position).toEqual([3, 0, 0]);
     expect(vue.snapshot.value.materials.definitions["material:object:object-a"].override.textures?.map?.assetId).toBe("texture-a");
-    expect(vue.snapshot.value.environment.environment.assetId).toBe("hdr-a");
+    expect(vue.snapshot.value.environment.lighting.source).toEqual({ kind: "hdr", assetId: "hdr-a" });
     expect(vue.snapshot.value.lights["light-a"].intensity).toBe(2);
     expect(resolveDefaultPresentationView(vue.editor.getSnapshot())).toMatchObject({
       status: "resolved",

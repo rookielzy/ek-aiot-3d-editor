@@ -106,13 +106,13 @@ describe("project import", () => {
 
     expect(imported.ok).toBe(true);
     expect(imported.manifest?.version).toBe(1);
-    expect(fresh.getSnapshot().version).toBe(6);
+    expect(fresh.getSnapshot().version).toBe(7);
     expect(fresh.getSnapshot().nodes["group-a"]).toMatchObject({ kind: "group", children: ["object-a", "point-a"] });
     expect(fresh.getSnapshot().selection).toEqual({ nodeId: "group-a", nodeIds: ["group-a"], objectId: null, objectIds: [] });
     expect(fresh.getSnapshot().objects["object-a"].asset.id).toBe("asset-a");
     expect(fresh.getSnapshot().lights["point-a"].kind).toBe("point");
     expect(fresh.getSnapshot().materials.assignments["object:object-a"]).toBeTruthy();
-    expect(fresh.getSnapshot().environment.environment.assetId).toBe("hdr-a");
+    expect(fresh.getSnapshot().environment.lighting.source).toEqual({ kind: "hdr", assetId: "hdr-a" });
     expect(fresh.getSnapshot().problems.acknowledged["missing-a"]).toBeTruthy();
     expect(fresh.exportProject().ok).toBe(true);
   });

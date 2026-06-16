@@ -14,7 +14,8 @@ export type AssetWorkspaceReferenceKind =
   | "object-glb"
   | "material-texture"
   | "environment-background"
-  | "environment-lighting";
+  | "environment-lighting"
+  | "environment-cubemap-face";
 
 export type AssetWorkspacePayloadStatus = "available" | "missing" | "not-required" | "kind-mismatch";
 export type AssetWorkspacePackageStatus = "complete" | "partial" | "blocked" | "not-referenced";
@@ -46,19 +47,26 @@ export interface MaterialTextureAssetReferenceLocation extends AssetReferenceLoc
 
 export interface EnvironmentBackgroundAssetReferenceLocation extends AssetReferenceLocationBase {
   kind: "environment-background";
-  mode: "texture" | "hdr";
+  sourceKind: "flat-image" | "equirectangular" | "hdr";
 }
 
 export interface EnvironmentLightingAssetReferenceLocation extends AssetReferenceLocationBase {
   kind: "environment-lighting";
-  mode: "texture" | "hdr";
+  sourceKind: "equirectangular" | "hdr";
+}
+
+export interface EnvironmentCubemapFaceAssetReferenceLocation extends AssetReferenceLocationBase {
+  kind: "environment-cubemap-face";
+  source: "background" | "lighting";
+  faceRole: string;
 }
 
 export type AssetReferenceLocation =
   | ObjectAssetReferenceLocation
   | MaterialTextureAssetReferenceLocation
   | EnvironmentBackgroundAssetReferenceLocation
-  | EnvironmentLightingAssetReferenceLocation;
+  | EnvironmentLightingAssetReferenceLocation
+  | EnvironmentCubemapFaceAssetReferenceLocation;
 
 export interface AssetWorkspacePayloadSummary {
   assetId: string;
@@ -203,22 +211,46 @@ export function collectAssetReferenceLocations(snapshot: SceneSnapshot): AssetRe
     }
   }
 
-  if ((snapshot.environment.background.mode === "texture" || snapshot.environment.background.mode === "hdr") && snapshot.environment.background.assetId) {
+  const backgroundSource = snapshot.environment.background.source;
+  if ((backgroundSource.kind === "flat-image" || backgroundSource.kind === "equirectangular" || backgroundSource.kind === "hdr") && backgroundSource.assetId) {
     locations.push({
       kind: "environment-background",
-      assetId: snapshot.environment.background.assetId,
-      mode: snapshot.environment.background.mode,
+      assetId: backgroundSource.assetId,
+      sourceKind: backgroundSource.kind,
       label: "Environment background"
     });
   }
+  if (backgroundSource.kind === "cubemap") {
+    for (const face of backgroundSource.faces) {
+      locations.push({
+        kind: "environment-cubemap-face",
+        source: "background",
+        faceRole: face.role,
+        assetId: face.assetId,
+        label: `Environment skybox ${face.role}`
+      });
+    }
+  }
 
-  if ((snapshot.environment.mode === "texture" || snapshot.environment.mode === "hdr") && snapshot.environment.environment.assetId) {
+  const lightingSource = snapshot.environment.lighting.source;
+  if ((lightingSource.kind === "equirectangular" || lightingSource.kind === "hdr") && lightingSource.assetId) {
     locations.push({
       kind: "environment-lighting",
-      assetId: snapshot.environment.environment.assetId,
-      mode: snapshot.environment.mode,
+      assetId: lightingSource.assetId,
+      sourceKind: lightingSource.kind,
       label: "Environment lighting"
     });
+  }
+  if (lightingSource.kind === "cubemap") {
+    for (const face of lightingSource.faces) {
+      locations.push({
+        kind: "environment-cubemap-face",
+        source: "lighting",
+        faceRole: face.role,
+        assetId: face.assetId,
+        label: `Environment lighting cubemap ${face.role}`
+      });
+    }
   }
 
   return locations.sort((left, right) =>
@@ -517,8 +549,11 @@ function resolvePayloadStatus(
 
 function inferKindFromReferences(references: readonly AssetReferenceLocation[]): AssetKind {
   const environment = references.find((reference) => reference.kind === "environment-background" || reference.kind === "environment-lighting");
-  if (environment && "mode" in environment) {
-    return environment.mode === "hdr" ? "hdr" : "texture";
+  if (environment && "sourceKind" in environment) {
+    return environment.sourceKind === "hdr" ? "hdr" : "texture";
+  }
+  if (references.some((reference) => reference.kind === "environment-cubemap-face")) {
+    return "texture";
   }
   if (references.some((reference) => reference.kind === "material-texture")) {
     return "texture";

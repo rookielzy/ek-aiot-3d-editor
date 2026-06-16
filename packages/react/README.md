@@ -6,7 +6,7 @@ This package is experimental `0.x`. It tracks the current core package contract 
 
 `useEditor()` creates or returns a core editor. `useEditorSnapshot()` uses React external-store subscription semantics. `EditorViewport` mounts and disposes the core runtime through React effects.
 
-`useInspector()` and `InspectorPanel` render the shared core inspector model for selected node transform availability, object-only material fields, scene environment/background, selected light nodes, and runtime problems. Edits dispatch core commands on commit boundaries, so undo/redo remains owned by core history.
+`useInspector()` and `InspectorPanel` render the shared core inspector model for selected node transform availability, object/material fields, scene lighting/background/skybox source fields, selected light nodes, and runtime problems. Edits dispatch core commands on commit boundaries, so undo/redo remains owned by core history.
 
 `useWorkbench()` and `EditorWorkbench` compose the primitive pieces into a compact viewport-plus-inspector shell. Pass an existing editor when the host owns editor lifetime; the workbench will not dispose it on unmount. If no editor is passed, the shell creates one and disposes it with the workbench.
 

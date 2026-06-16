@@ -51,6 +51,7 @@ describe("runtime disposal", () => {
     const adapterDispose = vi.fn();
     const pmrem: RuntimePmremAdapter = {
       fromEquirectangular: vi.fn(() => ({ texture: pmremTexture, dispose: pmremDispose })),
+      fromCubemap: vi.fn(() => ({ texture: pmremTexture, dispose: pmremDispose })),
       dispose: adapterDispose
     };
     const projector = new SceneProjector({
@@ -155,9 +156,8 @@ function snapshotWithHdrAndLight(): SceneSnapshot {
     ...createEmptySnapshot(),
     assets: { "hdr-a": { id: "hdr-a", kind: "hdr" } },
     environment: {
-      mode: "hdr",
-      background: { mode: "none" },
-      environment: { assetId: "hdr-a", intensity: 1, rotation: { x: 0, y: 0, z: 0 } }
+      lighting: { source: { kind: "hdr", assetId: "hdr-a" }, intensity: 1, rotation: { x: 0, y: 0, z: 0 } },
+      background: { source: { kind: "none" } }
     },
     lights: {
       "light-a": {

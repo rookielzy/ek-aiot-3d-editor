@@ -2,13 +2,13 @@ import type { SceneEnvironment } from "./types";
 
 export function createDefaultEnvironment(): SceneEnvironment {
   return {
-    mode: "none",
-    background: {
-      mode: "none"
-    },
-    environment: {
+    lighting: {
+      source: { kind: "none" },
       intensity: 1,
       rotation: { x: 0, y: 0, z: 0 }
+    },
+    background: {
+      source: { kind: "none" }
     }
   };
 }

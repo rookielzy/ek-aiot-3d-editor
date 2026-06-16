@@ -67,7 +67,7 @@ describe("snapshot serialization", () => {
     const legacy = createLegacyProofLoopSnapshot();
     const restored = restoreSnapshot(legacy);
 
-    expect(restored.version).toBe(6);
+    expect(restored.version).toBe(7);
     expect(restored.scene).toEqual(legacy.scene);
     expect(restored.objects["object-a"].transform.position).toEqual([4, 5, 6]);
     expect(restored.nodes["object-a"]).toMatchObject({ kind: "object", objectId: "object-a" });
@@ -77,7 +77,8 @@ describe("snapshot serialization", () => {
     expect(restored.selection.objectId).toBe("object-a");
     expect(restored.selection.objectIds).toEqual(["object-a"]);
     expect(restored.materials).toEqual({ definitions: {}, assignments: {} });
-    expect(restored.environment.mode).toBe("none");
+    expect(restored.environment.lighting.source).toEqual({ kind: "none" });
+    expect(restored.environment.background.source).toEqual({ kind: "none" });
     expect(restored.lights).toEqual({});
     expect(restored.cameras).toEqual({});
     expect(restored.presentation).toEqual({ defaultCameraId: null });
@@ -114,7 +115,7 @@ describe("snapshot serialization", () => {
 
     const restored = restoreSnapshot(version2);
 
-    expect(restored.version).toBe(6);
+    expect(restored.version).toBe(7);
     expect(restored.selection).toEqual({ nodeId: "object-a", nodeIds: ["object-a"], objectId: "object-a", objectIds: ["object-a"] });
   });
 
@@ -180,7 +181,7 @@ describe("snapshot serialization", () => {
 
     const restored = restoreSnapshot(version3);
 
-    expect(restored.version).toBe(6);
+    expect(restored.version).toBe(7);
     expect(restored.nodes["object-a"]).toMatchObject({ kind: "object", objectId: "object-a", children: ["light-a"] });
     expect(restored.nodes["light-a"]).toMatchObject({ kind: "object", objectId: "light-a", parentId: "object-a" });
     expect(restored.nodes["light-a:light"]).toMatchObject({ kind: "light", lightId: "light-a", parentId: null });

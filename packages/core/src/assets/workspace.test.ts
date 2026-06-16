@@ -419,9 +419,8 @@ function createWorkspaceSnapshot(): SceneSnapshot {
   editor.dispatch({
     type: "set-environment",
     environment: {
-      mode: "hdr",
-      background: { mode: "texture", assetId: "texture-a" },
-      environment: { assetId: "hdr-a" }
+      lighting: { source: { kind: "hdr", assetId: "hdr-a" } },
+      background: { source: { kind: "flat-image", assetId: "texture-a" } }
     }
   });
   const snapshot = editor.getSnapshot();

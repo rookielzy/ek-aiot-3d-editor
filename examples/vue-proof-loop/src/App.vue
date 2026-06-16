@@ -76,8 +76,8 @@ if (!editor.getSnapshot().objects.box) {
   editor.dispatch({
     type: "set-environment",
     environment: {
-      mode: "none",
-      background: { mode: "solid", color: "#eef3f8" }
+      lighting: { source: { kind: "none" } },
+      background: { source: { kind: "solid", color: "#eef3f8" } }
     }
   });
   editor.dispatch({ type: "add-light", light: { id: "fill", kind: "ambient", intensity: 0.6 } });

@@ -39,7 +39,7 @@ describe("missing asset integration", () => {
 
     await runtime.project();
 
-    expect(editor.getSnapshot().environment.environment.assetId).toBe("hdr-a");
+    expect(editor.getSnapshot().environment.lighting.source).toEqual({ kind: "hdr", assetId: "hdr-a" });
     expect(runtime.getProblems()).toMatchObject([{ code: "environment-asset-unresolved", target: { kind: "environment", assetId: "hdr-a" } }]);
     expect(editor.serialize().problems.acknowledged).toEqual({});
   });

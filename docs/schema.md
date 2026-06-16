@@ -4,20 +4,21 @@ Scene Snapshot 是本项目的 durable editor state。它必须是 JSON-compatib
 
 当前版本：
 
-- `SceneSnapshot.version = 6`
+- `SceneSnapshot.version = 7`
+- `V6SceneSnapshot.version = 6`
 - `V5SceneSnapshot.version = 5`
 - `V4SceneSnapshot.version = 4`
 - `V3SceneSnapshot.version = 3`
 - `PreviousSceneSnapshot.version = 2`
 - `LegacySceneSnapshot.version = 1`
 
-Version 1/2/3/4/5 snapshot 会通过 migration 规范化为当前 schema。v4 scene node graph 会原样升级到 v5，再补齐 v6 presentation state；migration 不会根据已有 GLB object metadata 自动生成 imported targets，也不会根据 transient runtime camera 自动生成 authored camera view。
+Version 1/2/3/4/5/6 snapshot 会通过 migration 规范化为当前 schema。v4 scene node graph 会原样升级到 v5，再补齐 v6 presentation state，最后把 v6 environment `mode`/`background.mode` 迁移为 v7 source-based environment；migration 不会根据已有 GLB object metadata 自动生成 imported targets，也不会根据 transient runtime camera 自动生成 authored camera view。
 
 ## 顶层结构
 
 ```ts
 interface SceneSnapshot {
-  version: 6;
+  version: 7;
   scene: {
     id: string;
     name: string;
@@ -374,29 +375,52 @@ Viewport marquee selection 不引入新的 durable schema 字段。拖拽矩形�
 ## Environment
 
 ```ts
-type EnvironmentMode = "none" | "solid" | "texture" | "hdr";
-type BackgroundMode = "none" | "solid" | "texture" | "hdr";
+type EnvironmentLightingSourceKind = "none" | "equirectangular" | "hdr" | "cubemap";
+type EnvironmentBackgroundSourceKind = "none" | "solid" | "flat-image" | "equirectangular" | "hdr" | "cubemap";
+type CubemapFaceRole = "positive-x" | "negative-x" | "positive-y" | "negative-y" | "positive-z" | "negative-z";
+
+type EnvironmentLightingSource =
+  | { kind: "none" }
+  | { kind: "equirectangular"; assetId: string }
+  | { kind: "hdr"; assetId: string }
+  | { kind: "cubemap"; faces: { role: CubemapFaceRole; assetId: string }[] };
+
+type EnvironmentBackgroundSource =
+  | { kind: "none" }
+  | { kind: "solid"; color: string }
+  | { kind: "flat-image"; assetId: string }
+  | { kind: "equirectangular"; assetId: string }
+  | { kind: "hdr"; assetId: string }
+  | { kind: "cubemap"; faces: { role: CubemapFaceRole; assetId: string }[] };
 
 interface SceneEnvironment {
-  mode: EnvironmentMode;
+  lighting: {
+    source: EnvironmentLightingSource;
+    intensity: number;
+    rotation: { x: number; y: number; z: number };
+  };
   background: {
-    mode: BackgroundMode;
-    color?: string;
-    assetId?: string;
+    source: EnvironmentBackgroundSource;
     intensity?: number;
     blur?: number;
     rotation?: { x: number; y: number; z: number };
-  };
-  environment: {
-    assetId?: string;
-    intensity: number;
-    rotation: { x: number; y: number; z: number };
   };
   metadata?: Record<string, JsonValue>;
 }
 ```
 
-Environment 保存的是意图，不保存 texture 或 PMREM 输出。HDR / image / texture 的加载失败通过 runtime problem 暴露。
+Environment 保存的是 authoring intent，不保存 texture、cubemap、resolver result 或 PMREM 输出。`lighting.source` 表示照亮模型的 image-based lighting source；`background.source` 表示可见背景。`flat-image` 是普通二维背景图；`equirectangular` / `hdr` / `cubemap` 是 sky/background intent，其中 cubemap 必须包含六个不重复 face role。HDR / image / texture / cubemap face 的解析或加载失败通过 runtime problem 暴露，不会删除 durable fields。
+
+v6 兼容迁移规则：
+
+- `environment.mode: "texture"` -> `lighting.source.kind = "equirectangular"`。
+- `environment.mode: "hdr"` -> `lighting.source.kind = "hdr"`。
+- `background.mode: "solid"` -> `background.source.kind = "solid"`。
+- `background.mode: "texture"` -> `background.source.kind = "flat-image"`。
+- `background.mode: "hdr"` -> `background.source.kind = "hdr"`。
+- 旧 `none` / `solid` lighting mode 会迁移为 no lighting source。
+
+`background.blur` 在 durable schema 中允许保存，但 runtime 会对 `flat-image` 背景发布不生效诊断；真正的 blur 只对 Three.js 支持的 environment-map 背景 source 有意义。
 
 ## Lights
 

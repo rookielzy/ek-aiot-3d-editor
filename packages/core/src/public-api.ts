@@ -77,6 +77,7 @@ export type {
   SelectNodesCommand,
   SelectObjectCommand,
   SelectObjectsCommand,
+  LegacySceneEnvironmentPatch,
   SceneEnvironmentPatch,
   SetDefaultCameraViewCommand,
   SetEnvironmentCommand,
@@ -144,7 +145,25 @@ export type {
   ScenePresentationState
 } from "./cameras/types";
 export type { DefaultPresentationViewResolution } from "./cameras/resolve";
-export type { BackgroundMode, EnvironmentMode, EnvironmentRotation, SceneEnvironment } from "./environment/types";
+export type {
+  BackgroundMode,
+  CubemapFaceReference,
+  CubemapFaceRole,
+  EnvironmentBackgroundSource,
+  EnvironmentBackgroundSourceKind,
+  EnvironmentLightingSource,
+  EnvironmentLightingSourceKind,
+  EnvironmentMode,
+  EnvironmentRotation,
+  LegacySceneEnvironment,
+  SceneEnvironment
+} from "./environment/types";
+export type {
+  EnvironmentConservativeLightOptions,
+  EnvironmentPresetCommand,
+  EnvironmentPresetProblem,
+  EnvironmentPresetResult
+} from "./environment/presets";
 export type { HistoryState } from "./history/history";
 export type { NodeSelectionInput, SelectionInput, SelectionMode, SelectionState } from "./selection/selection";
 export type {
@@ -154,6 +173,7 @@ export type {
   CameraViewFieldId,
   CameraViewListItem,
   EnvironmentFieldId,
+  InspectorActionDescriptor,
   InspectorCommandProblem,
   InspectorCommandResult,
   InspectorFieldDescriptor,
@@ -320,6 +340,15 @@ export {
   PROJECT_PACKAGE_VERSION,
   PROJECT_SCENE_PATH
 } from "./project/project-api";
+export {
+  buildClearEnvironmentPreset,
+  buildEnvironmentBackgroundAssetPreset,
+  buildEnvironmentCubemapPreset,
+  buildEnvironmentLightingAssetPreset,
+  buildEnvironmentSharedAssetPreset,
+  buildEnvironmentWithConservativeLightsPreset,
+  buildSolidBackgroundPreset
+} from "./environment/presets";
 export {
   buildAddLightCommand,
   buildCreateCameraViewCommand,
