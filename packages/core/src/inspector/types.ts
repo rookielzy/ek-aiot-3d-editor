@@ -40,6 +40,14 @@ export type InspectorCommandResult =
   | { ok: true; command: Command }
   | { ok: false; problem: InspectorCommandProblem };
 
+export interface InspectorActionDescriptor {
+  id: string;
+  label: string;
+  command?: Command;
+  disabled?: boolean;
+  problem?: InspectorCommandProblem;
+}
+
 export interface InspectorSection<TField extends InspectorFieldDescriptor = InspectorFieldDescriptor> {
   id: InspectorSectionId;
   title: string;
@@ -47,6 +55,7 @@ export interface InspectorSection<TField extends InspectorFieldDescriptor = Insp
   empty?: boolean;
   reason?: string;
   fields: TField[];
+  actions?: InspectorActionDescriptor[];
 }
 
 export type TransformVectorName = "position" | "rotation" | "scale";
@@ -90,10 +99,16 @@ export interface MaterialInspectorTarget {
 }
 
 export type EnvironmentFieldId =
+  | "lighting.source.kind"
+  | "lighting.source.assetId"
+  | `lighting.source.faces.${number}.assetId`
   | "mode"
   | "background.mode"
+  | "background.source.kind"
   | "background.color"
+  | "background.source.assetId"
   | "background.assetId"
+  | `background.source.faces.${number}.assetId`
   | "background.intensity"
   | "background.blur"
   | "background.rotation.x"

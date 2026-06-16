@@ -6,7 +6,7 @@ import type { RuntimeImportedTargetMatch } from "./imported-target-resolver";
 export { createMissingAssetProblem } from "../assets/problems";
 export type { Problem } from "../problems/types";
 
-export type EnvironmentProjectionRole = "background" | "environment";
+export type EnvironmentProjectionRole = "background" | "environment" | "background-cubemap-face" | "environment-cubemap-face";
 export interface MaterialTextureProblemInput {
   materialId: string;
   objectId: string;
@@ -94,6 +94,23 @@ export function createEnvironmentPmremProblem(assetId: string, role: Environment
       detail: message
     },
     metadata: { role }
+  };
+}
+
+export function createEnvironmentUnsupportedSettingProblem(setting: string, role: EnvironmentProjectionRole, detail: string): Problem {
+  return {
+    id: `environment-unsupported-setting:${role}:${setting}`,
+    severity: "info",
+    code: "environment-unsupported-setting",
+    source: "runtime",
+    target: { kind: "environment" },
+    recoverability: "automatic",
+    message: detail,
+    display: {
+      title: `${formatRole(role)} setting is not supported`,
+      detail
+    },
+    metadata: { role, setting }
   };
 }
 

@@ -219,8 +219,18 @@ describe("React InspectorPanel", () => {
     render(<InspectorPanel editor={editor} />);
     fireEvent.change(screen.getByLabelText("Lighting asset"), { target: { value: "studio-hdr" } });
 
-    expect(editor.getSnapshot().environment.mode).toBe("hdr");
-    expect(editor.getSnapshot().environment.environment.assetId).toBe("studio-hdr");
+    expect(editor.getSnapshot().environment.lighting.source).toEqual({ kind: "hdr", assetId: "studio-hdr" });
+  });
+
+  it("applies shared environment presets through core commands", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "register-asset", asset: { id: "studio-hdr", kind: "hdr", label: "Studio HDR" } });
+
+    render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("button", { name: "Shared lighting/background" }));
+
+    expect(editor.getSnapshot().environment.lighting.source).toEqual({ kind: "hdr", assetId: "studio-hdr" });
+    expect(editor.getSnapshot().environment.background.source).toEqual({ kind: "hdr", assetId: "studio-hdr" });
   });
 
   it("adds multiple lights of the same kind from the add dropdown", () => {

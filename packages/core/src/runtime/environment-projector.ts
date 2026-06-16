@@ -1,13 +1,12 @@
 import { Color, type Scene } from "three";
-import type { SceneEnvironment } from "../environment/types";
+import type { EnvironmentBackgroundSource, EnvironmentLightingSource, SceneEnvironment } from "../environment/types";
 import type { Problem } from "../problems/types";
 import type { SceneSnapshot } from "../snapshot/types";
 import {
   EnvironmentResourceManager,
-  type EnvironmentAssetKind,
   type EnvironmentResourceManagerOptions
 } from "./environment-resource-manager";
-import { createEnvironmentAssetUnresolvedProblem } from "./problems";
+import { createEnvironmentAssetUnresolvedProblem, createEnvironmentUnsupportedSettingProblem } from "./problems";
 
 export interface EnvironmentProjectorOptions extends EnvironmentResourceManagerOptions {
   scene: Scene;
@@ -29,13 +28,11 @@ export class EnvironmentProjector {
 
     resetSceneEnvironment(this.#scene);
 
-    const backgroundProblem = await this.#projectBackground(snapshot, environment, token);
+    const backgroundProblems = await this.#projectBackground(snapshot, environment, token);
     if (!this.#resources.isActive(token)) {
       return [];
     }
-    if (backgroundProblem) {
-      problems.push(backgroundProblem);
-    }
+    problems.push(...backgroundProblems);
 
     const environmentProblem = await this.#projectEnvironment(snapshot, environment, token);
     if (!this.#resources.isActive(token)) {
@@ -62,30 +59,82 @@ export class EnvironmentProjector {
     snapshot: SceneSnapshot,
     environment: SceneEnvironment,
     token: number
-  ): Promise<Problem | undefined> {
+  ): Promise<Problem[]> {
+    const problems: Problem[] = [];
     const background = environment.background;
     applyBackgroundScalars(this.#scene, environment);
 
-    if (background.mode === "none") {
-      return undefined;
+    if (background.source.kind === "flat-image" && background.blur && background.blur > 0) {
+      this.#scene.backgroundBlurriness = 0;
+      problems.push(createEnvironmentUnsupportedSettingProblem(
+        "background.blur",
+        "background",
+        "Background blur does not affect flat image backgrounds."
+      ));
     }
 
-    if (background.mode === "solid") {
-      this.#scene.background = new Color(background.color ?? "#000000");
-      return undefined;
+    switch (background.source.kind) {
+      case "none":
+        return problems;
+      case "solid":
+        this.#scene.background = new Color(background.source.color);
+        return problems;
+      case "flat-image": {
+        const problem = await this.#loadBackgroundTexture(snapshot, background.source, token, "flat");
+        return pushProblem(problems, problem);
+      }
+      case "equirectangular": {
+        const problem = await this.#loadBackgroundTexture(snapshot, background.source, token, "equirectangular");
+        return pushProblem(problems, problem);
+      }
+      case "hdr": {
+        const result = await this.#resources.load({
+          snapshot,
+          assetId: background.source.assetId,
+          kind: "hdr",
+          intent: "equirectangular",
+          role: "background",
+          token
+        });
+        if (!result.ok) {
+          return pushProblem(problems, result.problem);
+        }
+        this.#scene.background = result.texture;
+        return problems;
+      }
+      case "cubemap": {
+        const result = await this.#resources.loadCubemap({
+          snapshot,
+          faces: background.source.faces,
+          role: "background",
+          token
+        });
+        if (!result.ok) {
+          return pushProblem(problems, result.problem);
+        }
+        this.#scene.background = result.texture;
+        return problems;
+      }
     }
+  }
 
+  async #loadBackgroundTexture(
+    snapshot: SceneSnapshot,
+    source: Extract<EnvironmentBackgroundSource, { assetId: string }>,
+    token: number,
+    intent: "flat" | "equirectangular"
+  ): Promise<Problem | undefined> {
     const result = await this.#resources.load({
       snapshot,
-      assetId: background.assetId,
-      kind: background.mode,
+      assetId: source.assetId,
+      kind: "texture",
+      intent,
       role: "background",
       token
     });
     if (!result.ok) {
       return result.problem;
     }
-
     this.#scene.background = result.texture;
     return undefined;
   }
@@ -96,23 +145,49 @@ export class EnvironmentProjector {
     token: number
   ): Promise<Problem | undefined> {
     applyEnvironmentScalars(this.#scene, environment);
+    const source = environment.lighting.source;
 
-    if (environment.mode === "none" || environment.mode === "solid") {
-      return undefined;
+    switch (source.kind) {
+      case "none":
+        return undefined;
+      case "equirectangular":
+        return await this.#loadLightingTexture(snapshot, source, token, "texture");
+      case "hdr":
+        return await this.#loadLightingTexture(snapshot, source, token, "hdr");
+      case "cubemap": {
+        if (source.faces.length === 0) {
+          return createEnvironmentAssetUnresolvedProblem("missing", "environment");
+        }
+        const result = await this.#resources.loadCubemap({
+          snapshot,
+          faces: source.faces,
+          role: "environment",
+          token,
+          pmrem: "cubemap"
+        });
+        if (!result.ok) {
+          return result.problem;
+        }
+        this.#scene.environment = result.pmremTexture ?? result.texture;
+        return undefined;
+      }
     }
+  }
 
-    const assetId = environment.environment.assetId;
-    if (!assetId) {
-      return createEnvironmentAssetUnresolvedProblem("missing", "environment");
-    }
-
+  async #loadLightingTexture(
+    snapshot: SceneSnapshot,
+    source: Extract<EnvironmentLightingSource, { assetId: string }>,
+    token: number,
+    kind: "texture" | "hdr"
+  ): Promise<Problem | undefined> {
     const result = await this.#resources.load({
       snapshot,
-      assetId,
-      kind: environment.mode as EnvironmentAssetKind,
+      assetId: source.assetId,
+      kind,
+      intent: "equirectangular",
       role: "environment",
       token,
-      pmrem: true
+      pmrem: "equirectangular"
     });
     if (!result.ok) {
       return result.problem;
@@ -143,10 +218,17 @@ function applyBackgroundScalars(scene: Scene, environment: SceneEnvironment): vo
 }
 
 function applyEnvironmentScalars(scene: Scene, environment: SceneEnvironment): void {
-  scene.environmentIntensity = environment.environment.intensity;
+  scene.environmentIntensity = environment.lighting.intensity;
   scene.environmentRotation.set(
-    environment.environment.rotation.x,
-    environment.environment.rotation.y,
-    environment.environment.rotation.z
+    environment.lighting.rotation.x,
+    environment.lighting.rotation.y,
+    environment.lighting.rotation.z
   );
+}
+
+function pushProblem(problems: Problem[], problem: Problem | undefined): Problem[] {
+  if (problem) {
+    problems.push(problem);
+  }
+  return problems;
 }

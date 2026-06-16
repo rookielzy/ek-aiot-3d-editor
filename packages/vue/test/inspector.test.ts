@@ -249,8 +249,21 @@ describe("Vue InspectorPanel", () => {
     }
     await lightingAsset.setValue("studio-hdr");
 
-    expect(editor.getSnapshot().environment.mode).toBe("hdr");
-    expect(editor.getSnapshot().environment.environment.assetId).toBe("studio-hdr");
+    expect(editor.getSnapshot().environment.lighting.source).toEqual({ kind: "hdr", assetId: "studio-hdr" });
+    wrapper.unmount();
+  });
+
+  it("applies shared environment presets through core commands", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "register-asset", asset: { id: "studio-hdr", kind: "hdr", label: "Studio HDR" } });
+    const wrapper = mount(InspectorPanel, { props: { editor } });
+
+    const preset = wrapper.findAll("button").find((button) => button.text() === "Shared lighting/background");
+    expect(preset).toBeTruthy();
+    await preset!.trigger("click");
+
+    expect(editor.getSnapshot().environment.lighting.source).toEqual({ kind: "hdr", assetId: "studio-hdr" });
+    expect(editor.getSnapshot().environment.background.source).toEqual({ kind: "hdr", assetId: "studio-hdr" });
     wrapper.unmount();
   });
 

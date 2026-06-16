@@ -149,7 +149,7 @@ describe("inspector model", () => {
 
     const model = buildInspectorModel(editor.getSnapshot());
     const textureField = model.material.fields.find((field) => field.id === "textures.map.assetId");
-    const environmentField = model.environment.fields.find((field) => field.id === "environment.assetId");
+    const environmentField = model.environment.fields.find((field) => field.id === "lighting.source.assetId");
 
     expect(textureField?.options?.map((option) => option.value)).toEqual(["image-a", "texture-a"]);
     expect(environmentField?.options?.map((option) => option.value)).toEqual(["hdr-a", "image-a", "texture-a"]);
@@ -170,7 +170,7 @@ function createGroupSnapshot(): SceneSnapshot {
 
   return {
     ...snapshot,
-    version: 6,
+    version: 7,
     scene: {
       id: "scene-a",
       name: "Scene"

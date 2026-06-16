@@ -1,11 +1,12 @@
 import { createEmptyCameraState, createEmptyPresentationState } from "../cameras/defaults";
-import { createDefaultEnvironment } from "../environment/defaults";
+import { createLegacyDefaultEnvironment, migrateLegacySceneEnvironment } from "../environment/migration";
 import { createEmptyMaterialState } from "../materials/defaults";
 import { createEmptyAuthoredProblemState } from "../problems/defaults";
 import { createLightNode, createObjectNode } from "./defaults";
 import { immutableClone } from "./immutability";
 import {
   SNAPSHOT_VERSION,
+  type V6SceneSnapshot,
   type LegacySceneSnapshot,
   type PreviousSceneSnapshot,
   type SceneSnapshot,
@@ -21,6 +22,12 @@ export function migrateSerializedSnapshot(serialized: SerializedSceneSnapshot): 
   if (serialized.version === SNAPSHOT_VERSION) {
     assertValidSceneSnapshot(serialized);
     return immutableClone(serialized);
+  }
+
+  if (serialized.version === 6) {
+    const migrated = migrateV6Snapshot(serialized);
+    assertValidSceneSnapshot(migrated);
+    return immutableClone(migrated);
   }
 
   if (serialized.version === 5) {
@@ -57,13 +64,21 @@ export function migrateSerializedSnapshot(serialized: SerializedSceneSnapshot): 
   throw new Error(`Unsupported snapshot version: ${String(version)}.`);
 }
 
-export function migrateV5Snapshot(serialized: V5SceneSnapshot): SceneSnapshot {
+export function migrateV6Snapshot(serialized: V6SceneSnapshot): SceneSnapshot {
   return {
     ...serialized,
     version: SNAPSHOT_VERSION,
+    environment: migrateLegacySceneEnvironment(serialized.environment)
+  };
+}
+
+export function migrateV5Snapshot(serialized: V5SceneSnapshot): SceneSnapshot {
+  return migrateV6Snapshot({
+    ...serialized,
+    version: 6,
     cameras: createEmptyCameraState(),
     presentation: createEmptyPresentationState()
-  };
+  });
 }
 
 export function migrateV4Snapshot(serialized: V4SceneSnapshot): SceneSnapshot {
@@ -115,7 +130,7 @@ export function migrateV1Snapshot(serialized: LegacySceneSnapshot): SceneSnapsho
     ...serialized,
     version: 2,
     materials: createEmptyMaterialState(),
-    environment: createDefaultEnvironment(),
+    environment: createLegacyDefaultEnvironment(),
     lights: {},
     problems: createEmptyAuthoredProblemState()
   });

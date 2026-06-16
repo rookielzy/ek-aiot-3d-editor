@@ -8,11 +8,11 @@ Use `createEditor()` to create a framework-neutral editor, dispatch commands, su
 
 ## Snapshot Contract
 
-Snapshots are portable JSON-compatible records. Version 4 stores a canonical `SceneNode` / `NodeId` graph with `nodes`, `rootNodeIds`, and node-based selection. The first node kinds are GLB object nodes, empty group nodes, and light nodes. Object and light payload maps remain separate, while hierarchy, selection, transform targeting, inspector targeting, and runtime picking use nodes. Version 1/2/3 snapshots restore through the migration path and are normalized into the current schema.
+Snapshots are portable JSON-compatible records. The current v7 schema stores a canonical `SceneNode` / `NodeId` graph, authored camera views, and source-based environment lighting/background state. Version 1/2/3/4/5/6 snapshots restore through the migration path and are normalized into the current schema.
 
 Runtime values are never saved. Hosts may register GLB, texture, HDR, or image assets with runtime `source` values, but snapshots only keep stable asset references.
 
-When mounted, the core runtime projects the node graph, GLB payloads, scene background/environment intent, and durable light definitions into Three.js. Texture and HDR environment assets are resolved through the same `AssetResolverBridge` boundary as GLB assets. With the default Three.js `WebGLRenderer`, HDR/equirectangular environment lighting is converted to runtime-only PMREM output; custom `RendererLike` test renderers use the raw resolved texture unless they are backed by a real Three.js WebGL renderer. Stale textures, render targets, projected groups, light objects, and light target objects are disposed through the runtime lifecycle.
+When mounted, the core runtime projects the node graph, GLB payloads, scene lighting/background/skybox source intent, and durable light definitions into Three.js. Texture, image, HDR, and cubemap face assets are resolved through the same `AssetResolverBridge` boundary as GLB assets. With the default Three.js `WebGLRenderer`, HDR/equirectangular/cubemap environment lighting is converted to runtime-only PMREM output; custom `RendererLike` test renderers use the raw resolved texture unless they are backed by a real Three.js WebGL renderer. Stale textures, cubemaps, render targets, projected groups, light objects, and light target objects are disposed through the runtime lifecycle.
 
 ## Project Packages
 
@@ -24,9 +24,9 @@ The experimental `.ek3d` project package is a ZIP container with:
 - `scene.json`: the normal serialized `SceneSnapshot`
 - `assets/*`: GLB, texture, HDR, or image payload bytes referenced by asset ID
 
-Import validates archive shape, entry paths, manifest records, scene snapshot, payload references, and size limits before replacing editor state. Old scene snapshots are migrated to the current v4 node graph during import. Export fails by default when a referenced payload is unavailable; callers can opt into `partial: true`, which marks the manifest as partial and reports structured package problems. The package manifest remains version 1 because the package layout is unchanged.
+Import validates archive shape, entry paths, manifest records, scene snapshot, payload references, and size limits before replacing editor state. Old scene snapshots are migrated to the current v7 schema during import. Export fails by default when a referenced payload is unavailable; callers can opt into `partial: true`, which marks the manifest as partial and reports structured package problems. The package manifest remains version 1 because the package layout is unchanged.
 
-`editor.replaceAsset({ assetId, source })` replaces the transient payload for an existing asset ID. Scene objects, materials, environment fields, and authored problem state keep their durable references. Mounted runtimes retry projection through the project-aware resolver; successful recovery removes derived runtime problems without writing resolver output, `File`, `Blob`, object URLs, loaded textures, or PMREM output into the snapshot.
+`editor.replaceAsset({ assetId, source })` replaces the transient payload for an existing asset ID. Scene objects, materials, environment sources, cubemap faces, and authored problem state keep their durable references. Mounted runtimes retry projection through the project-aware resolver; successful recovery removes derived runtime problems without writing resolver output, `File`, `Blob`, object URLs, loaded textures, cubemaps, or PMREM output into the snapshot.
 
 ## Commands
 
@@ -38,7 +38,7 @@ All durable edits enter through commands so undo/redo remains framework-neutral:
 - `register-asset` records stable GLB, texture, HDR, or image asset references.
 - `paste-objects` accepts legacy v1 object clipboard payloads and current v2 node clipboard payloads.
 - `set-material` stores a small `MeshStandardMaterial` override subset with texture-slot references.
-- `set-environment` stores background/environment intent without PMREM or loaded textures.
+- `set-environment` stores source-based lighting/background/skybox intent without PMREM or loaded textures. Legacy v6-style `mode` patches are normalized for compatibility.
 - `add-light`, `update-light`, and `remove-light` store durable light authoring data and keep light nodes synchronized with light payloads.
 
 `editor.operations` exposes core-backed helpers for copy, paste, duplicate, delete, group, ungroup, select all, and clear selection. Default calls operate on node selection; calls with explicit object IDs keep object-only compatibility. Clipboard payloads are transient JSON editor data; v2 payloads can carry group/object/light node subtrees while v1 object payloads still paste into v4 editors. Clipboard data does not contain browser clipboard state, files, blobs, object URLs, loaded Three.js objects, resolver output, or project payload bytes.
@@ -47,7 +47,7 @@ All durable edits enter through commands so undo/redo remains framework-neutral:
 
 Core exports a framework-neutral inspector contract through `buildInspectorModel()` and command builders for transform, material, environment, and light fields. The model is pure JSON-compatible data derived from a snapshot plus optional runtime problems. Framework packages render it and dispatch the returned commands; they do not mutate snapshots, Three.js objects, or runtime resources directly.
 
-The inspector helpers cover selected node transforms when available, selected object node `MeshStandardMaterial` overrides, ordered node selection metadata, texture-slot asset references, scene environment/background fields, selected light node editing, light list/add/update/remove behavior, and runtime/authored problem display metadata.
+The inspector helpers cover selected node transforms when available, selected object node `MeshStandardMaterial` overrides, ordered node selection metadata, texture-slot asset references, scene lighting/background/skybox source fields, selected light node editing, light list/add/update/remove behavior, and runtime/authored problem display metadata.
 
 Framework workbench shells are composition adapters over this core contract. They may arrange the viewport, inspector, runtime problem display, and framework-native extension regions, but durable behavior remains in core commands, snapshots, serialization, restore, and runtime projection.
 

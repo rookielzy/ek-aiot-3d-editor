@@ -1,4 +1,4 @@
-import { PMREMGenerator, type Texture, type WebGLRenderer, type WebGLRenderTarget } from "three";
+import { PMREMGenerator, type CubeTexture, type Texture, type WebGLRenderer, type WebGLRenderTarget } from "three";
 
 export interface RuntimePmremResult {
   texture: Texture;
@@ -7,11 +7,19 @@ export interface RuntimePmremResult {
 
 export interface RuntimePmremAdapter {
   fromEquirectangular(texture: Texture): RuntimePmremResult;
+  fromCubemap(texture: CubeTexture): RuntimePmremResult;
   dispose(): void;
 }
 
 export class NoopPmremAdapter implements RuntimePmremAdapter {
   fromEquirectangular(texture: Texture): RuntimePmremResult {
+    return {
+      texture,
+      dispose() {}
+    };
+  }
+
+  fromCubemap(texture: CubeTexture): RuntimePmremResult {
     return {
       texture,
       dispose() {}
@@ -30,6 +38,16 @@ export class ThreePmremAdapter implements RuntimePmremAdapter {
 
   fromEquirectangular(texture: Texture): RuntimePmremResult {
     const renderTarget: WebGLRenderTarget = this.#generator.fromEquirectangular(texture);
+    return {
+      texture: renderTarget.texture,
+      dispose() {
+        renderTarget.dispose();
+      }
+    };
+  }
+
+  fromCubemap(texture: CubeTexture): RuntimePmremResult {
+    const renderTarget: WebGLRenderTarget = this.#generator.fromCubemap(texture);
     return {
       texture: renderTarget.texture,
       dispose() {

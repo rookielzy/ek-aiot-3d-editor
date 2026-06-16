@@ -2,7 +2,14 @@ import type { AuthoredCameraViewInput, AuthoredCameraViewPatch } from "../camera
 import type { AssetInput } from "../assets/types";
 import type { GlbImportManifest } from "../assets/import-pipeline";
 import type { GlbImportRemapPlan } from "../assets/import-remap";
-import type { SceneEnvironment } from "../environment/types";
+import type {
+  EnvironmentBackgroundSource,
+  EnvironmentLightingSource,
+  EnvironmentMode,
+  EnvironmentRotation,
+  LegacySceneEnvironment,
+  SceneEnvironment
+} from "../environment/types";
 import type { LightDefinition, LightKind } from "../lights/types";
 import type { MaterialAssignmentTarget, MaterialPatch } from "../materials/types";
 import type { EditorClipboardPayload } from "../clipboard/types";
@@ -198,7 +205,7 @@ export interface SetMaterialCommand {
 
 export interface SetEnvironmentCommand {
   type: "set-environment";
-  environment: SceneEnvironmentPatch;
+  environment: SceneEnvironmentPatch | LegacySceneEnvironmentPatch;
 }
 
 export interface CreateCameraViewCommand {
@@ -222,12 +229,28 @@ export interface SetDefaultCameraViewCommand {
   viewId: string | null;
 }
 
-export interface SceneEnvironmentPatch extends Partial<Omit<SceneEnvironment, "background" | "environment">> {
-  background?: Partial<Omit<SceneEnvironment["background"], "rotation">> & {
+export interface SceneEnvironmentPatch {
+  lighting?: {
+    source?: EnvironmentLightingSource;
+    intensity?: number;
+    rotation?: Partial<EnvironmentRotation>;
+  };
+  background?: {
+    source?: EnvironmentBackgroundSource;
+    intensity?: number;
+    blur?: number;
     rotation?: Partial<NonNullable<SceneEnvironment["background"]["rotation"]>>;
   };
-  environment?: Partial<Omit<SceneEnvironment["environment"], "rotation">> & {
-      rotation?: Partial<SceneEnvironment["environment"]["rotation"]>;
+  metadata?: SceneEnvironment["metadata"];
+}
+
+export interface LegacySceneEnvironmentPatch extends Partial<Omit<LegacySceneEnvironment, "background" | "environment">> {
+  mode?: EnvironmentMode;
+  background?: Partial<Omit<LegacySceneEnvironment["background"], "rotation">> & {
+    rotation?: Partial<NonNullable<LegacySceneEnvironment["background"]["rotation"]>>;
+  };
+  environment?: Partial<Omit<LegacySceneEnvironment["environment"], "rotation">> & {
+      rotation?: Partial<LegacySceneEnvironment["environment"]["rotation"]>;
   };
 }
 

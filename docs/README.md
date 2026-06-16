@@ -54,9 +54,9 @@ pnpm release:verify
 - Core：版本化 JSON Scene Snapshot、`SceneNode` / `NodeId` 层级与 target contract、命令分发、撤销/重做、订阅、序列化/恢复、runtime 挂载/销毁。
 - 场景节点：GLB object node、empty group node、light node 共享层级、Transform target、选择状态和 JSON metadata；object/light payload 仍保留独立 map。
 - Transform：支持 position / rotation / scale 的持久化变更；runtime 提供 node transform transaction 的 start / preview / commit / cancel 结构。
-- 资产：支持 `glb`、`texture`、`hdr`、`image` 四类资产引用；真实 `File`、`Blob`、URL、纹理、PMREM 输出只属于运行时。
+- 资产：支持 `glb`、`texture`、`hdr`、`image` 四类资产引用；真实 `File`、`Blob`、URL、纹理、cubemap、PMREM 输出只属于运行时。
 - 材质：持久化一小部分 `MeshStandardMaterial` override 与纹理槽资产引用。
-- 环境：持久化背景和环境光意图，支持 none / solid / texture / hdr 相关字段。
+- 环境：持久化 lighting source、visible background source 和 skybox/cubemap authoring intent，支持 none / solid / flat image / equirectangular / HDR / cubemap source。
 - 灯光：持久化 ambient、directional、hemisphere、point、spot 五类灯光定义。
 - Camera views：持久化用户显式 capture 的 authored perspective camera view，并可设置默认 presentation view；普通 orbit/reset/frame camera 仍是 runtime-only。
 - Runtime：core 内置 Three.js 投影层，将 Snapshot 投影为 scene、camera、renderer、对象、环境、灯光和问题列表。

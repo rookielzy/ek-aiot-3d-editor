@@ -22,8 +22,7 @@ describe("set environment command", () => {
 
     expect(result.ok).toBe(true);
     expect(result.snapshot.environment.background).toMatchObject({
-      mode: "solid",
-      color: "#202530",
+      source: { kind: "solid", color: "#202530" },
       intensity: 0.8
     });
     expect(JSON.stringify(result.snapshot)).not.toContain("Texture");
@@ -51,13 +50,73 @@ describe("set environment command", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(result.snapshot.environment.environment).toEqual({
-      assetId: "hdr-a",
+    expect(result.snapshot.environment.lighting).toEqual({
+      source: { kind: "hdr", assetId: "hdr-a" },
       intensity: 1.5,
       rotation: { x: 0, y: 1, z: 0 }
     });
-    expect(result.snapshot.environment.background.assetId).toBe("hdr-a");
+    expect(result.snapshot.environment.background.source).toEqual({ kind: "hdr", assetId: "hdr-a" });
     expect(JSON.stringify(result.snapshot)).not.toContain("runtime");
+  });
+
+  it("applies source-based background patches while preserving lighting", () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "register-asset", asset: { id: "hdr-a", kind: "hdr" } });
+    dispatcher.dispatch({ type: "register-asset", asset: { id: "sky-a", kind: "texture" } });
+    dispatcher.dispatch({
+      type: "set-environment",
+      environment: {
+        lighting: { source: { kind: "hdr", assetId: "hdr-a" }, intensity: 1.2, rotation: { x: 0, y: 0.5, z: 0 } },
+        background: { source: { kind: "equirectangular", assetId: "sky-a" }, blur: 0.25 }
+      }
+    });
+
+    const result = dispatcher.dispatch({
+      type: "set-environment",
+      environment: { background: { source: { kind: "solid", color: "#101010" } } }
+    });
+
+    expect(result.ok).toBe(true);
+    expect(store.getSnapshot().environment.lighting).toEqual({
+      source: { kind: "hdr", assetId: "hdr-a" },
+      intensity: 1.2,
+      rotation: { x: 0, y: 0.5, z: 0 }
+    });
+    expect(store.getSnapshot().environment.background).toEqual({
+      source: { kind: "solid", color: "#101010" }
+    });
+  });
+
+  it("rejects cubemap sources with missing face asset references without recording history", () => {
+    const store = new EditorStore();
+    const history = new CommandHistory();
+    const dispatcher = new CommandDispatcher(store, history, new AssetRegistry());
+    const before = store.getSnapshot();
+
+    const result = dispatcher.dispatch({
+      type: "set-environment",
+      environment: {
+        background: {
+          source: {
+            kind: "cubemap",
+            faces: [
+              { role: "positive-x", assetId: "missing-px" },
+              { role: "negative-x", assetId: "missing-nx" },
+              { role: "positive-y", assetId: "missing-py" },
+              { role: "negative-y", assetId: "missing-ny" },
+              { role: "positive-z", assetId: "missing-pz" },
+              { role: "negative-z", assetId: "missing-nz" }
+            ]
+          }
+        }
+      }
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("Environment background cubemap positive-x asset");
+    expect(store.getSnapshot()).toBe(before);
+    expect(history.state.undoCount).toBe(0);
   });
 
   it("rejects unknown environment assets without mutating state", () => {
@@ -78,7 +137,7 @@ describe("set environment command", () => {
     });
 
     expect(result.ok).toBe(false);
-    expect(result.error).toContain("Environment asset");
+    expect(result.error).toContain("Environment lighting source asset");
     expect(store.getSnapshot()).toBe(before);
   });
 
@@ -104,9 +163,8 @@ describe("set environment command", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(store.getSnapshot().environment.environment.assetId).toBeUndefined();
-    expect(store.getSnapshot().environment.background.assetId).toBeUndefined();
-    expect(store.getSnapshot().environment.background.color).toBe("#111111");
+    expect(store.getSnapshot().environment.lighting.source).toEqual({ kind: "none" });
+    expect(store.getSnapshot().environment.background.source).toEqual({ kind: "solid", color: "#111111" });
   });
 
   it("requires texture or HDR asset references for matching environment modes", () => {
@@ -125,7 +183,7 @@ describe("set environment command", () => {
 
     expect(missing.ok).toBe(false);
     expect(wrongKind.ok).toBe(false);
-    expect(wrongKind.error).toContain("Environment asset kind is unsupported");
+    expect(wrongKind.error).toContain("Environment lighting source asset kind is unsupported");
   });
 
   it.each([
@@ -160,10 +218,10 @@ describe("set environment command", () => {
       environment: { background: { mode: "solid", color: "#111111" } }
     });
 
-    expect(store.getSnapshot().environment.background.color).toBe("#111111");
+    expect(store.getSnapshot().environment.background.source).toEqual({ kind: "solid", color: "#111111" });
     dispatcher.undo();
-    expect(store.getSnapshot().environment.background.mode).toBe("none");
+    expect(store.getSnapshot().environment.background.source.kind).toBe("none");
     dispatcher.redo();
-    expect(store.getSnapshot().environment.background.color).toBe("#111111");
+    expect(store.getSnapshot().environment.background.source).toEqual({ kind: "solid", color: "#111111" });
   });
 });

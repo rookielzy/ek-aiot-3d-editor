@@ -6,7 +6,7 @@ This package is experimental `0.x`. It tracks the current core package contract 
 
 `useEditor()` exposes the core editor and current snapshot through Vue refs. `EditorViewport` mounts the core runtime and disposes it through Vue lifecycle hooks.
 
-`useInspector()` and `InspectorPanel` render the shared core inspector model for selected node transform availability, object-only material fields, scene environment/background, selected light nodes, and runtime problems. Edits dispatch core commands on commit boundaries, while Vue only owns draft inputs and rendering lifecycle.
+`useInspector()` and `InspectorPanel` render the shared core inspector model for selected node transform availability, object/material fields, scene lighting/background/skybox source fields, selected light nodes, and runtime problems. Edits dispatch core commands on commit boundaries, while Vue only owns draft inputs and rendering lifecycle.
 
 `useWorkbench()` and `EditorWorkbench` compose the primitive pieces into a compact viewport-plus-inspector shell. Pass a raw host-owned editor when the host owns editor lifetime; the workbench will not dispose it on unmount. If no editor is passed, the shell creates one and disposes it with the workbench. The composable keeps editor/runtime instances out of deep reactivity and exposes shallow snapshot/problem state.
 

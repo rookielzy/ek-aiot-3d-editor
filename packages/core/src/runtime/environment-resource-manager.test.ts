@@ -1,11 +1,11 @@
-import { Texture } from "three";
+import { CubeTexture, Texture } from "three";
 import { describe, expect, it, vi } from "vitest";
 import { AssetResolverBridge } from "../assets/resolver";
 import { createEmptySnapshot } from "../snapshot/defaults";
 import type { SceneSnapshot } from "../snapshot/types";
 import { EnvironmentResourceManager } from "./environment-resource-manager";
 import type { RuntimePmremAdapter } from "./pmrem-adapter";
-import type { RuntimeTextureLoaderAdapter } from "./texture-loader-adapter";
+import type { RuntimeCubeTextureLoaderAdapter, RuntimeTextureLoaderAdapter } from "./texture-loader-adapter";
 
 describe("environment resource manager", () => {
   it("reuses an environment texture within the active projection", async () => {
@@ -18,14 +18,43 @@ describe("environment resource manager", () => {
     const snapshot = snapshotWithAsset("texture-a", "texture");
     const token = manager.beginProjection();
 
-    const first = await manager.load({ snapshot, assetId: "texture-a", kind: "texture", role: "background", token });
-    const second = await manager.load({ snapshot, assetId: "texture-a", kind: "texture", role: "background", token });
+    const first = await manager.load({ snapshot, assetId: "texture-a", kind: "texture", intent: "flat", role: "background", token });
+    const second = await manager.load({ snapshot, assetId: "texture-a", kind: "texture", intent: "flat", role: "background", token });
 
     expect(first.ok).toBe(true);
     expect(second.ok).toBe(true);
     expect(loader.load).toHaveBeenCalledTimes(1);
     expect(manager.size).toBe(1);
     expect(texture.dispose).not.toHaveBeenCalled();
+  });
+
+  it("does not reuse a texture across different projection intents", async () => {
+    const loader: RuntimeTextureLoaderAdapter = {
+      load: vi.fn(async () => createTrackedTexture())
+    };
+    const manager = new EnvironmentResourceManager({
+      resolver: new AssetResolverBridge(() => ({ uri: "/shared.jpg" })),
+      textureLoader: loader
+    });
+    const snapshot = snapshotWithAsset("texture-a", "texture");
+    const token = manager.beginProjection();
+
+    const flat = await manager.load({ snapshot, assetId: "texture-a", kind: "texture", intent: "flat", role: "background", token });
+    const equirectangular = await manager.load({
+      snapshot,
+      assetId: "texture-a",
+      kind: "texture",
+      intent: "equirectangular",
+      role: "environment",
+      token
+    });
+
+    expect(flat.ok).toBe(true);
+    expect(equirectangular.ok).toBe(true);
+    expect(loader.load).toHaveBeenCalledTimes(2);
+    expect(loader.load).toHaveBeenNthCalledWith(1, { uri: "/shared.jpg" }, "flat");
+    expect(loader.load).toHaveBeenNthCalledWith(2, { uri: "/shared.jpg" }, "equirectangular");
+    expect(manager.size).toBe(2);
   });
 
   it("returns a structured runtime problem for unresolved environment assets", async () => {
@@ -35,7 +64,7 @@ describe("environment resource manager", () => {
     const snapshot = snapshotWithAsset("hdr-a", "hdr");
     const token = manager.beginProjection();
 
-    const result = await manager.load({ snapshot, assetId: "hdr-a", kind: "hdr", role: "environment", token });
+    const result = await manager.load({ snapshot, assetId: "hdr-a", kind: "hdr", intent: "equirectangular", role: "environment", token });
 
     expect(result).toMatchObject({
       ok: false,
@@ -68,12 +97,12 @@ describe("environment resource manager", () => {
     });
     const snapshot = snapshotWithAsset("texture-a", "texture");
     const tokenA = manager.beginProjection();
-    const pending = manager.load({ snapshot, assetId: "texture-a", kind: "texture", role: "background", token: tokenA });
+    const pending = manager.load({ snapshot, assetId: "texture-a", kind: "texture", intent: "flat", role: "background", token: tokenA });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(loader.load).toHaveBeenCalledTimes(1);
     const tokenB = manager.beginProjection();
 
-    const current = await manager.load({ snapshot, assetId: "texture-a", kind: "texture", role: "background", token: tokenB });
+    const current = await manager.load({ snapshot, assetId: "texture-a", kind: "texture", intent: "flat", role: "background", token: tokenB });
     resolveLoad(staleTexture);
     const stale = await pending;
 
@@ -100,7 +129,7 @@ describe("environment resource manager", () => {
     const snapshot = snapshotWithAsset("hdr-a", "hdr");
     const token = manager.beginProjection();
 
-    await manager.load({ snapshot, assetId: "hdr-a", kind: "hdr", role: "environment", token, pmrem: true });
+    await manager.load({ snapshot, assetId: "hdr-a", kind: "hdr", intent: "equirectangular", role: "environment", token, pmrem: "equirectangular" });
     manager.dispose();
 
     expect(texture.dispose).toHaveBeenCalledTimes(1);
@@ -119,7 +148,7 @@ describe("environment resource manager", () => {
     });
     const snapshot = snapshotWithAsset("texture-a", "texture");
     const token = manager.beginProjection();
-    const pending = manager.load({ snapshot, assetId: "texture-a", kind: "texture", role: "background", token });
+    const pending = manager.load({ snapshot, assetId: "texture-a", kind: "texture", intent: "flat", role: "background", token });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     manager.dispose();
@@ -153,6 +182,7 @@ describe("environment resource manager", () => {
       snapshot,
       assetId: "hdr-a",
       kind: "hdr",
+      intent: "equirectangular",
       role: "environment",
       token: resolveFailure.beginProjection()
     });
@@ -160,6 +190,7 @@ describe("environment resource manager", () => {
       snapshot,
       assetId: "hdr-a",
       kind: "hdr",
+      intent: "equirectangular",
       role: "environment",
       token: loadFailure.beginProjection()
     });
@@ -167,9 +198,10 @@ describe("environment resource manager", () => {
       snapshot,
       assetId: "hdr-a",
       kind: "hdr",
+      intent: "equirectangular",
       role: "environment",
       token: pmremFailure.beginProjection(),
-      pmrem: true
+      pmrem: "equirectangular"
     });
 
     expect(resolveResult).toMatchObject({ ok: false, problem: { code: "environment-asset-resolve-failed", source: "runtime", assetId: "hdr-a" } });
@@ -192,18 +224,76 @@ describe("environment resource manager", () => {
     });
     const snapshot = snapshotWithAsset("hdr-a", "hdr");
     const firstToken = manager.beginProjection();
-    await manager.load({ snapshot, assetId: "hdr-a", kind: "hdr", role: "background", token: firstToken });
-    await manager.load({ snapshot, assetId: "hdr-a", kind: "hdr", role: "environment", token: firstToken, pmrem: true });
+    await manager.load({ snapshot, assetId: "hdr-a", kind: "hdr", intent: "equirectangular", role: "background", token: firstToken });
+    await manager.load({ snapshot, assetId: "hdr-a", kind: "hdr", intent: "equirectangular", role: "environment", token: firstToken, pmrem: "equirectangular" });
     manager.releaseUnused(firstToken);
 
     const secondToken = manager.beginProjection();
-    await manager.load({ snapshot, assetId: "hdr-a", kind: "hdr", role: "background", token: secondToken });
+    await manager.load({ snapshot, assetId: "hdr-a", kind: "hdr", intent: "equirectangular", role: "background", token: secondToken });
     manager.releaseUnused(secondToken);
 
     expect(loader.load).toHaveBeenCalledTimes(1);
     expect(pmremDispose).toHaveBeenCalledTimes(1);
     expect(texture.dispose).not.toHaveBeenCalled();
     expect(manager.size).toBe(1);
+  });
+
+  it("loads cubemap faces once and creates PMREM from the cube texture", async () => {
+    const cubeTexture = new CubeTexture();
+    vi.spyOn(cubeTexture, "dispose");
+    const pmremTexture = new Texture();
+    const pmremDispose = vi.fn();
+    const cubeTextureLoader: RuntimeCubeTextureLoaderAdapter = { load: vi.fn(async () => cubeTexture) };
+    const manager = new EnvironmentResourceManager({
+      resolver: new AssetResolverBridge((asset) => ({ uri: `/${asset.id}.jpg` })),
+      cubeTextureLoader,
+      pmrem: {
+        fromEquirectangular: vi.fn(() => ({ texture: new Texture(), dispose() {} })),
+        fromCubemap: vi.fn(() => ({ texture: pmremTexture, dispose: pmremDispose })),
+        dispose() {}
+      }
+    });
+    const snapshot = snapshotWithCubemapAssets();
+    const token = manager.beginProjection();
+
+    const background = await manager.loadCubemap({ snapshot, faces: createCubemapFaces(), role: "background", token });
+    const lighting = await manager.loadCubemap({ snapshot, faces: createCubemapFaces(), role: "environment", token, pmrem: "cubemap" });
+
+    expect(background.ok).toBe(true);
+    expect(lighting).toMatchObject({ ok: true, texture: cubeTexture, pmremTexture });
+    expect(cubeTextureLoader.load).toHaveBeenCalledTimes(1);
+    expect(manager.size).toBe(1);
+
+    manager.dispose();
+    expect(cubeTexture.dispose).toHaveBeenCalledTimes(1);
+    expect(pmremDispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("loads cubemap faces in the Three.js cube texture order", async () => {
+    const cubeTextureLoader: RuntimeCubeTextureLoaderAdapter = { load: vi.fn(async () => new CubeTexture()) };
+    const manager = new EnvironmentResourceManager({
+      resolver: new AssetResolverBridge((asset) => ({ uri: `/${asset.id}.jpg` })),
+      cubeTextureLoader
+    });
+    const snapshot = snapshotWithCubemapAssets();
+    const token = manager.beginProjection();
+
+    const result = await manager.loadCubemap({
+      snapshot,
+      faces: [...createCubemapFaces()].reverse(),
+      role: "background",
+      token
+    });
+
+    expect(result.ok).toBe(true);
+    expect(cubeTextureLoader.load).toHaveBeenCalledWith([
+      { uri: "/px.jpg" },
+      { uri: "/nx.jpg" },
+      { uri: "/py.jpg" },
+      { uri: "/ny.jpg" },
+      { uri: "/pz.jpg" },
+      { uri: "/nz.jpg" }
+    ]);
   });
 });
 
@@ -220,5 +310,24 @@ function snapshotWithAsset(assetId: string, kind: SceneSnapshot["assets"][string
     assets: {
       [assetId]: { id: assetId, kind }
     }
+  };
+}
+
+function createCubemapFaces() {
+  return [
+    { role: "positive-x" as const, assetId: "px" },
+    { role: "negative-x" as const, assetId: "nx" },
+    { role: "positive-y" as const, assetId: "py" },
+    { role: "negative-y" as const, assetId: "ny" },
+    { role: "positive-z" as const, assetId: "pz" },
+    { role: "negative-z" as const, assetId: "nz" }
+  ];
+}
+
+function snapshotWithCubemapAssets(): SceneSnapshot {
+  const snapshot = createEmptySnapshot();
+  return {
+    ...snapshot,
+    assets: Object.fromEntries(createCubemapFaces().map((face) => [face.assetId, { id: face.assetId, kind: "texture" as const }]))
   };
 }

@@ -1,11 +1,11 @@
-import { Color, Scene, Texture } from "three";
+import { Color, CubeTexture, Scene, Texture } from "three";
 import { describe, expect, it, vi } from "vitest";
 import { AssetResolverBridge } from "../assets/resolver";
 import { createEmptySnapshot } from "../snapshot/defaults";
 import type { SceneSnapshot } from "../snapshot/types";
 import { EnvironmentProjector } from "./environment-projector";
 import type { RuntimePmremAdapter } from "./pmrem-adapter";
-import type { RuntimeTextureLoaderAdapter } from "./texture-loader-adapter";
+import type { RuntimeCubeTextureLoaderAdapter, RuntimeTextureLoaderAdapter } from "./texture-loader-adapter";
 
 describe("environment projector", () => {
   it("projects solid background color without mutating the serialized snapshot", async () => {
@@ -18,8 +18,7 @@ describe("environment projector", () => {
       ...createEmptySnapshot(),
       environment: {
         ...createEmptySnapshot().environment,
-        mode: "solid",
-        background: { mode: "solid", color: "#202530", intensity: 0.8 }
+        background: { source: { kind: "solid", color: "#202530" }, intensity: 0.8 }
       }
     } satisfies SceneSnapshot;
     const before = JSON.stringify(snapshot);
@@ -39,6 +38,7 @@ describe("environment projector", () => {
     const pmremTexture = new Texture();
     const pmrem: RuntimePmremAdapter = {
       fromEquirectangular: vi.fn(() => ({ texture: pmremTexture, dispose() {} })),
+      fromCubemap: vi.fn(() => ({ texture: new Texture(), dispose() {} })),
       dispose() {}
     };
     const projector = new EnvironmentProjector({
@@ -50,9 +50,8 @@ describe("environment projector", () => {
     const snapshot = snapshotWithEnvironment({
       assets: { "hdr-a": { id: "hdr-a", kind: "hdr" } },
       environment: {
-        mode: "hdr",
-        background: { mode: "none" },
-        environment: { assetId: "hdr-a", intensity: 1.5, rotation: { x: 0.1, y: 0.2, z: 0.3 } }
+        lighting: { source: { kind: "hdr", assetId: "hdr-a" }, intensity: 1.5, rotation: { x: 0.1, y: 0.2, z: 0.3 } },
+        background: { source: { kind: "none" } }
       }
     });
 
@@ -76,15 +75,15 @@ describe("environment projector", () => {
       hdrLoader,
       pmrem: {
         fromEquirectangular: vi.fn(() => ({ texture: pmremTexture, dispose() {} })),
+        fromCubemap: vi.fn(() => ({ texture: new Texture(), dispose() {} })),
         dispose() {}
       }
     });
     const snapshot = snapshotWithEnvironment({
       assets: { "hdr-a": { id: "hdr-a", kind: "hdr" } },
       environment: {
-        mode: "hdr",
-        background: { mode: "hdr", assetId: "hdr-a", intensity: 0.7, blur: 0.2 },
-        environment: { assetId: "hdr-a", intensity: 1.5, rotation: { x: 0, y: 1, z: 0 } }
+        lighting: { source: { kind: "hdr", assetId: "hdr-a" }, intensity: 1.5, rotation: { x: 0, y: 1, z: 0 } },
+        background: { source: { kind: "hdr", assetId: "hdr-a" }, intensity: 0.7, blur: 0.2 }
       }
     });
 
@@ -99,7 +98,7 @@ describe("environment projector", () => {
     expect(scene.environmentIntensity).toBe(1.5);
   });
 
-  it("projects texture backgrounds with intensity, blur, and rotation", async () => {
+  it("projects equirectangular texture backgrounds with intensity, blur, and rotation", async () => {
     const scene = new Scene();
     const texture = new Texture();
     const textureLoader: RuntimeTextureLoaderAdapter = { load: vi.fn(async () => texture) };
@@ -111,9 +110,8 @@ describe("environment projector", () => {
     const snapshot = snapshotWithEnvironment({
       assets: { "texture-a": { id: "texture-a", kind: "texture" } },
       environment: {
-        mode: "none",
-        background: { mode: "texture", assetId: "texture-a", intensity: 0.4, blur: 0.25, rotation: { x: 0, y: 1, z: 0 } },
-        environment: { intensity: 1, rotation: { x: 0, y: 0, z: 0 } }
+        lighting: { source: { kind: "none" }, intensity: 1, rotation: { x: 0, y: 0, z: 0 } },
+        background: { source: { kind: "equirectangular", assetId: "texture-a" }, intensity: 0.4, blur: 0.25, rotation: { x: 0, y: 1, z: 0 } }
       }
     });
 
@@ -137,17 +135,15 @@ describe("environment projector", () => {
     const withTexture = snapshotWithEnvironment({
       assets: { "texture-a": { id: "texture-a", kind: "texture" } },
       environment: {
-        mode: "none",
-        background: { mode: "texture", assetId: "texture-a" },
-        environment: { intensity: 1, rotation: { x: 0, y: 0, z: 0 } }
+        lighting: { source: { kind: "none" }, intensity: 1, rotation: { x: 0, y: 0, z: 0 } },
+        background: { source: { kind: "flat-image", assetId: "texture-a" } }
       }
     });
     const empty = snapshotWithEnvironment({
       assets: { "texture-a": { id: "texture-a", kind: "texture" } },
       environment: {
-        mode: "none",
-        background: { mode: "none" },
-        environment: { intensity: 1, rotation: { x: 0, y: 0, z: 0 } }
+        lighting: { source: { kind: "none" }, intensity: 1, rotation: { x: 0, y: 0, z: 0 } },
+        background: { source: { kind: "none" } }
       }
     });
 
@@ -167,17 +163,51 @@ describe("environment projector", () => {
     const snapshot = snapshotWithEnvironment({
       assets: { "hdr-a": { id: "hdr-a", kind: "hdr" } },
       environment: {
-        mode: "hdr",
-        background: { mode: "none" },
-        environment: { assetId: "hdr-a", intensity: 1, rotation: { x: 0, y: 0, z: 0 } }
+        lighting: { source: { kind: "hdr", assetId: "hdr-a" }, intensity: 1, rotation: { x: 0, y: 0, z: 0 } },
+        background: { source: { kind: "none" } }
       }
     });
 
     const problems = await projector.project(snapshot);
 
     expect(problems).toMatchObject([{ code: "environment-asset-unresolved", assetId: "hdr-a" }]);
-    expect(snapshot.environment.environment.assetId).toBe("hdr-a");
+    expect(snapshot.environment.lighting.source).toEqual({ kind: "hdr", assetId: "hdr-a" });
     expect(snapshot.problems.acknowledged).toEqual({});
+  });
+
+  it("projects cubemap background and cubemap lighting through PMREM", async () => {
+    const scene = new Scene();
+    const cubemapTexture = new CubeTexture();
+    const pmremTexture = new Texture();
+    const cubeTextureLoader: RuntimeCubeTextureLoaderAdapter = { load: vi.fn(async () => cubemapTexture) };
+    const pmrem: RuntimePmremAdapter = {
+      fromEquirectangular: vi.fn(() => ({ texture: new Texture(), dispose() {} })),
+      fromCubemap: vi.fn(() => ({ texture: pmremTexture, dispose() {} })),
+      dispose() {}
+    };
+    const projector = new EnvironmentProjector({
+      scene,
+      resolver: new AssetResolverBridge((asset) => ({ uri: `/${asset.id}.jpg` })),
+      cubeTextureLoader,
+      pmrem
+    });
+    const faces = createCubemapFaces();
+    const snapshot = snapshotWithEnvironment({
+      assets: createCubemapAssets(),
+      environment: {
+        lighting: { source: { kind: "cubemap", faces }, intensity: 1.25, rotation: { x: 0, y: 0.5, z: 0 } },
+        background: { source: { kind: "cubemap", faces } }
+      }
+    });
+
+    const problems = await projector.project(snapshot);
+
+    expect(problems).toEqual([]);
+    expect(cubeTextureLoader.load).toHaveBeenCalledTimes(1);
+    expect(pmrem.fromCubemap).toHaveBeenCalledWith(cubemapTexture);
+    expect(scene.background).toBe(cubemapTexture);
+    expect(scene.environment).toBe(pmremTexture);
+    expect(scene.environmentIntensity).toBe(1.25);
   });
 
   it("keeps the newer projection authoritative when an older environment load resolves late", async () => {
@@ -198,17 +228,15 @@ describe("environment projector", () => {
     const first = snapshotWithEnvironment({
       assets: { "texture-a": { id: "texture-a", kind: "texture" } },
       environment: {
-        mode: "none",
-        background: { mode: "texture", assetId: "texture-a", intensity: 0.2 },
-        environment: { intensity: 1, rotation: { x: 0, y: 0, z: 0 } }
+        lighting: { source: { kind: "none" }, intensity: 1, rotation: { x: 0, y: 0, z: 0 } },
+        background: { source: { kind: "flat-image", assetId: "texture-a" }, intensity: 0.2 }
       }
     });
     const second = snapshotWithEnvironment({
       assets: { "texture-a": { id: "texture-a", kind: "texture" } },
       environment: {
-        mode: "none",
-        background: { mode: "texture", assetId: "texture-a", intensity: 0.8 },
-        environment: { intensity: 1, rotation: { x: 0, y: 0, z: 0 } }
+        lighting: { source: { kind: "none" }, intensity: 1, rotation: { x: 0, y: 0, z: 0 } },
+        background: { source: { kind: "flat-image", assetId: "texture-a" }, intensity: 0.8 }
       }
     });
     const firstProjection = projector.project(first);
@@ -230,4 +258,19 @@ function snapshotWithEnvironment(partial: Pick<SceneSnapshot, "assets" | "enviro
     assets: partial.assets,
     environment: partial.environment
   };
+}
+
+function createCubemapFaces() {
+  return [
+    { role: "positive-x" as const, assetId: "px" },
+    { role: "negative-x" as const, assetId: "nx" },
+    { role: "positive-y" as const, assetId: "py" },
+    { role: "negative-y" as const, assetId: "ny" },
+    { role: "positive-z" as const, assetId: "pz" },
+    { role: "negative-z" as const, assetId: "nz" }
+  ];
+}
+
+function createCubemapAssets(): SceneSnapshot["assets"] {
+  return Object.fromEntries(createCubemapFaces().map((face) => [face.assetId, { id: face.assetId, kind: "texture" as const }]));
 }

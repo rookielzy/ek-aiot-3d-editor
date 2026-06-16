@@ -21,21 +21,19 @@ describe("environment inspector commands", () => {
 
     editor.dispatch(command.command);
 
-    expect(editor.getSnapshot().environment.background.mode).toBe("solid");
-    expect(editor.getSnapshot().environment.background.assetId).toBeUndefined();
+    expect(editor.getSnapshot().environment.background.source).toEqual({ kind: "solid", color: "#111111" });
     expect(editor.getSnapshot().environment.background.blur).toBeUndefined();
-    expect(editor.getSnapshot().environment.background.color).toBe("#111111");
   });
 
   it("selects HDR mode when assigning an HDR environment asset", () => {
     const editor = createEditor();
     editor.dispatch({ type: "register-asset", asset: { id: "hdr-a", kind: "hdr" } });
 
-    const result = buildSetEnvironmentCommand(editor.getSnapshot(), "environment.assetId", "hdr-a");
+    const result = buildSetEnvironmentCommand(editor.getSnapshot(), "lighting.source.assetId", "hdr-a");
 
     expect(result).toEqual({
       ok: true,
-      command: { type: "set-environment", environment: { mode: "hdr", environment: { assetId: "hdr-a" } } }
+      command: { type: "set-environment", environment: { lighting: { source: { kind: "hdr", assetId: "hdr-a" } } } }
     });
   });
 
@@ -45,12 +43,55 @@ describe("environment inspector commands", () => {
 
     const section = buildEnvironmentSection(editor.getSnapshot());
 
-    expect(section.fields.find((field) => field.id === "environment.assetId")?.disabled).toBeFalsy();
-    expect(section.fields.find((field) => field.id === "background.assetId")?.disabled).toBeFalsy();
+    expect(section.fields.find((field) => field.id === "lighting.source.assetId")?.disabled).toBeFalsy();
+    expect(section.fields.find((field) => field.id === "background.source.assetId")?.disabled).toBeFalsy();
+  });
+
+  it("exposes environment preset actions as core commands", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "register-asset", asset: { id: "studio-hdr", kind: "hdr" } });
+
+    const section = buildEnvironmentSection(editor.getSnapshot());
+    const shared = section.actions?.find((action) => action.id === "environment-preset-shared-asset");
+
+    expect(shared).toMatchObject({
+      label: "Shared lighting/background",
+      command: {
+        type: "set-environment",
+        environment: {
+          lighting: { source: { kind: "hdr", assetId: "studio-hdr" } },
+          background: { source: { kind: "hdr", assetId: "studio-hdr" } }
+        }
+      }
+    });
+  });
+
+  it("exposes complete cubemap preset actions when named face assets exist", () => {
+    const editor = createEditor();
+    for (const id of ["px", "nx", "py", "ny", "pz", "nz"]) {
+      editor.dispatch({ type: "register-asset", asset: { id, kind: "texture" } });
+    }
+
+    const section = buildEnvironmentSection(editor.getSnapshot());
+    const cubemap = section.actions?.find((action) => action.id === "environment-preset-cubemap-both");
+
+    expect(cubemap?.disabled).toBeFalsy();
+    expect(cubemap?.command).toMatchObject({
+      type: "set-environment",
+      environment: {
+        lighting: { source: { kind: "cubemap" } },
+        background: { source: { kind: "cubemap" } }
+      }
+    });
+    expect(cubemap?.command && cubemap.command.type === "set-environment"
+      ? cubemap.command.environment.lighting?.source?.kind === "cubemap"
+        ? cubemap.command.environment.lighting.source.faces.map((face) => face.assetId)
+        : []
+      : []).toEqual(["px", "nx", "py", "ny", "pz", "nz"]);
   });
 
   it("rejects unknown environment assets before dispatch", () => {
-    const result = buildSetEnvironmentCommand(createEditor().getSnapshot(), "environment.assetId", "missing");
+    const result = buildSetEnvironmentCommand(createEditor().getSnapshot(), "lighting.source.assetId", "missing");
 
     expect(result.ok).toBe(false);
     expect(result.ok ? undefined : result.problem.message).toContain("existing asset");

@@ -9,12 +9,13 @@ describe("scene snapshot contract", () => {
   it("creates a versioned JSON-compatible empty snapshot", () => {
     const snapshot = createEmptySnapshot("scene-a");
 
-    expect(snapshot.version).toBe(6);
+    expect(snapshot.version).toBe(7);
     expect(snapshot.scene.id).toBe("scene-a");
     expect(snapshot.nodes).toEqual({});
     expect(snapshot.rootNodeIds).toEqual([]);
     expect(snapshot.materials).toEqual({ definitions: {}, assignments: {} });
-    expect(snapshot.environment.mode).toBe("none");
+    expect(snapshot.environment.lighting.source).toEqual({ kind: "none" });
+    expect(snapshot.environment.background.source).toEqual({ kind: "none" });
     expect(snapshot.lights).toEqual({});
     expect(snapshot.cameras).toEqual({});
     expect(snapshot.presentation).toEqual({ defaultCameraId: null });
@@ -232,7 +233,7 @@ describe("scene snapshot contract", () => {
       version: 5
     } satisfies V5SceneSnapshot);
 
-    expect(migrated.version).toBe(6);
+    expect(migrated.version).toBe(7);
     expect(migrated.cameras).toEqual({});
     expect(migrated.presentation).toEqual({ defaultCameraId: null });
     expect(migrated.nodes["object-a"]).toEqual(v5.nodes["object-a"]);
@@ -251,7 +252,7 @@ describe("scene snapshot contract", () => {
 
     const migrated = migrateSerializedSnapshot(v4);
 
-    expect(migrated.version).toBe(6);
+    expect(migrated.version).toBe(7);
     expect(migrated.cameras).toEqual({});
     expect(migrated.presentation).toEqual({ defaultCameraId: null });
     expect(Object.values(migrated.nodes).some((node) => node.kind === "imported")).toBe(false);

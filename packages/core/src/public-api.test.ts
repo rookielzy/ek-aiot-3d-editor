@@ -15,6 +15,9 @@ import {
   buildAssetWorkspaceModel,
   buildInspectorModel,
   buildWorkbenchModel,
+  buildSolidBackgroundPreset,
+  buildEnvironmentSharedAssetPreset,
+  buildEnvironmentWithConservativeLightsPreset,
   buildCameraSection,
   buildCreateCameraViewCommand,
   buildCreateCameraViewInput,
@@ -74,6 +77,11 @@ import {
   type Problem,
   PROJECT_PACKAGE_VERSION,
   type ProjectAssetPayloadSummary,
+  type CubemapFaceReference,
+  type EnvironmentBackgroundSource,
+  type EnvironmentLightingSource,
+  type EnvironmentPresetResult,
+  type InspectorActionDescriptor,
   type SceneEnvironment,
   type SetMaterialCommand,
   type AddLightCommand,
@@ -100,6 +108,7 @@ import {
   type RuntimeTransformControlsOptions,
   type RuntimeViewportHelperOptions,
   type SceneCameraNode,
+  type LegacySceneEnvironmentPatch,
   type SceneEnvironmentPatch,
   type SceneImportedGlbNode,
   type SceneNode,
@@ -219,8 +228,18 @@ describe("core public API", () => {
       recoverability: "user-action"
     };
     const registerAsset: RegisterAssetCommand = { type: "register-asset", asset: { id: "texture-a", kind: "texture" } };
-    const setEnvironment: SetEnvironmentCommand = { type: "set-environment", environment: { background: { mode: "solid", color: "#ffffff" } } };
-    const environmentPatch: SceneEnvironmentPatch = { environment: { rotation: { y: 0.5 } } };
+    const setEnvironment: SetEnvironmentCommand = { type: "set-environment", environment: { background: { source: { kind: "solid", color: "#ffffff" } } } };
+    const environmentPatch: SceneEnvironmentPatch = { lighting: { rotation: { y: 0.5 } } };
+    const legacyEnvironmentPatch: LegacySceneEnvironmentPatch = { mode: "hdr", environment: { assetId: "hdr-a" } };
+    const lightingSource: EnvironmentLightingSource = { kind: "hdr", assetId: "hdr-a" };
+    const backgroundSource: EnvironmentBackgroundSource = { kind: "solid", color: "#ffffff" };
+    const cubemapFace: CubemapFaceReference = { role: "positive-x", assetId: "px" };
+    const environmentPresetResult: EnvironmentPresetResult = buildSolidBackgroundPreset("#ffffff");
+    const inspectorAction: InspectorActionDescriptor = {
+      id: "environment-preset-clear",
+      label: "Clear",
+      command: { type: "set-environment", environment: { lighting: { source: { kind: "none" } } } }
+    };
     const addLight: AddLightCommand = { type: "add-light", light: { kind: "ambient" } };
     const updateLight: UpdateLightCommand = { type: "update-light", lightId: "light-a", patch: { intensity: 2 } };
     const removeLight: RemoveLightCommand = { type: "remove-light", lightId: "light-a" };
@@ -448,8 +467,14 @@ describe("core public API", () => {
 
     expect(command.type).toBe("set-material");
     expect(registerAsset.asset.kind).toBe("texture");
-    expect(setEnvironment.environment.background?.mode).toBe("solid");
-    expect(environmentPatch.environment?.rotation?.y).toBe(0.5);
+    expect(setEnvironment.environment.background?.source?.kind).toBe("solid");
+    expect(environmentPatch.lighting?.rotation?.y).toBe(0.5);
+    expect(legacyEnvironmentPatch.mode).toBe("hdr");
+    expect(lightingSource.kind).toBe("hdr");
+    expect(backgroundSource.kind).toBe("solid");
+    expect(cubemapFace.role).toBe("positive-x");
+    expect(environmentPresetResult.ok).toBe(true);
+    expect(inspectorAction.command?.type).toBe("set-environment");
     expect(addLight.light.kind).toBe("ambient");
     expect(updateLight.patch.intensity).toBe(2);
     expect(removeLight.lightId).toBe("light-a");
@@ -501,7 +526,8 @@ describe("core public API", () => {
     expect(bindingDescriptor.slotKey).toBe(importedSlot.slotKey);
     expect(materialInspectorTarget.commandTarget.kind).toBe("material-slot");
     expect(clipboardNode.originalId).toBe("object-a");
-    expect(environment.mode).toBe("none");
+    expect(environment.lighting.source.kind).toBe("none");
+    expect(environment.background.source.kind).toBe("none");
     expect(light.kind).toBe("ambient");
     expect(problem.target).toEqual({ kind: "object", objectId: "object-a" });
     expect(workspacePayload.exportable).toBe(true);
@@ -521,6 +547,8 @@ describe("core public API", () => {
     expect(readonlyMarqueeSelection?.get().status).toBe("idle");
     expect(structuralEditorWithoutViewportHelpers.viewportHelpers).toBeUndefined();
     expect(structuralEditorWithoutViewportHelpers.marqueeSelection).toBeUndefined();
+    expect(buildEnvironmentSharedAssetPreset({ id: "hdr-a", kind: "hdr" }).ok).toBe(true);
+    expect(buildEnvironmentWithConservativeLightsPreset(createEmptySnapshot(), { type: "set-environment", environment: { background: { source: { kind: "none" } } } }).ok).toBe(true);
     expect(new EditorViewportHelperState({ grid: true }).get().visibility.grid).toBe(true);
     expect(workspaceImportOptions.rasterKind).toBe("texture");
     expect(workspaceImportResult.status).toBe("succeeded");

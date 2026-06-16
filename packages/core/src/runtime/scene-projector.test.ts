@@ -309,7 +309,7 @@ describe("scene projector", () => {
 
     expect(projector.objects.get("object-a")).toBeInstanceOf(Group);
     expect(store.getSnapshot().lights["light-a"]).toBeTruthy();
-    expect(store.getSnapshot().environment.background.color).toBe("#101010");
+    expect(store.getSnapshot().environment.background.source).toEqual({ kind: "solid", color: "#101010" });
   });
 
   it("projects GLB objects, HDR environments, lights, and combined runtime problems from one snapshot", async () => {
@@ -329,6 +329,7 @@ describe("scene projector", () => {
     const pmremTexture = new Texture();
     const pmrem: RuntimePmremAdapter = {
       fromEquirectangular: vi.fn(() => ({ texture: pmremTexture, dispose() {} })),
+      fromCubemap: vi.fn(() => ({ texture: new Texture(), dispose() {} })),
       dispose() {}
     };
     const projector = new SceneProjector({
@@ -363,6 +364,7 @@ describe("scene projector", () => {
     const pmremTexture = new Texture();
     const pmrem: RuntimePmremAdapter = {
       fromEquirectangular: vi.fn(() => ({ texture: pmremTexture, dispose() {} })),
+      fromCubemap: vi.fn(() => ({ texture: new Texture(), dispose() {} })),
       dispose() {}
     };
     const projector = new SceneProjector({
