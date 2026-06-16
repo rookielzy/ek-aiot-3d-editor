@@ -1,11 +1,20 @@
-import type { AddLightCommand, RemoveLightCommand, UpdateLightCommand } from "../commands/types";
+import type { AddLightCommand, Command, RemoveLightCommand, UpdateLightCommand } from "../commands/types";
+import { buildLightingPresetCommands, type LightingPresetId } from "../lights/presets";
 import type { LightDefinition, LightKind } from "../lights/types";
+import type { Problem } from "../problems/types";
 import { findLightNodeId } from "../snapshot/nodes";
 import { checkboxField, colorField, numberField, parseBoolean, parseFiniteNumber, textField, type NumberRange } from "./fields";
-import type { InspectorCommandProblem, InspectorCommandResult, InspectorFieldDescriptor, LightFieldId, LightInspectorSection, LightListItem } from "./types";
+import { toProblemItem } from "./problems";
+import type { InspectorActionDescriptor, InspectorCommandProblem, InspectorCommandResult, InspectorFieldDescriptor, LightFieldId, LightInspectorSection, LightListItem } from "./types";
 import type { SceneSnapshot } from "../snapshot/types";
 
 const LIGHT_KINDS: LightKind[] = ["ambient", "hemisphere", "directional", "point", "spot"];
+const LIGHTING_PRESET_OPTIONS: { id: LightingPresetId; label: string }[] = [
+  { id: "conservative-key-light", label: "Key shadow" },
+  { id: "soft-spotlight", label: "Soft spot" },
+  { id: "point-shadow-preview", label: "Point preview" },
+  { id: "disable-all-shadows", label: "Disable shadows" }
+];
 const AXES = ["x", "y", "z"] as const;
 const NUMBER_RANGES: Partial<Record<LightFieldId, NumberRange>> = {
   intensity: { min: 0 },
@@ -48,7 +57,11 @@ export function resolveActiveLightId(snapshot: SceneSnapshot, activeLightId?: st
   return null;
 }
 
-export function buildLightSection(snapshot: SceneSnapshot, activeLightId?: string | null): LightInspectorSection {
+export function buildLightSection(
+  snapshot: SceneSnapshot,
+  activeLightId?: string | null,
+  runtimeProblems: readonly Problem[] = []
+): LightInspectorSection {
   const resolvedActiveLightId = resolveActiveLightId(snapshot, activeLightId);
   const activeLightNodeId = resolvedActiveLightId ? findLightNodeId(snapshot, resolvedActiveLightId) : null;
   const activeLight = resolvedActiveLightId ? snapshot.lights[resolvedActiveLightId] : null;
@@ -63,7 +76,9 @@ export function buildLightSection(snapshot: SceneSnapshot, activeLightId?: strin
     activeLightNodeId,
     lights: buildLightList(snapshot, resolvedActiveLightId),
     addOptions: LIGHT_KINDS.map((kind) => ({ value: kind, label: formatLightKind(kind) })),
-    fields: activeLight ? buildLightFields(activeLight) : []
+    fields: activeLight ? buildLightFields(activeLight) : [],
+    actions: buildLightActions(snapshot, resolvedActiveLightId),
+    diagnostics: activeLight ? buildLightDiagnostics(snapshot, activeLight.id, runtimeProblems) : []
   };
 }
 
@@ -125,6 +140,45 @@ function buildLightList(snapshot: SceneSnapshot, activeLightId: string | null): 
       selected
     };
   });
+}
+
+function buildLightActions(snapshot: SceneSnapshot, activeLightId: string | null): InspectorActionDescriptor[] {
+  return LIGHTING_PRESET_OPTIONS.map(({ id, label }) => {
+    const result = buildLightingPresetCommands(snapshot.lights, id, activeLightId ? { lightId: activeLightId } : {});
+    const command = commandsToActionCommand(label, result.commands);
+    return {
+      id: `lighting-preset-${id}`,
+      label,
+      ...(command ? { command } : {}),
+      disabled: !result.ok || !command,
+      ...(result.problem ? { problem: result.problem } : {})
+    };
+  });
+}
+
+function commandsToActionCommand(label: string, commands: Command[]): Command | undefined {
+  if (commands.length === 0) {
+    return undefined;
+  }
+  if (commands.length === 1) {
+    return commands[0];
+  }
+  return {
+    type: "batch",
+    label,
+    commands
+  };
+}
+
+function buildLightDiagnostics(
+  snapshot: SceneSnapshot,
+  lightId: string,
+  runtimeProblems: readonly Problem[]
+) {
+  const acknowledged = snapshot.problems.acknowledged;
+  return runtimeProblems
+    .filter((runtimeProblem) => runtimeProblem.target.kind === "light" && runtimeProblem.target.lightId === lightId)
+    .map((runtimeProblem) => toProblemItem(runtimeProblem, Boolean(acknowledged[runtimeProblem.id]), true));
 }
 
 function getSelectedLightId(snapshot: SceneSnapshot): string | null {

@@ -297,6 +297,48 @@ describe("Vue InspectorPanel", () => {
     wrapper.unmount();
   });
 
+  it("renders lighting presets and active light diagnostics", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "add-light", light: { id: "point-a", kind: "point" } });
+    editor.dispatch({ type: "select-node", nodeId: "point-a" });
+    const runtime = {
+        getProblems: () => [{
+          id: "lighting-point-shadow-cost:point-a",
+          severity: "warning",
+          code: "lighting-point-shadow-cost",
+          source: "runtime",
+          target: { kind: "light", lightId: "point-a" },
+          recoverability: "user-action",
+          message: "Point shadows render six faces.",
+          display: {
+            title: "Point light shadow is expensive",
+            detail: "Point light uses six shadow map faces."
+          }
+        }],
+        subscribeProblems: () => () => {}
+      };
+    vi.spyOn(editor, "getRuntime").mockReturnValue(runtime as never);
+    vi.spyOn(editor, "subscribeRuntime").mockImplementation((subscriber) => {
+      subscriber(runtime as never);
+      return () => {};
+    });
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+    const wrapper = mount(InspectorPanel, { props: { editor } });
+
+    expect(wrapper.text()).toContain("Point light shadow is expensive");
+    expect(wrapper.text()).toContain("Point light uses six shadow map faces.");
+    const preset = wrapper.findAll("button").find((button) => button.text() === "Point preview");
+    expect(preset).toBeTruthy();
+    await preset!.trigger("click");
+
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({
+      type: "update-light",
+      lightId: "point-a"
+    }));
+    expect(editor.getSnapshot().lights["point-a"].shadow.enabled).toBe(true);
+    wrapper.unmount();
+  });
+
   it("shows light shadow validation problems without dispatching invalid drafts", async () => {
     const editor = markRaw(createEditor());
     editor.dispatch({ type: "add-light", light: { id: "sun", kind: "directional" } });

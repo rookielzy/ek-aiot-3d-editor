@@ -156,6 +156,43 @@ describe("light inspector commands", () => {
     expect(editor.getSnapshot().lights.sun).toMatchObject({ shadow: { mapSize: { width: 1024 } } });
   });
 
+  it("exposes lighting preset actions and active light diagnostics", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "add-light", light: { id: "point-a", kind: "point" } });
+    editor.dispatch({ type: "select-node", nodeId: "point-a" });
+
+    const section = buildLightSection(editor.getSnapshot(), null, [{
+      id: "lighting-point-shadow-cost:point-a",
+      severity: "warning",
+      code: "lighting-point-shadow-cost",
+      source: "runtime",
+      target: { kind: "light", lightId: "point-a" },
+      recoverability: "user-action",
+      message: "Point shadows render six faces.",
+      display: {
+        title: "Point light shadow is expensive",
+        detail: "Point light uses six shadow map faces."
+      }
+    }]);
+
+    expect(section.actions?.map((action) => action.id)).toEqual([
+      "lighting-preset-conservative-key-light",
+      "lighting-preset-soft-spotlight",
+      "lighting-preset-point-shadow-preview",
+      "lighting-preset-disable-all-shadows"
+    ]);
+    expect(section.actions?.find((action) => action.id === "lighting-preset-point-shadow-preview")).toMatchObject({
+      command: { type: "update-light", lightId: "point-a" },
+      problem: { code: "lighting-preset-point-shadow-cost" }
+    });
+    expect(section.diagnostics).toEqual([expect.objectContaining({
+      id: "lighting-point-shadow-cost:point-a",
+      title: "Point light shadow is expensive",
+      detail: "Point light uses six shadow map faces.",
+      runtime: true
+    })]);
+  });
+
   it("rejects shadow field drafts for unsupported light kinds before dispatch", () => {
     const editor = createEditor();
     editor.dispatch({ type: "add-light", light: { id: "ambient-a", kind: "ambient" } });

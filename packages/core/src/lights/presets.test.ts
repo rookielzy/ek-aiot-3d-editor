@@ -52,6 +52,22 @@ describe("lighting presets", () => {
     expect(preset.commands).toEqual([expect.objectContaining({ type: "add-light" })]);
   });
 
+  it("creates collision-safe ids when the requested light id belongs to another kind", () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "add-light", light: { id: "light-a", kind: "ambient" } });
+
+    const preset = buildLightingPresetCommands(store.getSnapshot().lights, "conservative-key-light", { lightId: "light-a" });
+    const result = dispatcher.dispatch({ type: "batch", commands: preset.commands });
+
+    expect(result.ok).toBe(true);
+    expect(store.getSnapshot().lights["light-a"].kind).toBe("ambient");
+    expect(store.getSnapshot().lights["light-a-2"]).toMatchObject({
+      kind: "directional",
+      shadow: { enabled: true }
+    });
+  });
+
   it("disables shadows only on shadow-capable lights", () => {
     const store = new EditorStore();
     const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());

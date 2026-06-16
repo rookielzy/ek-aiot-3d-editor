@@ -96,8 +96,8 @@ export class EditorViewportHelperState {
     this.#snapshot = freezeViewportHelperSnapshot({
       ...this.#snapshot,
       visibility,
-    hoverNodeId: visibility.hover ? this.#snapshot.hoverNodeId : null,
-    snapFeedback: visibility.snapFeedback ? this.#snapshot.snapFeedback : IDLE_VIEWPORT_SNAP_FEEDBACK
+      hoverNodeId: visibility.hover ? this.#snapshot.hoverNodeId : null,
+      snapFeedback: visibility.snapFeedback ? this.#snapshot.snapFeedback : IDLE_VIEWPORT_SNAP_FEEDBACK
     });
     this.#notify();
     return this.get();

@@ -23,6 +23,25 @@
     </div>
     <p v-else class="ek-inspector-empty">{{ section.reason }}</p>
     <p v-if="section.empty && section.reason && section.lights.length > 0" class="ek-inspector-empty">{{ section.reason }}</p>
+    <div v-if="section.actions?.length" class="ek-inspector-button-row" aria-label="Lighting presets">
+      <button
+        v-for="action in section.actions"
+        :key="action.id"
+        type="button"
+        :disabled="action.disabled"
+        :title="action.problem?.message"
+        @click="runAction(action.id)"
+      >
+        {{ action.label }}
+      </button>
+    </div>
+    <p v-if="fieldProblem && !fieldProblem.fieldId" class="ek-inspector-warning" role="alert">{{ fieldProblem.message }}</p>
+    <div v-if="section.diagnostics.length" class="ek-inspector-diagnostics" aria-label="Lighting diagnostics">
+      <p v-for="diagnostic in section.diagnostics" :key="diagnostic.id" :data-severity="diagnostic.severity">
+        <strong>{{ diagnostic.title }}</strong>
+        <span v-if="diagnostic.detail">{{ diagnostic.detail }}</span>
+      </p>
+    </div>
     <div v-if="section.activeLightId" class="ek-inspector-grid">
       <label v-for="field in section.fields" :key="field.id" class="ek-inspector-field">
         <span>{{ field.label }}</span>
@@ -97,6 +116,19 @@ function addLight(kind: LightKind | "") {
     emit("update:activeLightId", Object.keys(dispatch.snapshot.lights).at(-1) ?? null);
   }
   addKind.value = "";
+}
+
+function runAction(actionId: string) {
+  const action = props.section.actions?.find((candidate) => candidate.id === actionId);
+  fieldProblem.value = null;
+  if (!action || action.disabled || !action.command) {
+    fieldProblem.value = action?.problem ?? { code: "inspector-light-action-unavailable", message: "Lighting preset is unavailable.", severity: "info" };
+    return;
+  }
+  const dispatch = props.editor.dispatch(action.command);
+  if (!dispatch.ok) {
+    fieldProblem.value = { code: "inspector-light-dispatch-failed", message: dispatch.error ?? "Lighting preset failed.", severity: "warning" };
+  }
 }
 
 function commit(fieldId: LightFieldId, value: string) {

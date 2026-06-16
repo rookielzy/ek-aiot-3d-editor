@@ -32,7 +32,7 @@ export function buildProblemSection(snapshot: SceneSnapshot, runtimeProblems: re
   };
 }
 
-function toProblemItem(problem: Problem, acknowledged: boolean, runtime: boolean): InspectorProblemItem {
+export function toProblemItem(problem: Problem, acknowledged: boolean, runtime: boolean): InspectorProblemItem {
   return {
     id: problem.id,
     severity: problem.severity,

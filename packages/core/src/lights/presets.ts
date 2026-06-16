@@ -39,7 +39,7 @@ export function buildLightingPresetCommands(
 
 function buildConservativeKeyLight(lights: Record<string, LightDefinition>, options: LightingPresetOptions): LightingPresetResult {
   const existing = resolvePresetLight(lights, options.lightId, "directional");
-  const lightId = existing?.id ?? options.lightId ?? "key-light";
+  const lightId = existing?.id ?? resolveNewLightId(lights, options.lightId ?? "key-light");
   return {
     ok: true,
     commands: [{
@@ -85,7 +85,7 @@ function buildConservativeKeyLight(lights: Record<string, LightDefinition>, opti
 
 function buildSoftSpotlight(lights: Record<string, LightDefinition>, options: LightingPresetOptions): LightingPresetResult {
   const existing = resolvePresetLight(lights, options.lightId, "spot");
-  const lightId = existing?.id ?? options.lightId ?? "soft-spotlight";
+  const lightId = existing?.id ?? resolveNewLightId(lights, options.lightId ?? "soft-spotlight");
   return {
     ok: true,
     commands: [{
@@ -137,7 +137,7 @@ function buildSoftSpotlight(lights: Record<string, LightDefinition>, options: Li
 
 function buildPointShadowPreview(lights: Record<string, LightDefinition>, options: LightingPresetOptions): LightingPresetResult {
   const existing = resolvePresetLight(lights, options.lightId, "point");
-  const lightId = existing?.id ?? options.lightId ?? "point-shadow-preview";
+  const lightId = existing?.id ?? resolveNewLightId(lights, options.lightId ?? "point-shadow-preview");
   return {
     ok: true,
     problem: {
@@ -229,4 +229,17 @@ function unavailable(code: string, message: string): LightingPresetResult {
       severity: "warning"
     }
   };
+}
+
+function resolveNewLightId(lights: Record<string, LightDefinition>, preferredId: string): string {
+  if (!lights[preferredId]) {
+    return preferredId;
+  }
+  let index = 2;
+  let candidate = `${preferredId}-${index}`;
+  while (lights[candidate]) {
+    index += 1;
+    candidate = `${preferredId}-${index}`;
+  }
+  return candidate;
 }

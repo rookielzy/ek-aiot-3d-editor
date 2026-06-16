@@ -199,6 +199,7 @@ export interface LightInspectorSection extends InspectorSection {
   activeLightNodeId: string | null;
   lights: LightListItem[];
   addOptions: InspectorFieldOption<LightKind>[];
+  diagnostics: InspectorProblemItem[];
 }
 
 export interface CameraViewListItem {
