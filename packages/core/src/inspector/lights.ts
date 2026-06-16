@@ -1,19 +1,51 @@
-import type { AddLightCommand, RemoveLightCommand, UpdateLightCommand } from "../commands/types";
+import type { AddLightCommand, Command, RemoveLightCommand, UpdateLightCommand } from "../commands/types";
+import { buildLightingPresetCommands, type LightingPresetId } from "../lights/presets";
 import type { LightDefinition, LightKind } from "../lights/types";
+import type { Problem } from "../problems/types";
 import { findLightNodeId } from "../snapshot/nodes";
-import { colorField, numberField, parseFiniteNumber, selectField, textField, type NumberRange } from "./fields";
-import type { InspectorCommandProblem, InspectorCommandResult, LightFieldId, LightInspectorSection, LightListItem } from "./types";
+import { checkboxField, colorField, numberField, parseBoolean, parseFiniteNumber, textField, type NumberRange } from "./fields";
+import { toProblemItem } from "./problems";
+import type { InspectorActionDescriptor, InspectorCommandProblem, InspectorCommandResult, InspectorFieldDescriptor, LightFieldId, LightInspectorSection, LightListItem } from "./types";
 import type { SceneSnapshot } from "../snapshot/types";
 
 const LIGHT_KINDS: LightKind[] = ["ambient", "hemisphere", "directional", "point", "spot"];
+const LIGHTING_PRESET_OPTIONS: { id: LightingPresetId; label: string }[] = [
+  { id: "conservative-key-light", label: "Key shadow" },
+  { id: "soft-spotlight", label: "Soft spot" },
+  { id: "point-shadow-preview", label: "Point preview" },
+  { id: "disable-all-shadows", label: "Disable shadows" }
+];
 const AXES = ["x", "y", "z"] as const;
-const NUMBER_RANGES = {
+const NUMBER_RANGES: Partial<Record<LightFieldId, NumberRange>> = {
   intensity: { min: 0 },
   distance: { min: 0 },
   decay: { min: 0 },
   angle: { min: 0, max: Math.PI / 2 },
-  penumbra: { min: 0, max: 1 }
-} satisfies Partial<Record<LightFieldId, NumberRange>>;
+  penumbra: { min: 0, max: 1 },
+  "shadow.mapSize.width": { min: 1 },
+  "shadow.mapSize.height": { min: 1 },
+  "shadow.bias": {},
+  "shadow.normalBias": { min: 0 },
+  "shadow.radius": { min: 0 },
+  "shadow.camera.near": { min: 0 },
+  "shadow.camera.far": { min: 0 },
+  "shadow.camera.left": {},
+  "shadow.camera.right": {},
+  "shadow.camera.top": {},
+  "shadow.camera.bottom": {}
+};
+type ShadowNumberFieldId =
+  | "shadow.mapSize.width"
+  | "shadow.mapSize.height"
+  | "shadow.bias"
+  | "shadow.normalBias"
+  | "shadow.radius"
+  | "shadow.camera.near"
+  | "shadow.camera.far"
+  | "shadow.camera.left"
+  | "shadow.camera.right"
+  | "shadow.camera.top"
+  | "shadow.camera.bottom";
 type LightPatchResult = { ok: true; patch: Partial<LightDefinition> } | { ok: false; problem: InspectorCommandProblem };
 
 export function resolveActiveLightId(snapshot: SceneSnapshot, activeLightId?: string | null): string | null {
@@ -25,7 +57,11 @@ export function resolveActiveLightId(snapshot: SceneSnapshot, activeLightId?: st
   return null;
 }
 
-export function buildLightSection(snapshot: SceneSnapshot, activeLightId?: string | null): LightInspectorSection {
+export function buildLightSection(
+  snapshot: SceneSnapshot,
+  activeLightId?: string | null,
+  runtimeProblems: readonly Problem[] = []
+): LightInspectorSection {
   const resolvedActiveLightId = resolveActiveLightId(snapshot, activeLightId);
   const activeLightNodeId = resolvedActiveLightId ? findLightNodeId(snapshot, resolvedActiveLightId) : null;
   const activeLight = resolvedActiveLightId ? snapshot.lights[resolvedActiveLightId] : null;
@@ -40,7 +76,9 @@ export function buildLightSection(snapshot: SceneSnapshot, activeLightId?: strin
     activeLightNodeId,
     lights: buildLightList(snapshot, resolvedActiveLightId),
     addOptions: LIGHT_KINDS.map((kind) => ({ value: kind, label: formatLightKind(kind) })),
-    fields: activeLight ? buildLightFields(activeLight) : []
+    fields: activeLight ? buildLightFields(activeLight) : [],
+    actions: buildLightActions(snapshot, resolvedActiveLightId),
+    diagnostics: activeLight ? buildLightDiagnostics(snapshot, activeLight.id, runtimeProblems) : []
   };
 }
 
@@ -104,6 +142,45 @@ function buildLightList(snapshot: SceneSnapshot, activeLightId: string | null): 
   });
 }
 
+function buildLightActions(snapshot: SceneSnapshot, activeLightId: string | null): InspectorActionDescriptor[] {
+  return LIGHTING_PRESET_OPTIONS.map(({ id, label }) => {
+    const result = buildLightingPresetCommands(snapshot.lights, id, activeLightId ? { lightId: activeLightId } : {});
+    const command = commandsToActionCommand(label, result.commands);
+    return {
+      id: `lighting-preset-${id}`,
+      label,
+      ...(command ? { command } : {}),
+      disabled: !result.ok || !command,
+      ...(result.problem ? { problem: result.problem } : {})
+    };
+  });
+}
+
+function commandsToActionCommand(label: string, commands: Command[]): Command | undefined {
+  if (commands.length === 0) {
+    return undefined;
+  }
+  if (commands.length === 1) {
+    return commands[0];
+  }
+  return {
+    type: "batch",
+    label,
+    commands
+  };
+}
+
+function buildLightDiagnostics(
+  snapshot: SceneSnapshot,
+  lightId: string,
+  runtimeProblems: readonly Problem[]
+) {
+  const acknowledged = snapshot.problems.acknowledged;
+  return runtimeProblems
+    .filter((runtimeProblem) => runtimeProblem.target.kind === "light" && runtimeProblem.target.lightId === lightId)
+    .map((runtimeProblem) => toProblemItem(runtimeProblem, Boolean(acknowledged[runtimeProblem.id]), true));
+}
+
 function getSelectedLightId(snapshot: SceneSnapshot): string | null {
   const node = snapshot.selection.nodeId ? snapshot.nodes[snapshot.selection.nodeId] : undefined;
   return node?.kind === "light" && snapshot.lights[node.lightId] ? node.lightId : null;
@@ -115,8 +192,8 @@ function getLightSectionEmptyReason(snapshot: SceneSnapshot): string {
     : "Select a light node to edit scene lighting.";
 }
 
-function buildLightFields(light: LightDefinition) {
-  const fields = [
+function buildLightFields(light: LightDefinition): InspectorFieldDescriptor<unknown>[] {
+  const fields: InspectorFieldDescriptor<unknown>[] = [
     textField("name", "Name", light.name),
     colorField("color", "Color", light.color),
     numberField("intensity", "Intensity", light.intensity, { min: 0, step: 0.01 })
@@ -146,6 +223,26 @@ function buildLightFields(light: LightDefinition) {
     fields.push(numberField("angle", "Angle", light.angle, { min: 0, max: Math.PI / 2, step: 0.01 }));
     fields.push(numberField("penumbra", "Penumbra", light.penumbra ?? 0, { min: 0, max: 1, step: 0.01 }));
   }
+  if (isShadowCapableLight(light)) {
+    fields.push(
+      checkboxField("shadow.enabled", "Cast shadows", light.shadow.enabled),
+      numberField("shadow.mapSize.width", "Shadow map width", light.shadow.mapSize.width, { min: 1, step: 1 }),
+      numberField("shadow.mapSize.height", "Shadow map height", light.shadow.mapSize.height, { min: 1, step: 1 }),
+      numberField("shadow.bias", "Shadow bias", light.shadow.bias, { step: 0.0001 }),
+      numberField("shadow.normalBias", "Shadow normal bias", light.shadow.normalBias, { min: 0, step: 0.001 }),
+      numberField("shadow.radius", "Shadow radius", light.shadow.radius, { min: 0, step: 0.1 }),
+      numberField("shadow.camera.near", "Shadow near", light.shadow.camera.near, { min: 0, step: 0.1 }),
+      numberField("shadow.camera.far", "Shadow far", light.shadow.camera.far, { min: 0, step: 1 })
+    );
+    if (light.kind === "directional") {
+      fields.push(
+        numberField("shadow.camera.left", "Shadow left", light.shadow.camera.left, { step: 0.1 }),
+        numberField("shadow.camera.right", "Shadow right", light.shadow.camera.right, { step: 0.1 }),
+        numberField("shadow.camera.top", "Shadow top", light.shadow.camera.top, { step: 0.1 }),
+        numberField("shadow.camera.bottom", "Shadow bottom", light.shadow.camera.bottom, { step: 0.1 })
+      );
+    }
+  }
 
   return fields;
 }
@@ -172,6 +269,23 @@ function buildLightPatch(
       return problem(fieldId, parsed.message);
     }
     return { ok: true, patch: { [fieldId]: parsed.value } as Partial<LightDefinition> };
+  }
+  if (fieldId === "shadow.enabled") {
+    if (!isShadowCapableLight(light)) {
+      return problem(fieldId, "Shadows are not supported by this light kind.");
+    }
+    return { ok: true, patch: { shadow: { ...light.shadow, enabled: parseBoolean(value) } } as Partial<LightDefinition> };
+  }
+  if (fieldId.startsWith("shadow.")) {
+    if (!isShadowCapableLight(light)) {
+      return problem(fieldId, "Shadows are not supported by this light kind.");
+    }
+    const shadowFieldId = fieldId as ShadowNumberFieldId;
+    const parsed = parseFiniteNumber(value, fieldId, NUMBER_RANGES[shadowFieldId]);
+    if (!parsed.ok) {
+      return problem(fieldId, parsed.message);
+    }
+    return buildShadowPatch(light, shadowFieldId, parsed.value);
   }
   if (fieldId.startsWith("position.")) {
     if (!hasTransform(light)) {
@@ -202,12 +316,75 @@ function buildLightPatch(
   return problem(fieldId, "Unsupported light field.");
 }
 
+function buildShadowPatch(light: LightDefinition, fieldId: ShadowNumberFieldId, value: number): LightPatchResult {
+  if (!isShadowCapableLight(light)) {
+    return problem(fieldId, "Shadows are not supported by this light kind.");
+  }
+  if (fieldId === "shadow.mapSize.width" || fieldId === "shadow.mapSize.height") {
+    const dimension = Math.trunc(value);
+    const axis = fieldId.endsWith("width") ? "width" : "height";
+    return {
+      ok: true,
+      patch: {
+        shadow: {
+          ...light.shadow,
+          mapSize: { ...light.shadow.mapSize, [axis]: dimension }
+        }
+      } as Partial<LightDefinition>
+    };
+  }
+  if (fieldId === "shadow.bias" || fieldId === "shadow.normalBias" || fieldId === "shadow.radius") {
+    const key = fieldId.split(".")[1] as "bias" | "normalBias" | "radius";
+    return {
+      ok: true,
+      patch: {
+        shadow: {
+          ...light.shadow,
+          [key]: value
+        }
+      } as Partial<LightDefinition>
+    };
+  }
+  if (fieldId === "shadow.camera.near" || fieldId === "shadow.camera.far") {
+    const key = fieldId.endsWith("near") ? "near" : "far";
+    return {
+      ok: true,
+      patch: {
+        shadow: {
+          ...light.shadow,
+          camera: { ...light.shadow.camera, [key]: value }
+        }
+      } as Partial<LightDefinition>
+    };
+  }
+  if (fieldId.startsWith("shadow.camera.")) {
+    if (light.kind !== "directional") {
+      return problem(fieldId, "Directional shadow bounds are only supported by directional lights.");
+    }
+    const key = fieldId.split(".")[2] as "left" | "right" | "top" | "bottom";
+    return {
+      ok: true,
+      patch: {
+        shadow: {
+          ...light.shadow,
+          camera: { ...light.shadow.camera, [key]: value }
+        }
+      } as Partial<LightDefinition>
+    };
+  }
+  return problem(fieldId, "Unsupported light shadow field.");
+}
+
 function formatLightKind(kind: LightKind): string {
   return kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 
 function hasTransform(light: LightDefinition): light is LightDefinition & { transform: NonNullable<LightDefinition["transform"]> } {
   return Boolean(light.transform);
+}
+
+function isShadowCapableLight(light: LightDefinition): light is Extract<LightDefinition, { kind: "directional" | "point" | "spot" }> {
+  return light.kind === "directional" || light.kind === "point" || light.kind === "spot";
 }
 
 function problem(fieldId: string, message: string): { ok: false; problem: InspectorCommandProblem } {

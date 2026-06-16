@@ -134,7 +134,19 @@ export type LightFieldId =
   | "distance"
   | "decay"
   | "angle"
-  | "penumbra";
+  | "penumbra"
+  | "shadow.enabled"
+  | "shadow.mapSize.width"
+  | "shadow.mapSize.height"
+  | "shadow.bias"
+  | "shadow.normalBias"
+  | "shadow.radius"
+  | "shadow.camera.near"
+  | "shadow.camera.far"
+  | "shadow.camera.left"
+  | "shadow.camera.right"
+  | "shadow.camera.top"
+  | "shadow.camera.bottom";
 
 export type CameraViewFieldId =
   | "name"
@@ -187,6 +199,7 @@ export interface LightInspectorSection extends InspectorSection {
   activeLightNodeId: string | null;
   lights: LightListItem[];
   addOptions: InspectorFieldOption<LightKind>[];
+  diagnostics: InspectorProblemItem[];
 }
 
 export interface CameraViewListItem {

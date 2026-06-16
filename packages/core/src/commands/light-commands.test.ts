@@ -160,6 +160,65 @@ describe("light commands", () => {
     expect(store.getSnapshot().lights["point-a"]).toBeUndefined();
   });
 
+  it("updates directional shadow settings through command history", () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "add-light", light: { id: "sun", kind: "directional" } });
+
+    const result = dispatcher.dispatch({
+      type: "update-light",
+      lightId: "sun",
+      patch: {
+        shadow: {
+          enabled: true,
+          mapSize: { width: 2048, height: 1024 },
+          bias: -0.0001,
+          normalBias: 0.01,
+          radius: 2,
+          camera: { near: 0.2, far: 80, left: -8, right: 8, top: 6, bottom: -6 }
+        }
+      }
+    });
+
+    expect(result.ok).toBe(true);
+    expect(store.getSnapshot().lights.sun).toMatchObject({
+      kind: "directional",
+      shadow: { enabled: true, mapSize: { width: 2048, height: 1024 } }
+    });
+    expect(store.getSnapshot().nodes.sun).toMatchObject({
+      kind: "light",
+      lightId: "sun",
+      transform: store.getSnapshot().lights.sun.transform
+    });
+    dispatcher.undo();
+    expect(store.getSnapshot().lights.sun).toMatchObject({
+      kind: "directional",
+      shadow: { enabled: false, mapSize: { width: 1024, height: 1024 } }
+    });
+    dispatcher.redo();
+    expect(store.getSnapshot().lights.sun).toMatchObject({ shadow: { enabled: true } });
+  });
+
+  it("rejects shadow updates on ambient lights without mutating history", () => {
+    const store = new EditorStore();
+    const history = new CommandHistory();
+    const dispatcher = new CommandDispatcher(store, history, new AssetRegistry());
+    dispatcher.dispatch({ type: "add-light", light: { id: "ambient-a", kind: "ambient" } });
+    const before = store.getSnapshot();
+    const undoCount = history.state.undoCount;
+
+    const result = dispatcher.dispatch({
+      type: "update-light",
+      lightId: "ambient-a",
+      patch: { shadow: { enabled: true } } as never
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("does not support shadow settings");
+    expect(store.getSnapshot()).toBe(before);
+    expect(history.state.undoCount).toBe(undoCount);
+  });
+
   it("removes a light node subtree and normalizes selection", () => {
     const store = new EditorStore();
     const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
@@ -191,5 +250,20 @@ describe("light commands", () => {
     expect(result.ok).toBe(true);
     expect("transform" in store.getSnapshot().lights["ambient-a"]).toBe(false);
     expect("transform" in store.getSnapshot().nodes["ambient-a"]).toBe(false);
+  });
+
+  it("does not persist shadows on non-shadow-capable light updates", () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "add-light", light: { id: "ambient-a", kind: "ambient" } });
+
+    const result = dispatcher.dispatch({
+      type: "update-light",
+      lightId: "ambient-a",
+      patch: { intensity: 2 }
+    });
+
+    expect(result.ok).toBe(true);
+    expect("shadow" in store.getSnapshot().lights["ambient-a"]).toBe(false);
   });
 });

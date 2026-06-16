@@ -149,11 +149,11 @@ describe("Vue EditorWorkbench", () => {
       await nextTick();
       expect(wrapper.find(`[title="${title}"]`).attributes("aria-pressed")).toBe("false");
     }
-    expect(Object.values(editor.viewportHelpers.get().visibility)).toEqual([false, false, false, false, false, false]);
+    expect(Object.values(editor.viewportHelpers.get().visibility)).toEqual([false, false, false, false, false, false, true, true, false]);
 
     await wrapper.find('[title="Move mode"]').trigger("click");
     await nextTick();
-    expect(Object.values(editor.viewportHelpers.get().visibility)).toEqual([false, false, false, false, false, false]);
+    expect(Object.values(editor.viewportHelpers.get().visibility)).toEqual([false, false, false, false, false, false, true, true, false]);
     expect(JSON.stringify(editor.serialize())).not.toContain("viewportHelpers");
 
     await wrapper.find('[title="Reset camera"]').trigger("click");
@@ -781,7 +781,7 @@ describe("Vue EditorWorkbench", () => {
     wrapper.unmount();
 
     expect(editor.disposed).toBe(false);
-    expect(editor.getSnapshot().version).toBe(7);
+    expect(editor.getSnapshot().version).toBe(8);
   });
 
   it("disposes a shell-created editor on unmount", () => {

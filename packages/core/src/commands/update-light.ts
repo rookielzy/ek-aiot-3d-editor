@@ -1,5 +1,6 @@
 import { createTransform } from "../snapshot/defaults";
-import type { LightDefinition } from "../lights/types";
+import { createDefaultLightShadow } from "../lights/defaults";
+import type { LightDefinition, LightKind } from "../lights/types";
 import { findLightNodeId } from "../snapshot/nodes";
 import type { SceneSnapshot } from "../snapshot/types";
 import type { UpdateLightCommand } from "./types";
@@ -11,6 +12,9 @@ export function applyUpdateLight(snapshot: SceneSnapshot, command: UpdateLightCo
   }
   if (command.patch.kind && command.patch.kind !== light.kind) {
     throw new Error("Light kind cannot be changed by update-light.");
+  }
+  if (!supportsShadow(light.kind) && "shadow" in command.patch) {
+    throw new Error(`Light ${command.lightId} kind ${light.kind} does not support shadow settings.`);
   }
 
   const next = normalizeUpdatedLight({ ...light, ...command.patch } as LightDefinition);
@@ -55,11 +59,22 @@ function normalizeUpdatedLight(light: LightDefinition): LightDefinition {
       return hemisphere;
     }
     case "directional":
+      return {
+        ...light,
+        transform: createTransform(light.transform),
+        shadow: createDefaultLightShadow("directional", light.shadow)
+      };
     case "point":
+      return {
+        ...light,
+        transform: createTransform(light.transform),
+        shadow: createDefaultLightShadow("point", light.shadow)
+      };
     case "spot":
       return {
         ...light,
-        transform: createTransform(light.transform)
+        transform: createTransform(light.transform),
+        shadow: createDefaultLightShadow("spot", light.shadow)
       };
     default:
       return assertNever(light);
@@ -68,4 +83,8 @@ function normalizeUpdatedLight(light: LightDefinition): LightDefinition {
 
 function assertNever(value: never): never {
   throw new Error(`Unsupported light: ${JSON.stringify(value)}`);
+}
+
+function supportsShadow(kind: LightKind): boolean {
+  return kind === "directional" || kind === "point" || kind === "spot";
 }

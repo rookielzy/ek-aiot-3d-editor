@@ -59,6 +59,87 @@ describe("scene projector", () => {
     expect(projector.objects.getTarget("point-a")).toMatchObject({ kind: "light", lightId: "point-a", transformable: true });
   });
 
+  it("toggles projection-owned mesh shadow participation from enabled light shadows", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "add-light", light: { id: "sun", kind: "directional", shadow: { enabled: true } } });
+    const root = new Group();
+    const realMesh = new Mesh(new BoxGeometry(), new MeshStandardMaterial());
+    const runtimeOnlyMesh = new Mesh(new BoxGeometry(), new MeshStandardMaterial());
+    const problemMesh = new Mesh(new BoxGeometry(), new MeshStandardMaterial());
+    runtimeOnlyMesh.userData.runtimeOnly = true;
+    problemMesh.userData.problem = true;
+    root.add(realMesh, runtimeOnlyMesh, problemMesh);
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: { load: async () => root }
+    });
+
+    await projector.project(store.getSnapshot());
+
+    expect(realMesh.castShadow).toBe(true);
+    expect(realMesh.receiveShadow).toBe(true);
+    expect(runtimeOnlyMesh.castShadow).toBe(false);
+    expect(runtimeOnlyMesh.receiveShadow).toBe(false);
+    expect(problemMesh.castShadow).toBe(false);
+    expect(problemMesh.receiveShadow).toBe(false);
+    expect(projector.shadowSummary.enabled).toBe(true);
+
+    dispatcher.dispatch({
+      type: "update-light",
+      lightId: "sun",
+      patch: { shadow: { ...store.getSnapshot().lights.sun.shadow, enabled: false } }
+    });
+    await projector.project(store.getSnapshot());
+
+    expect(realMesh.castShadow).toBe(false);
+    expect(realMesh.receiveShadow).toBe(false);
+    expect(projector.shadowSummary.enabled).toBe(false);
+  });
+
+  it("does not let a stale async load re-enable mesh shadow participation", async () => {
+    let resolveSlowLoad: (scene: Group) => void = () => {};
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    dispatcher.dispatch({ type: "add-light", light: { id: "sun", kind: "directional", shadow: { enabled: true } } });
+    const oldSnapshot = store.getSnapshot();
+    dispatcher.dispatch({
+      type: "update-light",
+      lightId: "sun",
+      patch: { shadow: { ...store.getSnapshot().lights.sun.shadow, enabled: false } }
+    });
+    const newSnapshot = store.getSnapshot();
+    const oldRoot = new Group();
+    const oldMesh = new Mesh(new BoxGeometry(), new MeshStandardMaterial());
+    const newRoot = new Group();
+    const newMesh = new Mesh(new BoxGeometry(), new MeshStandardMaterial());
+    oldRoot.add(oldMesh);
+    newRoot.add(newMesh);
+    const projector = new SceneProjector({
+      resolver: new AssetResolverBridge(() => ({ uri: "/box.glb" })),
+      loader: {
+        load: vi
+          .fn()
+          .mockImplementationOnce(() => new Promise<Group>((resolve) => { resolveSlowLoad = resolve; }))
+          .mockResolvedValueOnce(newRoot)
+      }
+    });
+
+    const staleProjection = projector.project(oldSnapshot);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await projector.project(newSnapshot);
+    resolveSlowLoad(oldRoot);
+    await staleProjection;
+
+    expect(projector.objects.getObject("object-a")).toBe(newRoot);
+    expect(newMesh.castShadow).toBe(false);
+    expect(newMesh.receiveShadow).toBe(false);
+    expect(oldMesh.castShadow).toBe(false);
+    expect(oldRoot.parent).toBeNull();
+  });
+
   it("keeps non-spatial light nodes selectable but unavailable for transform targets", async () => {
     const store = new EditorStore();
     const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
@@ -380,6 +461,34 @@ describe("scene projector", () => {
     expect(projector.scene.environment).toBe(pmremTexture);
     expect(projector.scene.environmentIntensity).toBe(2);
     expect(projector.problems).toEqual([]);
+  });
+
+  it("adds lighting diagnostics to runtime problems without authored acknowledgements", async () => {
+    const store = new EditorStore();
+    const dispatcher = new CommandDispatcher(store, new CommandHistory(), new AssetRegistry());
+    dispatcher.dispatch({
+      type: "add-light",
+      light: {
+        id: "point-a",
+        kind: "point",
+        shadow: { enabled: true, mapSize: { width: 2048, height: 2048 } }
+      }
+    });
+    const projector = new SceneProjector();
+    projector.setRendererShadowMapAvailable(false);
+
+    await projector.project(store.getSnapshot());
+
+    expect(projector.problems.map((problem) => problem.code)).toEqual(expect.arrayContaining([
+      "lighting-shadow-renderer-missing",
+      "lighting-point-shadow-cost",
+      "lighting-shadow-map-high",
+      "lighting-shadow-budget-high"
+    ]));
+    expect(projector.problems).toContainEqual(expect.objectContaining({
+      target: { kind: "light", lightId: "point-a" }
+    }));
+    expect(store.getSnapshot().problems.acknowledged).toEqual({});
   });
 
   it("does not let an older projection restore removed lights after a newer snapshot wins", async () => {

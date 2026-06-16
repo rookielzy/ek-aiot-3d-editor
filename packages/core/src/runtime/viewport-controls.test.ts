@@ -34,7 +34,10 @@ describe("viewport controls", () => {
           axes: true,
           selectionBounds: true,
           hover: true,
-          snapFeedback: true
+          snapFeedback: true,
+          lightGizmos: true,
+          lightTargets: true,
+          shadowCameras: false
         }
       }
     });
@@ -92,7 +95,10 @@ describe("viewport controls", () => {
         axes: true,
         selectionBounds: true,
         hover: true,
-        snapFeedback: true
+        snapFeedback: true,
+        lightGizmos: true,
+        lightTargets: true,
+        shadowCameras: false
       },
       gridSize: 20,
       axesSize: 2

@@ -245,6 +245,81 @@ describe("React InspectorPanel", () => {
     expect(Object.values(editor.getSnapshot().lights).filter((light) => light.kind === "point")).toHaveLength(2);
   });
 
+  it("edits light shadow controls through core inspector commands", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "add-light", light: { id: "sun", kind: "directional" } });
+    editor.dispatch({ type: "select-node", nodeId: "sun" });
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+
+    render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByLabelText("Cast shadows"));
+    fireEvent.change(screen.getByLabelText("Shadow map width"), { target: { value: "2048" } });
+    fireEvent.blur(screen.getByLabelText("Shadow map width"));
+
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({
+      type: "update-light",
+      lightId: "sun",
+      patch: expect.objectContaining({
+        shadow: expect.objectContaining({ enabled: true })
+      })
+    }));
+    expect(editor.getSnapshot().lights.sun.shadow).toMatchObject({
+      enabled: true,
+      mapSize: { width: 2048 }
+    });
+  });
+
+  it("renders lighting presets and active light diagnostics", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "add-light", light: { id: "point-a", kind: "point" } });
+    editor.dispatch({ type: "select-node", nodeId: "point-a" });
+    vi.spyOn(editor, "subscribeRuntime").mockImplementation((subscriber) => {
+      subscriber({
+        getProblems: () => [{
+          id: "lighting-point-shadow-cost:point-a",
+          severity: "warning",
+          code: "lighting-point-shadow-cost",
+          source: "runtime",
+          target: { kind: "light", lightId: "point-a" },
+          recoverability: "user-action",
+          message: "Point shadows render six faces.",
+          display: {
+            title: "Point light shadow is expensive",
+            detail: "Point light uses six shadow map faces."
+          }
+        }],
+        subscribeProblems: () => () => {}
+      } as never);
+      return () => {};
+    });
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+
+    render(<InspectorPanel editor={editor} />);
+    expect(screen.getAllByText("Point light shadow is expensive")).toHaveLength(2);
+    expect(screen.getAllByText("Point light uses six shadow map faces.")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Point preview" }));
+
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({
+      type: "update-light",
+      lightId: "point-a"
+    }));
+    expect(editor.getSnapshot().lights["point-a"].shadow.enabled).toBe(true);
+  });
+
+  it("shows light shadow validation problems without dispatching invalid drafts", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "add-light", light: { id: "sun", kind: "directional" } });
+    editor.dispatch({ type: "select-node", nodeId: "sun" });
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+
+    render(<InspectorPanel editor={editor} />);
+    fireEvent.change(screen.getByLabelText("Shadow map width"), { target: { value: "0" } });
+    fireEvent.blur(screen.getByLabelText("Shadow map width"));
+
+    expect(screen.getByText(/greater than or equal to 1/)).toBeTruthy();
+    expect(dispatchSpy).not.toHaveBeenCalledWith(expect.objectContaining({ type: "update-light" }));
+  });
+
   it("edits authored camera views through core inspector commands", () => {
     const editor = createEditor();
     editor.dispatch({ type: "create-camera-view", view: { id: "view-a", name: "Hero", projection: { kind: "perspective", fov: 60 } } });

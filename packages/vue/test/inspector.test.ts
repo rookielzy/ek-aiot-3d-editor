@@ -267,6 +267,97 @@ describe("Vue InspectorPanel", () => {
     wrapper.unmount();
   });
 
+  it("edits light shadow controls through core inspector commands", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "add-light", light: { id: "sun", kind: "directional" } });
+    editor.dispatch({ type: "select-node", nodeId: "sun" });
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+    const wrapper = mount(InspectorPanel, { props: { editor } });
+
+    const castShadows = wrapper.findAll("label").find((label) => label.text().includes("Cast shadows"))?.find('input[type="checkbox"]');
+    const mapWidth = wrapper.findAll("label").find((label) => label.text().includes("Shadow map width"))?.find('input[type="number"]');
+    if (!castShadows || !mapWidth) {
+      throw new Error("Shadow controls were not rendered");
+    }
+    await castShadows.setValue(true);
+    await mapWidth.setValue("2048");
+    await mapWidth.trigger("blur");
+
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({
+      type: "update-light",
+      lightId: "sun",
+      patch: expect.objectContaining({
+        shadow: expect.objectContaining({ enabled: true })
+      })
+    }));
+    expect(editor.getSnapshot().lights.sun.shadow).toMatchObject({
+      enabled: true,
+      mapSize: { width: 2048 }
+    });
+    wrapper.unmount();
+  });
+
+  it("renders lighting presets and active light diagnostics", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "add-light", light: { id: "point-a", kind: "point" } });
+    editor.dispatch({ type: "select-node", nodeId: "point-a" });
+    const runtime = {
+        getProblems: () => [{
+          id: "lighting-point-shadow-cost:point-a",
+          severity: "warning",
+          code: "lighting-point-shadow-cost",
+          source: "runtime",
+          target: { kind: "light", lightId: "point-a" },
+          recoverability: "user-action",
+          message: "Point shadows render six faces.",
+          display: {
+            title: "Point light shadow is expensive",
+            detail: "Point light uses six shadow map faces."
+          }
+        }],
+        subscribeProblems: () => () => {}
+      };
+    vi.spyOn(editor, "getRuntime").mockReturnValue(runtime as never);
+    vi.spyOn(editor, "subscribeRuntime").mockImplementation((subscriber) => {
+      subscriber(runtime as never);
+      return () => {};
+    });
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+    const wrapper = mount(InspectorPanel, { props: { editor } });
+
+    expect(wrapper.text()).toContain("Point light shadow is expensive");
+    expect(wrapper.text()).toContain("Point light uses six shadow map faces.");
+    const preset = wrapper.findAll("button").find((button) => button.text() === "Point preview");
+    expect(preset).toBeTruthy();
+    await preset!.trigger("click");
+
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({
+      type: "update-light",
+      lightId: "point-a"
+    }));
+    expect(editor.getSnapshot().lights["point-a"].shadow.enabled).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("shows light shadow validation problems without dispatching invalid drafts", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "add-light", light: { id: "sun", kind: "directional" } });
+    editor.dispatch({ type: "select-node", nodeId: "sun" });
+    const dispatchSpy = vi.spyOn(editor, "dispatch");
+    const wrapper = mount(InspectorPanel, { props: { editor } });
+
+    const mapWidth = wrapper.findAll("label").find((label) => label.text().includes("Shadow map width"))?.find('input[type="number"]');
+    if (!mapWidth) {
+      throw new Error("Shadow map width input was not rendered");
+    }
+    await mapWidth.setValue("0");
+    await mapWidth.trigger("blur");
+
+    expect(wrapper.text()).toContain("greater than or equal to 1");
+    expect(dispatchSpy).not.toHaveBeenCalledWith(expect.objectContaining({ type: "update-light" }));
+    wrapper.unmount();
+  });
+
   it("edits authored camera views through core inspector commands", async () => {
     const editor = markRaw(createEditor());
     editor.dispatch({ type: "create-camera-view", view: { id: "view-a", name: "Hero", projection: { kind: "perspective", fov: 60 } } });

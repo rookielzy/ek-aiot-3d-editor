@@ -1,6 +1,42 @@
 import type { JsonValue, Transform } from "../snapshot/types";
 
 export type LightKind = "ambient" | "directional" | "hemisphere" | "point" | "spot";
+export type ShadowCapableLightKind = "directional" | "point" | "spot";
+
+export interface LightShadowMapSize {
+  width: number;
+  height: number;
+}
+
+export interface BaseLightShadowSettings {
+  enabled: boolean;
+  mapSize: LightShadowMapSize;
+  bias: number;
+  normalBias: number;
+  radius: number;
+  camera: {
+    near: number;
+    far: number;
+  };
+  metadata?: Record<string, JsonValue>;
+}
+
+export interface DirectionalLightShadowSettings extends Omit<BaseLightShadowSettings, "camera"> {
+  camera: BaseLightShadowSettings["camera"] & {
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+  };
+}
+
+export type PointLightShadowSettings = BaseLightShadowSettings;
+export type SpotLightShadowSettings = BaseLightShadowSettings;
+
+export type LightShadowSettings =
+  | DirectionalLightShadowSettings
+  | PointLightShadowSettings
+  | SpotLightShadowSettings;
 
 export interface BaseLightDefinition {
   id: string;
@@ -20,6 +56,7 @@ export interface DirectionalLightDefinition extends BaseLightDefinition {
   kind: "directional";
   transform: Transform;
   target: [number, number, number];
+  shadow: DirectionalLightShadowSettings;
 }
 
 export interface HemisphereLightDefinition extends BaseLightDefinition {
@@ -32,6 +69,7 @@ export interface PointLightDefinition extends BaseLightDefinition {
   transform: Transform;
   distance?: number;
   decay?: number;
+  shadow: PointLightShadowSettings;
 }
 
 export interface SpotLightDefinition extends BaseLightDefinition {
@@ -42,6 +80,7 @@ export interface SpotLightDefinition extends BaseLightDefinition {
   angle: number;
   penumbra?: number;
   decay?: number;
+  shadow: SpotLightShadowSettings;
 }
 
 export type LightDefinition =
@@ -50,3 +89,10 @@ export type LightDefinition =
   | HemisphereLightDefinition
   | PointLightDefinition
   | SpotLightDefinition;
+
+export type LegacyLightDefinition =
+  | AmbientLightDefinition
+  | (Omit<DirectionalLightDefinition, "shadow"> & { shadow?: DirectionalLightShadowSettings })
+  | HemisphereLightDefinition
+  | (Omit<PointLightDefinition, "shadow"> & { shadow?: PointLightShadowSettings })
+  | (Omit<SpotLightDefinition, "shadow"> & { shadow?: SpotLightShadowSettings });

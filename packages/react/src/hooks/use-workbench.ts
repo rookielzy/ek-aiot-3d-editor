@@ -1,4 +1,4 @@
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import {
   DEFAULT_WORKBENCH_VIEWPORT_HELPER_VISIBILITY,
   EditorViewportHelperState,
@@ -158,7 +158,9 @@ export interface UseWorkbenchResult extends WorkbenchContext {
 export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchResult {
   const editor = useEditor(options) as EditorWithGlbImport;
   const viewportHelperStore = getViewportHelperStore(editor);
-  ensureDefaultWorkbenchViewportHelpers(viewportHelperStore);
+  useEffect(() => {
+    ensureDefaultWorkbenchViewportHelpers(viewportHelperStore);
+  }, [viewportHelperStore]);
   const snap = useSyncExternalStore(
     (listener) => editor.subscribeSnap(listener),
     () => editor.snap.get(),

@@ -65,6 +65,11 @@
   min-width: 0;
 }
 
+.ek-inspector-field--checkbox {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
 .ek-inspector-field span {
   color: var(--ek-panel-muted);
   font-size: 0.75rem;
@@ -90,6 +95,13 @@
 
 .ek-inspector input[type="color"] {
   padding: 0.2rem;
+}
+
+.ek-inspector input[type="checkbox"] {
+  width: 1.1rem;
+  min-width: 1.1rem;
+  min-height: 1.1rem;
+  padding: 0;
 }
 
 .ek-inspector input:focus-visible,
@@ -259,6 +271,45 @@
 .ek-inspector-compact-action {
   padding-inline: 0.55rem;
   cursor: pointer;
+}
+
+.ek-inspector-diagnostics {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.ek-inspector-diagnostics p {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  border-left: 3px solid #d0d7e2;
+  background: #ffffff;
+}
+
+.ek-inspector-diagnostics p[data-severity="warning"] {
+  border-left-color: #f79009;
+}
+
+.ek-inspector-diagnostics p[data-severity="error"] {
+  border-left-color: #d92d20;
+}
+
+.ek-inspector-diagnostics strong,
+.ek-inspector-diagnostics span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ek-inspector-diagnostics strong {
+  font-size: 0.78rem;
+}
+
+.ek-inspector-diagnostics span {
+  color: var(--ek-panel-muted);
+  font-size: 0.72rem;
 }
 
 .ek-inspector-danger {

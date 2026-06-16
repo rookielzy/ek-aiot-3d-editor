@@ -125,8 +125,11 @@ Imported target TransformControls 只会附着到 runtime map 标记为可独立
 - bounds：selected 和 primary selected target 的边界框。
 - hover：pointer hover 命中 target 时的 transient 边界反馈。
 - guide：TransformControls drag 期间的 snap feedback 参考线/状态。
+- lights：directional / hemisphere / point / spot light gizmo。
+- targets：directional / spot light target marker 和 target line。
+- shadow cam：enabled shadow light 的 shadow camera frustum helper。
 
-这些 helper 都由 core runtime/session 管理。Grid、floor、axes、hover 和 guide 会被标记为 `runtimeOnly`，不会进入 `ThreeObjectMap.targetEntries()`，因此不会成为 picking/marquee selection target。Bounds 继续使用 runtime target map；选择 imported GLB target 时，边界框包围 matched imported target object，而不是 owner GLB object。
+这些 helper 都由 core runtime/session 管理。Grid、floor、axes、hover、guide、light gizmo、target helper 和 shadow camera helper 会被标记为 `runtimeOnly`，不会进入 `ThreeObjectMap.targetEntries()`，因此不会成为 picking/marquee selection target。Bounds 继续使用 runtime target map；选择 imported GLB target 时，边界框包围 matched imported target object，而不是 owner GLB object。
 
 Helper visibility、hover target、snap feedback status、guide geometry、marquee overlay/drag rectangle/candidate IDs、Three.js helper object 和 TransformControls helper 都不属于 durable scene authoring state。它们不会进入 `SceneSnapshot`、history command、`editor.serialize()` 或 `.ek3d` `scene.json`。React/Vue toolbar 和 viewport overlay 只通过 core session API 渲染/切换这些 transient 状态，不拥有 selection、transform 或 snap 语义。
 
@@ -211,6 +214,10 @@ editor.dispatch({
 ```
 
 每个 light payload 都有对应 light node。选择 light list 中的灯光会选择对应 light node，而不是把当前灯光目标保存在框架本地状态里。`activeLightId` 仍作为 React/Vue context 的兼容字段暴露，但它从 inspector/node selection 派生。
+
+Directional、point 和 spot lights 支持 shadow authoring：enable/disable、mapSize、bias、normalBias、radius、near/far，directional 还支持 shadow camera bounds。Shadow edits 通过 normal light command/history 写入 snapshot；ambient 和 hemisphere 不暴露 shadow fields。Lighting preset builders 会返回普通 command list，例如 conservative key light、soft spotlight、point shadow preview 和 disable all shadows；preset 不直接改 renderer 或 Three.js light。
+
+Runtime 根据当前 shadow summary 只在需要时启用 renderer `shadowMap`，并把 durable shadow settings 投影到 Three.js light shadow camera/map。Projection-owned meshes 在 shadow-enabled scene 中默认 cast/receive shadow，runtime helpers、pick proxies 和 problem placeholders 不参与。Point shadow cost、过高 mapSize、shadow budget、过宽 frustum/range 和 renderer shadow capability 缺失都会作为 runtime problems 出现在 Problems 面板和 hierarchy badge；这些 diagnostics 不进入 Snapshot。
 
 ## 材质
 

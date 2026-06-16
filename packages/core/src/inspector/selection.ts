@@ -46,7 +46,7 @@ export function buildInspectorModel(snapshot: SceneSnapshot, options: BuildInspe
     transform: buildTransformSection(snapshot),
     material: buildMaterialSection(snapshot, runtimeProblems),
     environment: buildEnvironmentSection(snapshot),
-    lights: buildLightSection(snapshot, options.activeLightId),
+    lights: buildLightSection(snapshot, options.activeLightId, runtimeProblems),
     cameras: buildCameraSection(snapshot, {
       activeCameraViewId,
       runtimeReady: options.runtimeReady

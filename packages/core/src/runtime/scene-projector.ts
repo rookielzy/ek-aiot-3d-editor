@@ -10,7 +10,8 @@ import { EnvironmentProjector } from "./environment-projector";
 import type { GltfLoaderAdapter } from "./gltf-loader-adapter";
 import { GlbImportError, PlaceholderGltfLoaderAdapter } from "./gltf-loader-adapter";
 import { resolveImportedGlbTargets, type RuntimeImportedTargetMatch } from "./imported-target-resolver";
-import { LightProjector } from "./light-projector";
+import { LightProjector, type RuntimeLightShadowSummary } from "./light-projector";
+import { deriveLightingDiagnostics } from "./lighting-diagnostics";
 import { MaterialProjector } from "./material-projector";
 import type { RuntimePmremAdapter } from "./pmrem-adapter";
 import { disposeObjectTree } from "./disposal";
@@ -53,6 +54,7 @@ export class SceneProjector {
   #runtimeObjectAssetSignatures = new Map<string, string>();
   #projectionGeneration = 0;
   #disposed = false;
+  #rendererShadowMapAvailable = true;
 
   constructor(options: SceneProjectorOptions = {}) {
     this.scene = options.scene ?? new Scene();
@@ -74,6 +76,14 @@ export class SceneProjector {
 
   get problems(): Problem[] {
     return [...this.#problems];
+  }
+
+  get shadowSummary(): RuntimeLightShadowSummary {
+    return this.#lights.shadowSummary;
+  }
+
+  setRendererShadowMapAvailable(available: boolean): void {
+    this.#rendererShadowMapAvailable = available;
   }
 
   async project(snapshot: SceneSnapshot): Promise<void> {
@@ -98,6 +108,7 @@ export class SceneProjector {
       }
     }
     this.#lights.release(activeLightIds);
+    this.#syncMeshShadowParticipation(this.#lights.shadowSummary.enabled);
 
     const materialProblems = await this.#materials.project(snapshot, this.objects.targetEntries());
     if (!this.#isActive(generation)) {
@@ -110,6 +121,10 @@ export class SceneProjector {
       return;
     }
     this.#appendProblems(environmentProblems);
+
+    this.#appendProblems(deriveLightingDiagnostics(snapshot, this.#lights.shadowSummary, {
+      rendererShadowMapAvailable: this.#rendererShadowMapAvailable
+    }));
   }
 
   getLight(lightId: string): Object3D | undefined {
@@ -118,6 +133,25 @@ export class SceneProjector {
 
   getLightTarget(lightId: string): Object3D | undefined {
     return this.#lights.getTarget(lightId);
+  }
+
+  #syncMeshShadowParticipation(enabled: boolean): void {
+    const roots = new Set<Object3D>();
+    for (const [, target] of this.objects.targetEntries()) {
+      if (target.kind === "object" || target.kind === "imported") {
+        roots.add(target.object);
+      }
+    }
+
+    for (const root of roots) {
+      root.traverse((object) => {
+        if (!(object instanceof Mesh) || object.userData.runtimeOnly || object.userData.problem) {
+          return;
+        }
+        object.castShadow = enabled;
+        object.receiveShadow = enabled;
+      });
+    }
   }
 
   async #projectNode(
