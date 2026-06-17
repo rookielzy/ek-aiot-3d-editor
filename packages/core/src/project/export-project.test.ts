@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { attachGlbImportManifestMetadata, createGlbImportManifest } from "../assets/import-pipeline";
 import { decodeArchiveJson, defaultArchiveAdapter } from "./archive-adapter";
-import { PROJECT_SCENE_PATH } from "./package-types";
+import { PROJECT_MANIFEST_PATH, PROJECT_SCENE_PATH } from "./package-types";
 import { createEditor } from "../editor/create-editor";
 import type { EditorMarqueeSelectionState } from "../editor/marquee-selection-state";
 
@@ -297,6 +297,44 @@ describe("project export", () => {
     expect(serializedScene).not.toContain("isTexture");
     expect(serializedScene).not.toContain("object URL");
     expect(serializedScene).not.toContain("imported-material-slot-unresolved");
+  });
+
+  it("does not export locale, dictionaries, translated copy, or descriptor-only UI data", () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      name: "Pump A",
+      asset: { id: "asset-a", label: "Pump A", source: new Uint8Array([1, 2, 3]) }
+    });
+
+    const result = editor.exportProject();
+
+    expect(result.ok).toBe(true);
+    const archiveEntries = defaultArchiveAdapter.read(result.packageBytes as Uint8Array);
+    const serializedManifest = new TextDecoder().decode(archiveEntries.find((entry) => entry.path === PROJECT_MANIFEST_PATH)!.bytes);
+    const serializedScene = new TextDecoder().decode(archiveEntries.find((entry) => entry.path === PROJECT_SCENE_PATH)!.bytes);
+    const manifest = JSON.parse(serializedManifest);
+    const scene = JSON.parse(serializedScene);
+    const packageText = `${serializedManifest}\n${serializedScene}`;
+    expect(manifest).toMatchObject({
+      version: 1,
+      scenePath: PROJECT_SCENE_PATH,
+      assets: {
+        "asset-a": {
+          id: "asset-a",
+          kind: "glb"
+        }
+      }
+    });
+    expect(scene.objects["object-a"].name).toBe("Pump A");
+    expect(scene.assets["asset-a"].label).toBe("Pump A");
+    expect(serializedScene).toContain("Pump A");
+    expect(packageText).not.toContain("workbench.");
+    expect(packageText).not.toContain("Asset {name}");
+    expect(packageText).not.toContain("locale");
+    expect(packageText).not.toContain("dictionary");
+    expect(packageText).not.toContain("translated");
   });
 });
 

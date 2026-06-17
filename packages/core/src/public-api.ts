@@ -165,6 +165,14 @@ export type {
   EnvironmentPresetResult
 } from "./environment/presets";
 export type { HistoryState } from "./history/history";
+export type {
+  CreateMessageDescriptorInput,
+  MessageDescriptor,
+  MessageDescriptorValues,
+  MessageFallback,
+  MessageKey,
+  SupportedLocale
+} from "./i18n/messages";
 export type { NodeSelectionInput, SelectionInput, SelectionMode, SelectionState } from "./selection/selection";
 export type {
   AssetOption,
@@ -342,6 +350,12 @@ export type {
 } from "./snapshot/types";
 
 export { createAuthoredCameraView, createAuthoredCameraViewInput, createEmptyPresentationState } from "./cameras/defaults";
+export {
+  BUILTIN_LOCALES,
+  createMessageDescriptor,
+  isMessageDescriptorValues,
+  isMessageKey
+} from "./i18n/messages";
 export { resolveDefaultPresentationView } from "./cameras/resolve";
 export { createEditor } from "./editor/create-editor";
 export { createAdvancedEditorOperations, createMemoryClipboard } from "./editor/operations";

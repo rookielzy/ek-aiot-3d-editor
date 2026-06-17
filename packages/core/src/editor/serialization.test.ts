@@ -241,4 +241,58 @@ describe("snapshot serialization", () => {
     expect(serializedText).not.toContain("shadowMap");
     expect(serializedText).not.toContain("runtimeOnly");
   });
+
+  it("keeps i18n descriptor data out of durable snapshots in this slice", () => {
+    const snapshot: SceneSnapshot = {
+      ...createEmptySnapshot("scene-a"),
+      assets: {
+        "asset-a": {
+          id: "asset-a",
+          kind: "glb",
+          label: "Pump A"
+        }
+      },
+      nodes: {
+        "object-a": {
+          id: "object-a",
+          kind: "object",
+          name: "Pump A",
+          objectId: "object-a",
+          parentId: null,
+          children: [],
+          transform: createTransform()
+        }
+      },
+      rootNodeIds: ["object-a"],
+      objects: {
+        "object-a": {
+          id: "object-a",
+          name: "Pump A",
+          kind: "glb",
+          parentId: null,
+          children: [],
+          asset: {
+            id: "asset-a",
+            kind: "glb",
+            label: "Pump A"
+          },
+          transform: createTransform()
+        }
+      },
+      rootObjectIds: ["object-a"]
+    };
+
+    const serialized = serializeSnapshot(snapshot);
+    const serializedText = JSON.stringify(serialized);
+
+    expect(serialized.scene).toEqual({ id: "scene-a", name: "Untitled scene" });
+    expect(serialized.objects["object-a"].name).toBe("Pump A");
+    expect(serialized.assets["asset-a"].label).toBe("Pump A");
+    expect(serializedText).toContain("Pump A");
+    expect(serializedText).not.toContain("workbench.");
+    expect(serializedText).not.toContain("Runtime ready");
+    expect(serializedText).not.toContain("locale");
+    expect(serializedText).not.toContain("dictionary");
+    expect(serializedText).not.toContain("translated");
+  });
 });
