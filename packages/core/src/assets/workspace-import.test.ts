@@ -131,7 +131,19 @@ describe("workbench asset import bridge", () => {
       committed: false,
       diagnostics: [{
         code: "workbench-import-raster-kind-required",
-        actionLabel: "Choose intent"
+        actionLabel: "Choose intent",
+        titleDescriptor: {
+          key: "workbenchImport.diagnostic.workbench.import.raster.kind.required.title",
+          fallback: "Choose image or texture"
+        },
+        detailDescriptor: {
+          values: expect.objectContaining({
+            fileName: "label.jpg"
+          })
+        },
+        actionLabelDescriptor: {
+          key: "workbenchImport.diagnostic.workbench.import.raster.kind.required.actionLabel"
+        }
       }]
     });
     expect(editor.getSnapshot().assets["image-a"]).toBeUndefined();

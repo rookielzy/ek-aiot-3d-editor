@@ -18,6 +18,8 @@ import type {
 } from "../environment/types";
 import { CUBEMAP_FACE_ROLES } from "../environment/validation";
 import type { AssetKind, AssetReference, SceneSnapshot } from "../snapshot/types";
+import { createDisplayMessageDescriptor } from "../i18n/display-messages";
+import { inspectorActionLabelDescriptor, inspectorCommandMessageDescriptor, inspectorSectionTitleDescriptor } from "./display-messages";
 import { assetField, colorField, numberField, parseFiniteNumber, selectField, validateAssetKind, type NumberRange } from "./fields";
 import type {
   EnvironmentFieldId,
@@ -41,16 +43,17 @@ export function buildEnvironmentSection(snapshot: SceneSnapshot): InspectorSecti
   return {
     id: "environment",
     title: "Environment",
+    titleDescriptor: inspectorSectionTitleDescriptor("environment", "Environment"),
     enabled: true,
     actions: buildEnvironmentActions(snapshot),
     fields: [
-      selectField("lighting.source.kind", "Lighting source", environment.lighting.source.kind, LIGHTING_SOURCE_KINDS.map((kind) => ({ value: kind, label: formatSourceKind(kind) }))),
+      selectField("lighting.source.kind", "Lighting source", environment.lighting.source.kind, LIGHTING_SOURCE_KINDS.map(sourceKindOption)),
       assetField("lighting.source.assetId", "Lighting asset", lightingAssetId, snapshot, ["texture", "image", "hdr"]),
       numberField("environment.intensity", "Lighting intensity", environment.lighting.intensity, { min: 0, step: 0.01 }),
       numberField("environment.rotation.x", "Lighting rotation X", environment.lighting.rotation.x, { step: 0.01 }),
       numberField("environment.rotation.y", "Lighting rotation Y", environment.lighting.rotation.y, { step: 0.01 }),
       numberField("environment.rotation.z", "Lighting rotation Z", environment.lighting.rotation.z, { step: 0.01 }),
-      selectField("background.source.kind", "Background source", environment.background.source.kind, BACKGROUND_SOURCE_KINDS.map((kind) => ({ value: kind, label: formatSourceKind(kind) }))),
+      selectField("background.source.kind", "Background source", environment.background.source.kind, BACKGROUND_SOURCE_KINDS.map(sourceKindOption)),
       colorField("background.color", "Background color", getBackgroundColor(environment.background.source), environment.background.source.kind !== "solid"),
       assetField("background.source.assetId", "Background asset", backgroundAssetId, snapshot, ["texture", "image", "hdr"]),
       numberField("background.intensity", "Background intensity", environment.background.intensity ?? 1, { min: 0, step: 0.01 }),
@@ -352,17 +355,25 @@ function presetAction(
   if (!result.ok) {
     return disabledAction(id, label, result.problem.message);
   }
-  return { id, label, command: result.command };
+  return { id, label, labelDescriptor: inspectorActionLabelDescriptor(id, label), command: result.command };
 }
 
 function disabledAction(id: string, label: string, message: string): InspectorActionDescriptor {
   return {
     id,
     label,
+    labelDescriptor: inspectorActionLabelDescriptor(id, label),
     disabled: true,
     problem: {
       code: "environment-preset-unavailable",
       message,
+      messageDescriptor: createDisplayMessageDescriptor({
+        namespace: "inspector",
+        path: "action.environment.presetUnavailable",
+        field: "message",
+        fallback: message,
+        values: { actionId: id }
+      }),
       severity: "info"
     }
   };
@@ -375,6 +386,12 @@ function flatBackgroundBlurProblem(environment: SceneEnvironment): InspectorComm
   return {
     code: "environment-background-blur-unsupported",
     message: "Background blur does not affect flat image backgrounds.",
+    messageDescriptor: createDisplayMessageDescriptor({
+      namespace: "inspector",
+      path: "problem.environment.backgroundBlurUnsupported",
+      field: "message",
+      fallback: "Background blur does not affect flat image backgrounds."
+    }),
     severity: "info"
   };
 }
@@ -388,5 +405,29 @@ function formatFaceRole(role: CubemapFaceRole): string {
 }
 
 function problem(fieldId: string, message: string): { ok: false; problem: InspectorCommandProblem } {
-  return { ok: false, problem: { code: "inspector-environment-invalid", fieldId, message, severity: "warning" } };
+  return {
+    ok: false,
+    problem: {
+      code: "inspector-environment-invalid",
+      fieldId,
+      message,
+      messageDescriptor: inspectorCommandMessageDescriptor("command.environment.invalid", fieldId, message),
+      severity: "warning"
+    }
+  };
+}
+
+function sourceKindOption(kind: EnvironmentLightingSourceKind | EnvironmentBackgroundSourceKind) {
+  const label = formatSourceKind(kind);
+  return {
+    value: kind,
+    label,
+    labelDescriptor: createDisplayMessageDescriptor({
+      namespace: "inspector",
+      path: `option.environment.source.${kind}`,
+      field: "label",
+      fallback: label,
+      values: { kind }
+    })
+  };
 }

@@ -6,6 +6,8 @@ import type { MaterialAssignmentTarget, MaterialPatch, MaterialSide, MeshStandar
 import type { Problem } from "../problems/types";
 import { isColorString } from "../snapshot/primitives";
 import type { SceneImportedGlbNode, SceneObject, SceneSnapshot } from "../snapshot/types";
+import { createDisplayMessageDescriptor } from "../i18n/display-messages";
+import { inspectorCommandMessageDescriptor, inspectorSectionReasonDescriptor, inspectorSectionTitleDescriptor } from "./display-messages";
 import { assetField, checkboxField, colorField, numberField, parseBoolean, parseFiniteNumber, selectField, validateAssetKind, type NumberRange } from "./fields";
 import type { InspectorCommandProblem, InspectorCommandResult, InspectorFieldDescriptor, MaterialFieldId, MaterialInspectorSection, MaterialInspectorTarget } from "./types";
 
@@ -33,14 +35,16 @@ export function buildMaterialSection(snapshot: SceneSnapshot, runtimeProblems: r
   return {
     id: "material",
     title: "Material",
+    titleDescriptor: inspectorSectionTitleDescriptor("material", "Material"),
     enabled: !disabled,
     empty: disabled,
     reason: disabled ? getDisabledReason(snapshot, targets) : undefined,
+    ...(disabled ? { reasonDescriptor: inspectorSectionReasonDescriptor("material", getDisabledReason(snapshot, targets)) } : {}),
     assignmentId,
     materialId: material?.id ?? null,
     activeTargetKey: activeTarget?.key ?? null,
     targets,
-    sideOptions: MATERIAL_SIDES.map((side) => ({ value: side, label: formatSide(side) })),
+    sideOptions: MATERIAL_SIDES.map(sideOption),
     fields: buildMaterialFieldsForTarget(snapshot, activeTarget, disabled)
   };
 }
@@ -63,7 +67,7 @@ export function buildMaterialFieldsForTarget(
     numberField("emissiveIntensity", "Emissive intensity", override.emissiveIntensity ?? 0, { disabled, min: 0, step: 0.01 }),
     numberField("opacity", "Opacity", override.opacity ?? 1, { disabled, min: 0, max: 1, step: 0.01 }),
     checkboxField("transparent", "Transparent", override.transparent ?? false, disabled),
-    selectField("side", "Side", override.side ?? "front", MATERIAL_SIDES.map((side) => ({ value: side, label: formatSide(side) })), disabled),
+    selectField("side", "Side", override.side ?? "front", MATERIAL_SIDES.map(sideOption), disabled),
     numberField("envMapIntensity", "Environment intensity", override.envMapIntensity ?? 1, { disabled, min: 0, step: 0.01 }),
     ...TEXTURE_SLOTS.map((slot) =>
       assetField(`textures.${slot}.assetId`, formatTextureSlot(slot), override.textures?.[slot]?.assetId ?? "", snapshot, ["texture", "image"], disabled)
@@ -455,5 +459,29 @@ function formatSlotLabel(label: string, nodeId: string): string {
 }
 
 function problem(fieldId: string, message: string): { ok: false; problem: InspectorCommandProblem } {
-  return { ok: false, problem: { code: "inspector-material-invalid", fieldId, message, severity: "warning" } };
+  return {
+    ok: false,
+    problem: {
+      code: "inspector-material-invalid",
+      fieldId,
+      message,
+      messageDescriptor: inspectorCommandMessageDescriptor("command.material.invalid", fieldId, message),
+      severity: "warning"
+    }
+  };
+}
+
+function sideOption(side: MaterialSide) {
+  const label = formatSide(side);
+  return {
+    value: side,
+    label,
+    labelDescriptor: createDisplayMessageDescriptor({
+      namespace: "inspector",
+      path: `option.material.side.${side}`,
+      field: "label",
+      fallback: label,
+      values: { side }
+    })
+  };
 }

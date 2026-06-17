@@ -1,5 +1,6 @@
 import type { SetNodeTransformCommand } from "../commands/types";
 import type { SceneNode, SceneSnapshot, Transform } from "../snapshot/types";
+import { inspectorCommandMessageDescriptor, inspectorSectionReasonDescriptor, inspectorSectionTitleDescriptor } from "./display-messages";
 import { numberField } from "./fields";
 import { getSelectedNodeTarget } from "./node-targets";
 import type { InspectorCommandResult, InspectorSection, TransformAxis, TransformFieldId, TransformVectorName } from "./types";
@@ -15,9 +16,11 @@ export function buildTransformSection(snapshot: SceneSnapshot): InspectorSection
   return {
     id: "transform",
     title: "Transform",
+    titleDescriptor: inspectorSectionTitleDescriptor("transform", "Transform"),
     enabled: !disabled,
     empty: disabled,
     reason: disabled ? target.transformUnavailableReason : undefined,
+    ...(disabled && target.transformUnavailableReason ? { reasonDescriptor: inspectorSectionReasonDescriptor("transform", target.transformUnavailableReason) } : {}),
     fields: getTransformVectors(target.node?.kind).flatMap((vector) =>
       AXES.map((axis, axisIndex) =>
         numberField(`${vector}.${axis}`, `${formatVector(vector)} ${axis.toUpperCase()}`, target.transform?.[vector][axisIndex] ?? defaultTransformValue(vector), {
@@ -71,5 +74,14 @@ function formatVector(vector: TransformVectorName): string {
 }
 
 function problem(fieldId: string, message: string): InspectorCommandResult {
-  return { ok: false, problem: { code: "inspector-transform-invalid", fieldId, message, severity: "warning" } };
+  return {
+    ok: false,
+    problem: {
+      code: "inspector-transform-invalid",
+      fieldId,
+      message,
+      messageDescriptor: inspectorCommandMessageDescriptor("command.transform.invalid", fieldId, message),
+      severity: "warning"
+    }
+  };
 }

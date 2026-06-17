@@ -1,5 +1,6 @@
 import type { AssetOption, InspectorFieldDescriptor, InspectorFieldOption } from "./types";
 import type { AssetKind, AssetReference, SceneSnapshot } from "../snapshot/types";
+import { createDisplayMessageDescriptor } from "../i18n/display-messages";
 
 export interface NumberRange {
   min?: number;
@@ -15,6 +16,7 @@ export function numberField(
   return {
     id,
     label,
+    labelDescriptor: fieldLabelDescriptor(id, label),
     kind: "number",
     value,
     ...options
@@ -25,6 +27,7 @@ export function colorField(id: string, label: string, value = "#ffffff", disable
   return {
     id,
     label,
+    labelDescriptor: fieldLabelDescriptor(id, label),
     kind: "color",
     value: normalizeColorInputValue(value),
     disabled
@@ -35,6 +38,7 @@ export function textField(id: string, label: string, value: string, disabled = f
   return {
     id,
     label,
+    labelDescriptor: fieldLabelDescriptor(id, label),
     kind: "text",
     value,
     disabled
@@ -45,6 +49,7 @@ export function checkboxField(id: string, label: string, value: boolean, disable
   return {
     id,
     label,
+    labelDescriptor: fieldLabelDescriptor(id, label),
     kind: "checkbox",
     value,
     disabled
@@ -61,6 +66,7 @@ export function selectField<T extends string>(
   return {
     id,
     label,
+    labelDescriptor: fieldLabelDescriptor(id, label),
     kind: "select",
     value,
     options,
@@ -79,6 +85,7 @@ export function assetField(
   return {
     id,
     label,
+    labelDescriptor: fieldLabelDescriptor(id, label),
     kind: "asset",
     value,
     assetKinds,
@@ -152,4 +159,14 @@ function normalizeColorInputValue(value: string): string {
   }
 
   return `#${channels.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function fieldLabelDescriptor(id: string, label: string) {
+  return createDisplayMessageDescriptor({
+    namespace: "inspector",
+    path: `field.${id}`,
+    field: "label",
+    fallback: label,
+    values: { fieldId: id }
+  });
 }

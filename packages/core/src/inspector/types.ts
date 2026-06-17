@@ -5,6 +5,7 @@ import type { MaterialAssignmentTarget, MaterialSide, TextureSlotName } from "..
 import type { Problem, ProblemRecoverability, ProblemSeverity, ProblemSource, ProblemTarget } from "../problems/types";
 import type { AssetKind, AssetReference, SceneNode, SceneObject } from "../snapshot/types";
 import type { LightDefinition } from "../lights/types";
+import type { MessageDescriptor } from "../i18n/messages";
 
 export type InspectorSectionId = "transform" | "material" | "environment" | "lights" | "cameras" | "problems";
 export type InspectorFieldKind = "number" | "color" | "select" | "checkbox" | "asset" | "text";
@@ -12,11 +13,13 @@ export type InspectorFieldKind = "number" | "color" | "select" | "checkbox" | "a
 export interface InspectorFieldOption<T extends string = string> {
   value: T;
   label: string;
+  labelDescriptor?: MessageDescriptor;
 }
 
 export interface InspectorFieldDescriptor<T = unknown> {
   id: string;
   label: string;
+  labelDescriptor?: MessageDescriptor;
   kind: InspectorFieldKind;
   value: T;
   disabled?: boolean;
@@ -32,6 +35,7 @@ export interface InspectorFieldDescriptor<T = unknown> {
 export interface InspectorCommandProblem {
   code: string;
   message: string;
+  messageDescriptor?: MessageDescriptor;
   fieldId?: string;
   severity?: ProblemSeverity;
 }
@@ -43,6 +47,7 @@ export type InspectorCommandResult =
 export interface InspectorActionDescriptor {
   id: string;
   label: string;
+  labelDescriptor?: MessageDescriptor;
   command?: Command;
   disabled?: boolean;
   problem?: InspectorCommandProblem;
@@ -51,9 +56,11 @@ export interface InspectorActionDescriptor {
 export interface InspectorSection<TField extends InspectorFieldDescriptor = InspectorFieldDescriptor> {
   id: InspectorSectionId;
   title: string;
+  titleDescriptor?: MessageDescriptor;
   enabled: boolean;
   empty?: boolean;
   reason?: string;
+  reasonDescriptor?: MessageDescriptor;
   fields: TField[];
   actions?: InspectorActionDescriptor[];
 }
@@ -226,18 +233,22 @@ export interface InspectorProblemItem {
   source: ProblemSource;
   target: ProblemTarget;
   title: string;
+  titleDescriptor?: MessageDescriptor;
   detail?: string;
+  detailDescriptor?: MessageDescriptor;
   assetId?: string;
   objectId?: string;
   recoverability: ProblemRecoverability;
   acknowledged: boolean;
   actionLabel?: string;
+  actionLabelDescriptor?: MessageDescriptor;
   runtime: boolean;
 }
 
 export interface ProblemInspectorSection {
   id: "problems";
   title: string;
+  titleDescriptor?: MessageDescriptor;
   enabled: true;
   fields: [];
   problems: InspectorProblemItem[];

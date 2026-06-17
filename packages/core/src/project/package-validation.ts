@@ -1,4 +1,5 @@
 import { collectAssetReferenceLocations } from "../assets/workspace";
+import { createDisplayMessageDescriptor } from "../i18n/display-messages";
 import { isSupportedAssetKind } from "../snapshot/primitives";
 import type { AssetReference, SceneSnapshot } from "../snapshot/types";
 import { isJsonCompatible, validateSceneSnapshot } from "../snapshot/validation";
@@ -124,7 +125,21 @@ export function createProjectProblem(code: string, message: string, metadata?: R
     message,
     display: {
       title: formatProblemTitle(code),
-      detail: message
+      titleDescriptor: createDisplayMessageDescriptor({
+        namespace: "problem",
+        path: `project.${code}`,
+        field: "title",
+        fallback: formatProblemTitle(code),
+        values: { code, assetId: assetId ?? null }
+      }),
+      detail: message,
+      detailDescriptor: createDisplayMessageDescriptor({
+        namespace: "problem",
+        path: `project.${code}`,
+        field: "detail",
+        fallback: message,
+        values: { code, assetId: assetId ?? null }
+      })
     },
     ...(metadata && isJsonCompatible(metadata) ? { metadata } : {})
   };

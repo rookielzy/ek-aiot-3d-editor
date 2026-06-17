@@ -1,4 +1,5 @@
 import type { JsonValue } from "../snapshot/types";
+import type { MessageDescriptor } from "../i18n/messages";
 
 export type ProblemSeverity = "info" | "warning" | "error";
 export type ProblemSource = "validation" | "command" | "asset-resolver" | "runtime";
@@ -18,8 +19,11 @@ export type ProblemTarget =
 
 export interface ProblemDisplay {
   title: string;
+  titleDescriptor?: MessageDescriptor;
   detail?: string;
+  detailDescriptor?: MessageDescriptor;
   actionLabel?: string;
+  actionLabelDescriptor?: MessageDescriptor;
   metadata?: Record<string, JsonValue>;
 }
 

@@ -30,7 +30,15 @@ describe("asset workspace", () => {
       materialId: "mat-a",
       assignmentId: "object:object-a",
       objectId: "object-a",
-      slot: "map"
+      slot: "map",
+      labelDescriptor: {
+        key: "assetWorkspace.reference.materialTexture.label",
+        fallback: "{materialName} {slotLabel}",
+        values: expect.objectContaining({
+          materialName: "Panel Material",
+          slot: "map"
+        })
+      }
     });
     expect(JSON.parse(JSON.stringify(locations))).toEqual(locations);
   });
@@ -235,7 +243,11 @@ describe("asset workspace", () => {
       problemCount: 1,
       highestProblemSeverity: "warning",
       recoverable: true,
-      actionLabel: "Replace asset"
+      actionLabel: "Replace asset",
+      actionLabelDescriptor: {
+        key: "problem.asset.unresolved.actionLabel",
+        fallback: "Replace asset"
+      }
     });
     expect(workspace.items.find((item) => item.id === "missing-texture")).toMatchObject({
       problemIds: ["runtime:texture-slot"],
@@ -299,8 +311,17 @@ describe("asset workspace", () => {
     expect(item?.importDiagnostics[0]).toMatchObject({
       code: "glb-decoder-missing",
       assetId: "glb-a",
-      target: { kind: "asset", assetId: "glb-a" }
+      target: { kind: "asset", assetId: "glb-a" },
+      titleDescriptor: {
+        key: "assetWorkspace.importDiagnostic.glb.decoder.missing.title"
+      },
+      actionLabelDescriptor: {
+        key: "assetWorkspace.importDiagnostic.glb.decoder.missing.actionLabel",
+        fallback: "Configure decoder"
+      }
     });
+    expect(JSON.stringify(item?.importManifest)).not.toContain("Descriptor");
+    expect(JSON.stringify(item?.importManifest)).not.toContain("assetWorkspace.importDiagnostic");
     expect(JSON.stringify(workspace)).not.toContain("Object3D");
     expect(JSON.stringify(workspace)).not.toContain("blob:");
   });
