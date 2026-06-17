@@ -4,7 +4,7 @@ import {
   BUILTIN_LOCALES,
   createMessageDescriptor,
   isMessageDescriptorValues,
-  resolveMessageFallback,
+  isMessageKey,
   type MessageDescriptor,
   type MessageDescriptorValues,
   type SupportedLocale
@@ -28,6 +28,7 @@ describe("message descriptors", () => {
     expect(descriptor).not.toHaveProperty("locale");
     expect(descriptor).not.toHaveProperty("text");
     expect(isMessageDescriptorValues(undefined)).toBe(false);
+    expect(isMessageKey("workbench.status.runtimeReady")).toBe(true);
   });
 
   it("keeps names, counts, modes, severities, statuses, and asset identifiers as JSON-safe values", () => {
@@ -70,6 +71,7 @@ describe("message descriptors", () => {
       new Object3D(),
       new (class RuntimeValue {})(),
       new URL("blob:https://example.test/runtime"),
+      "blob:https://example.test/runtime",
       Number.NaN,
       Number.POSITIVE_INFINITY,
       circular,
@@ -83,7 +85,24 @@ describe("message descriptors", () => {
         key: "workbench.problem.runtimeValue",
         fallback: "Runtime value",
         values: { value } as never
-      })).toThrow("Message descriptor values must be JSON-compatible.");
+      })).toThrow("Message descriptor values must be JSON-compatible and must not include runtime-only values.");
+    }
+  });
+
+  it("rejects missing, blank, and non-namespaced keys or fallbacks from unsafe hosts", () => {
+    const inputs = [
+      { fallback: "Missing key" },
+      { key: "", fallback: "Blank key" },
+      { key: "Pump A", fallback: "User label key" },
+      { key: "motor-control-panel.glb", fallback: "Filename key" },
+      { key: "workbench", fallback: "Not namespaced" },
+      { key: "workbench.status.runtimeReady" },
+      { key: "workbench.status.runtimeReady", fallback: "" },
+      { key: "workbench.status.runtimeReady", fallback: "   " }
+    ];
+
+    for (const input of inputs) {
+      expect(() => createMessageDescriptor(input)).toThrow(/Message descriptor (key|fallback)/);
     }
   });
 
@@ -111,6 +130,33 @@ describe("message descriptors", () => {
     });
   });
 
+  it("clones and freezes descriptor values after validation", () => {
+    const values: MessageDescriptorValues = {
+      name: "Pump A",
+      nested: {
+        status: "ready"
+      }
+    };
+
+    const descriptor = createMessageDescriptor({
+      key: "workbench.asset.item",
+      fallback: "Asset {name}",
+      values
+    });
+    values.name = "Mutated";
+    values.nested = { status: "mutated" };
+
+    expect(descriptor.values).toEqual({
+      name: "Pump A",
+      nested: {
+        status: "ready"
+      }
+    });
+    expect(Object.isFrozen(descriptor)).toBe(true);
+    expect(Object.isFrozen(descriptor.values)).toBe(true);
+    expect(Object.isFrozen(descriptor.values?.nested)).toBe(true);
+  });
+
   it("keeps fallback rendering readable when no dictionary entry is available", () => {
     const descriptor = createMessageDescriptor({
       key: "inspector.material.assignment",
@@ -118,7 +164,7 @@ describe("message descriptors", () => {
       values: { name: "motor-control-panel.glb" }
     });
 
-    expect(resolveMessageFallback(descriptor)).toBe("Material assigned to {name}");
+    expect(descriptor.fallback).toBe("Material assigned to {name}");
     expect(descriptor.values).toEqual({ name: "motor-control-panel.glb" });
   });
 
@@ -145,6 +191,6 @@ describe("message descriptors", () => {
     };
 
     expect(isMessageDescriptorValues(descriptor.values)).toBe(true);
-    expect(resolveMessageFallback(descriptor)).toBe("Host translated status");
+    expect(descriptor.fallback).toBe("Host translated status");
   });
 });

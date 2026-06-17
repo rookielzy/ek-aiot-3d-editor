@@ -39,7 +39,7 @@ import {
   EditorViewportHelperState,
   findImportedGlbMaterialSlot,
   isMessageDescriptorValues,
-  resolveMessageFallback,
+  isMessageKey,
   resolveEditorShortcut,
   snapNumber,
   validateSceneSnapshot,
@@ -234,11 +234,12 @@ describe("core public API", () => {
 
     expect(BUILTIN_LOCALES).toEqual(["en", "zh-CN"]);
     expect(isMessageDescriptorValues(values)).toBe(true);
-    expect(resolveMessageFallback(descriptor)).toBe("Runtime ready for {name}");
+    expect(isMessageKey(key)).toBe(true);
+    expect(descriptor.fallback).toBe("Runtime ready for {name}");
     expect(publicApi).toHaveProperty("BUILTIN_LOCALES");
     expect(publicApi).toHaveProperty("createMessageDescriptor");
     expect(publicApi).toHaveProperty("isMessageDescriptorValues");
-    expect(publicApi).toHaveProperty("resolveMessageFallback");
+    expect(publicApi).toHaveProperty("isMessageKey");
     expect(publicApi).not.toHaveProperty("i18next");
     expect(publicApi).not.toHaveProperty("reactI18next");
     expect(publicApi).not.toHaveProperty("vueI18n");

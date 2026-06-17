@@ -166,6 +166,7 @@ export type {
 } from "./environment/presets";
 export type { HistoryState } from "./history/history";
 export type {
+  CreateMessageDescriptorInput,
   MessageDescriptor,
   MessageDescriptorValues,
   MessageFallback,
@@ -353,7 +354,7 @@ export {
   BUILTIN_LOCALES,
   createMessageDescriptor,
   isMessageDescriptorValues,
-  resolveMessageFallback
+  isMessageKey
 } from "./i18n/messages";
 export { resolveDefaultPresentationView } from "./cameras/resolve";
 export { createEditor } from "./editor/create-editor";

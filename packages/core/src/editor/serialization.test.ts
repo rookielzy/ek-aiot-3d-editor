@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { createLightDefinition } from "../lights/defaults";
-import { createMessageDescriptor } from "../i18n/messages";
 import { createEmptySnapshot, createLightNode, createTransform } from "../snapshot/defaults";
 import type { SceneSnapshot, V3SceneSnapshot } from "../snapshot/types";
 import { validateSerializedSceneSnapshot } from "../snapshot/migrations";
@@ -244,11 +243,6 @@ describe("snapshot serialization", () => {
   });
 
   it("keeps i18n descriptor data out of durable snapshots in this slice", () => {
-    const descriptor = createMessageDescriptor({
-      key: "workbench.status.runtimeReady",
-      fallback: "Runtime ready for {name}",
-      values: { name: "Pump A", localeHint: "zh-CN" }
-    });
     const snapshot: SceneSnapshot = {
       ...createEmptySnapshot("scene-a"),
       assets: {
@@ -288,14 +282,17 @@ describe("snapshot serialization", () => {
       rootObjectIds: ["object-a"]
     };
 
-    const serializedText = JSON.stringify(serializeSnapshot(snapshot));
+    const serialized = serializeSnapshot(snapshot);
+    const serializedText = JSON.stringify(serialized);
 
-    expect(descriptor.key).toBe("workbench.status.runtimeReady");
+    expect(serialized.scene).toEqual({ id: "scene-a", name: "Untitled scene" });
+    expect(serialized.objects["object-a"].name).toBe("Pump A");
+    expect(serialized.assets["asset-a"].label).toBe("Pump A");
     expect(serializedText).toContain("Pump A");
-    expect(serializedText).not.toContain("workbench.status.runtimeReady");
+    expect(serializedText).not.toContain("workbench.");
     expect(serializedText).not.toContain("Runtime ready");
-    expect(serializedText).not.toContain("zh-CN");
     expect(serializedText).not.toContain("locale");
     expect(serializedText).not.toContain("dictionary");
+    expect(serializedText).not.toContain("translated");
   });
 });
