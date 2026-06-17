@@ -7,10 +7,12 @@ import {
   attachGlbImportManifestMetadata,
   buildAssetWorkspaceModel,
   createGlbImportManifest,
+  createMessageDescriptor,
   createEditor,
   filterAssetWorkspaceItems,
   ThreeGltfLoaderAdapter,
   type EditorRuntimeOptions,
+  type ProjectProblem,
   type RendererLike
 } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
@@ -203,7 +205,7 @@ describe("React EditorWorkbench", () => {
     }));
     const rows = within(screen.getByLabelText("Asset workspace rows"));
     expect(rows.getByText("robot.glb")).toBeTruthy();
-    expect(rows.getByText("glb")).toBeTruthy();
+    expect(rows.getByText("GLB")).toBeTruthy();
     expect(Object.values(editor.getSnapshot().objects)[0]).toMatchObject({
       name: "robot",
       asset: { kind: "glb", label: "robot.glb" }
@@ -236,7 +238,7 @@ describe("React EditorWorkbench", () => {
     expect(Object.values(editor.getSnapshot().assets)).toEqual([
       expect.objectContaining({ kind: "texture", label: "paint.png" })
     ]);
-    expect(within(screen.getByLabelText("Asset workspace rows")).getByText("texture")).toBeTruthy();
+    expect(within(screen.getByLabelText("Asset workspace rows")).getByText("Texture")).toBeTruthy();
     urls.restore();
   });
 
@@ -363,6 +365,263 @@ describe("React EditorWorkbench", () => {
     fireEvent.click(screen.getByTitle("Select all"));
 
     expect(screen.getByText("Selection 2 nodes")).toBeTruthy();
+  });
+
+  it("renders representative default Workbench text in Simplified Chinese", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Robot arm", asset: { id: "asset-a", label: "robot.glb" } });
+
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} locale="zh-CN" />);
+
+    expect(screen.getByLabelText("编辑器控件")).toBeTruthy();
+    expect(screen.getByLabelText("项目面板")).toBeTruthy();
+    expect(screen.getByLabelText("3D 视口")).toBeTruthy();
+    expect(screen.getByLabelText("编辑器状态")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "层级" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "资源" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "项目" })).toBeTruthy();
+    expect(screen.getByTitle("旋转模式")).toBeTruthy();
+    expect(screen.getByPlaceholderText("标签、ID、状态、诊断")).toBeTruthy();
+    expect(screen.getByText("Robot arm")).toBeTruthy();
+    expect(screen.getByText("robot.glb")).toBeTruthy();
+    expect(screen.getByText("项目 部分")).toBeTruthy();
+    expect(screen.getByText("选择 无")).toBeTruthy();
+  });
+
+  it("uses defaultLocale for uncontrolled initial Workbench copy", () => {
+    const editor = createEditor();
+
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} defaultLocale="zh-CN" />);
+
+    expect(screen.getByLabelText("编辑器控件")).toBeTruthy();
+    expect((screen.getByLabelText("语言") as HTMLSelectElement).value).toBe("zh-CN");
+  });
+
+  it("switches uncontrolled locale without changing editor state or helper state", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Robot arm", asset: { id: "asset-a", label: "robot.glb" } });
+    const onLocaleChange = vi.fn();
+
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} onLocaleChange={onLocaleChange} />);
+
+    fireEvent.click(screen.getByTitle("Rotate mode"));
+    fireEvent.click(screen.getByTitle("Toggle viewport grid"));
+    const serializedBefore = editor.serialize();
+
+    fireEvent.change(screen.getByLabelText("Language"), { target: { value: "zh-CN" } });
+
+    expect(onLocaleChange).toHaveBeenCalledWith("zh-CN");
+    expect(screen.getByTitle("旋转模式").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByTitle("切换视口网格").getAttribute("aria-pressed")).toBe("false");
+    expect(editor.transformMode.get()).toBe("rotate");
+    expect(editor.serialize()).toEqual(serializedBefore);
+    expect(JSON.stringify(editor.serialize())).not.toContain("zh-CN");
+    expect(JSON.stringify(editor.serialize())).not.toContain("旋转");
+  });
+
+  it("supports controlled locale, hidden switch, disabled switch, and host translation override", () => {
+    const editor = createEditor();
+    const onLocaleChange = vi.fn();
+    const { rerender } = render(
+      <EditorWorkbench
+        editor={editor}
+        rendererFactory={fakeRenderer}
+        locale="en"
+        showLocaleSwitcher={false}
+        translate={(descriptor, locale) =>
+          descriptor.key === "reactWorkbench.toolbar.project.open.label" && locale === "zh-CN"
+            ? "载入工程"
+            : undefined}
+        onLocaleChange={onLocaleChange}
+        toolbar={({ i18n }) => <span>Custom {i18n.t("reactWorkbench.toolbar.project.open.label")}</span>}
+      />
+    );
+
+    expect(screen.queryByLabelText("Language")).toBeNull();
+    expect(screen.getByText("Custom Open")).toBeTruthy();
+
+    rerender(
+      <EditorWorkbench
+        editor={editor}
+        rendererFactory={fakeRenderer}
+        locale="zh-CN"
+        localeSwitcherDisabled
+        translate={(descriptor, locale) =>
+          descriptor.key === "reactWorkbench.toolbar.project.open.label" && locale === "zh-CN"
+            ? "载入工程"
+            : undefined}
+        onLocaleChange={onLocaleChange}
+        toolbar={({ i18n }) => <span>Custom {i18n.t("reactWorkbench.toolbar.project.open.label")}</span>}
+      />
+    );
+
+    expect(screen.getByText("Custom 载入工程")).toBeTruthy();
+    const switcher = screen.getByLabelText("语言") as HTMLSelectElement;
+    expect(switcher.disabled).toBe(true);
+    fireEvent.change(switcher, { target: { value: "en" } });
+    expect(onLocaleChange).not.toHaveBeenCalled();
+  });
+
+  it("calls onLocaleChange from an enabled controlled switch without changing host-controlled copy before rerender", () => {
+    const editor = createEditor();
+    const onLocaleChange = vi.fn();
+
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} locale="en" onLocaleChange={onLocaleChange} />);
+
+    fireEvent.change(screen.getByLabelText("Language"), { target: { value: "zh-CN" } });
+
+    expect(onLocaleChange).toHaveBeenCalledWith("zh-CN");
+    expect(screen.getByLabelText("Editor controls")).toBeTruthy();
+    expect(screen.queryByLabelText("编辑器控件")).toBeNull();
+  });
+
+  it("re-resolves completed asset import queue statuses after locale changes", async () => {
+    const editor = createEditor();
+    const urls = mockObjectUrls();
+
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+
+    const input = screen.getByLabelText("Import assets") as HTMLInputElement;
+    fireEvent.change(input, {
+      target: {
+        files: [new File([new Uint8Array([1])], "paint.png", { type: "image/png" })]
+      }
+    });
+
+    expect(await screen.findByText(/succeeded · texture · Imported asset-/)).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Language"), { target: { value: "zh-CN" } });
+
+    expect(await screen.findByText(/已成功 · texture · 已导入 asset-/)).toBeTruthy();
+    expect(screen.getAllByText("paint.png").length).toBeGreaterThan(0);
+    urls.restore();
+  });
+
+  it("re-resolves failed recovery statuses after locale changes while preserving raw details", async () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "texture-a", label: "Broken texture" } });
+    const replaceAsset = vi.spyOn(editor, "replaceAsset").mockResolvedValue({
+      ok: false,
+      problems: [createReplacementProblem()]
+    });
+
+    render(
+      <EditorWorkbench
+        editor={editor}
+        resolver={new AssetResolverBridge(() => null)}
+        rendererFactory={fakeRenderer}
+      />
+    );
+
+    await act(async () => {
+      await editor.getRuntime()?.project();
+    });
+
+    const input = screen.getByLabelText(/Replace asset.*Broken texture/s) as HTMLInputElement;
+    fireEvent.change(input, {
+      target: {
+        files: [new File([new Uint8Array([1])], "still-broken.png", { type: "image/png" })]
+      }
+    });
+
+    expect((await screen.findAllByText("Asset could not be resolved")).length).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getByLabelText("Language"), { target: { value: "zh-CN" } });
+
+    expect((await screen.findAllByText("无法解析资源")).length).toBeGreaterThan(0);
+    expect(replaceAsset).toHaveBeenCalledWith(expect.objectContaining({
+      assetId: "texture-a",
+      label: "still-broken.png"
+    }));
+  });
+
+  it("localizes asset payload, package, import, diagnostic, and recovery descriptors in zh-CN", async () => {
+    const editor = createEditor();
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      name: "Robot arm",
+      asset: {
+        id: "asset-a",
+        label: "robot.glb",
+        metadata: attachGlbImportManifestMetadata(undefined, createGlbImportManifest({
+          diagnostics: [{
+            id: "glb-load-failed",
+            severity: "error",
+            code: "glb-load-failed",
+            target: { kind: "asset", assetId: "asset-a" },
+            message: "loader exploded",
+            recoverability: "user-action",
+            display: {
+              title: "GLB failed to load",
+              detail: "loader exploded",
+              actionLabel: "Replace asset"
+            }
+          }]
+        }))
+      }
+    });
+    editor.dispatch({ type: "register-asset", asset: { id: "unused-image", kind: "image", label: "Unused image" } });
+
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} locale="zh-CN" />);
+
+    const rows = within(screen.getByLabelText("资源工作区行"));
+    const rowText = rows.getByText("robot.glb").closest("li")!.textContent ?? "";
+
+    expect(rowText).toContain("GLB");
+    expect(rowText).toContain("缺失");
+    expect(rowText).toContain("阻塞");
+    expect(rowText).toContain("失败");
+    expect(rowText).toContain("GLB 加载失败");
+    expect(rows.getByLabelText("重新导入 robot.glb")).toBeTruthy();
+    expect((rows.getByText("Unused image").closest("li")!.textContent ?? "")).toContain("未引用");
+  });
+
+  it("renders descriptor-backed missing asset recovery actions in zh-CN", async () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a", label: "Missing box" } });
+
+    render(
+      <EditorWorkbench
+        editor={editor}
+        resolver={new AssetResolverBridge(() => null)}
+        rendererFactory={fakeRenderer}
+        locale="zh-CN"
+      />
+    );
+
+    await act(async () => {
+      await editor.getRuntime()?.project();
+    });
+
+    expect(await screen.findByLabelText("缺失资源恢复")).toBeTruthy();
+    expect(screen.getAllByText("替换资源").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("无法解析资源").length).toBeGreaterThan(0);
+  });
+
+  it("does not recreate editor or remount runtime when controlled locale changes", () => {
+    const editor = createEditor();
+    const mountRuntime = vi.spyOn(editor, "mountRuntime");
+    const rendererDispose = vi.fn();
+    const rendererFactory = (container: HTMLElement) => fakeRenderer(container, rendererDispose);
+    const { rerender, unmount } = render(
+      <EditorWorkbench editor={editor} rendererFactory={rendererFactory} locale="en" />
+    );
+    const runtime = editor.getRuntime();
+
+    act(() => {
+      rerender(
+        <EditorWorkbench editor={editor} rendererFactory={rendererFactory} locale="zh-CN" />
+      );
+    });
+
+    expect(editor.getRuntime()).toBe(runtime);
+    expect(mountRuntime).toHaveBeenCalledTimes(1);
+    expect(rendererDispose).not.toHaveBeenCalled();
+    expect(editor.disposed).toBe(false);
+    expect(screen.getByText("选择 无")).toBeTruthy();
+
+    unmount();
   });
 
   it("selects hierarchy rows through core node selection and updates inspector and status", () => {
@@ -737,6 +996,32 @@ describe("React EditorWorkbench", () => {
     expect(editor.getRuntime()?.disposed ?? true).toBe(true);
   });
 
+  it("keeps runtime ownership stable under StrictMode when locale changes", () => {
+    const editor = createEditor();
+    const rendererDispose = vi.fn();
+    const mountRuntime = vi.spyOn(editor, "mountRuntime");
+    const { rerender, unmount } = render(
+      <StrictMode>
+        <EditorWorkbench editor={editor} rendererFactory={(container) => fakeRenderer(container, rendererDispose)} locale="en" />
+      </StrictMode>
+    );
+    const mountCallsBeforeLocaleChange = mountRuntime.mock.calls.length;
+
+    rerender(
+      <StrictMode>
+        <EditorWorkbench editor={editor} rendererFactory={(container) => fakeRenderer(container, rendererDispose)} locale="zh-CN" />
+      </StrictMode>
+    );
+
+    expect(mountRuntime.mock.calls.length).toBeLessThanOrEqual(mountCallsBeforeLocaleChange + 1);
+    expect(editor.disposed).toBe(false);
+    expect(screen.getByText("选择 无")).toBeTruthy();
+
+    unmount();
+
+    expect(editor.disposed).toBe(false);
+  });
+
   it("keeps a shell-created editor alive during React StrictMode effect replay", async () => {
     let capturedEditor = createEditor();
     const { unmount } = render(
@@ -776,6 +1061,17 @@ describe("React EditorWorkbench", () => {
 
     unmount();
     expect(editor.disposed).toBe(false);
+  });
+
+  it("exposes Workbench i18n helpers from direct useWorkbench consumers", () => {
+    const editor = createEditor();
+    const { result, unmount } = renderHookWithResult(() => useWorkbench({ editor, locale: "zh-CN" }));
+
+    expect(result().i18n.locale).toBe("zh-CN");
+    expect(result().i18n.t("reactWorkbench.toolbar.project.open.label")).toBe("打开");
+    expect(result().i18n.localeLabel("zh-CN")).toBe("简体中文");
+
+    unmount();
   });
 
   it("refreshes useWorkbench asset workspace after payload-only replacement", async () => {
@@ -878,5 +1174,38 @@ function withPrimitivePath(manifest: ReturnType<typeof createWorkbenchManifest>,
         path
       }]
     }]
+  };
+}
+
+function createReplacementProblem(): ProjectProblem {
+  return {
+    id: "project:asset-unresolved",
+    severity: "error",
+    code: "asset-unresolved",
+    source: "validation",
+    target: { kind: "asset", assetId: "texture-a" },
+    assetId: "texture-a",
+    recoverability: "user-action",
+    message: "Asset texture-a could not be resolved.",
+    display: {
+      title: "Asset could not be resolved",
+      titleDescriptor: createMessageDescriptor({
+        key: "problem.asset.unresolved.title",
+        fallback: "Asset could not be resolved",
+        values: { assetId: "texture-a", objectId: null }
+      }),
+      detail: "Asset texture-a is missing or unavailable.",
+      detailDescriptor: createMessageDescriptor({
+        key: "problem.asset.unresolved.detail",
+        fallback: "Asset {assetId} is missing or unavailable.",
+        values: { assetId: "texture-a", objectId: null }
+      }),
+      actionLabel: "Replace asset",
+      actionLabelDescriptor: createMessageDescriptor({
+        key: "problem.asset.unresolved.actionLabel",
+        fallback: "Replace asset",
+        values: { assetId: "texture-a", objectId: null }
+      })
+    }
   };
 }

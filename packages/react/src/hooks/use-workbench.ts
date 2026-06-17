@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
   DEFAULT_WORKBENCH_VIEWPORT_HELPER_VISIBILITY,
   EditorViewportHelperState,
@@ -37,12 +37,28 @@ import {
   type ViewportHelperStateSnapshot
 } from "@ek-aiot/3d-editor-core";
 import { buildWorkbenchModel, executeEditorAction } from "@ek-aiot/3d-editor-core";
+import {
+  DEFAULT_WORKBENCH_LOCALE,
+  WORKBENCH_LOCALES,
+  getWorkbenchLocaleLabel,
+  normalizeWorkbenchLocale,
+  resolveWorkbenchMessage,
+  type WorkbenchI18n,
+  type WorkbenchLocale,
+  type WorkbenchMessageInput,
+  type WorkbenchMessageValues,
+  type WorkbenchTranslate
+} from "../i18n/workbench-i18n";
 import { useEditor } from "./use-editor";
 import { useInspector } from "./use-inspector";
 
 export interface UseWorkbenchOptions extends EditorOptions {
   editor?: EditorWithGlbImport;
   loader?: EditorRuntimeOptions["loader"];
+  locale?: WorkbenchLocale;
+  defaultLocale?: WorkbenchLocale;
+  onLocaleChange?(locale: WorkbenchLocale): void;
+  translate?: WorkbenchTranslate;
 }
 
 export interface WorkbenchSelectionContext {
@@ -112,6 +128,7 @@ export interface WorkbenchContext {
   project: WorkbenchProjectContext;
   assets: WorkbenchAssetContext;
   problems: WorkbenchProblemsContext;
+  i18n?: WorkbenchI18n;
   runtimeProblems: Problem[];
   runtime: EditorRuntime | null;
   runtimeReady: boolean;
@@ -150,13 +167,48 @@ export interface WorkbenchContext {
   importAssetFiles(options: Omit<WorkbenchAssetImportOptions, "loader"> & { loader?: WorkbenchAssetImportOptions["loader"] }): Promise<WorkbenchAssetImportResult[]>;
 }
 
-export interface UseWorkbenchResult extends WorkbenchContext {
+export interface ResolvedWorkbenchContext extends WorkbenchContext {
+  i18n: WorkbenchI18n;
+}
+
+export interface UseWorkbenchResult extends ResolvedWorkbenchContext {
   ownsEditor: boolean;
   dispose(): void;
 }
 
 export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchResult {
-  const editor = useEditor(options) as EditorWithGlbImport;
+  const {
+    locale,
+    defaultLocale,
+    onLocaleChange,
+    translate,
+    loader,
+    ...editorOptions
+  } = options;
+  const editor = useEditor(editorOptions) as EditorWithGlbImport;
+  const controlledLocale = locale !== undefined;
+  const [uncontrolledLocale, setUncontrolledLocale] = useState<WorkbenchLocale>(() =>
+    normalizeWorkbenchLocale(defaultLocale ?? DEFAULT_WORKBENCH_LOCALE)
+  );
+  const resolvedLocale = controlledLocale
+    ? normalizeWorkbenchLocale(locale)
+    : uncontrolledLocale;
+  const setLocale = useCallback((nextLocale: WorkbenchLocale) => {
+    const normalized = normalizeWorkbenchLocale(nextLocale);
+    onLocaleChange?.(normalized);
+    if (!controlledLocale) {
+      setUncontrolledLocale(normalized);
+    }
+  }, [controlledLocale, onLocaleChange]);
+  const i18n = useMemo<WorkbenchI18n>(() => ({
+    locale: resolvedLocale,
+    supportedLocales: WORKBENCH_LOCALES,
+    localeLabel: getWorkbenchLocaleLabel,
+    setLocale,
+    t(message: WorkbenchMessageInput, values?: WorkbenchMessageValues) {
+      return resolveWorkbenchMessage(resolvedLocale, message, values, translate);
+    }
+  }), [resolvedLocale, setLocale, translate]);
   const viewportHelperStore = getViewportHelperStore(editor);
   useEffect(() => {
     ensureDefaultWorkbenchViewportHelpers(viewportHelperStore);
@@ -223,13 +275,13 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   const reimportGlbAsset = useCallback((input: Omit<ReimportGlbAssetOptions, "loader"> & { loader?: ReimportGlbAssetOptions["loader"] }) =>
     editor.reimportGlbAsset({
       ...input,
-      loader: input.loader ?? options.loader
-    }), [editor, options.loader]);
+      loader: input.loader ?? loader
+    }), [editor, loader]);
   const importAssetFiles = useCallback((assetOptions: Omit<WorkbenchAssetImportOptions, "loader"> & { loader?: WorkbenchAssetImportOptions["loader"] }) =>
     editor.importWorkbenchAssets({
       ...assetOptions,
-      loader: assetOptions.loader ?? options.loader
-    }), [editor, options.loader]);
+      loader: assetOptions.loader ?? loader
+    }), [editor, loader]);
   const dispose = useCallback(() => {
     if (ownsEditor) {
       editor.dispose();
@@ -316,6 +368,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     project,
     assets,
     problems,
+    i18n,
     runtimeProblems: inspector.runtimeProblems,
     runtime,
     runtimeReady: runtime !== null,

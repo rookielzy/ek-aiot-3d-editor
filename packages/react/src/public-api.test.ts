@@ -2,7 +2,23 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { EditorViewport, EditorWorkbench, InspectorPanel, useEditor, useEditorSnapshot, useInspector, useWorkbench, type EditorWorkbenchProps, type WorkbenchContext, type WorkbenchRegionName } from "./index";
+import {
+  DEFAULT_WORKBENCH_LOCALE,
+  EditorViewport,
+  EditorWorkbench,
+  InspectorPanel,
+  resolveWorkbenchMessage,
+  useEditor,
+  useEditorSnapshot,
+  useInspector,
+  useWorkbench,
+  type EditorWorkbenchProps,
+  type ResolvedWorkbenchContext,
+  type WorkbenchContext,
+  type WorkbenchI18n,
+  type WorkbenchLocale,
+  type WorkbenchRegionName
+} from "./index";
 
 describe("react public API", () => {
   it("exports only the thin React adapter surface", () => {
@@ -17,18 +33,45 @@ describe("react public API", () => {
 
   it("exposes the install-ready workbench contract from the package root", () => {
     const regionName: WorkbenchRegionName = "leftPanel";
-    const props: Pick<EditorWorkbenchProps, "leftPanel" | "rightPanel" | "sidePanel" | "status"> = {
-      leftPanel: (context: WorkbenchContext) => context.model.hierarchy.totalCount,
+    const locale: WorkbenchLocale = "zh-CN";
+    const props: Pick<EditorWorkbenchProps, "locale" | "leftPanel" | "rightPanel" | "sidePanel" | "status"> = {
+      locale,
+      leftPanel: (context: ResolvedWorkbenchContext) => context.i18n.t("reactWorkbench.leftPanel.hierarchy.label"),
       rightPanel: (context) => context.problems.totalCount,
       sidePanel: (context) => context.history.undoCount,
       status: (context) => context.model.status.problemCount === 0 && context.project.exportProject().ok ? "ok" : "blocked"
     };
+    const i18n: Pick<WorkbenchI18n, "locale" | "t"> = {
+      locale,
+      t: (key) => resolveWorkbenchMessage(locale, key)
+    };
 
     expect(regionName).toBe("leftPanel");
+    expect(DEFAULT_WORKBENCH_LOCALE).toBe("en");
+    expect(props.locale).toBe("zh-CN");
+    expect(i18n.t("reactWorkbench.toolbar.project.open.label")).toBe("打开");
     expect(typeof props.leftPanel).toBe("function");
     expect(typeof props.rightPanel).toBe("function");
     expect(typeof props.sidePanel).toBe("function");
     expect(typeof props.status).toBe("function");
+  });
+
+  it("keeps WorkbenchContext mock-compatible while resolved regions expose i18n", () => {
+    const oldStyleContext = {
+      model: {
+        hierarchy: { totalCount: 0 },
+        status: { problemCount: 0 }
+      },
+      history: { undoCount: 0 },
+      project: { exportProject: () => ({ ok: true }) },
+      problems: { totalCount: 0 }
+    } as unknown as WorkbenchContext;
+
+    const region: NonNullable<EditorWorkbenchProps["toolbar"]> = (context) =>
+      context.i18n.t("reactWorkbench.toolbar.project.open.label");
+
+    expect(oldStyleContext.i18n).toBeUndefined();
+    expect(typeof region).toBe("function");
   });
 
   it("declares React as peer dependency and core as workspace dependency", () => {

@@ -94,7 +94,7 @@ describe("React proof-loop parity", () => {
       expect(within(hierarchy).getByText("Ambient light")).toBeTruthy();
       const assets = within(projectPanel).getByLabelText("Assets");
       expect(assets.textContent).toContain("Recoverable asset");
-      expect(assets.textContent).toContain("glb");
+      expect(assets.textContent).toContain("GLB");
       expect(assets.textContent).toContain("missing payload");
       expect(assets.textContent).toContain("1 refs");
       expect(screen.getByTestId("starter-overlay").textContent).toContain("3 objects");
@@ -117,36 +117,45 @@ describe("React proof-loop parity", () => {
       });
       expect(within(toolbar).getByRole("button", { name: "Snap move" }).getAttribute("aria-pressed")).toBe("true");
 
+      fireEvent.change(screen.getByLabelText("Language"), { target: { value: "zh-CN" } });
+      await waitFor(() => expect(screen.getByLabelText("编辑器控件")).toBeTruthy());
+      const localizedProjectPanel = screen.getByLabelText("项目面板");
+      expect(localizedProjectPanel.textContent).toContain("缺少载荷");
+      expect(screen.getByText("选择 Simple box")).toBeTruthy();
+
       const positionX = getFieldInput("Position X") as HTMLInputElement;
       fireEvent.change(positionX, { target: { value: "2" } });
       fireEvent.blur(positionX);
       await act(async () => undefined);
-      await waitFor(() => expect(screen.getByText("Undo 3")).toBeTruthy());
+      await waitFor(() => expect(screen.getByText("撤销 3")).toBeTruthy());
 
       await act(async () => {
-        await clickButton("Undo");
+        await clickButton("撤销");
       });
-      expect(screen.getByText("Redo 1")).toBeTruthy();
+      expect(screen.getByText("重做 1")).toBeTruthy();
       await act(async () => {
-        await clickButton("Redo");
+        await clickButton("重做");
       });
 
       const baseColorInput = getFieldInput("Base color") as HTMLInputElement;
       fireEvent.change(baseColorInput, { target: { value: "#00aa88" } });
       await act(async () => undefined);
-      await waitFor(() => expect(screen.getByText("Dirty")).toBeTruthy());
+      await waitFor(() => expect(screen.getByText("未保存")).toBeTruthy());
 
       await act(async () => {
-        await clickButton("Duplicate");
+        await clickButton("副本");
       });
-      await waitFor(() => expect(projectPanel.textContent).toContain("Objects4"));
+      await waitFor(() => expect(localizedProjectPanel.textContent).toContain("对象4"));
+      expect(screen.getByTestId("starter-overlay").textContent).toContain("4 objects");
 
       await act(async () => {
-        await clickButton("Export partial");
+        await clickButton("导出部分");
       });
-      expect(screen.getByText(/Exported partial project/)).toBeTruthy();
+      expect(screen.getByText(/已导出部分项目/)).toBeTruthy();
       await waitFor(() => expect(window.__lastDownloadedProject).toBeInstanceOf(Uint8Array));
       expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("asset-unresolved");
+      expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("zh-CN");
+      expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("缺少载荷");
 
       await act(async () => {
         const bytes = window.__lastDownloadedProject;
@@ -155,21 +164,21 @@ describe("React proof-loop parity", () => {
         const file = new File([copyBytes(bytes!)], "starter.ek3d", { type: "application/octet-stream" });
         fireEvent.change(openInput, { target: { files: [file] } });
       });
-      await waitFor(() => expect(screen.getByText("Opened starter.ek3d")).toBeTruthy());
+      await waitFor(() => expect(screen.getByText("已打开 starter.ek3d")).toBeTruthy());
       await waitFor(() => expect(screen.getAllByText("Camera view 1").length).toBeGreaterThan(0));
       expect(screen.getByText(/Default/)).toBeTruthy();
 
-      await waitFor(() => expect(projectPanel.textContent).toContain("Replace asset"));
-      expect(projectPanel.textContent).toContain("1 problems");
+      await waitFor(() => expect(localizedProjectPanel.textContent).toContain("替换资源"));
+      expect(localizedProjectPanel.textContent).toContain("1 个问题");
 
       await act(async () => {
-        const recoveryInput = within(projectPanel).getByLabelText(/Replace asset.*Recoverable asset/s) as HTMLInputElement;
+        const recoveryInput = within(localizedProjectPanel).getByLabelText(/替换资源.*Recoverable asset/s) as HTMLInputElement;
         const file = new File([new Uint8Array([1, 2, 3, 4])], "recovered.glb", { type: "model/gltf-binary" });
         fireEvent.change(recoveryInput, { target: { files: [file] } });
       });
-      await waitFor(() => expect(projectPanel.textContent).not.toContain("Replace asset"));
-      await waitFor(() => expect(screen.getByText("Problems 0")).toBeTruthy());
-      expect(projectPanel.textContent).toContain("Recoverable asset");
+      await waitFor(() => expect(localizedProjectPanel.textContent).not.toContain("替换资源"));
+      await waitFor(() => expect(screen.getByText("问题 0")).toBeTruthy());
+      expect(localizedProjectPanel.textContent).toContain("Recoverable asset");
       expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("Blob");
     } finally {
       restoreDownloadCapture();

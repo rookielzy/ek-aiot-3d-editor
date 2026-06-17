@@ -46,7 +46,7 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
       expect(text(section(host, "Hierarchy"))).toContain("Ambient light");
     });
     expect(text(section(host, "Assets"))).toContain("Recoverable asset");
-    expect(text(section(host, "Assets"))).toContain("glb");
+    expect(text(section(host, "Assets"))).toContain("GLB");
     expect(text(section(host, "Assets"))).toContain("missing payload");
     expect(text(section(host, "Assets"))).toContain("blocked");
     expect(text(section(host, "Assets"))).toContain("1 refs");

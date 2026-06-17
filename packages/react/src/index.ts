@@ -10,6 +10,15 @@ export { ProblemsPanel } from "./components/ProblemsPanel";
 export { useEditor, useEditorSnapshot } from "./hooks/use-editor";
 export { useInspector } from "./hooks/use-inspector";
 export { useWorkbench } from "./hooks/use-workbench";
+export {
+  DEFAULT_WORKBENCH_LOCALE,
+  WORKBENCH_LOCALE_LABELS,
+  WORKBENCH_LOCALES,
+  getWorkbenchLocaleLabel,
+  isWorkbenchLocale,
+  normalizeWorkbenchLocale,
+  resolveWorkbenchMessage
+} from "./i18n/workbench-i18n";
 export type { EditorViewportProps } from "./components/EditorViewport";
 export type { EditorWorkbenchProps, WorkbenchRegionName, WorkbenchRenderRegion } from "./components/EditorWorkbench";
 export type { InspectorPanelProps } from "./components/InspectorPanel";
@@ -22,6 +31,7 @@ export type { ProblemsPanelProps } from "./components/ProblemsPanel";
 export type { UseEditorOptions } from "./hooks/use-editor";
 export type { UseInspectorOptions, UseInspectorResult } from "./hooks/use-inspector";
 export type {
+  ResolvedWorkbenchContext,
   UseWorkbenchOptions,
   UseWorkbenchResult,
   WorkbenchAssetContext,
@@ -32,3 +42,12 @@ export type {
   WorkbenchSelectionContext,
   WorkbenchTransformContext
 } from "./hooks/use-workbench";
+export type {
+  WorkbenchI18n,
+  WorkbenchLocale,
+  WorkbenchMessageDescriptor,
+  WorkbenchMessageInput,
+  WorkbenchMessageKey,
+  WorkbenchMessageValues,
+  WorkbenchTranslate
+} from "./i18n/workbench-i18n";
