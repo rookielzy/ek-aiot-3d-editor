@@ -216,6 +216,7 @@ describe("asset workspace", () => {
   it("attaches runtime and project asset problems with replacement affordance metadata", () => {
     const snapshot = createWorkspaceSnapshot();
     const runtimeProblem = createMissingAssetProblem("glb-a", "object-a");
+    delete runtimeProblem.display!.actionLabel;
     const textureProblem: Problem = {
       id: "runtime:texture-slot",
       severity: "error",

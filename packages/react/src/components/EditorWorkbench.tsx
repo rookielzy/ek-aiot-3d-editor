@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { resolveEditorShortcut, type AssetResolverBridge, type EditorRuntime, type EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
-import { useWorkbench, type UseWorkbenchOptions, type WorkbenchContext } from "../hooks/use-workbench";
+import { useWorkbench, type ResolvedWorkbenchContext, type UseWorkbenchOptions } from "../hooks/use-workbench";
 import { EditorViewport } from "./EditorViewport";
 import { InspectorView } from "./InspectorView";
 import { WorkbenchLeftPanel } from "./WorkbenchLeftPanel";
@@ -8,7 +8,7 @@ import { WorkbenchStatusBar } from "./WorkbenchStatusBar";
 import { WorkbenchToolbar } from "./WorkbenchToolbar";
 import "./workbench.css";
 
-export type WorkbenchRenderRegion = (context: WorkbenchContext) => ReactNode;
+export type WorkbenchRenderRegion = (context: ResolvedWorkbenchContext) => ReactNode;
 export type WorkbenchRegionName = "toolbar" | "leftPanel" | "sidePanel" | "viewportOverlay" | "rightPanel" | "status";
 
 const DEFAULT_WORKBENCH_INTERACTIONS = {
@@ -27,6 +27,8 @@ export interface EditorWorkbenchProps extends UseWorkbenchOptions {
   rendererFactory?: EditorRuntimeOptions["rendererFactory"];
   interactions?: EditorRuntimeOptions["interactions"];
   showDefaultToolbar?: boolean;
+  showLocaleSwitcher?: boolean;
+  localeSwitcherDisabled?: boolean;
   onRuntimeReady?(runtime: EditorRuntime | null): void;
   className?: string;
   style?: CSSProperties;
@@ -46,11 +48,17 @@ export interface EditorWorkbenchProps extends UseWorkbenchOptions {
 export function EditorWorkbench({
   editor: providedEditor,
   snapshot,
+  locale,
+  defaultLocale,
+  onLocaleChange,
+  translate,
   resolver,
   loader,
   rendererFactory,
   interactions = DEFAULT_WORKBENCH_INTERACTIONS,
   showDefaultToolbar = true,
+  showLocaleSwitcher = true,
+  localeSwitcherDisabled = false,
   onRuntimeReady,
   className,
   style,
@@ -63,7 +71,15 @@ export function EditorWorkbench({
   viewportOverlay,
   status
 }: EditorWorkbenchProps) {
-  const workbench = useWorkbench({ editor: providedEditor, snapshot, loader });
+  const workbench = useWorkbench({
+    editor: providedEditor,
+    snapshot,
+    loader,
+    locale,
+    defaultLocale,
+    onLocaleChange,
+    translate
+  });
   const pendingDisposeRef = useRef<{ dispose(): void; timer: ReturnType<typeof setTimeout> } | null>(null);
   const rootRef = useRef<HTMLElement | null>(null);
   const [marqueeSelectionEnabled, setMarqueeSelectionEnabled] = useState(false);
@@ -125,12 +141,13 @@ export function EditorWorkbench({
     };
   }, [workbench.editor]);
 
+  const t = workbench.i18n.t;
   const rootClassName = className ? `ek-workbench ${className}` : "ek-workbench";
   const hasToolbar = showDefaultToolbar || toolbar;
   const renderLeftPanel = leftPanel ?? sidePanel;
 
   return (
-    <main ref={rootRef} className={rootClassName} style={style} tabIndex={0}>
+    <main ref={rootRef} className={rootClassName} style={style} tabIndex={0} aria-label={t("reactWorkbench.shell.main.label")}>
       {hasToolbar ? (
         <div className="ek-workbench__toolbar">
           {showDefaultToolbar ? (
@@ -138,12 +155,14 @@ export function EditorWorkbench({
               context={workbench}
               marqueeSelectionEnabled={marqueeSelectionEnabled}
               onToggleMarqueeSelection={() => setMarqueeSelectionEnabled((enabled) => !enabled)}
+              showLocaleSwitcher={showLocaleSwitcher}
+              localeSwitcherDisabled={localeSwitcherDisabled}
             />
           ) : null}
           {toolbar ? <div className="ek-workbench__toolbar-region">{toolbar(workbench)}</div> : null}
         </div>
       ) : null}
-      <section className="ek-workbench__viewport-shell" aria-label="3D viewport">
+      <section className="ek-workbench__viewport-shell" aria-label={t("reactWorkbench.shell.viewport.label")}>
         <EditorViewport
           editor={workbench.editor}
           resolver={resolver}
@@ -155,10 +174,10 @@ export function EditorWorkbench({
         />
         {viewportOverlay ? <div className="ek-workbench__overlay">{viewportOverlay(workbench)}</div> : null}
       </section>
-      <aside className="ek-workbench__side-panel" aria-label="Project panel">
+      <aside className="ek-workbench__side-panel" aria-label={t("reactWorkbench.shell.projectPanel.label")}>
         {renderLeftPanel ? renderLeftPanel(workbench) : <WorkbenchLeftPanel context={workbench} />}
       </aside>
-      <aside className="ek-workbench__right-panel" aria-label="Inspector panel">
+      <aside className="ek-workbench__right-panel" aria-label={t("reactWorkbench.shell.inspectorPanel.label")}>
         {rightPanel ? rightPanel(workbench) : (
           <InspectorView
             editor={workbench.editor}
@@ -174,7 +193,7 @@ export function EditorWorkbench({
           />
         )}
       </aside>
-      <footer className="ek-workbench__status" aria-label="Editor status">
+      <footer className="ek-workbench__status" aria-label={t("reactWorkbench.shell.status.label")}>
         {status ? status(workbench) : <WorkbenchStatusBar context={workbench} />}
       </footer>
     </main>

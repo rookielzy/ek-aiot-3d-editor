@@ -434,7 +434,7 @@ function buildAssetWorkspaceItem(
           : "partial";
   const highestProblemSeverity = highestSeverity(allProblems);
   const missing = missingReference || (referenced && payloadStatus === "missing") || allProblems.some(isMissingProblem);
-  const recoverableProblem = allProblems.find((problem) => problem.actionLabel || problem.recoverability === "user-action");
+  const recoverableProblem = allProblems.find((problem) => problem.actionLabel || problem.actionLabelDescriptor || problem.recoverability === "user-action");
   const status = missingReference
     ? "missing-reference"
     : referenced && (payloadStatus === "missing" || payloadStatus === "kind-mismatch")
@@ -469,8 +469,8 @@ function buildAssetWorkspaceItem(
     highestProblemSeverity,
     missing,
     recoverable: allProblems.some((problem) => problem.recoverability === "user-action"),
-    ...(recoverableProblem?.actionLabel ? {
-      actionLabel: recoverableProblem.actionLabel,
+    ...(recoverableProblem?.actionLabel || recoverableProblem?.actionLabelDescriptor ? {
+      ...(recoverableProblem.actionLabel ? { actionLabel: recoverableProblem.actionLabel } : {}),
       ...(recoverableProblem.actionLabelDescriptor ? { actionLabelDescriptor: recoverableProblem.actionLabelDescriptor } : {})
     } : {}),
     status,
