@@ -33,9 +33,13 @@ import {
   buildSetTransformCommand,
   createImportedGlbBindingDescriptor,
   createImportedGlbTargetDescriptors,
+  createMessageDescriptor,
   ThreeGltfLoaderAdapter,
+  BUILTIN_LOCALES,
   EditorViewportHelperState,
   findImportedGlbMaterialSlot,
+  isMessageDescriptorValues,
+  resolveMessageFallback,
   resolveEditorShortcut,
   snapNumber,
   validateSceneSnapshot,
@@ -76,6 +80,9 @@ import {
   type LightDefinition,
   type LightingPresetId,
   type LightingPresetResult,
+  type MessageDescriptor,
+  type MessageDescriptorValues,
+  type MessageKey,
   type MaterialInspectorTarget,
   type Problem,
   PROJECT_PACKAGE_VERSION,
@@ -177,6 +184,10 @@ describe("core public API", () => {
     expect(packageJson.dependencies).toHaveProperty("fflate");
     expect(packageJson.peerDependencies ?? {}).not.toHaveProperty("vue");
     expect(packageJson.peerDependencies ?? {}).not.toHaveProperty("react");
+    expect(packageJson.dependencies ?? {}).not.toHaveProperty("i18next");
+    expect(packageJson.dependencies ?? {}).not.toHaveProperty("react-i18next");
+    expect(packageJson.dependencies ?? {}).not.toHaveProperty("vue-i18n");
+    expect(packageJson.dependencies ?? {}).not.toHaveProperty("formatjs");
   });
 
   it("does not re-export internal runtime projectors or resource seams", async () => {
@@ -207,6 +218,30 @@ describe("core public API", () => {
     expect(publicApi).not.toHaveProperty("ProjectAssetStore");
     expect(publicApi).not.toHaveProperty("defaultArchiveAdapter");
     expect(publicApi).not.toHaveProperty("exportProjectPackage");
+  });
+
+  it("exports framework-neutral i18n descriptor contracts from the package root", async () => {
+    const publicApi = await import("./index");
+    const key: MessageKey = "workbench.status.runtimeReady";
+    const values: MessageDescriptorValues = {
+      name: "Pump A"
+    };
+    const descriptor: MessageDescriptor = createMessageDescriptor({
+      key,
+      fallback: "Runtime ready for {name}",
+      values
+    });
+
+    expect(BUILTIN_LOCALES).toEqual(["en", "zh-CN"]);
+    expect(isMessageDescriptorValues(values)).toBe(true);
+    expect(resolveMessageFallback(descriptor)).toBe("Runtime ready for {name}");
+    expect(publicApi).toHaveProperty("BUILTIN_LOCALES");
+    expect(publicApi).toHaveProperty("createMessageDescriptor");
+    expect(publicApi).toHaveProperty("isMessageDescriptorValues");
+    expect(publicApi).toHaveProperty("resolveMessageFallback");
+    expect(publicApi).not.toHaveProperty("i18next");
+    expect(publicApi).not.toHaveProperty("reactI18next");
+    expect(publicApi).not.toHaveProperty("vueI18n");
   });
 
   it("exports expanded schema and command contracts from the package root", async () => {

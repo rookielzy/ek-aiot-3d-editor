@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createLightDefinition } from "../lights/defaults";
+import { createMessageDescriptor } from "../i18n/messages";
 import { createEmptySnapshot, createLightNode, createTransform } from "../snapshot/defaults";
 import type { SceneSnapshot, V3SceneSnapshot } from "../snapshot/types";
 import { validateSerializedSceneSnapshot } from "../snapshot/migrations";
@@ -240,5 +241,61 @@ describe("snapshot serialization", () => {
     expect(serializedText).not.toContain("WebGLRenderTarget");
     expect(serializedText).not.toContain("shadowMap");
     expect(serializedText).not.toContain("runtimeOnly");
+  });
+
+  it("keeps i18n descriptor data out of durable snapshots in this slice", () => {
+    const descriptor = createMessageDescriptor({
+      key: "workbench.status.runtimeReady",
+      fallback: "Runtime ready for {name}",
+      values: { name: "Pump A", localeHint: "zh-CN" }
+    });
+    const snapshot: SceneSnapshot = {
+      ...createEmptySnapshot("scene-a"),
+      assets: {
+        "asset-a": {
+          id: "asset-a",
+          kind: "glb",
+          label: "Pump A"
+        }
+      },
+      nodes: {
+        "object-a": {
+          id: "object-a",
+          kind: "object",
+          name: "Pump A",
+          objectId: "object-a",
+          parentId: null,
+          children: [],
+          transform: createTransform()
+        }
+      },
+      rootNodeIds: ["object-a"],
+      objects: {
+        "object-a": {
+          id: "object-a",
+          name: "Pump A",
+          kind: "glb",
+          parentId: null,
+          children: [],
+          asset: {
+            id: "asset-a",
+            kind: "glb",
+            label: "Pump A"
+          },
+          transform: createTransform()
+        }
+      },
+      rootObjectIds: ["object-a"]
+    };
+
+    const serializedText = JSON.stringify(serializeSnapshot(snapshot));
+
+    expect(descriptor.key).toBe("workbench.status.runtimeReady");
+    expect(serializedText).toContain("Pump A");
+    expect(serializedText).not.toContain("workbench.status.runtimeReady");
+    expect(serializedText).not.toContain("Runtime ready");
+    expect(serializedText).not.toContain("zh-CN");
+    expect(serializedText).not.toContain("locale");
+    expect(serializedText).not.toContain("dictionary");
   });
 });

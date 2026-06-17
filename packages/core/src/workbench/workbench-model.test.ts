@@ -3,6 +3,7 @@ import { attachGlbImportManifestMetadata, createGlbImportManifest } from "../ass
 import { createMissingAssetProblem } from "../assets/problems";
 import { planGlbImportRemap } from "../assets/import-remap";
 import { createEditor } from "../editor/create-editor";
+import { createMessageDescriptor } from "../i18n/messages";
 import { createMaterialAssignmentId } from "../materials/defaults";
 import { buildInspectorModel } from "../inspector/selection";
 import { createEnvironmentAssetUnresolvedProblem, createImportedTargetMissingProblem } from "../runtime/problems";
@@ -753,6 +754,43 @@ describe("workbench model", () => {
       lights: snapshot.lights,
       selection: snapshot.selection
     }).toEqual(before);
+  });
+
+  it("keeps current fallback display strings while descriptor contract stays out of the model", () => {
+    const descriptor = createMessageDescriptor({
+      key: "workbench.missingAsset.action",
+      fallback: "Replace asset",
+      values: { assetId: "asset-a", name: "Pump A" }
+    });
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Pump A", asset: { id: "asset-a", label: "Pump GLB" } });
+    const snapshot = editor.getSnapshot();
+    const runtimeProblems = [createMissingAssetProblem("asset-a", "object-a")];
+
+    const model = buildWorkbenchModel(snapshot, {
+      inspector: buildInspectorModel(snapshot, { runtimeProblems }),
+      runtimeProblems,
+      history: editor.getHistoryState(),
+      snap: editor.snap.get(),
+      transformMode: editor.transformMode.get(),
+      runtimeReady: false
+    });
+    const serializedModel = JSON.stringify(model);
+
+    expect(descriptor.key).toBe("workbench.missingAsset.action");
+    expect(model.hierarchy.rows.find((row) => row.id === "object-a")?.label).toBe("Pump A");
+    expect(model.assets.items.find((item) => item.id === "asset-a")?.label).toBe("Pump GLB");
+    expect(model.assets.missing[0]).toMatchObject({
+      label: "Pump GLB",
+      title: "Asset could not be resolved",
+      actionLabel: "Replace asset"
+    });
+    expect(model.project.statusLabel).toBe("1 problems");
+    expect(model.selection.label).toBe("none");
+    expect(serializedModel).not.toContain("workbench.missingAsset.action");
+    expect(serializedModel).not.toContain("locale");
+    expect(serializedModel).not.toContain("zh-CN");
+    expect(serializedModel).not.toContain("dictionary");
   });
 });
 
