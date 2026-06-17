@@ -13,6 +13,8 @@ import type { SnapSettings } from "../runtime/transform/snap";
 import type { TransformMode } from "../runtime/transform/transform-mode";
 import { deriveImportedRemapProblems } from "../runtime/remap-problems";
 import type { AssetReference, SceneNode, SceneSnapshot } from "../snapshot/types";
+import type { MessageDescriptor } from "../i18n/messages";
+import { createDisplayMessageDescriptor } from "../i18n/display-messages";
 
 export interface BuildWorkbenchModelOptions {
   inspector?: InspectorModel;
@@ -82,9 +84,12 @@ export interface WorkbenchMissingAssetItem {
   objectId?: string;
   label: string;
   title: string;
+  titleDescriptor?: MessageDescriptor;
   detail?: string;
+  detailDescriptor?: MessageDescriptor;
   severity: ProblemSeverity;
   actionLabel?: string;
+  actionLabelDescriptor?: MessageDescriptor;
 }
 
 export interface WorkbenchProblemItem extends InspectorProblemItem {
@@ -103,6 +108,7 @@ export interface WorkbenchProblemsModel {
 export interface WorkbenchSelectionModel {
   count: number;
   label: string;
+  labelDescriptor?: MessageDescriptor;
   nodeId: string | null;
   nodeIds: string[];
   nodeKind: InspectorModel["selection"]["nodeKind"];
@@ -146,6 +152,7 @@ export interface WorkbenchStatusModel {
   projectProblemCount: number;
   snapFeedback: ViewportSnapFeedbackState;
   snapFeedbackLabel: string;
+  snapFeedbackLabelDescriptor?: MessageDescriptor;
 }
 
 export interface WorkbenchProjectModel {
@@ -161,6 +168,7 @@ export interface WorkbenchProjectModel {
   problemCount: number;
   ready: boolean;
   statusLabel: string;
+  statusLabelDescriptor?: MessageDescriptor;
 }
 
 export interface WorkbenchModel {
@@ -264,12 +272,23 @@ function toProjectProblemItem(problem: ProjectProblem | Problem): WorkbenchProbl
     source: problem.source,
     target: problem.target,
     title: problem.display?.title ?? problem.message,
+    titleDescriptor: problem.display?.titleDescriptor,
     detail: problem.display?.detail ?? problem.message,
+    detailDescriptor: problem.display?.detailDescriptor,
     assetId: problem.assetId,
     objectId: problem.objectId,
     recoverability: problem.recoverability,
     acknowledged: false,
     actionLabel: problem.display?.actionLabel ?? (problem.recoverability === "user-action" ? "Replace asset" : undefined),
+    actionLabelDescriptor: problem.display?.actionLabelDescriptor ?? (problem.recoverability === "user-action"
+      ? createDisplayMessageDescriptor({
+          namespace: "workbench",
+          path: "problem.replaceAsset",
+          field: "actionLabel",
+          fallback: "Replace asset",
+          values: { code: problem.code, assetId: problem.assetId ?? null }
+        })
+      : undefined),
     runtime: false,
     project: true
   };
@@ -281,6 +300,7 @@ function buildWorkbenchSelection(snapshot: SceneSnapshot, inspector: InspectorMo
   return {
     count: selection.count,
     label: formatSelectionLabel(snapshot, selection.nodeId, selection.count),
+    labelDescriptor: selectionLabelDescriptor(snapshot, selection.nodeId, selection.count),
     nodeId: selection.nodeId,
     nodeIds: [...selection.nodeIds],
     nodeKind: selection.nodeKind,
@@ -391,9 +411,12 @@ function buildWorkbenchAssets(snapshot: SceneSnapshot, workspace: AssetWorkspace
         objectId: problem.objectId,
         label: snapshot.assets[asset.id]?.label ?? asset.label,
         title: problem.title,
+        titleDescriptor: problem.titleDescriptor,
         detail: problem.detail,
+        detailDescriptor: problem.detailDescriptor,
         severity: problem.severity,
-        actionLabel: problem.actionLabel
+        actionLabel: problem.actionLabel,
+        actionLabelDescriptor: problem.actionLabelDescriptor
       }));
     });
 
@@ -491,7 +514,8 @@ function buildWorkbenchStatus(
     runtimeProblemCount: problems.runtimeCount,
     projectProblemCount: problems.projectCount,
     snapFeedback,
-    snapFeedbackLabel: formatSnapFeedbackLabel(snapFeedback)
+    snapFeedbackLabel: formatSnapFeedbackLabel(snapFeedback),
+    snapFeedbackLabelDescriptor: snapFeedbackLabelDescriptor(snapFeedback)
   };
 }
 
@@ -523,7 +547,8 @@ function buildWorkbenchProject(
     completeness,
     problemCount,
     ready: completeness === "complete" && problemCount === 0,
-    statusLabel: problemCount > 0 ? `${problemCount} problems` : completeness === "partial" ? "Partial" : "Ready"
+    statusLabel: problemCount > 0 ? `${problemCount} problems` : completeness === "partial" ? "Partial" : "Ready",
+    statusLabelDescriptor: projectStatusLabelDescriptor(completeness, problemCount)
   };
 }
 
@@ -547,6 +572,35 @@ function formatSelectionLabel(snapshot: SceneSnapshot, nodeId: string | null, co
     return node.name;
   }
   return `${count} nodes`;
+}
+
+function selectionLabelDescriptor(snapshot: SceneSnapshot, nodeId: string | null, count: number): MessageDescriptor {
+  if (count === 0) {
+    return createDisplayMessageDescriptor({
+      namespace: "workbench",
+      path: "selection.none",
+      field: "label",
+      fallback: "none",
+      values: { count }
+    });
+  }
+  const node = nodeId ? snapshot.nodes[nodeId] : undefined;
+  if (count === 1 && node) {
+    return createDisplayMessageDescriptor({
+      namespace: "workbench",
+      path: "selection.single",
+      field: "label",
+      fallback: "{name}",
+      values: { count, name: node.name, nodeId: node.id, nodeKind: node.kind }
+    });
+  }
+  return createDisplayMessageDescriptor({
+    namespace: "workbench",
+    path: "selection.multiple",
+    field: "label",
+    fallback: "{count} nodes",
+    values: { count }
+  });
 }
 
 function problemMatchesNode(
@@ -626,4 +680,38 @@ function formatSnapFeedbackLabel(feedback: ViewportSnapFeedbackState): string {
     return `Snap ${feedback.mode ?? "mode"} off`;
   }
   return "Snap disabled";
+}
+
+function snapFeedbackLabelDescriptor(feedback: ViewportSnapFeedbackState): MessageDescriptor {
+  return createDisplayMessageDescriptor({
+    namespace: "workbench",
+    path: `status.snap.${feedback.status}`,
+    field: "label",
+    fallback: formatSnapFeedbackLabel(feedback),
+    values: {
+      status: feedback.status,
+      mode: feedback.mode ?? null,
+      increment: feedback.increment ?? null,
+      channelSnapped: feedback.channelSnapped
+    }
+  });
+}
+
+function projectStatusLabelDescriptor(completeness: ProjectCompleteness, problemCount: number): MessageDescriptor {
+  if (problemCount > 0) {
+    return createDisplayMessageDescriptor({
+      namespace: "workbench",
+      path: "project.status.problems",
+      field: "label",
+      fallback: "{problemCount} problems",
+      values: { completeness, problemCount }
+    });
+  }
+  return createDisplayMessageDescriptor({
+    namespace: "workbench",
+    path: `project.status.${completeness}`,
+    field: "label",
+    fallback: completeness === "partial" ? "Partial" : "Ready",
+    values: { completeness, problemCount }
+  });
 }

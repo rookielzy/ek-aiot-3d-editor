@@ -2,6 +2,7 @@ import type { CreateCameraViewCommand, DeleteCameraViewCommand, SetDefaultCamera
 import { createAuthoredCameraViewInput, getAuthoredCameraView, hasAuthoredCameraView } from "../cameras/defaults";
 import type { AuthoredCameraView } from "../cameras/types";
 import type { SceneSnapshot } from "../snapshot/types";
+import { inspectorCommandMessageDescriptor, inspectorSectionReasonDescriptor, inspectorSectionTitleDescriptor } from "./display-messages";
 import { numberField, parseFiniteNumber, textField, type NumberRange } from "./fields";
 import type { CameraInspectorSection, CameraViewFieldId, CameraViewListItem, InspectorCommandProblem, InspectorCommandResult } from "./types";
 
@@ -35,9 +36,13 @@ export function buildCameraSection(
   return {
     id: "cameras",
     title: "Camera views",
+    titleDescriptor: inspectorSectionTitleDescriptor("cameras", "Camera views"),
     enabled: true,
     empty: !activeCameraView,
     reason: activeCameraView ? undefined : "Capture a camera view to author presentation state.",
+    ...(!activeCameraView
+      ? { reasonDescriptor: inspectorSectionReasonDescriptor("cameras", "Capture a camera view to author presentation state.") }
+      : {}),
     activeCameraViewId,
     defaultCameraViewId: snapshot.presentation.defaultCameraId,
     cameraViews: buildCameraViewList(snapshot, activeCameraViewId),
@@ -183,5 +188,14 @@ function buildCameraViewPatch(
 }
 
 function problem(fieldId: string, message: string): { ok: false; problem: InspectorCommandProblem } {
-  return { ok: false, problem: { code: "inspector-camera-invalid", fieldId, message, severity: "warning" } };
+  return {
+    ok: false,
+    problem: {
+      code: "inspector-camera-invalid",
+      fieldId,
+      message,
+      messageDescriptor: inspectorCommandMessageDescriptor("command.camera.invalid", fieldId, message),
+      severity: "warning"
+    }
+  };
 }

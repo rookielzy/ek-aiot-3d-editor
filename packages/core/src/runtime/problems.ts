@@ -1,6 +1,7 @@
 import type { Problem } from "../problems/types";
 import type { TextureSlotName } from "../materials/types";
 import type { SceneImportedGlbNode } from "../snapshot/types";
+import { createDisplayMessageDescriptor } from "../i18n/display-messages";
 import type { RuntimeImportedTargetMatch } from "./imported-target-resolver";
 
 export { createMissingAssetProblem } from "../assets/problems";
@@ -26,7 +27,9 @@ export function createEnvironmentAssetUnresolvedProblem(assetId: string, role: E
     message: `${formatRole(role)} asset ${assetId} could not be resolved.`,
     display: {
       title: `${formatRole(role)} asset could not be resolved`,
-      detail: `Asset ${assetId} is missing or unavailable.`
+      titleDescriptor: problemDescriptor("environment.assetUnresolved", "title", `${formatRole(role)} asset could not be resolved`, { assetId, role }),
+      detail: `Asset ${assetId} is missing or unavailable.`,
+      detailDescriptor: problemDescriptor("environment.assetUnresolved", "detail", "Asset {assetId} is missing or unavailable.", { assetId, role })
     },
     metadata: { role }
   };
@@ -49,6 +52,7 @@ export function createEnvironmentAssetLoadProblem(
     message,
     display: {
       title: `${formatRole(role)} asset failed to load`,
+      titleDescriptor: problemDescriptor("environment.assetLoadFailed", "title", `${formatRole(role)} asset failed to load`, { assetId, role }),
       detail: message
     },
     metadata: { role }
@@ -72,6 +76,7 @@ export function createEnvironmentAssetResolveProblem(
     message,
     display: {
       title: `${formatRole(role)} asset failed to resolve`,
+      titleDescriptor: problemDescriptor("environment.assetResolveFailed", "title", `${formatRole(role)} asset failed to resolve`, { assetId, role }),
       detail: message
     },
     metadata: { role }
@@ -91,6 +96,7 @@ export function createEnvironmentPmremProblem(assetId: string, role: Environment
     message,
     display: {
       title: `${formatRole(role)} PMREM generation failed`,
+      titleDescriptor: problemDescriptor("environment.pmremFailed", "title", `${formatRole(role)} PMREM generation failed`, { assetId, role }),
       detail: message
     },
     metadata: { role }
@@ -108,7 +114,9 @@ export function createEnvironmentUnsupportedSettingProblem(setting: string, role
     message: detail,
     display: {
       title: `${formatRole(role)} setting is not supported`,
-      detail
+      titleDescriptor: problemDescriptor("environment.unsupportedSetting", "title", `${formatRole(role)} setting is not supported`, { role, setting }),
+      detail,
+      detailDescriptor: problemDescriptor("environment.unsupportedSetting", "detail", detail, { role, setting })
     },
     metadata: { role, setting }
   };
@@ -132,7 +140,19 @@ export function createMaterialTextureAssetUnresolvedProblem(input: MaterialTextu
     message: `Material texture asset ${input.textureSlot.assetId} could not be resolved.`,
     display: {
       title: "Material texture asset could not be resolved",
-      detail: `Texture slot ${input.slot} references missing or unavailable asset ${input.textureSlot.assetId}.`
+      titleDescriptor: problemDescriptor("material.textureAssetUnresolved", "title", "Material texture asset could not be resolved", {
+        materialId: input.materialId,
+        objectId: input.objectId,
+        slot: input.slot,
+        assetId: input.textureSlot.assetId
+      }),
+      detail: `Texture slot ${input.slot} references missing or unavailable asset ${input.textureSlot.assetId}.`,
+      detailDescriptor: problemDescriptor("material.textureAssetUnresolved", "detail", "Texture slot {slot} references missing or unavailable asset {assetId}.", {
+        materialId: input.materialId,
+        objectId: input.objectId,
+        slot: input.slot,
+        assetId: input.textureSlot.assetId
+      })
     },
     metadata: { slot: input.slot }
   };
@@ -157,6 +177,12 @@ export function createMaterialTextureAssetLoadProblem(input: MaterialTextureProb
     message,
     display: {
       title: "Material texture asset failed to load",
+      titleDescriptor: problemDescriptor("material.textureAssetLoadFailed", "title", "Material texture asset failed to load", {
+        materialId: input.materialId,
+        objectId: input.objectId,
+        slot: input.slot,
+        assetId: input.textureSlot.assetId
+      }),
       detail: message
     },
     metadata: { slot: input.slot }
@@ -182,6 +208,12 @@ export function createMaterialTextureAssetResolveProblem(input: MaterialTextureP
     message,
     display: {
       title: "Material texture asset failed to resolve",
+      titleDescriptor: problemDescriptor("material.textureAssetResolveFailed", "title", "Material texture asset failed to resolve", {
+        materialId: input.materialId,
+        objectId: input.objectId,
+        slot: input.slot,
+        assetId: input.textureSlot.assetId
+      }),
       detail: message
     },
     metadata: { slot: input.slot }
@@ -205,7 +237,9 @@ export function createImportedTargetMissingProblem(match: RuntimeImportedTargetM
     message: match.message ?? `Imported target ${match.importKey} could not be matched in the loaded GLB.`,
     display: {
       title: "Imported target could not be matched",
-      detail: match.message ?? `The loaded GLB no longer exposes ${match.importKey}.`
+      titleDescriptor: problemDescriptor("importedTarget.missing", "title", "Imported target could not be matched", { importKey: match.importKey, objectId: match.ownerObjectId }),
+      detail: match.message ?? `The loaded GLB no longer exposes ${match.importKey}.`,
+      detailDescriptor: match.message ? undefined : problemDescriptor("importedTarget.missing", "detail", "The loaded GLB no longer exposes {importKey}.", { importKey: match.importKey, objectId: match.ownerObjectId })
     },
     metadata: {
       importKey: match.importKey,
@@ -235,10 +269,23 @@ export function createImportedTargetUnresolvedProblem(node: SceneImportedGlbNode
     message: `Imported target ${previousImportKey} could not be remapped during GLB reimport.`,
     display: {
       title: "Imported target needs remap",
+      titleDescriptor: problemDescriptor("importedTarget.needsRemap", "title", "Imported target needs remap", {
+        importKey: node.importKey,
+        previousImportKey,
+        candidateCount: candidateImportKeys.length
+      }),
       detail: candidateImportKeys.length > 0
         ? `Previous target ${previousImportKey} has ${candidateImportKeys.length} possible replacement targets.`
         : `Previous target ${previousImportKey} was not found in the replacement GLB.`,
-      actionLabel: "Review remap"
+      detailDescriptor: problemDescriptor("importedTarget.needsRemap", "detail", candidateImportKeys.length > 0
+        ? "Previous target {previousImportKey} has {candidateCount} possible replacement targets."
+        : "Previous target {previousImportKey} was not found in the replacement GLB.", {
+        importKey: node.importKey,
+        previousImportKey,
+        candidateCount: candidateImportKeys.length
+      }),
+      actionLabel: "Review remap",
+      actionLabelDescriptor: problemDescriptor("importedTarget.reviewRemap", "actionLabel", "Review remap", { importKey: node.importKey, previousImportKey })
     },
     metadata: {
       importKey: node.importKey,
@@ -277,10 +324,27 @@ export function createImportedMaterialSlotUnresolvedProblem(
       : `Imported material slot ${slotId} could not be remapped during GLB reimport.`,
     display: {
       title: runtimeTargetMissing ? "Imported material slot unavailable" : "Imported material slot needs remap",
+      titleDescriptor: problemDescriptor(runtimeTargetMissing ? "importedMaterialSlot.unavailable" : "importedMaterialSlot.needsRemap", "title", runtimeTargetMissing ? "Imported material slot unavailable" : "Imported material slot needs remap", {
+        importKey: node.importKey,
+        slotId,
+        reason
+      }),
       detail: runtimeTargetMissing
         ? `Material assignment target ${slotId} remains durable but no runtime imported target was registered.`
         : `Material assignment target ${slotId} remains durable but no replacement slot was matched.`,
-      actionLabel: runtimeTargetMissing ? "Review imported target" : "Review remap"
+      detailDescriptor: problemDescriptor(runtimeTargetMissing ? "importedMaterialSlot.unavailable" : "importedMaterialSlot.needsRemap", "detail", runtimeTargetMissing
+        ? "Material assignment target {slotId} remains durable but no runtime imported target was registered."
+        : "Material assignment target {slotId} remains durable but no replacement slot was matched.", {
+        importKey: node.importKey,
+        slotId,
+        reason
+      }),
+      actionLabel: runtimeTargetMissing ? "Review imported target" : "Review remap",
+      actionLabelDescriptor: problemDescriptor(runtimeTargetMissing ? "importedMaterialSlot.reviewTarget" : "importedMaterialSlot.reviewRemap", "actionLabel", runtimeTargetMissing ? "Review imported target" : "Review remap", {
+        importKey: node.importKey,
+        slotId,
+        reason
+      })
     },
     metadata: {
       importKey: node.importKey,
@@ -309,8 +373,11 @@ export function createImportedMaterialSlotAssignmentUnresolvedProblem(
     message: reason,
     display: {
       title: "Imported material slot needs remap",
+      titleDescriptor: problemDescriptor("importedMaterialSlot.assignmentNeedsRemap", "title", "Imported material slot needs remap", { objectId, slotId }),
       detail: `Material assignment target ${slotId} remains durable but no imported slot was matched.`,
-      actionLabel: "Review remap"
+      detailDescriptor: problemDescriptor("importedMaterialSlot.assignmentNeedsRemap", "detail", "Material assignment target {slotId} remains durable but no imported slot was matched.", { objectId, slotId }),
+      actionLabel: "Review remap",
+      actionLabelDescriptor: problemDescriptor("importedMaterialSlot.reviewRemap", "actionLabel", "Review remap", { objectId, slotId })
     },
     metadata: { slotId }
   };
@@ -340,8 +407,10 @@ export function createImportedMaterialSlotProjectionProblem(
     message: reason,
     display: {
       title: "Imported material slot could not be projected",
+      titleDescriptor: problemDescriptor("importedMaterialSlot.projectionFailed", "title", "Imported material slot could not be projected", { importKey: node.importKey, slotId }),
       detail: reason,
-      actionLabel: "Review material slot"
+      actionLabel: "Review material slot",
+      actionLabelDescriptor: problemDescriptor("importedMaterialSlot.reviewMaterialSlot", "actionLabel", "Review material slot", { importKey: node.importKey, slotId })
     },
     metadata: {
       importKey: node.importKey,
@@ -369,7 +438,9 @@ export function createImportedTargetAmbiguousProblem(match: RuntimeImportedTarge
     message: match.message ?? `Imported target ${match.importKey} matched multiple runtime objects.`,
     display: {
       title: "Imported target match is ambiguous",
-      detail: match.message ?? `The runtime could not choose one loaded GLB object for ${match.importKey}.`
+      titleDescriptor: problemDescriptor("importedTarget.ambiguous", "title", "Imported target match is ambiguous", { importKey: match.importKey, objectId: match.ownerObjectId }),
+      detail: match.message ?? `The runtime could not choose one loaded GLB object for ${match.importKey}.`,
+      detailDescriptor: match.message ? undefined : problemDescriptor("importedTarget.ambiguous", "detail", "The runtime could not choose one loaded GLB object for {importKey}.", { importKey: match.importKey, objectId: match.ownerObjectId })
     },
     metadata: {
       importKey: match.importKey,
@@ -395,7 +466,8 @@ export function createImportedTargetNonTransformableProblem(match: RuntimeImport
     recoverability: "automatic",
     message: `Imported target ${match.importKey} is linked to a shared runtime object and cannot be transformed independently.`,
     display: {
-      title: "Imported target cannot be transformed independently"
+      title: "Imported target cannot be transformed independently",
+      titleDescriptor: problemDescriptor("importedTarget.nonTransformable", "title", "Imported target cannot be transformed independently", { importKey: match.importKey, objectId: match.ownerObjectId })
     },
     metadata: {
       importKey: match.importKey,
@@ -408,4 +480,19 @@ export function createImportedTargetNonTransformableProblem(match: RuntimeImport
 
 function formatRole(role: EnvironmentProjectionRole): string {
   return role === "background" ? "Background" : "Environment";
+}
+
+function problemDescriptor(
+  path: string,
+  field: "title" | "detail" | "actionLabel",
+  fallback: string,
+  values?: Record<string, string | number | boolean | null | string[]>
+) {
+  return createDisplayMessageDescriptor({
+    namespace: "problem",
+    path,
+    field,
+    fallback,
+    ...(values ? { values } : {})
+  });
 }

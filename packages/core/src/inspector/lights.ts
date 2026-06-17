@@ -3,6 +3,8 @@ import { buildLightingPresetCommands, type LightingPresetId } from "../lights/pr
 import type { LightDefinition, LightKind } from "../lights/types";
 import type { Problem } from "../problems/types";
 import { findLightNodeId } from "../snapshot/nodes";
+import { createDisplayMessageDescriptor } from "../i18n/display-messages";
+import { inspectorActionLabelDescriptor, inspectorCommandMessageDescriptor, inspectorSectionReasonDescriptor, inspectorSectionTitleDescriptor } from "./display-messages";
 import { checkboxField, colorField, numberField, parseBoolean, parseFiniteNumber, textField, type NumberRange } from "./fields";
 import { toProblemItem } from "./problems";
 import type { InspectorActionDescriptor, InspectorCommandProblem, InspectorCommandResult, InspectorFieldDescriptor, LightFieldId, LightInspectorSection, LightListItem } from "./types";
@@ -69,13 +71,15 @@ export function buildLightSection(
   return {
     id: "lights",
     title: "Lights",
+    titleDescriptor: inspectorSectionTitleDescriptor("lights", "Lights"),
     enabled: true,
     empty: !activeLight,
     reason: activeLight ? undefined : getLightSectionEmptyReason(snapshot),
+    ...(!activeLight ? { reasonDescriptor: inspectorSectionReasonDescriptor("lights", getLightSectionEmptyReason(snapshot)) } : {}),
     activeLightId: resolvedActiveLightId,
     activeLightNodeId,
     lights: buildLightList(snapshot, resolvedActiveLightId),
-    addOptions: LIGHT_KINDS.map((kind) => ({ value: kind, label: formatLightKind(kind) })),
+    addOptions: LIGHT_KINDS.map(lightKindOption),
     fields: activeLight ? buildLightFields(activeLight) : [],
     actions: buildLightActions(snapshot, resolvedActiveLightId),
     diagnostics: activeLight ? buildLightDiagnostics(snapshot, activeLight.id, runtimeProblems) : []
@@ -149,6 +153,7 @@ function buildLightActions(snapshot: SceneSnapshot, activeLightId: string | null
     return {
       id: `lighting-preset-${id}`,
       label,
+      labelDescriptor: inspectorActionLabelDescriptor(`lighting-preset-${id}`, label),
       ...(command ? { command } : {}),
       disabled: !result.ok || !command,
       ...(result.problem ? { problem: result.problem } : {})
@@ -388,5 +393,29 @@ function isShadowCapableLight(light: LightDefinition): light is Extract<LightDef
 }
 
 function problem(fieldId: string, message: string): { ok: false; problem: InspectorCommandProblem } {
-  return { ok: false, problem: { code: "inspector-light-invalid", fieldId, message, severity: "warning" } };
+  return {
+    ok: false,
+    problem: {
+      code: "inspector-light-invalid",
+      fieldId,
+      message,
+      messageDescriptor: inspectorCommandMessageDescriptor("command.light.invalid", fieldId, message),
+      severity: "warning"
+    }
+  };
+}
+
+function lightKindOption(kind: LightKind) {
+  const label = formatLightKind(kind);
+  return {
+    value: kind,
+    label,
+    labelDescriptor: createDisplayMessageDescriptor({
+      namespace: "inspector",
+      path: `option.light.kind.${kind}`,
+      field: "label",
+      fallback: label,
+      values: { kind }
+    })
+  };
 }

@@ -3,6 +3,8 @@ import type { AssetKind, JsonValue, SceneSnapshot } from "../snapshot/types";
 import type { AssetInput } from "./types";
 import type { GlbImportDiagnostic, GlbImportManifest } from "./import-pipeline";
 import type { EditorWithGlbImport } from "../editor/editor-api";
+import type { MessageDescriptor } from "../i18n/messages";
+import { createDisplayMessageDescriptor } from "../i18n/display-messages";
 
 export type WorkbenchImportStatus = "succeeded" | "failed";
 export type WorkbenchRasterImportKind = "image" | "texture";
@@ -39,8 +41,11 @@ export interface WorkbenchAssetImportDiagnostic {
   severity: "info" | "warning" | "error";
   code: string;
   title: string;
+  titleDescriptor?: MessageDescriptor;
   detail?: string;
+  detailDescriptor?: MessageDescriptor;
   actionLabel?: string;
+  actionLabelDescriptor?: MessageDescriptor;
 }
 
 const GLB_EXTENSIONS = new Set(["glb"]);
@@ -92,8 +97,11 @@ export function classifyWorkbenchAssetImportFile(
       severity: "error",
       code: "workbench-import-kind-unsupported",
       title: "Unsupported asset type",
+      titleDescriptor: importDiagnosticDescriptor("workbench-import-kind-unsupported", "title", "Unsupported asset type", { fileName: formatLabel(file.name) }),
       detail: `${formatLabel(file.name)} cannot be imported as a local Workbench asset.`,
-      actionLabel: "Choose GLB, HDR, or image"
+      detailDescriptor: importDiagnosticDescriptor("workbench-import-kind-unsupported", "detail", "{fileName} cannot be imported as a local Workbench asset.", { fileName: formatLabel(file.name) }),
+      actionLabel: "Choose GLB, HDR, or image",
+      actionLabelDescriptor: importDiagnosticDescriptor("workbench-import-kind-unsupported", "actionLabel", "Choose GLB, HDR, or image", { fileName: formatLabel(file.name) })
     }
   };
 }
@@ -173,8 +181,16 @@ async function importWorkbenchAsset(
           severity: "error",
           code: "workbench-import-register-failed",
           title: "Asset registration failed",
+          titleDescriptor: importDiagnosticDescriptor("workbench-import-register-failed", "title", "Asset registration failed", {
+            fileName: label,
+            kind
+          }),
           ...(commandResult.error ? { detail: commandResult.error } : {}),
-          actionLabel: "Choose another file"
+          actionLabel: "Choose another file",
+          actionLabelDescriptor: importDiagnosticDescriptor("workbench-import-register-failed", "actionLabel", "Choose another file", {
+            fileName: label,
+            kind
+          })
         }],
     snapshot: commandResult.snapshot
   };
@@ -256,8 +272,22 @@ function toWorkbenchDiagnostic(diagnostic: GlbImportDiagnostic): WorkbenchAssetI
     severity: diagnostic.severity,
     code: diagnostic.code,
     title: diagnostic.display.title,
+    titleDescriptor: importDiagnosticDescriptor(diagnostic.code, "title", diagnostic.display.title, {
+      diagnosticId: diagnostic.id,
+      code: diagnostic.code
+    }),
     detail: diagnostic.display.detail ?? diagnostic.message,
-    ...(diagnostic.display.actionLabel ? { actionLabel: diagnostic.display.actionLabel } : {})
+    detailDescriptor: importDiagnosticDescriptor(diagnostic.code, "detail", diagnostic.display.detail ?? diagnostic.message, {
+      diagnosticId: diagnostic.id,
+      code: diagnostic.code
+    }),
+    ...(diagnostic.display.actionLabel ? {
+      actionLabel: diagnostic.display.actionLabel,
+      actionLabelDescriptor: importDiagnosticDescriptor(diagnostic.code, "actionLabel", diagnostic.display.actionLabel, {
+        diagnosticId: diagnostic.id,
+        code: diagnostic.code
+      })
+    } : {})
   };
 }
 
@@ -267,9 +297,27 @@ function createAmbiguousRasterDiagnostic(name: string | undefined): WorkbenchAss
     severity: "error",
     code: "workbench-import-raster-kind-required",
     title: "Choose image or texture",
+    titleDescriptor: importDiagnosticDescriptor("workbench-import-raster-kind-required", "title", "Choose image or texture", { fileName: formatLabel(name) }),
     detail: `${formatLabel(name)} is a raster file. Select whether it should be registered as an image or a texture.`,
-    actionLabel: "Choose intent"
+    detailDescriptor: importDiagnosticDescriptor("workbench-import-raster-kind-required", "detail", "{fileName} is a raster file. Select whether it should be registered as an image or a texture.", { fileName: formatLabel(name) }),
+    actionLabel: "Choose intent",
+    actionLabelDescriptor: importDiagnosticDescriptor("workbench-import-raster-kind-required", "actionLabel", "Choose intent", { fileName: formatLabel(name) })
   };
+}
+
+function importDiagnosticDescriptor(
+  code: string,
+  field: "title" | "detail" | "actionLabel",
+  fallback: string,
+  values: Record<string, string | number | boolean | null>
+) {
+  return createDisplayMessageDescriptor({
+    namespace: "workbenchImport",
+    path: `diagnostic.${code}`,
+    field,
+    fallback,
+    values: { code, ...values }
+  });
 }
 
 function getExtension(name: string | undefined): string {

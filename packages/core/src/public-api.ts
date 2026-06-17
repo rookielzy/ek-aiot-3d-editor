@@ -173,6 +173,11 @@ export type {
   MessageKey,
   SupportedLocale
 } from "./i18n/messages";
+export type {
+  DisplayMessageDescriptorInput,
+  DisplayMessageField,
+  DisplayMessageNamespace
+} from "./i18n/display-messages";
 export type { NodeSelectionInput, SelectionInput, SelectionMode, SelectionState } from "./selection/selection";
 export type {
   AssetOption,
@@ -356,6 +361,11 @@ export {
   isMessageDescriptorValues,
   isMessageKey
 } from "./i18n/messages";
+export {
+  createDisplayMessageDescriptor,
+  createFallbackDisplayMessageDescriptor,
+  descriptorValues
+} from "./i18n/display-messages";
 export { resolveDefaultPresentationView } from "./cameras/resolve";
 export { createEditor } from "./editor/create-editor";
 export { createAdvancedEditorOperations, createMemoryClipboard } from "./editor/operations";

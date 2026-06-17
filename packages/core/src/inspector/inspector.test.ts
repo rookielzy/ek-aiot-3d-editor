@@ -154,6 +154,38 @@ describe("inspector model", () => {
     expect(textureField?.options?.map((option) => option.value)).toEqual(["image-a", "texture-a"]);
     expect(environmentField?.options?.map((option) => option.value)).toEqual(["hdr-a", "image-a", "texture-a"]);
   });
+
+  it("exposes descriptors for stable inspector chrome without descriptorizing authored asset labels", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "register-asset", asset: { id: "texture-a", kind: "texture", label: "Pump A texture" } });
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a", label: "motor-control-panel.glb" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+
+    const model = buildInspectorModel(editor.getSnapshot());
+    const transformField = model.transform.fields.find((field) => field.id === "position.x");
+    const textureField = model.material.fields.find((field) => field.id === "textures.map.assetId");
+    const sideField = model.material.fields.find((field) => field.id === "side");
+
+    expect(model.transform.titleDescriptor).toMatchObject({
+      key: "inspector.section.transform.title",
+      fallback: "Transform"
+    });
+    expect(transformField?.labelDescriptor).toMatchObject({
+      key: "inspector.field.position.x.label",
+      fallback: "Position X"
+    });
+    expect(sideField?.options?.find((option) => option.value === "double")?.labelDescriptor).toMatchObject({
+      key: "inspector.option.material.side.double.label",
+      fallback: "Double"
+    });
+    const textureOption = textureField?.options?.find((option) => option.value === "texture-a");
+    expect(textureOption).toMatchObject({
+      label: "Pump A texture"
+    });
+    expect(textureOption).not.toHaveProperty("labelDescriptor");
+    expect(JSON.stringify(model)).not.toContain("i18next");
+    expect(JSON.stringify(model)).not.toContain("vue-i18n");
+  });
 });
 
 function createGroupSnapshot(): SceneSnapshot {

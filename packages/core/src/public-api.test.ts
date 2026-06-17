@@ -32,8 +32,11 @@ import {
   sortAssetWorkspaceItems,
   buildSetTransformCommand,
   createImportedGlbBindingDescriptor,
+  createDisplayMessageDescriptor,
+  createFallbackDisplayMessageDescriptor,
   createImportedGlbTargetDescriptors,
   createMessageDescriptor,
+  descriptorValues,
   ThreeGltfLoaderAdapter,
   BUILTIN_LOCALES,
   EditorViewportHelperState,
@@ -49,6 +52,9 @@ import {
   type AssetWorkspaceStatus,
   type BatchCommand,
   type CreateCameraViewCommand,
+  type DisplayMessageDescriptorInput,
+  type DisplayMessageField,
+  type DisplayMessageNamespace,
   type CreateGroupCommand,
   type CreateImportedGlbTargetsCommand,
   type DeleteNodesCommand,
@@ -231,13 +237,29 @@ describe("core public API", () => {
       fallback: "Runtime ready for {name}",
       values
     });
+    const displayInput: DisplayMessageDescriptorInput = {
+      namespace: "workbench" satisfies DisplayMessageNamespace,
+      path: "status.runtimeReady",
+      field: "label" satisfies DisplayMessageField,
+      fallback: "Runtime ready",
+      values: descriptorValues({ name: "Pump A" })
+    };
+    const displayDescriptor = createDisplayMessageDescriptor(displayInput);
+    const fallbackDescriptor = createFallbackDisplayMessageDescriptor("problem", "asset-unresolved", "actionLabel", "Replace asset", {
+      assetId: "asset-a"
+    });
 
     expect(BUILTIN_LOCALES).toEqual(["en", "zh-CN"]);
     expect(isMessageDescriptorValues(values)).toBe(true);
     expect(isMessageKey(key)).toBe(true);
     expect(descriptor.fallback).toBe("Runtime ready for {name}");
+    expect(displayDescriptor.key).toBe("workbench.status.runtimeReady.label");
+    expect(fallbackDescriptor.key).toBe("problem.fallback.asset.unresolved.actionLabel");
     expect(publicApi).toHaveProperty("BUILTIN_LOCALES");
     expect(publicApi).toHaveProperty("createMessageDescriptor");
+    expect(publicApi).toHaveProperty("createDisplayMessageDescriptor");
+    expect(publicApi).toHaveProperty("createFallbackDisplayMessageDescriptor");
+    expect(publicApi).toHaveProperty("descriptorValues");
     expect(publicApi).toHaveProperty("isMessageDescriptorValues");
     expect(publicApi).toHaveProperty("isMessageKey");
     expect(publicApi).not.toHaveProperty("i18next");

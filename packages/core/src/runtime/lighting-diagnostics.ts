@@ -1,6 +1,7 @@
 import type { LightDefinition } from "../lights/types";
 import type { Problem } from "../problems/types";
 import type { SceneSnapshot } from "../snapshot/types";
+import { createDisplayMessageDescriptor } from "../i18n/display-messages";
 import type { RuntimeLightShadowEntry, RuntimeLightShadowSummary } from "./light-projector";
 
 export interface LightingDiagnosticsOptions {
@@ -71,7 +72,9 @@ function createRendererCapabilityProblem(sceneId: string): Problem {
     message: "Shadows are authored, but this renderer does not expose shadow map support.",
     display: {
       title: "Renderer cannot display authored shadows",
-      detail: "The active runtime renderer has no shadowMap capability, so shadow settings are preserved but not visible."
+      titleDescriptor: diagnosticDescriptor("rendererShadowMapMissing", "title", "Renderer cannot display authored shadows", { sceneId }),
+      detail: "The active runtime renderer has no shadowMap capability, so shadow settings are preserved but not visible.",
+      detailDescriptor: diagnosticDescriptor("rendererShadowMapMissing", "detail", "The active runtime renderer has no shadowMap capability, so shadow settings are preserved but not visible.", { sceneId })
     }
   };
 }
@@ -87,7 +90,20 @@ function createPointShadowCostProblem(entry: RuntimeLightShadowEntry, light: Lig
     message: `Point light ${light.name} renders six shadow map faces.`,
     display: {
       title: "Point light shadow is expensive",
-      detail: `${light.name} uses ${formatTexels(entry.texelCost)} effective shadow texels because point shadows render six faces.`
+      titleDescriptor: diagnosticDescriptor("pointShadowCost", "title", "Point light shadow is expensive", {
+        lightId: entry.lightId,
+        lightName: light.name,
+        faces: entry.faces,
+        texelCost: entry.texelCost
+      }),
+      detail: `${light.name} uses ${formatTexels(entry.texelCost)} effective shadow texels because point shadows render six faces.`,
+      detailDescriptor: diagnosticDescriptor("pointShadowCost", "detail", "{lightName} uses {formattedTexelCost} effective shadow texels because point shadows render six faces.", {
+        lightId: entry.lightId,
+        lightName: light.name,
+        faces: entry.faces,
+        texelCost: entry.texelCost,
+        formattedTexelCost: formatTexels(entry.texelCost)
+      })
     },
     metadata: {
       faces: entry.faces,
@@ -107,7 +123,22 @@ function createHighMapSizeProblem(entry: RuntimeLightShadowEntry, light: LightDe
     message: `Shadow map for ${light.name} is large.`,
     display: {
       title: "Shadow map size is high",
-      detail: `${light.name} uses ${entry.mapSize.width} x ${entry.mapSize.height} shadow maps (${formatTexels(entry.texelCost)} effective texels).`
+      titleDescriptor: diagnosticDescriptor("shadowMapHigh", "title", "Shadow map size is high", {
+        lightId: entry.lightId,
+        lightName: light.name,
+        width: entry.mapSize.width,
+        height: entry.mapSize.height,
+        texelCost: entry.texelCost
+      }),
+      detail: `${light.name} uses ${entry.mapSize.width} x ${entry.mapSize.height} shadow maps (${formatTexels(entry.texelCost)} effective texels).`,
+      detailDescriptor: diagnosticDescriptor("shadowMapHigh", "detail", "{lightName} uses {width} x {height} shadow maps ({formattedTexelCost} effective texels).", {
+        lightId: entry.lightId,
+        lightName: light.name,
+        width: entry.mapSize.width,
+        height: entry.mapSize.height,
+        texelCost: entry.texelCost,
+        formattedTexelCost: formatTexels(entry.texelCost)
+      })
     },
     metadata: {
       width: entry.mapSize.width,
@@ -131,7 +162,21 @@ function createBroadDirectionalBoundsProblem(entry: RuntimeLightShadowEntry, lig
     message: `Directional shadow bounds for ${light.name} are broad.`,
     display: {
       title: "Directional shadow frustum is broad",
-      detail: `${light.name} covers ${formatNumber(width)} x ${formatNumber(height)} world units. Tightening bounds improves shadow detail.`
+      titleDescriptor: diagnosticDescriptor("directionalShadowBoundsBroad", "title", "Directional shadow frustum is broad", {
+        lightId: entry.lightId,
+        lightName: light.name,
+        width,
+        height
+      }),
+      detail: `${light.name} covers ${formatNumber(width)} x ${formatNumber(height)} world units. Tightening bounds improves shadow detail.`,
+      detailDescriptor: diagnosticDescriptor("directionalShadowBoundsBroad", "detail", "{lightName} covers {formattedWidth} x {formattedHeight} world units. Tightening bounds improves shadow detail.", {
+        lightId: entry.lightId,
+        lightName: light.name,
+        width,
+        height,
+        formattedWidth: formatNumber(width),
+        formattedHeight: formatNumber(height)
+      })
     },
     metadata: {
       width,
@@ -152,7 +197,21 @@ function createBroadRangeProblem(entry: RuntimeLightShadowEntry, light: LightDef
     message: `Shadow camera range for ${light.name} is broad.`,
     display: {
       title: "Shadow camera range is broad",
-      detail: `${light.name} uses near ${formatNumber(entry.camera.near)} and far ${formatNumber(entry.camera.far)}. A tighter range improves shadow precision.`
+      titleDescriptor: diagnosticDescriptor("shadowCameraRangeBroad", "title", "Shadow camera range is broad", {
+        lightId: entry.lightId,
+        lightName: light.name,
+        near: entry.camera.near,
+        far: entry.camera.far
+      }),
+      detail: `${light.name} uses near ${formatNumber(entry.camera.near)} and far ${formatNumber(entry.camera.far)}. A tighter range improves shadow precision.`,
+      detailDescriptor: diagnosticDescriptor("shadowCameraRangeBroad", "detail", "{lightName} uses near {formattedNear} and far {formattedFar}. A tighter range improves shadow precision.", {
+        lightId: entry.lightId,
+        lightName: light.name,
+        near: entry.camera.near,
+        far: entry.camera.far,
+        formattedNear: formatNumber(entry.camera.near),
+        formattedFar: formatNumber(entry.camera.far)
+      })
     },
     metadata: {
       near: entry.camera.near,
@@ -172,7 +231,13 @@ function createSceneBudgetProblem(sceneId: string, totalTexelCost: number): Prob
     message: "Enabled shadows exceed the conservative scene shadow budget.",
     display: {
       title: "Scene shadow budget is high",
-      detail: `Enabled shadows use ${formatTexels(totalTexelCost)} effective texels. Disable unused shadows or lower map sizes.`
+      titleDescriptor: diagnosticDescriptor("sceneShadowBudgetHigh", "title", "Scene shadow budget is high", { sceneId, totalTexelCost }),
+      detail: `Enabled shadows use ${formatTexels(totalTexelCost)} effective texels. Disable unused shadows or lower map sizes.`,
+      detailDescriptor: diagnosticDescriptor("sceneShadowBudgetHigh", "detail", "Enabled shadows use {formattedTexelCost} effective texels. Disable unused shadows or lower map sizes.", {
+        sceneId,
+        totalTexelCost,
+        formattedTexelCost: formatTexels(totalTexelCost)
+      })
     },
     metadata: {
       totalTexelCost
@@ -212,4 +277,19 @@ function formatTexels(value: number): string {
 
 function formatNumber(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function diagnosticDescriptor(
+  path: string,
+  field: "title" | "detail",
+  fallback: string,
+  values: Record<string, string | number>
+) {
+  return createDisplayMessageDescriptor({
+    namespace: "problem",
+    path: `lighting.${path}`,
+    field,
+    fallback,
+    values
+  });
 }

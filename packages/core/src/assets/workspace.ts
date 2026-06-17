@@ -3,6 +3,8 @@ import type { Problem, ProblemSeverity } from "../problems/types";
 import type { ProjectCompleteness, ProjectProblem } from "../project/package-types";
 import { findObjectNodeId } from "../snapshot/nodes";
 import type { AssetKind, AssetReference, JsonValue, SceneSnapshot } from "../snapshot/types";
+import type { MessageDescriptor } from "../i18n/messages";
+import { createDisplayMessageDescriptor } from "../i18n/display-messages";
 import {
   getGlbImportManifestFromMetadata,
   resolveGlbImportStatus,
@@ -26,6 +28,7 @@ export interface AssetReferenceLocationBase {
   kind: AssetWorkspaceReferenceKind;
   assetId: string;
   label: string;
+  labelDescriptor?: MessageDescriptor;
 }
 
 export interface ObjectAssetReferenceLocation extends AssetReferenceLocationBase {
@@ -86,9 +89,12 @@ export interface AssetWorkspaceProblemSummary {
   code: string;
   source: Problem["source"];
   title: string;
+  titleDescriptor?: MessageDescriptor;
   detail?: string;
+  detailDescriptor?: MessageDescriptor;
   recoverability: Problem["recoverability"];
   actionLabel?: string;
+  actionLabelDescriptor?: MessageDescriptor;
   assetId?: string;
   objectId?: string;
   target: Problem["target"];
@@ -120,6 +126,7 @@ export interface AssetWorkspaceItem {
   missing: boolean;
   recoverable: boolean;
   actionLabel?: string;
+  actionLabelDescriptor?: MessageDescriptor;
   status: AssetWorkspaceStatus;
   searchText: string;
 }
@@ -188,7 +195,13 @@ export function collectAssetReferenceLocations(snapshot: SceneSnapshot): AssetRe
       objectId: object.id,
       ...(nodeId ? { nodeId } : {}),
       objectName: object.name,
-      label: `Object ${object.name}`
+      label: `Object ${object.name}`,
+      labelDescriptor: referenceLabelDescriptor("objectGlb", "Object {objectName}", {
+        assetId: object.asset.id,
+        objectId: object.id,
+        nodeId: nodeId ?? null,
+        objectName: object.name
+      })
     });
   }
 
@@ -217,7 +230,11 @@ export function collectAssetReferenceLocations(snapshot: SceneSnapshot): AssetRe
       kind: "environment-background",
       assetId: backgroundSource.assetId,
       sourceKind: backgroundSource.kind,
-      label: "Environment background"
+      label: "Environment background",
+      labelDescriptor: referenceLabelDescriptor("environmentBackground", "Environment background", {
+        assetId: backgroundSource.assetId,
+        sourceKind: backgroundSource.kind
+      })
     });
   }
   if (backgroundSource.kind === "cubemap") {
@@ -227,7 +244,11 @@ export function collectAssetReferenceLocations(snapshot: SceneSnapshot): AssetRe
         source: "background",
         faceRole: face.role,
         assetId: face.assetId,
-        label: `Environment skybox ${face.role}`
+        label: `Environment skybox ${face.role}`,
+        labelDescriptor: referenceLabelDescriptor("environmentSkyboxFace", "Environment skybox {faceRole}", {
+          assetId: face.assetId,
+          faceRole: face.role
+        })
       });
     }
   }
@@ -238,7 +259,11 @@ export function collectAssetReferenceLocations(snapshot: SceneSnapshot): AssetRe
       kind: "environment-lighting",
       assetId: lightingSource.assetId,
       sourceKind: lightingSource.kind,
-      label: "Environment lighting"
+      label: "Environment lighting",
+      labelDescriptor: referenceLabelDescriptor("environmentLighting", "Environment lighting", {
+        assetId: lightingSource.assetId,
+        sourceKind: lightingSource.kind
+      })
     });
   }
   if (lightingSource.kind === "cubemap") {
@@ -248,7 +273,11 @@ export function collectAssetReferenceLocations(snapshot: SceneSnapshot): AssetRe
         source: "lighting",
         faceRole: face.role,
         assetId: face.assetId,
-        label: `Environment lighting cubemap ${face.role}`
+        label: `Environment lighting cubemap ${face.role}`,
+        labelDescriptor: referenceLabelDescriptor("environmentLightingCubemapFace", "Environment lighting cubemap {faceRole}", {
+          assetId: face.assetId,
+          faceRole: face.role
+        })
       });
     }
   }
@@ -374,9 +403,14 @@ function buildAssetWorkspaceItem(
       code: diagnostic.code,
       source: "runtime",
       title: diagnostic.display.title,
+      titleDescriptor: importDiagnosticDescriptor(assetId, diagnostic.id, diagnostic.code, "title", diagnostic.display.title),
       detail: diagnostic.display.detail ?? diagnostic.message,
+      detailDescriptor: importDiagnosticDescriptor(assetId, diagnostic.id, diagnostic.code, "detail", diagnostic.display.detail ?? diagnostic.message),
       recoverability: diagnostic.recoverability,
-      ...(diagnostic.display.actionLabel ? { actionLabel: diagnostic.display.actionLabel } : {}),
+      ...(diagnostic.display.actionLabel ? {
+        actionLabel: diagnostic.display.actionLabel,
+        actionLabelDescriptor: importDiagnosticDescriptor(assetId, diagnostic.id, diagnostic.code, "actionLabel", diagnostic.display.actionLabel)
+      } : {}),
       assetId,
       target: { kind: "asset", assetId },
       project: false
@@ -435,7 +469,10 @@ function buildAssetWorkspaceItem(
     highestProblemSeverity,
     missing,
     recoverable: allProblems.some((problem) => problem.recoverability === "user-action"),
-    ...(recoverableProblem?.actionLabel ? { actionLabel: recoverableProblem.actionLabel } : {}),
+    ...(recoverableProblem?.actionLabel ? {
+      actionLabel: recoverableProblem.actionLabel,
+      ...(recoverableProblem.actionLabelDescriptor ? { actionLabelDescriptor: recoverableProblem.actionLabelDescriptor } : {})
+    } : {}),
     status,
     searchText: ""
   };
@@ -459,10 +496,21 @@ function normalizeProblemSummary(problem: Problem | ProjectProblem | AssetWorksp
     code: problem.code,
     source: problem.source,
     title: problem.display?.title ?? problem.message,
+    ...(problem.display?.titleDescriptor ? { titleDescriptor: problem.display.titleDescriptor } : {}),
     ...(problem.display?.detail ?? problem.message ? { detail: problem.display?.detail ?? problem.message } : {}),
+    ...(problem.display?.detailDescriptor ? { detailDescriptor: problem.display.detailDescriptor } : {}),
     recoverability: problem.recoverability,
     ...(problem.display?.actionLabel ?? (problem.recoverability === "user-action" ? "Replace asset" : undefined)
-      ? { actionLabel: problem.display?.actionLabel ?? "Replace asset" }
+      ? {
+          actionLabel: problem.display?.actionLabel ?? "Replace asset",
+          actionLabelDescriptor: problem.display?.actionLabelDescriptor ?? createDisplayMessageDescriptor({
+            namespace: "assetWorkspace",
+            path: "problem.replaceAsset",
+            field: "actionLabel",
+            fallback: "Replace asset",
+            values: { code: problem.code, assetId: assetId || null }
+          })
+        }
       : {}),
     ...(assetId ? { assetId } : {}),
     ...(problem.objectId ? { objectId: problem.objectId } : {}),
@@ -633,8 +681,44 @@ function createMaterialTextureReferenceLocation(
     slot,
     ...(assignment ? { assignmentId: assignment.id, assignmentTarget: formatAssignmentTarget(assignment.target) } : {}),
     ...(assignment?.target.objectId ? { objectId: assignment.target.objectId } : {}),
-    label: `${materialName} ${formatTextureSlot(slot)}`
+    label: `${materialName} ${formatTextureSlot(slot)}`,
+    labelDescriptor: referenceLabelDescriptor("materialTexture", "{materialName} {slotLabel}", {
+      assetId,
+      materialId,
+      materialName,
+      slot,
+      slotLabel: formatTextureSlot(slot),
+      assignmentId: assignment?.id ?? null,
+      assignmentTarget: assignment ? formatAssignmentTarget(assignment.target) : null,
+      objectId: assignment?.target.objectId ?? null
+    })
   };
+}
+
+function referenceLabelDescriptor(path: string, fallback: string, values: Record<string, string | number | boolean | null>) {
+  return createDisplayMessageDescriptor({
+    namespace: "assetWorkspace",
+    path: `reference.${path}`,
+    field: "label",
+    fallback,
+    values
+  });
+}
+
+function importDiagnosticDescriptor(
+  assetId: string,
+  diagnosticId: string,
+  code: string,
+  field: "title" | "detail" | "actionLabel",
+  fallback: string
+) {
+  return createDisplayMessageDescriptor({
+    namespace: "assetWorkspace",
+    path: `importDiagnostic.${code}`,
+    field,
+    fallback,
+    values: { assetId, diagnosticId, code }
+  });
 }
 
 function formatAssignmentTarget(target: { kind: "object"; objectId: string } | { kind: "material-slot"; objectId: string; slotId: string }): string {

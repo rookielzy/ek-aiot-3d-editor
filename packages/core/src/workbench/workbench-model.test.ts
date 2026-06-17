@@ -191,16 +191,52 @@ describe("workbench model", () => {
       expect.objectContaining({
         assetId: "asset-a",
         objectId: "object-a",
-        actionLabel: "Replace asset"
+        actionLabel: "Replace asset",
+        actionLabelDescriptor: expect.objectContaining({
+          key: "problem.asset.unresolved.actionLabel"
+        })
       }),
       expect.objectContaining({
         assetId: "hdr-missing",
         objectId: undefined,
-        actionLabel: "Replace asset"
+        actionLabel: "Replace asset",
+        actionLabelDescriptor: expect.objectContaining({
+          key: "problem.fallback.replaceAsset.actionLabel"
+        })
       })
     ]);
     expect(JSON.stringify(model)).not.toContain("blob:");
     expect(JSON.stringify(model)).not.toContain("uri");
+  });
+
+  it("exposes Workbench descriptors while keeping authored labels as values", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Pump A", asset: { id: "asset-a", label: "motor-control-panel.glb" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+
+    const model = buildWorkbenchModel(editor.getSnapshot());
+
+    expect(model.selection).toMatchObject({
+      label: "Pump A",
+      labelDescriptor: {
+        key: "workbench.selection.single.label",
+        fallback: "{name}",
+        values: expect.objectContaining({
+          name: "Pump A",
+          nodeId: "object-a"
+        })
+      }
+    });
+    expect(model.status.snapFeedbackLabelDescriptor).toMatchObject({
+      key: "workbench.status.snap.idle.label",
+      fallback: "Snap idle"
+    });
+    expect(model.project.statusLabelDescriptor).toMatchObject({
+      key: "workbench.project.status.partial.label",
+      fallback: "Partial"
+    });
+    expect(JSON.stringify(model.selection.labelDescriptor?.key)).not.toContain("Pump A");
+    expect(JSON.stringify(model)).not.toContain("i18next");
   });
 
   it("attributes imported target runtime problems to hierarchy rows", () => {
@@ -755,7 +791,7 @@ describe("workbench model", () => {
     }).toEqual(before);
   });
 
-  it("keeps current fallback display strings while descriptor contract stays out of the model", () => {
+  it("keeps current fallback display strings while descriptor contract stays out of durable state", () => {
     const editor = createEditor();
     editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Pump A", asset: { id: "asset-a", label: "Pump GLB" } });
     const snapshot = editor.getSnapshot();
@@ -780,9 +816,10 @@ describe("workbench model", () => {
     });
     expect(model.project.statusLabel).toBe("1 problems");
     expect(model.selection.label).toBe("none");
-    expect(serializedModel).not.toContain("workbench.");
     expect(serializedModel).not.toContain("locale");
     expect(serializedModel).not.toContain("dictionary");
+    expect(JSON.stringify(editor.serialize())).not.toContain("workbench.");
+    expect(JSON.stringify(editor.serialize())).not.toContain("descriptor");
   });
 });
 

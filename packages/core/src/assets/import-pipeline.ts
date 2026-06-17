@@ -1,5 +1,6 @@
 import type { Material, Object3D } from "three";
 import type { Problem, ProblemRecoverability, ProblemSeverity } from "../problems/types";
+import { createDisplayMessageDescriptor } from "../i18n/display-messages";
 import { isJsonCompatible, isPlainRecord } from "../snapshot/json";
 import type { AssetReference, JsonValue } from "../snapshot/types";
 import type { ResolvedAsset } from "./types";
@@ -589,7 +590,49 @@ export function glbImportDiagnosticToProblem(
     ...(objectId ? { objectId } : {}),
     message: diagnostic.message,
     recoverability: diagnostic.recoverability,
-    display: { ...diagnostic.display },
+    display: {
+      ...diagnostic.display,
+      titleDescriptor: createDisplayMessageDescriptor({
+        namespace: "problem",
+        path: `glbImport.${diagnostic.code}`,
+        field: "title",
+        fallback: diagnostic.display.title,
+        values: {
+          assetId: asset.id,
+          objectId: objectId ?? null,
+          diagnosticId: diagnostic.id,
+          code: diagnostic.code
+        }
+      }),
+      ...(diagnostic.display.detail ? {
+        detailDescriptor: createDisplayMessageDescriptor({
+          namespace: "problem",
+          path: `glbImport.${diagnostic.code}`,
+          field: "detail",
+          fallback: diagnostic.display.detail,
+          values: {
+            assetId: asset.id,
+            objectId: objectId ?? null,
+            diagnosticId: diagnostic.id,
+            code: diagnostic.code
+          }
+        })
+      } : {}),
+      ...(diagnostic.display.actionLabel ? {
+        actionLabelDescriptor: createDisplayMessageDescriptor({
+          namespace: "problem",
+          path: `glbImport.${diagnostic.code}`,
+          field: "actionLabel",
+          fallback: diagnostic.display.actionLabel,
+          values: {
+            assetId: asset.id,
+            objectId: objectId ?? null,
+            diagnosticId: diagnostic.id,
+            code: diagnostic.code
+          }
+        })
+      } : {})
+    },
     metadata: {
       ...(diagnostic.metadata ?? {}),
       glbImportDiagnosticId: diagnostic.id,
