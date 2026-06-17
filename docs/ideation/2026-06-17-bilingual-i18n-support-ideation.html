@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ideation: Bilingual i18n Support</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fa;
+      --panel: #ffffff;
+      --text: #172033;
+      --muted: #5e6a7e;
+      --line: #d9dee8;
+      --accent: #1d6f8f;
+      --accent-soft: #e6f4f7;
+      --accent-text: #0d4c61;
+      --warn-soft: #fff4d6;
+      --warn-text: #684600;
+      --danger-soft: #fde8e8;
+      --danger-text: #7f1d1d;
+      --code: #25324a;
+      --shadow: 0 18px 50px rgba(28, 35, 50, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    code {
+      color: var(--code);
+      background: #eef1f6;
+      border-radius: 4px;
+      padding: 0.08rem 0.28rem;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.92em;
+    }
+
+    .page {
+      width: min(960px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 40px 0 56px;
+    }
+
+    header,
+    section,
+    footer {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    header {
+      padding: 28px 32px;
+    }
+
+    section {
+      margin-top: 18px;
+      padding: 26px 32px;
+    }
+
+    footer {
+      margin-top: 18px;
+      padding: 18px 24px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    h1,
+    h2,
+    h3 {
+      line-height: 1.25;
+      margin: 0;
+    }
+
+    h1 {
+      font-size: clamp(1.8rem, 4vw, 2.7rem);
+      letter-spacing: 0;
+    }
+
+    h2 {
+      font-size: 1.35rem;
+      margin-bottom: 14px;
+    }
+
+    h3 {
+      font-size: 1.05rem;
+      margin-bottom: 10px;
+    }
+
+    p {
+      margin: 0 0 0.9rem;
+      max-width: 74ch;
+    }
+
+    ul,
+    ol {
+      margin: 0.4rem 0 0;
+      padding-left: 1.3rem;
+    }
+
+    li {
+      margin: 0.25rem 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 0.92rem;
+    }
+
+    th,
+    td {
+      border-top: 1px solid var(--line);
+      padding: 10px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 650;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .chip,
+    .idea-meta span {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      border-radius: 999px;
+      border: 1px solid #bfdde5;
+      background: var(--accent-soft);
+      color: var(--accent-text);
+      padding: 0 10px;
+      font-size: 0.86rem;
+      font-weight: 600;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .summary-grid div {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fbfcfe;
+    }
+
+    .summary-grid strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 1.35rem;
+    }
+
+    .jump-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin: 14px 0 18px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .jump-list a {
+      display: block;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #fbfcfe;
+      color: var(--text);
+    }
+
+    .idea {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      margin-top: 14px;
+      background: #fbfcfe;
+    }
+
+    .idea-header {
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 10px;
+    }
+
+    .idea-rank {
+      flex: 0 0 auto;
+      display: inline-grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: white;
+      font-weight: 750;
+    }
+
+    .idea-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 10px 0 12px;
+    }
+
+    .basis {
+      border-left: 4px solid var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent-text);
+      padding: 12px 14px;
+      border-radius: 0 8px 8px 0;
+      margin: 12px 0;
+    }
+
+    .downside {
+      border-left: 4px solid #f59e0b;
+      background: var(--warn-soft);
+      color: var(--warn-text);
+      padding: 12px 14px;
+      border-radius: 0 8px 8px 0;
+    }
+
+    .diagram {
+      margin: 14px 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 12px;
+      overflow-x: auto;
+    }
+
+    .diagram svg {
+      display: block;
+      width: 100%;
+      min-width: 560px;
+      height: auto;
+    }
+
+    .rejected {
+      background: var(--danger-soft);
+      color: var(--danger-text);
+      border-color: #f5b7b7;
+    }
+
+    @media (max-width: 760px) {
+      .page {
+        width: min(100vw - 20px, 960px);
+        padding-top: 20px;
+      }
+
+      header,
+      section {
+        padding: 20px;
+      }
+
+      .summary-grid,
+      .jump-list {
+        grid-template-columns: 1fr;
+      }
+
+      .idea-header {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header>
+      <h1>Ideation: Bilingual i18n Support</h1>
+      <p>判断当前 3D editor 是否值得做中英文国际化，以及最强的切入方向是什么。结论：值得做，但应该先做 message contract 和宿主接入边界，避免把具体 i18n runtime 过早塞进 core。</p>
+      <div class="meta">
+        <span class="chip">date: <time datetime="2026-06-17">2026-06-17</time></span>
+        <span class="chip">topic: bilingual-i18n-support</span>
+        <span class="chip">focus: 中英文国际化支持</span>
+        <span class="chip">mode: repo-grounded</span>
+      </div>
+    </header>
+
+    <section>
+      <h2>Grounding Context</h2>
+      <h3>Codebase Context</h3>
+      <p>当前仓库是 pnpm TypeScript workspace：core editor state、commands、validation、runtime projection 和 Workbench model 在 <code>packages/core</code>，React/Vue 适配器在 <code>packages/react</code> 和 <code>packages/vue</code>。README 明确强调 durable state 只能存 versioned scene snapshot 和 <code>.ek3d</code> JSON；Three.js runtime、resolver output、helper state 等不能序列化。</p>
+      <p>检索没有发现已有 i18n 系统；<code>translate</code> 命中主要是 transform mode，不是翻译能力。反而能看到大量英文文案已经进入 public-ish model 和 UI：<code>InspectorFieldDescriptor.label</code>、<code>InspectorSection.title</code>、<code>InspectorCommandProblem.message</code> 是 core 类型的一部分；material/environment/workbench builders 直接产出英文 label、title、reason、message；React/Vue Workbench 组件也有大量硬编码英文按钮、aria label、placeholder 和状态文本。</p>
+      <p>典型证据包括：<code>packages/core/src/inspector/types.ts:17</code> 定义字段 label，<code>packages/core/src/inspector/material.ts:33</code> 返回 <code>title: "Material"</code> 和 material field labels，<code>packages/core/src/inspector/environment.ts:41</code> 返回 environment action/field labels，<code>packages/core/src/workbench/workbench-model.ts:526</code> 产出 <code>Ready</code>/<code>Partial</code>/<code>problems</code> 状态文本，<code>packages/react/src/components/WorkbenchToolbar.tsx:69</code> 和 <code>packages/react/src/components/WorkbenchLeftPanel.tsx:151</code> 硬编码默认 Workbench 文案。Vue 侧基本镜像这些字符串。</p>
+      <h3>External Context</h3>
+      <p>外部资料只用于校准边界，不作为选型承诺。i18next 官方文档强调 interpolation、plural、TypeScript 支持和类型安全翻译；react-i18next 的官方入口是 <code>useTranslation</code> hook / provider；Vue I18n 支持 Vue 3 Composition API，且需要关心 legacy/composition 模式；MDN 的 <code>Intl</code> 文档确认数字、日期和语言敏感格式化已有浏览器标准能力。这个外部形态支持“core 不绑定 runtime，adapter/host 可以接入自己 i18n 栈”的判断。</p>
+      <h3>Past Learnings</h3>
+      <p>仓库没有 <code>docs/solutions/</code> 可复用。本轮沿用项目自身的稳定原则：snapshot-first、runtime-only 不持久化、React/Vue adapter thin、公共 package surface 谨慎扩张。</p>
+    </section>
+
+    <section>
+      <h2>Topic Axes</h2>
+      <ul>
+        <li>Message boundary and durable state</li>
+        <li>Default Workbench UI</li>
+        <li>Problems and diagnostics</li>
+        <li>Host integration surface</li>
+        <li>Verification and documentation</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Ranked Ideas</h2>
+      <div class="summary-grid">
+        <div><strong>20</strong> raw candidates considered</div>
+        <div><strong>6</strong> ranked survivors</div>
+        <div><strong>5</strong> axes covered</div>
+      </div>
+      <ol class="jump-list">
+        <li><a href="#idea-1">1. Core Message Descriptor Layer Before Any Framework Runtime</a></li>
+        <li><a href="#idea-2">2. Built-in en / zh-CN Workbench Dictionaries Shared by React and Vue</a></li>
+        <li><a href="#idea-3">3. Localize Problems and Diagnostics by Code, Not by Serialized Message</a></li>
+        <li><a href="#idea-4">4. Host Translator Bridge Instead of Owning the User's i18n Runtime</a></li>
+        <li><a href="#idea-5">5. Locale-Sensitive Formatting Helpers for Counts, Numbers, and Status Text</a></li>
+        <li><a href="#idea-6">6. Bilingual Verification Harness and String Audit</a></li>
+      </ol>
+
+      <article class="idea" id="idea-1">
+        <div class="idea-header">
+          <span class="idea-rank">1</span>
+          <div>
+            <h3>Core Message Descriptor Layer Before Any Framework Runtime</h3>
+            <div class="idea-meta">
+              <span>Axis: Message boundary and durable state</span>
+              <span>Confidence: 94%</span>
+              <span>Complexity: High</span>
+            </div>
+          </div>
+        </div>
+        <p><strong>Description:</strong> 先把 core/workbench/inspector 产出的 display string 从“直接英文字符串”升级为可翻译 message descriptor：稳定 key、默认英文 fallback、参数 values、必要时的 semantic kind。UI 层可以立刻渲染 fallback，也可以用 translator 把 descriptor 转成中文。这个方向不要求马上引入 i18next、react-i18next 或 Vue I18n。</p>
+        <div class="diagram">
+          <svg viewBox="0 0 760 180" role="img" aria-label="Message descriptor boundary from core to adapters">
+            <defs>
+              <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                <path d="M0,0 L8,4 L0,8 Z" fill="#1d6f8f"></path>
+              </marker>
+            </defs>
+            <rect x="20" y="42" width="170" height="92" rx="8" fill="#e6f4f7" stroke="#1d6f8f"></rect>
+            <text x="105" y="78" text-anchor="middle" font-size="16" font-weight="700" fill="#0d4c61">Core builders</text>
+            <text x="105" y="104" text-anchor="middle" font-size="13" fill="#0d4c61">keys + values + fallback</text>
+            <line x1="190" y1="88" x2="315" y2="88" stroke="#1d6f8f" stroke-width="3" marker-end="url(#arrow)"></line>
+            <rect x="315" y="42" width="170" height="92" rx="8" fill="#ffffff" stroke="#d9dee8"></rect>
+            <text x="400" y="78" text-anchor="middle" font-size="16" font-weight="700" fill="#172033">Translator</text>
+            <text x="400" y="104" text-anchor="middle" font-size="13" fill="#5e6a7e">built-in or host supplied</text>
+            <line x1="485" y1="88" x2="610" y2="88" stroke="#1d6f8f" stroke-width="3" marker-end="url(#arrow)"></line>
+            <rect x="610" y="42" width="130" height="92" rx="8" fill="#f7f8fa" stroke="#d9dee8"></rect>
+            <text x="675" y="78" text-anchor="middle" font-size="16" font-weight="700" fill="#172033">React / Vue</text>
+            <text x="675" y="104" text-anchor="middle" font-size="13" fill="#5e6a7e">render strings</text>
+          </svg>
+        </div>
+        <div class="basis"><strong>Basis:</strong> direct: <code>packages/core/src/inspector/types.ts:17</code> exposes <code>label</code>, <code>packages/core/src/inspector/types.ts:51</code> exposes section <code>title</code>/<code>reason</code>, and <code>packages/core/src/workbench/workbench-model.ts:526</code> already produces English status labels from core. These strings sit below React/Vue, so adapter-only translation cannot cover the surface cleanly.</div>
+        <p><strong>Rationale:</strong> 这是最重要的地基。它让 core 继续 framework-neutral，同时阻止英文文案继续固化到 public model。后续中英文、宿主自定义翻译、测试和 docs 都可以围绕同一 message key contract 展开。</p>
+        <p class="downside"><strong>Downsides:</strong> 需要触及 inspector/workbench/problem 类型，会带来 API 设计成本。必须避免把所有用户自定义数据也“key 化”；node name、asset label、scene name 仍然应该是用户内容。</p>
+      </article>
+
+      <article class="idea" id="idea-2">
+        <div class="idea-header">
+          <span class="idea-rank">2</span>
+          <div>
+            <h3>Built-in <code>en</code> / <code>zh-CN</code> Workbench Dictionaries Shared by React and Vue</h3>
+            <div class="idea-meta">
+              <span>Axis: Default Workbench UI</span>
+              <span>Confidence: 91%</span>
+              <span>Complexity: Medium</span>
+            </div>
+          </div>
+        </div>
+        <p><strong>Description:</strong> 为 install-ready 默认 Workbench 提供内置英文和简体中文词典，覆盖 toolbar、left panel、status bar、inspector chrome、aria label、placeholder、empty state 和 import/recovery UI。React 和 Vue 应消费同一份 key/dictionary contract，而不是各自维护一套翻译。</p>
+        <div class="basis"><strong>Basis:</strong> direct: <code>packages/react/src/components/WorkbenchToolbar.tsx:69</code> 到 <code>:220</code> 是密集英文按钮和 title，<code>packages/react/src/components/WorkbenchLeftPanel.tsx:151</code> 起也有 Hierarchy、Assets、Import assets、Search assets、Status、Sort 等文案；Vue 左面板和 toolbar 基本复制同一 UI surface。</div>
+        <p><strong>Rationale:</strong> 这个项目已经把 React/Vue default Workbench 当作 npm 包产品化卖点。中英文支持如果只覆盖 core descriptors，不覆盖 default shell，用户第一眼仍会看到英文界面。共享词典还能降低 React/Vue parity 风险。</p>
+        <p class="downside"><strong>Downsides:</strong> 翻译会暴露中文长文本导致布局溢出的风险，尤其是 toolbar 小按钮和 status bar。实现时需要 browser screenshot 或 DOM 文本 fitting 验证，不能只跑 unit test。</p>
+      </article>
+
+      <article class="idea" id="idea-3">
+        <div class="idea-header">
+          <span class="idea-rank">3</span>
+          <div>
+            <h3>Localize Problems and Diagnostics by Code, Not by Serialized Message</h3>
+            <div class="idea-meta">
+              <span>Axis: Problems and diagnostics</span>
+              <span>Confidence: 90%</span>
+              <span>Complexity: High</span>
+            </div>
+          </div>
+        </div>
+        <p><strong>Description:</strong> 把 runtime/project/import/material/environment/light problem 的用户展示文案按 problem code 和参数进行本地化。持久或派生 problem 仍保留 <code>code</code>、<code>target</code>、<code>metadata</code> 和 fallback message；UI 渲染时根据 locale 生成 title/detail/actionLabel。不要把中文/英文结果写进 snapshot 或 <code>.ek3d</code>。</p>
+        <div class="diagram">
+          <svg viewBox="0 0 760 190" role="img" aria-label="Problem code localization path">
+            <rect x="24" y="38" width="190" height="104" rx="8" fill="#fff4d6" stroke="#d39b09"></rect>
+            <text x="119" y="72" text-anchor="middle" font-size="16" font-weight="700" fill="#684600">Problem source</text>
+            <text x="119" y="98" text-anchor="middle" font-size="13" fill="#684600">code + target + metadata</text>
+            <text x="119" y="122" text-anchor="middle" font-size="13" fill="#684600">fallback message</text>
+            <path d="M214 90 H330" stroke="#1d6f8f" stroke-width="3" marker-end="url(#arrow2)"></path>
+            <defs>
+              <marker id="arrow2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                <path d="M0,0 L8,4 L0,8 Z" fill="#1d6f8f"></path>
+              </marker>
+            </defs>
+            <rect x="330" y="38" width="170" height="104" rx="8" fill="#e6f4f7" stroke="#1d6f8f"></rect>
+            <text x="415" y="78" text-anchor="middle" font-size="16" font-weight="700" fill="#0d4c61">Message map</text>
+            <text x="415" y="106" text-anchor="middle" font-size="13" fill="#0d4c61">en / zh-CN / host</text>
+            <path d="M500 90 H610" stroke="#1d6f8f" stroke-width="3" marker-end="url(#arrow2)"></path>
+            <rect x="610" y="38" width="126" height="104" rx="8" fill="#ffffff" stroke="#d9dee8"></rect>
+            <text x="673" y="78" text-anchor="middle" font-size="16" font-weight="700" fill="#172033">UI display</text>
+            <text x="673" y="106" text-anchor="middle" font-size="13" fill="#5e6a7e">localized text</text>
+          </svg>
+        </div>
+        <div class="basis"><strong>Basis:</strong> direct: <code>packages/core/src/problems/types.ts</code> defines <code>Problem.code</code>, <code>target</code>, <code>message</code>, and optional <code>display</code>; <code>packages/core/src/assets/import-pipeline.ts</code> creates decoder and extension diagnostics with English <code>display.title</code>/<code>actionLabel</code>; <code>README.md</code> states runtime diagnostics are exposed as problems instead of being written back into snapshot.</div>
+        <p><strong>Rationale:</strong> Problems 是真实用户最需要看懂的地方，也是最容易把英文错误泄漏给中文用户的地方。按 code 本地化还能让宿主覆盖业务术语，同时保留 fallback message 便于调试。</p>
+        <p class="downside"><strong>Downsides:</strong> 不是所有 Error.message 都能稳定翻译；loader/raw exception 仍可能只能作为 fallback detail。需要区分用户可操作诊断和开发者调试细节。</p>
+      </article>
+
+      <article class="idea" id="idea-4">
+        <div class="idea-header">
+          <span class="idea-rank">4</span>
+          <div>
+            <h3>Host Translator Bridge Instead of Owning the User's i18n Runtime</h3>
+            <div class="idea-meta">
+              <span>Axis: Host integration surface</span>
+              <span>Confidence: 87%</span>
+              <span>Complexity: Medium</span>
+            </div>
+          </div>
+        </div>
+        <p><strong>Description:</strong> 对 React/Vue/default Workbench 暴露一个小而稳定的 translator bridge，例如 <code>locale</code>、<code>messages</code>、<code>translate(descriptor)</code> 或 <code>i18n</code> prop/composable 参数。默认用内置词典；宿主可桥接到 i18next、react-i18next、Vue I18n 或自己的企业翻译系统。</p>
+        <div class="basis"><strong>Basis:</strong> external: react-i18next 官方推荐通过 <code>useTranslation</code> 获取翻译函数，Vue I18n 官方支持 Composition API 的 <code>useI18n</code>；二者框架形态不同。reasoned: 该项目同时发布 React、Vue 和 core 包，如果 core 或 shared workbench 绑定其中任一 runtime，会破坏 adapter thin 和 framework-neutral 边界。</div>
+        <p><strong>Rationale:</strong> 宿主应用很可能已经有自己的语言切换、namespace、加载策略和术语表。桥接而不是拥有 runtime，可以让默认 Workbench 立即可用，又不干扰宿主架构。</p>
+        <p class="downside"><strong>Downsides:</strong> Bridge 设计太宽会变成另一个 i18n 框架；太窄又覆盖不了 plural/interpolation。第一版应只支持本项目需要的 keys、values、fallback 和 basic formatting。</p>
+      </article>
+
+      <article class="idea" id="idea-5">
+        <div class="idea-header">
+          <span class="idea-rank">5</span>
+          <div>
+            <h3>Locale-Sensitive Formatting Helpers for Counts, Numbers, and Status Text</h3>
+            <div class="idea-meta">
+              <span>Axis: Message boundary and durable state</span>
+              <span>Confidence: 82%</span>
+              <span>Complexity: Medium</span>
+            </div>
+          </div>
+        </div>
+        <p><strong>Description:</strong> 把 selection count、problem count、asset refs、FOV/rotation/position display、status labels、date/time 等显示格式从字符串拼接升级成 locale-aware formatting。优先使用浏览器标准 <code>Intl.NumberFormat</code>/<code>Intl.DateTimeFormat</code>，再由 message descriptor 插入格式化结果。</p>
+        <div class="basis"><strong>Basis:</strong> direct: <code>packages/core/src/workbench/workbench-model.ts:541</code> 返回 <code>none</code> / <code>${count} nodes</code>，<code>:526</code> 返回 <code>${problemCount} problems</code>；React/Vue asset panels 拼接 <code>refs</code>、<code>problems</code>、status 等。external: MDN 文档说明 <code>Intl.NumberFormat</code> 和 <code>Intl.DateTimeFormat</code> 是语言敏感格式化 API。</div>
+        <p><strong>Rationale:</strong> 只翻译固定词不够。中文不需要英文复数，英文需要 plural，数字和日期也应跟随 locale。这个方向能把最常见的“半翻译”问题提前解决。</p>
+        <p class="downside"><strong>Downsides:</strong> 本项目目前多数数字是编辑器参数而非业务日期，过早做复杂单位系统会超范围。第一版只做 count/status/date/number 的基础格式化，不做完整 unit conversion。</p>
+      </article>
+
+      <article class="idea" id="idea-6">
+        <div class="idea-header">
+          <span class="idea-rank">6</span>
+          <div>
+            <h3>Bilingual Verification Harness and String Audit</h3>
+            <div class="idea-meta">
+              <span>Axis: Verification and documentation</span>
+              <span>Confidence: 86%</span>
+              <span>Complexity: Medium</span>
+            </div>
+          </div>
+        </div>
+        <p><strong>Description:</strong> 给 i18n 加一个持续防回归层：string audit 测试列出 core/React/Vue 默认 UI 中未 key 化的英文文案；React/Vue Workbench test 分别以 <code>en</code> 和 <code>zh-CN</code> 渲染关键路径；browser screenshot 或 DOM 尺寸检查覆盖中文长文本不溢出；docs 给出宿主如何接入内置词典和自定义 translator。</p>
+        <div class="basis"><strong>Basis:</strong> direct: 仓库已有 React/Vue Workbench tests、browser tests 和 release verification；AGENTS.md 要求 UI 相关变化用 <code>pnpm test</code>，browser/runtime 行为用 <code>pnpm test:browser</code>。reasoned: i18n 最常见失败不是初次翻译，而是新功能重新硬编码英文或中文布局破裂。</div>
+        <p><strong>Rationale:</strong> 国际化如果没有验证，很快会变成一次性翻译。这个方向让 i18n 成为 package quality gate，尤其适合当前双适配器、默认 Workbench、npm 发布的产品形态。</p>
+        <p class="downside"><strong>Downsides:</strong> string audit 可能误报技术名词、asset/user-authored labels、test fixture names。需要白名单和清楚规则，不要把测试变成维护负担。</p>
+      </article>
+    </section>
+
+    <section>
+      <h2>Rejection Summary</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Idea</th>
+            <th>Reason Rejected</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>Add i18next directly to core</td><td>Core 是 framework-neutral contract；强绑一个 runtime 会增加依赖和 public API 压力。</td></tr>
+          <tr><td>2</td><td>Add react-i18next and Vue I18n immediately</td><td>没有 message contract 前，双 runtime 只会让 React/Vue 各自补洞，无法覆盖 core 产出的英文。</td></tr>
+          <tr><td>3</td><td>Translate durable scene/node/asset names</td><td>这些是用户内容，不是 UI chrome；自动翻译会污染 durable authoring data。</td></tr>
+          <tr><td>4</td><td>Store locale in <code>SceneSnapshot</code></td><td>Locale 是宿主/session UI state，不是场景真相；写入 snapshot 会违反项目 durable-state 边界。</td></tr>
+          <tr><td>5</td><td>Browser-language auto-detection only</td><td>嵌入式编辑器需要宿主显式控制语言；自动检测可作为默认，但不能是唯一机制。</td></tr>
+          <tr><td>6</td><td>Chinese as the only/default UI</td><td>项目准备发布 npm 包，英文仍是生态默认；正确目标是内置 en + zh-CN 并允许宿主选择。</td></tr>
+          <tr><td>7</td><td>Extract every string into JSON in one sweep</td><td>会机械搬运字符串但不解决 message boundary、参数、problem code 和 host bridge。</td></tr>
+          <tr><td>8</td><td>Problem messages only</td><td>有价值但范围过窄；默认 Workbench 的 toolbar/sidebar/inspector 仍会保持英文。</td></tr>
+          <tr><td>9</td><td>Toolbar/sidebar only</td><td>能快速显效，但 core inspector/problem model 仍泄漏英文，后续返工大。</td></tr>
+          <tr><td>10</td><td>Full translation-key codegen first</td><td>可能有用，但在 key shape 尚未稳定前过早；先用手写 typed key union 或 const dictionary 更务实。</td></tr>
+          <tr><td>11</td><td>Machine translation workflow</td><td>当前需求是中英文产品支持，不是翻译运营系统；可后置到文案规模变大后。</td></tr>
+          <tr><td>12</td><td>Persist user language in <code>.ek3d</code></td><td>同 snapshot locale 问题；项目包应保存场景和资产 payload，不保存某个宿主 UI 偏好。</td></tr>
+          <tr><td>13</td><td>Defer all i18n until 1.0</td><td>英文已经进入默认 Workbench 和 public model；越晚抽离，API 和测试返工越大。</td></tr>
+          <tr><td>14</td><td>Use CSS-only language switching</td><td>无法处理参数、plural、diagnostics 和 host integration，属于演示层技巧。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>External References</h2>
+      <ul>
+        <li><a href="https://www.i18next.com/translation-function/interpolation">i18next interpolation documentation</a></li>
+        <li><a href="https://www.i18next.com/overview/typescript">i18next TypeScript documentation</a></li>
+        <li><a href="https://react.i18next.com/latest/usetranslation-hook">react-i18next useTranslation documentation</a></li>
+        <li><a href="https://vue-i18n.intlify.dev/guide/advanced/composition">Vue I18n Composition API guide</a></li>
+        <li><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/NumberFormat">MDN Intl.NumberFormat</a></li>
+        <li><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat">MDN Intl.DateTimeFormat</a></li>
+      </ul>
+    </section>
+
+    <footer class="composition-signal">
+      Composed 2026-06-17T00:00Z by ce-ideate from the prompt “现在我想做中英文国际化的支持，你觉得怎么样”.
+    </footer>
+  </main>
+</body>
+</html>
