@@ -4,6 +4,8 @@ import { decodeArchiveJson, defaultArchiveAdapter } from "./archive-adapter";
 import { PROJECT_MANIFEST_PATH, PROJECT_SCENE_PATH } from "./package-types";
 import { createEditor } from "../editor/create-editor";
 import type { EditorMarqueeSelectionState } from "../editor/marquee-selection-state";
+import { expectAuthoredValuesPresent, expectNoI18nDurableLeakage, expectNoRuntimeOnlyLeakage } from "../../../test/i18n-durable-sentinels";
+import { seedI18nDurableEditor } from "../../../test/i18n-durable-fixture";
 
 describe("project export", () => {
   it("exports scene, manifest, and payload entries when payloads are available", () => {
@@ -301,12 +303,7 @@ describe("project export", () => {
 
   it("does not export locale, dictionaries, translated copy, or descriptor-only UI data", () => {
     const editor = createEditor();
-    editor.dispatch({
-      type: "import-glb",
-      objectId: "object-a",
-      name: "Pump A",
-      asset: { id: "asset-a", label: "Pump A", source: new Uint8Array([1, 2, 3]) }
-    });
+    seedI18nDurableEditor(editor);
 
     const result = editor.exportProject();
 
@@ -328,13 +325,14 @@ describe("project export", () => {
       }
     });
     expect(scene.objects["object-a"].name).toBe("Pump A");
-    expect(scene.assets["asset-a"].label).toBe("Pump A");
-    expect(serializedScene).toContain("Pump A");
-    expect(packageText).not.toContain("workbench.");
-    expect(packageText).not.toContain("Asset {name}");
-    expect(packageText).not.toContain("locale");
-    expect(packageText).not.toContain("dictionary");
-    expect(packageText).not.toContain("translated");
+    expect(scene.assets["asset-a"].label).toBe("motor-control-panel.glb");
+    expect(scene.assets["texture-a"].label).toBe("Body");
+    expect(scene.assets["hdr-a"].label).toBe("Studio HDR");
+    expect(scene.lights["light-a"].name).toBe("Key light");
+    expect(scene.cameras["view-a"].name).toBe("Hero view");
+    expectAuthoredValuesPresent(packageText);
+    expectNoI18nDurableLeakage(packageText);
+    expectNoRuntimeOnlyLeakage(packageText);
   });
 });
 

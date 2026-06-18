@@ -17,6 +17,8 @@ import {
 } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
 import { useWorkbench } from "../src/hooks/use-workbench";
+import { expectAuthoredValuesPresent, expectNoI18nDurableLeakage, expectNoRuntimeOnlyLeakage } from "../../test/i18n-durable-sentinels";
+import { decodeProjectPackageText, resolveProjectPackageBytes, seedI18nDurableEditor } from "../../test/i18n-durable-fixture";
 
 describe("React EditorWorkbench", () => {
   it("composes viewport, inspector, and render regions around one core editor", () => {
@@ -628,6 +630,70 @@ describe("React EditorWorkbench", () => {
     expect(inspector.getByText(/警告 · 资源解析器 · asset-a · 替换资源/)).toBeTruthy();
     expect(JSON.stringify(editor.serialize())).not.toContain("zh-CN");
     expect(JSON.stringify(editor.serialize())).not.toContain("无法解析资源");
+  });
+
+  it("keeps locale interactions and replacement files out of serialized and exported state", async () => {
+    const editor = createEditor();
+    seedI18nDurableEditor(editor);
+    const { rerender } = render(
+      <EditorWorkbench
+        editor={editor}
+        resolver={new AssetResolverBridge(() => null)}
+        rendererFactory={fakeRenderer}
+        locale="en"
+        showLocaleSwitcher={false}
+        translate={(descriptor, locale) =>
+          descriptor.key === "reactWorkbench.toolbar.project.open.label" && locale === "zh-CN"
+            ? "宿主打开"
+            : undefined}
+      />
+    );
+
+    rerender(
+      <EditorWorkbench
+        editor={editor}
+        resolver={new AssetResolverBridge(() => null)}
+        rendererFactory={fakeRenderer}
+        locale="zh-CN"
+        localeSwitcherDisabled
+        translate={(descriptor, locale) =>
+          descriptor.key === "reactWorkbench.toolbar.project.open.label" && locale === "zh-CN"
+            ? "宿主打开"
+            : undefined}
+      />
+    );
+    fireEvent.click(screen.getByText("Pump A"));
+    const positionXInput = screen.getAllByLabelText("位置 X")
+      .find((input) => (input as HTMLInputElement).value === "0") as HTMLInputElement | undefined;
+    expect(positionXInput).toBeTruthy();
+    fireEvent.change(positionXInput!, { target: { value: "2" } });
+    fireEvent.blur(positionXInput!);
+    const replacementFile = new File([new Uint8Array([10, 11, 12, 13])], "motor-control-panel.glb", { type: "model/gltf-binary" });
+    await act(async () => {
+      await editor.replaceAsset({
+        assetId: "asset-a",
+        source: replacementFile,
+        label: replacementFile.name,
+        mimeType: replacementFile.type
+      });
+    });
+
+    const exported = editor.exportProject({ partial: true });
+    const serialized = editor.serialize();
+    const packageBytes = await resolveProjectPackageBytes(exported.packageBytes);
+    const packageText = decodeProjectPackageText(packageBytes);
+
+    expect(packageBytes).toBeInstanceOf(Uint8Array);
+    expect(serialized.objects["object-a"].transform.position[0]).toBe(2);
+    expect(editor.getAssetWorkspacePayloads().find((payload) => payload.assetId === "asset-a")?.byteSize).toBe(4);
+    expectAuthoredValuesPresent(serialized);
+    expectAuthoredValuesPresent(packageText);
+    expectNoI18nDurableLeakage(serialized);
+    expectNoI18nDurableLeakage(packageText);
+    expectNoRuntimeOnlyLeakage(serialized);
+    expectNoRuntimeOnlyLeakage(packageText);
+    expect(JSON.stringify(serialized)).not.toContain("宿主打开");
+    expect(packageText).not.toContain("宿主打开");
   });
 
   it("does not recreate editor or remount runtime when controlled locale changes", () => {
