@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   AssetResolverBridge,
-  ThreeGltfLoaderAdapter,
   type EditorRuntimeOptions,
   type EditorWithGlbImport,
   type Problem,
@@ -9,10 +8,11 @@ import {
 } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench, useEditor, type WorkbenchContext, type WorkbenchLocale } from "@ek-aiot/3d-editor-react";
 import simpleBoxUrl from "../../../packages/core/test/fixtures/simple-box.glb?url";
+import { createDemoGltfLoader } from "./demo-gltf-loader";
 
 const RECOVERABLE_ASSET_ID = "recoverable-box";
 
-const demoLoader = new ThreeGltfLoaderAdapter();
+const demoLoader = createDemoGltfLoader();
 
 export interface AppProps {
   locale?: WorkbenchLocale;

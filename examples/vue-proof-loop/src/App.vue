@@ -24,7 +24,6 @@
 <script setup lang="ts">
 import {
   AssetResolverBridge,
-  ThreeGltfLoaderAdapter,
   type EditorRuntimeOptions,
   type EditorWithGlbImport,
   type Problem,
@@ -33,6 +32,7 @@ import {
 import { EditorWorkbench, useEditor, type WorkbenchLocale } from "@ek-aiot/3d-editor-vue";
 import { ref } from "vue";
 import simpleBoxUrl from "../../../packages/core/test/fixtures/simple-box.glb?url";
+import { createDemoGltfLoader } from "./demo-gltf-loader";
 
 const RECOVERABLE_ASSET_ID = "recoverable-box";
 
@@ -51,7 +51,7 @@ const resolver = new AssetResolverBridge((asset) => {
   }
   return { uri: simpleBoxUrl, metadata: { assetId: asset.id, ...(asset.label ? { label: asset.label } : {}) } };
 });
-const demoLoader = new ThreeGltfLoaderAdapter();
+const demoLoader = createDemoGltfLoader();
 
 if (!editor.getSnapshot().objects.box) {
   editor.dispatch({ type: "import-glb", objectId: "box", name: "Simple box", asset: { id: "simple-box", label: "Simple box" } });
