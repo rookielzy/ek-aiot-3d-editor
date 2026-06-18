@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { BoxGeometry, Mesh, MeshStandardMaterial } from "three";
 import {
   AssetResolverBridge,
   type EditorRuntimeOptions,
@@ -8,32 +7,26 @@ import {
   type WorkbenchModel
 } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench, useEditor, type WorkbenchContext, type WorkbenchLocale } from "@ek-aiot/3d-editor-react";
+import simpleBoxUrl from "../../../packages/core/test/fixtures/simple-box.glb?url";
+import { createDemoGltfLoader } from "./demo-gltf-loader";
 
 const RECOVERABLE_ASSET_ID = "recoverable-box";
 
-const demoLoader: EditorRuntimeOptions["loader"] = {
-  async load(resolved) {
-    const assetId = typeof resolved.metadata?.assetId === "string" ? resolved.metadata.assetId : undefined;
-    const label = typeof resolved.metadata?.label === "string" ? resolved.metadata.label : undefined;
-    const color = assetId === RECOVERABLE_ASSET_ID ? "#f59e0b" : "#3b82f6";
-    const mesh = new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial({ color }));
-    mesh.name = label ?? assetId ?? "Demo mesh";
-    return mesh;
-  }
-};
+const demoLoader = createDemoGltfLoader();
 
 export interface AppProps {
   locale?: WorkbenchLocale;
+  loader?: EditorRuntimeOptions["loader"];
   rendererFactory?: EditorRuntimeOptions["rendererFactory"];
 }
 
-export function App({ locale, rendererFactory }: AppProps = {}) {
+export function App({ locale, loader = demoLoader, rendererFactory }: AppProps = {}) {
   const editor = useEditor() as EditorWithGlbImport;
   const resolver = useMemo(() => new AssetResolverBridge((asset) => {
     if (asset.kind !== "glb" || asset.id === RECOVERABLE_ASSET_ID) {
       return null;
     }
-    return { uri: `/assets/${asset.id}.glb`, metadata: { assetId: asset.id, ...(asset.label ? { label: asset.label } : {}) } };
+    return { uri: simpleBoxUrl, metadata: { assetId: asset.id, ...(asset.label ? { label: asset.label } : {}) } };
   }), []);
   const [runtimeReady, setRuntimeReady] = useState(false);
 
@@ -73,7 +66,7 @@ export function App({ locale, rendererFactory }: AppProps = {}) {
     <EditorWorkbench
       editor={editor}
       resolver={resolver}
-      loader={demoLoader}
+      loader={loader}
       rendererFactory={rendererFactory}
       locale={locale}
       viewportClassName="starter-viewport"

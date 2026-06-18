@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import React from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Group } from "three";
@@ -79,7 +80,7 @@ describe("React proof-loop parity", () => {
   it("uses the package default workbench as the local starter proof", async () => {
     const restoreDownloadCapture = installDownloadCapture();
     try {
-      render(<ReactProofLoopApp rendererFactory={fakeRenderer} />);
+      render(<ReactProofLoopApp rendererFactory={fakeRenderer} loader={fakeLoader} />);
       await act(async () => undefined);
 
       const toolbar = screen.getByLabelText("Editor controls");
@@ -173,7 +174,7 @@ describe("React proof-loop parity", () => {
 
       await act(async () => {
         const recoveryInput = within(localizedProjectPanel).getByLabelText(/替换资源.*Recoverable asset/s) as HTMLInputElement;
-        const file = new File([new Uint8Array([1, 2, 3, 4])], "recovered.glb", { type: "model/gltf-binary" });
+        const file = await glbFixtureFile();
         fireEvent.change(recoveryInput, { target: { files: [file] } });
       });
       await waitFor(() => expect(localizedProjectPanel.textContent).not.toContain("替换资源"));
@@ -208,6 +209,10 @@ function fakeRenderer(container: HTMLElement): RendererLike {
   };
 }
 
+const fakeLoader = {
+  load: async () => new Group()
+};
+
 function installDownloadCapture(): () => void {
   const originalCreateObjectURL = URL.createObjectURL;
   const originalRevokeObjectURL = URL.revokeObjectURL;
@@ -230,6 +235,17 @@ function installDownloadCapture(): () => void {
 }
 
 function copyBytes(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
+async function glbFixtureFile(): Promise<File> {
+  const bytes = await readFile("packages/core/test/fixtures/simple-box.glb");
+  return new File([toArrayBuffer(bytes)], "recovered.glb", { type: "model/gltf-binary" });
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   const buffer = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(buffer).set(bytes);
   return buffer;

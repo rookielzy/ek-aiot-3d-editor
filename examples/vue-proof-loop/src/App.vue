@@ -2,7 +2,7 @@
   <EditorWorkbench
     :editor="editor"
     :resolver="resolver"
-    :loader="demoLoader"
+    :loader="loader ?? demoLoader"
     :renderer-factory="rendererFactory"
     :locale="locale"
     viewport-class-name="starter-viewport"
@@ -22,7 +22,6 @@
 </template>
 
 <script setup lang="ts">
-import { BoxGeometry, Mesh, MeshStandardMaterial } from "three";
 import {
   AssetResolverBridge,
   type EditorRuntimeOptions,
@@ -32,11 +31,14 @@ import {
 } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench, useEditor, type WorkbenchLocale } from "@ek-aiot/3d-editor-vue";
 import { ref } from "vue";
+import simpleBoxUrl from "../../../packages/core/test/fixtures/simple-box.glb?url";
+import { createDemoGltfLoader } from "./demo-gltf-loader";
 
 const RECOVERABLE_ASSET_ID = "recoverable-box";
 
 defineProps<{
   locale?: WorkbenchLocale;
+  loader?: EditorRuntimeOptions["loader"];
   rendererFactory?: EditorRuntimeOptions["rendererFactory"];
 }>();
 
@@ -47,18 +49,9 @@ const resolver = new AssetResolverBridge((asset) => {
   if (asset.kind !== "glb" || asset.id === RECOVERABLE_ASSET_ID) {
     return null;
   }
-  return { uri: `/assets/${asset.id}.glb`, metadata: { assetId: asset.id, ...(asset.label ? { label: asset.label } : {}) } };
+  return { uri: simpleBoxUrl, metadata: { assetId: asset.id, ...(asset.label ? { label: asset.label } : {}) } };
 });
-const demoLoader: EditorRuntimeOptions["loader"] = {
-  async load(resolved) {
-    const assetId = typeof resolved.metadata?.assetId === "string" ? resolved.metadata.assetId : undefined;
-    const label = typeof resolved.metadata?.label === "string" ? resolved.metadata.label : undefined;
-    const color = assetId === RECOVERABLE_ASSET_ID ? "#f59e0b" : "#3b82f6";
-    const mesh = new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial({ color }));
-    mesh.name = label ?? assetId ?? "Demo mesh";
-    return mesh;
-  }
-};
+const demoLoader = createDemoGltfLoader();
 
 if (!editor.getSnapshot().objects.box) {
   editor.dispatch({ type: "import-glb", objectId: "box", name: "Simple box", asset: { id: "simple-box", label: "Simple box" } });

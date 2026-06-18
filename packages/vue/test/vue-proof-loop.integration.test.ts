@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { Group } from "three";
 import { describe, expect, it } from "vitest";
 import { h, markRaw, nextTick } from "vue";
@@ -86,7 +87,8 @@ describe("Vue proof-loop parity", () => {
     try {
       const wrapper = mount(VueProofLoopApp, {
         props: {
-          rendererFactory: fakeRenderer
+          rendererFactory: fakeRenderer,
+          loader: fakeLoader
         }
       });
       await nextTick();
@@ -155,7 +157,7 @@ describe("Vue proof-loop parity", () => {
 
       const recoveryInput = projectPanel.find('[aria-label="Missing asset recovery"] input[type="file"]');
       expect(recoveryInput.exists()).toBe(true);
-      await uploadFile(recoveryInput.element as HTMLInputElement, new File([new Uint8Array([1, 2, 3, 4])], "recovered.glb", { type: "model/gltf-binary" }));
+      await uploadFile(recoveryInput.element as HTMLInputElement, await glbFixtureFile());
       await waitForVue(() => expect(projectPanel.text()).not.toContain("Replace asset"));
       await waitForVue(() => expect(wrapper.text()).toContain("Problems 0"));
       expect(projectPanel.text()).toContain("Recoverable asset");
@@ -212,6 +214,10 @@ function fakeRenderer(container: HTMLElement): RendererLike {
   };
 }
 
+const fakeLoader = {
+  load: async () => new Group()
+};
+
 function installDownloadCapture(): () => void {
   const originalCreateObjectURL = URL.createObjectURL;
   const originalRevokeObjectURL = URL.revokeObjectURL;
@@ -244,6 +250,17 @@ async function uploadFile(input: HTMLInputElement, file: File): Promise<void> {
 }
 
 function copyBytes(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
+}
+
+async function glbFixtureFile(): Promise<File> {
+  const bytes = await readFile("packages/core/test/fixtures/simple-box.glb");
+  return new File([toArrayBuffer(bytes)], "recovered.glb", { type: "model/gltf-binary" });
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   const buffer = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(buffer).set(bytes);
   return buffer;

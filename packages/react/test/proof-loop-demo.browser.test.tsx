@@ -11,6 +11,7 @@ import VueProofLoopApp from "../../../examples/vue-proof-loop/src/App.vue";
 import VueDemoStyles from "../../../examples/vue-proof-loop/src/styles.css?raw";
 import WorkbenchStyles from "../src/components/workbench.css?raw";
 import InspectorStyles from "../src/components/inspector.css?raw";
+import simpleBoxUrl from "../../core/test/fixtures/simple-box.glb?url";
 
 describe("proof-loop starter demo browser verification", () => {
   let cleanup: (() => void) | null = null;
@@ -145,7 +146,7 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
 
     const recoveryInput = section(host, "Missing asset recovery").querySelector('input[type="file"]') as HTMLInputElement | null;
     expect(recoveryInput, "Expected default missing asset recovery input").toBeTruthy();
-    await uploadFile(recoveryInput!, new File([new Uint8Array([1, 2, 3, 4])], "recovered.glb", { type: "model/gltf-binary" }));
+    await uploadFile(recoveryInput!, await glbFixtureFile());
     await waitFor(() => {
       expect(host.querySelector('[aria-label="Missing asset recovery"]')).toBeNull();
       expect(text(host)).toContain("Problems 0");
@@ -619,6 +620,12 @@ function copyBytes(bytes: Uint8Array): ArrayBuffer {
   const buffer = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(buffer).set(bytes);
   return buffer;
+}
+
+async function glbFixtureFile(): Promise<File> {
+  const response = await fetch(simpleBoxUrl);
+  expect(response.ok).toBe(true);
+  return new File([await response.arrayBuffer()], "recovered.glb", { type: "model/gltf-binary" });
 }
 
 declare global {
