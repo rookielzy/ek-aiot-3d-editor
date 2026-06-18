@@ -172,7 +172,10 @@ async function verifyChineseWorkbenchLayout(host: HTMLElement): Promise<void> {
   assertLocalizedWorkbenchLayout(host);
 
   await clickByText(host, "捕获视图");
-  await waitFor(() => expect(text(host)).toContain("相机视图 1"));
+  await waitFor(() => {
+    expect(text(host)).toContain("相机视图");
+    expect(text(host)).toContain("Camera view 1");
+  });
   await clickByText(host, "设为默认");
   expect(text(host)).toContain("默认");
   await clickByText(host, "应用视图");
