@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { findForbiddenI18nRuntimeDependencies } from "./package-manifest-contract.mjs";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packDir = resolve(rootDir, ".release-packages");
@@ -22,7 +23,10 @@ export const releasePackages = [
     frameworkPeers: ["react", "react-dom"],
     requiredFiles: ["package.json", "README.md", "CHANGELOG.md", "dist/index.js", "dist/index.css", "dist/index.d.ts"],
     cssImport: "@ek-aiot/3d-editor-react/styles.css",
-    forbiddenImport: "@ek-aiot/3d-editor-react/components/EditorWorkbench"
+    forbiddenImports: [
+      "@ek-aiot/3d-editor-react/components/EditorWorkbench",
+      "@ek-aiot/3d-editor-react/i18n/workbench-i18n"
+    ]
   },
   {
     id: "vue",
@@ -31,9 +35,16 @@ export const releasePackages = [
     frameworkPeers: ["vue"],
     requiredFiles: ["package.json", "README.md", "CHANGELOG.md", "dist/index.js", "dist/index.css", "dist/index.d.ts"],
     cssImport: "@ek-aiot/3d-editor-vue/styles.css",
-    forbiddenImport: "@ek-aiot/3d-editor-vue/components/EditorWorkbench.vue"
+    forbiddenImports: [
+      "@ek-aiot/3d-editor-vue/components/EditorWorkbench.vue",
+      "@ek-aiot/3d-editor-vue/i18n/workbench-i18n"
+    ]
   }
 ];
+
+function forbiddenImportsForReleasePackages() {
+  return releasePackages.flatMap((spec) => spec.forbiddenImports ?? [spec.forbiddenImport].filter(Boolean));
+}
 
 function assert(condition, message) {
   if (!condition) {
@@ -147,6 +158,11 @@ export function assertPackageManifest(spec, manifest, options = {}) {
 
   const dependencies = manifest.dependencies ?? {};
   const peerDependencies = manifest.peerDependencies ?? {};
+  const forbiddenI18nRuntimePackages = findForbiddenI18nRuntimeDependencies(manifest);
+  assert(
+    forbiddenI18nRuntimePackages.length === 0,
+    `${spec.name} must not require ${forbiddenI18nRuntimePackages.join(", ")} for built-in Workbench i18n`
+  );
 
   if (spec.id === "core") {
     assert(dependencies.fflate, "core must keep fflate as a runtime dependency");
@@ -319,7 +335,7 @@ async function verifyConsumerInstall(tarballsByPackage) {
     run("node", ["runtime-check.mjs"], { cwd: tempDir });
     run("pnpm", ["exec", "tsc", "-p", "tsconfig.json", "--noEmit"], { cwd: tempDir });
     const privateImportOutput = runExpectFailure("pnpm", ["exec", "tsc", "-p", "tsconfig.private.json", "--noEmit"], { cwd: tempDir });
-    for (const specifier of releasePackages.map((spec) => spec.forbiddenImport).filter(Boolean)) {
+    for (const specifier of forbiddenImportsForReleasePackages()) {
       assert(privateImportOutput.includes(specifier), `private subpath type check did not mention ${specifier}`);
     }
     const viteBin = join(tempDir, "node_modules/vite/bin/vite.js");
@@ -338,12 +354,22 @@ const vue = await import("@ek-aiot/3d-editor-vue");
 if (typeof core.createEditor !== "function") throw new Error("core root import failed");
 if (typeof react.EditorWorkbench !== "function") throw new Error("react root import failed");
 if (!vue.EditorWorkbench) throw new Error("vue root import failed");
+if (react.DEFAULT_WORKBENCH_LOCALE !== "en") throw new Error("react default locale export failed");
+if (vue.DEFAULT_WORKBENCH_LOCALE !== "en") throw new Error("vue default locale export failed");
+if (react.getWorkbenchLocaleLabel("zh-CN") !== "简体中文") throw new Error("react locale label export failed");
+if (vue.getWorkbenchLocaleLabel("zh-CN") !== "简体中文") throw new Error("vue locale label export failed");
+if (react.normalizeWorkbenchLocale(undefined) !== "en") throw new Error("react locale normalization failed");
+if (vue.normalizeWorkbenchLocale(undefined) !== "en") throw new Error("vue locale normalization failed");
+if (react.isWorkbenchLocale("fr")) throw new Error("react accepted unsupported locale");
+if (vue.isWorkbenchLocale("fr")) throw new Error("vue accepted unsupported locale");
+if (react.resolveWorkbenchMessage("zh-CN", "reactWorkbench.toolbar.project.open.label") !== "打开") throw new Error("react zh-CN resolver failed");
+if (vue.resolveWorkbenchMessage("zh-CN", "reactWorkbench.toolbar.project.open.label") !== "打开") throw new Error("vue zh-CN resolver failed");
 
 const editor = core.createEditor();
 if (!core.validateSceneSnapshot(editor.getSnapshot()).ok) throw new Error("core runtime smoke check failed");
 editor.dispose();
 
-for (const specifier of ${JSON.stringify(releasePackages.map((spec) => spec.forbiddenImport), null, 2)}) {
+for (const specifier of ${JSON.stringify(forbiddenImportsForReleasePackages(), null, 2)}) {
   let failed = false;
   try {
     await import(specifier);
@@ -357,29 +383,105 @@ for (const specifier of ${JSON.stringify(releasePackages.map((spec) => spec.forb
 
 function typeCheckSource() {
   return `import { createEditor, type SceneSnapshot } from "@ek-aiot/3d-editor-core";
-import { EditorWorkbench as ReactEditorWorkbench, type EditorWorkbenchProps } from "@ek-aiot/3d-editor-react";
-import { EditorWorkbench as VueEditorWorkbench } from "@ek-aiot/3d-editor-vue";
+import {
+  DEFAULT_WORKBENCH_LOCALE as REACT_DEFAULT_LOCALE,
+  EditorWorkbench as ReactEditorWorkbench,
+  getWorkbenchLocaleLabel as getReactWorkbenchLocaleLabel,
+  normalizeWorkbenchLocale as normalizeReactWorkbenchLocale,
+  resolveWorkbenchMessage as resolveReactWorkbenchMessage,
+  type EditorWorkbenchProps as ReactEditorWorkbenchProps,
+  type ResolvedWorkbenchContext as ReactResolvedWorkbenchContext,
+  type WorkbenchI18n as ReactWorkbenchI18n,
+  type WorkbenchLocale as ReactWorkbenchLocale,
+  type WorkbenchTranslate as ReactWorkbenchTranslate
+} from "@ek-aiot/3d-editor-react";
+import {
+  DEFAULT_WORKBENCH_LOCALE as VUE_DEFAULT_LOCALE,
+  EditorWorkbench as VueEditorWorkbench,
+  getWorkbenchLocaleLabel as getVueWorkbenchLocaleLabel,
+  normalizeWorkbenchLocale as normalizeVueWorkbenchLocale,
+  resolveWorkbenchMessage as resolveVueWorkbenchMessage,
+  type EditorWorkbenchEmits,
+  type EditorWorkbenchProps as VueEditorWorkbenchProps,
+  type EditorWorkbenchSlots,
+  type WorkbenchI18n as VueWorkbenchI18n,
+  type WorkbenchLocale as VueWorkbenchLocale,
+  type WorkbenchTranslate as VueWorkbenchTranslate
+} from "@ek-aiot/3d-editor-vue";
 
 const editor = createEditor();
 const snapshot: SceneSnapshot = editor.getSnapshot();
 const reactWorkbench: typeof ReactEditorWorkbench = ReactEditorWorkbench;
 const vueWorkbench: typeof VueEditorWorkbench = VueEditorWorkbench;
-const props: EditorWorkbenchProps = { editor };
+const reactLocale: ReactWorkbenchLocale = "zh-CN";
+const vueLocale: VueWorkbenchLocale = "zh-CN";
+const statusMessage = { key: "host.status.saved", fallback: "Saved" } as const;
+const reactTranslate: ReactWorkbenchTranslate = (descriptor, locale) =>
+  descriptor.key === "host.status.saved" && locale === "zh-CN" ? "Host saved" : undefined;
+const vueTranslate: VueWorkbenchTranslate = (descriptor, locale) =>
+  descriptor.key === "host.status.saved" && locale === "zh-CN" ? "Host saved" : undefined;
+const reactProps: ReactEditorWorkbenchProps = {
+  editor,
+  locale: reactLocale,
+  defaultLocale: REACT_DEFAULT_LOCALE,
+  showLocaleSwitcher: false,
+  localeSwitcherDisabled: true,
+  translate: reactTranslate,
+  onLocaleChange(locale) {
+    void locale;
+  },
+  status(context: ReactResolvedWorkbenchContext) {
+    return context.i18n.t(statusMessage);
+  }
+};
+const vueProps: VueEditorWorkbenchProps = {
+  editor,
+  locale: vueLocale,
+  defaultLocale: VUE_DEFAULT_LOCALE,
+  showLocaleSwitcher: false,
+  localeSwitcherDisabled: true,
+  translate: vueTranslate
+};
+const vueEmits: EditorWorkbenchEmits = {
+  runtimeReady: [null],
+  "update:locale": [vueLocale]
+};
+const vueSlots: EditorWorkbenchSlots = {
+  status(context) {
+    return context.i18n.t(statusMessage);
+  }
+};
+const reactI18n: Pick<ReactWorkbenchI18n, "locale" | "t"> = {
+  locale: reactLocale,
+  t: (key) => resolveReactWorkbenchMessage(reactLocale, key)
+};
+const vueI18n: Pick<VueWorkbenchI18n, "locale" | "t"> = {
+  locale: vueLocale,
+  t: (key) => resolveVueWorkbenchMessage(vueLocale, key)
+};
 
 void snapshot;
 void reactWorkbench;
 void vueWorkbench;
-void props;
+void reactProps;
+void vueProps;
+void vueEmits;
+void vueSlots;
+void reactI18n;
+void vueI18n;
+void getReactWorkbenchLocaleLabel("zh-CN");
+void getVueWorkbenchLocaleLabel("zh-CN");
+void normalizeReactWorkbenchLocale(undefined);
+void normalizeVueWorkbenchLocale(undefined);
 
 editor.dispose();
 `;
 }
 
 function privateSubpathCheckSource() {
-  return `import "@ek-aiot/3d-editor-core/runtime/editor-runtime";
-import "@ek-aiot/3d-editor-react/components/EditorWorkbench";
-import "@ek-aiot/3d-editor-vue/components/EditorWorkbench.vue";
-`;
+  return forbiddenImportsForReleasePackages()
+    .map((specifier) => `import "${specifier}";`)
+    .join("\n");
 }
 
 function consumerTsconfig() {
@@ -421,15 +523,23 @@ async function writeViteConsumerFixtures(tempDir) {
   await writeFile(join(reactDir, "index.html"), `<div id="root"></div><script type="module" src="/src/main.tsx"></script>\n`);
   await writeFile(join(reactDir, "src/main.tsx"), `import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { EditorWorkbench } from "@ek-aiot/3d-editor-react";
+import { EditorWorkbench, type WorkbenchTranslate } from "@ek-aiot/3d-editor-react";
 import "@ek-aiot/3d-editor-react/styles.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("missing root");
+const statusMessage = { key: "host.status.saved", fallback: "Saved" } as const;
+const translate: WorkbenchTranslate = (descriptor, locale) =>
+  descriptor.key === "host.status.saved" && locale === "zh-CN" ? "Host saved" : undefined;
 
 createRoot(root).render(
   <StrictMode>
-    <EditorWorkbench />
+    <EditorWorkbench
+      locale="zh-CN"
+      showLocaleSwitcher={false}
+      translate={translate}
+      status={({ i18n }) => <span>{i18n.t(statusMessage)}</span>}
+    />
   </StrictMode>
 );
 `);
@@ -447,11 +557,21 @@ export default defineConfig({
 
   await writeFile(join(vueDir, "index.html"), `<div id="app"></div><script type="module" src="/src/main.ts"></script>\n`);
   await writeFile(join(vueDir, "src/main.ts"), `import { createApp, h } from "vue";
-import { EditorWorkbench } from "@ek-aiot/3d-editor-vue";
+import { EditorWorkbench, type WorkbenchTranslate } from "@ek-aiot/3d-editor-vue";
 import "@ek-aiot/3d-editor-vue/styles.css";
 
+const statusMessage = { key: "host.status.saved", fallback: "Saved" } as const;
+const translate: WorkbenchTranslate = (descriptor, locale) =>
+  descriptor.key === "host.status.saved" && locale === "zh-CN" ? "Host saved" : undefined;
+
 createApp({
-  render: () => h(EditorWorkbench)
+  render: () => h(EditorWorkbench, {
+    locale: "zh-CN",
+    showLocaleSwitcher: false,
+    translate
+  }, {
+    status: ({ i18n }) => h("span", i18n.t(statusMessage))
+  })
 }).mount("#app");
 `);
   await writeFile(join(vueDir, "vite.config.ts"), `import { defineConfig } from "vite";

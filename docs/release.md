@@ -19,7 +19,7 @@ The root workspace and all examples remain private. Published packages are exper
 ## Contributor Flow
 
 1. Make the package-facing change.
-2. Run `pnpm changeset` when the change affects package runtime output, public types, package metadata, package READMEs, or npm-facing behavior.
+2. Run `pnpm changeset` when the change affects package runtime output, public types, public i18n types, package metadata, package README changes, bilingual Workbench behavior, or npm-facing behavior.
 3. Choose only the affected public packages. Do not list the private root workspace or examples.
 4. Run `pnpm release:verify` before requesting review when release metadata, package output, or imports changed.
 
@@ -46,6 +46,7 @@ When the release PR is merged and no changesets remain, the same workflow runs `
 - exclusion checks for sources, tests, fixtures, `.tsbuildinfo`, examples, and JavaScript source maps
 - temporary consumer install/import checks from the packed tarballs
 - fresh Vite React and Vite Vue consumer builds that import the package root API plus the documented `styles.css` CSS subpath and mount `EditorWorkbench`
+- documented i18n root-import surface checks for `DEFAULT_WORKBENCH_LOCALE`, locale labels, locale normalization, resolver helpers, React render-prop `i18n`, and Vue `update:locale` / scoped-slot `i18n` types
 - private subpath import checks through package `exports`
 
 React and Vue packages intentionally expose only the package root and CSS subpath:
@@ -59,6 +60,8 @@ import "@ek-aiot/3d-editor-vue/styles.css";
 ```
 
 Do not document or rely on deep imports such as `@ek-aiot/3d-editor-react/components/*` or `@ek-aiot/3d-editor-vue/components/*`; the release verifier checks that those remain private.
+
+Package-facing i18n work must not add required `i18next`, `react-i18next`, Vue I18n, FormatJS, or `intl-messageformat` runtime dependencies. The React/Vue Workbench packages ship built-in `en` and `zh-CN` dictionaries, allow an optional host `translate` callback, and keep locale, switch state, dictionaries, translated copy, and host callbacks out of `SceneSnapshot`, `.ek3d`, command history, asset records, and runtime metadata.
 
 The packed shell manifests must contain registry-consumable semver ranges for `@ek-aiot/3d-editor-core`; workspace protocol ranges must not leak into tarballs.
 

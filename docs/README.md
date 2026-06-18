@@ -64,6 +64,7 @@ pnpm release:verify
 - 项目包：实验性 `.ek3d` ZIP 容器，包含 `project.json`、`scene.json` 和 `assets/*` payload。
 - React：`useEditor()`、`useEditorSnapshot()`、`useInspector()`、`useWorkbench()`、`EditorViewport`、`InspectorPanel`、`EditorWorkbench`。
 - Vue：`useEditor()`、`useInspector()`、`useWorkbench()`、`EditorViewport`、`InspectorPanel`、`EditorWorkbench`。
+- 双语 Workbench：React/Vue package docs 和集成指南覆盖默认 English、内置 `zh-CN`、locale prop / `v-model:locale`、switch 控制、host translate callback、render prop / scoped slot 的 `i18n`。locale/switch/dictionary/translated copy 属于宿主或 session UI state，不进入 Snapshot 或 `.ek3d`。
 - 本地 React/Vue proof-loop demo：提供交互 toolbar、Scene hierarchy、Camera views inspector、asset/problem surface 和派生 proof checklist，用于验证 camera view authoring、selection、transform、material inspector、history、hierarchy、project package 和缺失资产恢复流程。
 
 ## 当前工作流边界
@@ -90,6 +91,7 @@ pnpm release:verify
 - `@ek-aiot/3d-editor-core` 是 ESM only，并直接依赖 Three.js。
 - React/Vue 包是薄适配层，框架库为 peer dependency；不要在 core 中引入 React/Vue。
 - 公开 API 仍处于实验性 `0.x` 阶段，不承诺 1.0 稳定性。
+- React/Vue Workbench 只内置 `en` 和 `zh-CN`；不承诺额外语言、外部 locale pack、通用设置系统或持久化语言偏好。
 
 ## 当前非目标
 

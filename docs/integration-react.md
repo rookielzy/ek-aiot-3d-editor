@@ -60,6 +60,42 @@ export function EditorPage() {
 
 不传 `toolbar`、`leftPanel`、`rightPanel` 或 `status` 时，Workbench 会使用 package-owned 默认 UI。默认 toolbar 已包含 open/export、undo/redo、transform mode、snap、marquee selection 开关、grid/floor/axes/hover/bounds/snap guide helper、camera reset/frame、camera view capture/apply、copy/paste/duplicate/delete/group/ungroup/select controls；默认 viewport 开启 pointer picking，并保留左键拖拽给相机旋转。用户打开 toolbar 的 `Marquee` 后才启用 viewport marquee selection。默认右侧 inspector 包含 Camera views section，可以编辑 authored camera view、设置 default presentation view、删除 view，或把 view 应用回 transient editor camera。默认左栏会显示 hierarchy、可批量导入的 asset workspace、project summary、project/runtime problems 和缺失资产恢复入口。
 
+## 双语 Workbench UI
+
+默认 Workbench UI 内置 `en` 和 `zh-CN` 字典，默认语言是 English，不需要 `i18next`、`react-i18next`、FormatJS 或其他第三方 i18n runtime。宿主只需要继续从 package root 和公开 CSS 子路径导入：
+
+```tsx
+import {
+  EditorWorkbench,
+  type WorkbenchLocale,
+  type WorkbenchTranslate
+} from "@ek-aiot/3d-editor-react";
+import "@ek-aiot/3d-editor-react/styles.css";
+```
+
+宿主拥有语言设置时，把 locale 放在 React state 或应用 store 中：
+
+```tsx
+const [locale, setLocale] = useState<WorkbenchLocale>("zh-CN");
+const translate: WorkbenchTranslate = (descriptor, activeLocale) =>
+  descriptor.key === "reactWorkbench.status.saved" && activeLocale === "zh-CN"
+    ? "已保存"
+    : undefined;
+
+<EditorWorkbench
+  locale={locale}
+  onLocaleChange={setLocale}
+  showLocaleSwitcher={false}
+  localeSwitcherDisabled={isSaving}
+  translate={translate}
+  status={(context) => <span>{context.i18n.t("reactWorkbench.status.saved")}</span>}
+/>;
+```
+
+不需要宿主控制时，可以用 `defaultLocale="zh-CN"` 让 Workbench 自己维护初始语言。`showLocaleSwitcher={false}` 会隐藏内置切换器，`localeSwitcherDisabled={isSaving}` 会保留切换器但禁止交互。
+
+`locale`、switch visibility、disabled 状态、dictionary、translated copy 和 translate callback 都是宿主/session UI state。不要写入 `SceneSnapshot`、`.ek3d`、command history、asset records 或 runtime metadata。文件名、asset label、object name、project metadata 是 authored values；它们作为插值显示，不默认翻译。
+
 ## 初始化场景
 
 ```tsx

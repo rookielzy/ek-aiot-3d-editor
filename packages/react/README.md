@@ -37,6 +37,45 @@ function Workbench() {
 
 Render-prop regions receive the core editor, current snapshot, inspector model, runtime problems, active light state, selected node/object/light IDs, advanced operation helpers, selection count, project import/export helpers, asset replacement, and a dispatch helper. Runtime options such as `resolver`, loader, and renderer factory are passed through to core runtime mounting; React shell code does not resolve assets or serialize runtime problems.
 
+## Bilingual Workbench UI
+
+The default Workbench UI ships with built-in `en` and `zh-CN` dictionaries and defaults to English. No third-party i18n runtime is required. Keep imports at the package root and the public CSS subpath:
+
+```tsx
+import { useMemo, useState } from "react";
+import {
+  EditorWorkbench,
+  type WorkbenchLocale,
+  type WorkbenchTranslate
+} from "@ek-aiot/3d-editor-react";
+import "@ek-aiot/3d-editor-react/styles.css";
+
+function BilingualWorkbench() {
+  const [locale, setLocale] = useState<WorkbenchLocale>("zh-CN");
+  const isSaving = false;
+  const translate = useMemo<WorkbenchTranslate>(() => (descriptor, activeLocale) =>
+    descriptor.key === "reactWorkbench.status.saved" && activeLocale === "zh-CN"
+      ? "已保存"
+      : undefined,
+  []);
+
+  return (
+    <EditorWorkbench
+      locale={locale}
+      onLocaleChange={setLocale}
+      showLocaleSwitcher={false}
+      localeSwitcherDisabled={isSaving}
+      translate={translate}
+      status={({ i18n }) => <span>{i18n.t("reactWorkbench.status.saved")}</span>}
+    />
+  );
+}
+```
+
+Use `locale` and `onLocaleChange` when the host owns the language setting. Use `defaultLocale="zh-CN"` for uncontrolled Workbench state that starts in Simplified Chinese. `showLocaleSwitcher={false}` hides the built-in switch, and `localeSwitcherDisabled={isSaving}` keeps it visible but disabled while host UI is busy.
+
+Locale, switch visibility, switch disabled state, dictionaries, translated copy, and host `translate` callbacks are session or host UI state. Do not store them in `SceneSnapshot`, `.ek3d`, command history, asset records, or runtime metadata. Authored file names, asset labels, object names, and project metadata remain authored values; they are interpolated into messages and are not translated by default.
+
 `EditorWorkbench` installs shared shortcut handling on the workbench root and ignores editable controls. Copy, paste, duplicate, delete, group, ungroup, select all, and clear selection route through core `editor.operations`, so React does not duplicate node hierarchy, payload cleanup, or clipboard semantics.
 
 Problem panels expose file replacement for recoverable asset problems and pass the selected `File` to `editor.replaceAsset()` for the same asset ID. The React layer does not store files in snapshots and does not implement its own asset resolver, package validator, or runtime cleanup.

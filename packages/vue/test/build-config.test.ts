@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { FORBIDDEN_I18N_RUNTIME_PACKAGES, findForbiddenI18nRuntimeDependencies } from "../../../scripts/package-manifest-contract.mjs";
 
 describe("Vue package build config", () => {
   it("keeps Vue and core external for browser consumers", () => {
@@ -50,19 +51,8 @@ describe("Vue package build config", () => {
       peerDependencies?: Record<string, string>;
       optionalDependencies?: Record<string, string>;
     };
-    const allDependencyNames = [
-      ...Object.keys(packageJson.dependencies ?? {}),
-      ...Object.keys(packageJson.peerDependencies ?? {}),
-      ...Object.keys(packageJson.optionalDependencies ?? {})
-    ];
 
-    expect(allDependencyNames).not.toEqual(expect.arrayContaining([
-      "i18next",
-      "react-i18next",
-      "vue-i18n",
-      "@intlify/vue-i18n",
-      "intl-messageformat",
-      "@formatjs/intl"
-    ]));
+    expect(FORBIDDEN_I18N_RUNTIME_PACKAGES).toContain("vue-i18n");
+    expect(findForbiddenI18nRuntimeDependencies(packageJson)).toEqual([]);
   });
 });

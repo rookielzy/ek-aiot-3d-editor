@@ -7,6 +7,11 @@ import {
   EditorViewport,
   EditorWorkbench,
   InspectorPanel,
+  WORKBENCH_LOCALE_LABELS,
+  WORKBENCH_LOCALES,
+  getWorkbenchLocaleLabel,
+  isWorkbenchLocale,
+  normalizeWorkbenchLocale,
   resolveWorkbenchMessage,
   useEditor,
   useEditorSnapshot,
@@ -17,6 +22,11 @@ import {
   type WorkbenchContext,
   type WorkbenchI18n,
   type WorkbenchLocale,
+  type WorkbenchMessageDescriptor,
+  type WorkbenchMessageInput,
+  type WorkbenchMessageKey,
+  type WorkbenchMessageValues,
+  type WorkbenchTranslate,
   type WorkbenchRegionName
 } from "./index";
 
@@ -34,8 +44,24 @@ describe("react public API", () => {
   it("exposes the install-ready workbench contract from the package root", () => {
     const regionName: WorkbenchRegionName = "leftPanel";
     const locale: WorkbenchLocale = "zh-CN";
-    const props: Pick<EditorWorkbenchProps, "locale" | "leftPanel" | "rightPanel" | "sidePanel" | "status"> = {
+    const translate: WorkbenchTranslate = (descriptor, activeLocale) =>
+      descriptor.key === "host.status.saved" && activeLocale === "zh-CN" ? "已保存" : undefined;
+    const descriptor: WorkbenchMessageDescriptor = {
+      key: "host.custom.message",
+      fallback: "Host {name}",
+      values: { name: "Workbench" } satisfies WorkbenchMessageValues
+    };
+    const key: WorkbenchMessageKey = "reactWorkbench.toolbar.project.open.label";
+    const input: WorkbenchMessageInput = descriptor;
+    const props: Pick<EditorWorkbenchProps, "locale" | "defaultLocale" | "onLocaleChange" | "showLocaleSwitcher" | "localeSwitcherDisabled" | "translate" | "leftPanel" | "rightPanel" | "sidePanel" | "status"> = {
       locale,
+      defaultLocale: "en",
+      onLocaleChange: (nextLocale) => {
+        expect(nextLocale).toBe("zh-CN");
+      },
+      showLocaleSwitcher: false,
+      localeSwitcherDisabled: true,
+      translate,
       leftPanel: (context: ResolvedWorkbenchContext) => context.i18n.t("reactWorkbench.leftPanel.hierarchy.label"),
       rightPanel: (context) => context.problems.totalCount,
       sidePanel: (context) => context.history.undoCount,
@@ -43,13 +69,24 @@ describe("react public API", () => {
     };
     const i18n: Pick<WorkbenchI18n, "locale" | "t"> = {
       locale,
-      t: (key) => resolveWorkbenchMessage(locale, key)
+      t: (message) => resolveWorkbenchMessage(locale, message)
     };
 
     expect(regionName).toBe("leftPanel");
     expect(DEFAULT_WORKBENCH_LOCALE).toBe("en");
+    expect(WORKBENCH_LOCALES).toEqual(["en", "zh-CN"]);
+    expect(WORKBENCH_LOCALE_LABELS["zh-CN"]).toBe("简体中文");
+    expect(getWorkbenchLocaleLabel("zh-CN")).toBe("简体中文");
+    expect(isWorkbenchLocale("zh-CN")).toBe(true);
+    expect(isWorkbenchLocale("fr")).toBe(false);
+    expect(normalizeWorkbenchLocale(undefined)).toBe("en");
     expect(props.locale).toBe("zh-CN");
-    expect(i18n.t("reactWorkbench.toolbar.project.open.label")).toBe("打开");
+    expect(props.defaultLocale).toBe("en");
+    expect(props.showLocaleSwitcher).toBe(false);
+    expect(props.localeSwitcherDisabled).toBe(true);
+    expect(i18n.t(key)).toBe("打开");
+    expect(i18n.t(input)).toBe("Host Workbench");
+    expect(props.translate?.({ key: "host.status.saved", fallback: "Saved" }, locale)).toBe("已保存");
     expect(typeof props.leftPanel).toBe("function");
     expect(typeof props.rightPanel).toBe("function");
     expect(typeof props.sidePanel).toBe("function");
