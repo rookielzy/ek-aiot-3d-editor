@@ -40,10 +40,26 @@ import {
   type ViewportHelperKey,
   type ViewportHelperStateSnapshot
 } from "@ek-aiot/3d-editor-core";
+import {
+  DEFAULT_WORKBENCH_LOCALE,
+  WORKBENCH_LOCALES,
+  getWorkbenchLocaleLabel,
+  normalizeWorkbenchLocale,
+  resolveWorkbenchMessage,
+  type WorkbenchI18n,
+  type WorkbenchLocale,
+  type WorkbenchMessageInput,
+  type WorkbenchMessageValues,
+  type WorkbenchTranslate
+} from "../i18n/workbench-i18n";
 
 export interface UseWorkbenchOptions extends EditorOptions {
   editor?: EditorWithGlbImport | Ref<EditorWithGlbImport | undefined>;
   loader?: EditorRuntimeOptions["loader"] | Ref<EditorRuntimeOptions["loader"] | undefined>;
+  locale?: WorkbenchLocale | Ref<WorkbenchLocale | undefined>;
+  defaultLocale?: WorkbenchLocale;
+  onLocaleChange?(locale: WorkbenchLocale): void;
+  translate?: WorkbenchTranslate | Ref<WorkbenchTranslate | undefined>;
 }
 
 export interface WorkbenchSelectionContext {
@@ -113,6 +129,7 @@ export interface WorkbenchContext {
   project: WorkbenchProjectContext;
   assets: WorkbenchAssetContext;
   problems: WorkbenchProblemsContext;
+  i18n?: WorkbenchI18n;
   runtimeProblems: Problem[];
   runtime: EditorRuntime | null;
   runtimeReady: boolean;
@@ -132,6 +149,7 @@ export interface WorkbenchContext {
   snap: SnapSettings;
   viewportHelperState: ViewportHelperStateSnapshot;
   transformMode: TransformMode;
+  hierarchyRowsById: ReadonlyMap<string, WorkbenchModel["hierarchy"]["rows"][number]>;
   setActiveLightId(value: string | null): void;
   setActiveCameraViewId(value: string | null): void;
   setTransformMode(mode: TransformMode): void;
@@ -151,6 +169,10 @@ export interface WorkbenchContext {
   replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult>;
 }
 
+export interface ResolvedWorkbenchContext extends WorkbenchContext {
+  i18n: WorkbenchI18n;
+}
+
 export interface UseWorkbenchResult {
   editor: EditorWithGlbImport;
   snapshot: ShallowRef<SceneSnapshot>;
@@ -163,7 +185,7 @@ export interface UseWorkbenchResult {
   snap: ShallowRef<SnapSettings>;
   viewportHelperState: ShallowRef<ViewportHelperStateSnapshot>;
   transformMode: Ref<TransformMode>;
-  context: ComputedRef<WorkbenchContext>;
+  context: ComputedRef<ResolvedWorkbenchContext>;
   ownsEditor: boolean;
   setActiveLightId(value: string | null): void;
   setActiveCameraViewId(value: string | null): void;
@@ -188,6 +210,10 @@ export interface UseWorkbenchResult {
 
 export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchResult {
   const editorOption = isRefOption(options.editor) ? options.editor : undefined;
+  const localeOption = isRefValue<WorkbenchLocale | undefined>(options.locale) ? options.locale : undefined;
+  const translateOption = isRefValue<WorkbenchTranslate | undefined>(options.translate) ? options.translate : undefined;
+  const controlledLocale = computed(() => localeOption ? localeOption.value !== undefined : options.locale !== undefined);
+  const uncontrolledLocale = ref<WorkbenchLocale>(normalizeWorkbenchLocale(options.defaultLocale ?? DEFAULT_WORKBENCH_LOCALE));
   const initialEditor = resolveInitialEditor(options, editorOption);
   let viewportHelperStore = getViewportHelperStore(initialEditor);
   ensureDefaultWorkbenchViewportHelpers(viewportHelperStore);
@@ -382,6 +408,14 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     });
   }
 
+  function setLocale(nextLocale: WorkbenchLocale): void {
+    const normalized = normalizeWorkbenchLocale(nextLocale);
+    options.onLocaleChange?.(normalized);
+    if (!controlledLocale.value) {
+      uncontrolledLocale.value = normalized;
+    }
+  }
+
   function dispose(): void {
     if (disposed) {
       return;
@@ -417,6 +451,13 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
       runtimeReady: runtime.value !== null
     });
   });
+  const assetPayloads = computed(() => {
+    assetWorkspaceVersion.value;
+    return getAssetWorkspacePayloads(currentEditor.value);
+  });
+  const hierarchyRowsById = computed(() =>
+    new Map(model.value.hierarchy.rows.map((row) => [row.id, row]))
+  );
   const activeLightId = computed({
     get: () => inspector.value.lights.activeLightId,
     set: setActiveLightId
@@ -425,7 +466,22 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     get: () => inspector.value.cameras.activeCameraViewId,
     set: setActiveCameraViewId
   });
-  const context = computed<WorkbenchContext>(() => ({
+  const resolvedLocale = computed(() =>
+    controlledLocale.value
+      ? normalizeWorkbenchLocale(localeOption ? localeOption.value : options.locale as WorkbenchLocale | undefined)
+      : uncontrolledLocale.value
+  );
+  const translate = computed(() => translateOption ? translateOption.value : options.translate as WorkbenchTranslate | undefined);
+  const i18n = computed<WorkbenchI18n>(() => ({
+    locale: resolvedLocale.value,
+    supportedLocales: WORKBENCH_LOCALES,
+    localeLabel: getWorkbenchLocaleLabel,
+    setLocale,
+    t(message: WorkbenchMessageInput, values?: WorkbenchMessageValues) {
+      return resolveWorkbenchMessage(resolvedLocale.value, message, values, translate.value);
+    }
+  }));
+  const context = computed<ResolvedWorkbenchContext>(() => ({
     editor: currentEditor.value,
     model: model.value,
     snapshot: snapshot.value,
@@ -464,7 +520,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
       exportProject
     },
     assets: {
-      payloads: getAssetWorkspacePayloads(currentEditor.value),
+      payloads: assetPayloads.value,
       workspaceVersion: assetWorkspaceVersion.value,
       importFiles: importAssetFiles,
       replaceAsset,
@@ -478,6 +534,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
       totalCount: model.value.problems.totalCount,
       refresh: subscribeRuntimeProblems
     },
+    i18n: i18n.value,
     runtimeProblems: runtimeProblems.value,
     runtime: runtime.value,
     runtimeReady: runtime.value !== null,
@@ -497,6 +554,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     snap: snap.value,
     viewportHelperState: viewportHelperState.value,
     transformMode: transformMode.value,
+    hierarchyRowsById: hierarchyRowsById.value,
     setActiveLightId,
     setActiveCameraViewId,
     setTransformMode,

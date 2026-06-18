@@ -42,4 +42,27 @@ describe("Vue package build config", () => {
     expect(css).toContain("overflow: auto;");
     expect(css).toContain("contain: paint;");
   });
+
+  it("does not require a third-party i18n runtime", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const packageJson = JSON.parse(readFileSync(resolve(here, "../package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+      peerDependencies?: Record<string, string>;
+      optionalDependencies?: Record<string, string>;
+    };
+    const allDependencyNames = [
+      ...Object.keys(packageJson.dependencies ?? {}),
+      ...Object.keys(packageJson.peerDependencies ?? {}),
+      ...Object.keys(packageJson.optionalDependencies ?? {})
+    ];
+
+    expect(allDependencyNames).not.toEqual(expect.arrayContaining([
+      "i18next",
+      "react-i18next",
+      "vue-i18n",
+      "@intlify/vue-i18n",
+      "intl-messageformat",
+      "@formatjs/intl"
+    ]));
+  });
 });
