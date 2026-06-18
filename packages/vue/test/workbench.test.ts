@@ -15,6 +15,8 @@ import {
 } from "@ek-aiot/3d-editor-core";
 import EditorWorkbench from "../src/components/EditorWorkbench.vue";
 import { useWorkbench } from "../src/composables/use-workbench";
+import { expectAuthoredValuesPresent, expectNoI18nDurableLeakage, expectNoRuntimeOnlyLeakage } from "../../test/i18n-durable-sentinels";
+import { decodeProjectPackageText, resolveProjectPackageBytes, seedI18nDurableEditor } from "../../test/i18n-durable-fixture";
 
 describe("Vue EditorWorkbench", () => {
   it("composes viewport, inspector, and scoped slots around one raw editor", () => {
@@ -969,6 +971,58 @@ describe("Vue EditorWorkbench", () => {
     expect(JSON.stringify(editor.serialize())).not.toContain("zh-CN");
     expect(JSON.stringify(editor.serialize())).not.toContain("无法解析资源");
 
+    wrapper.unmount();
+  });
+
+  it("keeps locale interactions and replacement files out of serialized and exported state", async () => {
+    const editor = markRaw(createEditor());
+    seedI18nDurableEditor(editor);
+    const wrapper = mount(EditorWorkbench, {
+      props: {
+        editor,
+        resolver: new AssetResolverBridge(() => null),
+        rendererFactory: fakeRenderer,
+        locale: "en",
+        showLocaleSwitcher: false,
+        translate: (descriptor, locale) =>
+          descriptor.key === "reactWorkbench.toolbar.project.open.label" && locale === "zh-CN"
+            ? "宿主打开"
+            : undefined
+      }
+    });
+
+    await wrapper.setProps({ locale: "zh-CN", localeSwitcherDisabled: true, showLocaleSwitcher: true });
+    await nextTick();
+    await wrapper.findAll(".ek-workbench__tree-row").find((button) => button.text().includes("Pump A"))!.trigger("click");
+    const positionLabel = wrapper.findAll("label").find((label) => label.text().includes("位置 X"));
+    expect(positionLabel).toBeTruthy();
+    await positionLabel!.find("input").setValue("2");
+    await positionLabel!.find("input").trigger("blur");
+    const replacementFile = new File([new Uint8Array([10, 11, 12, 13])], "motor-control-panel.glb", { type: "model/gltf-binary" });
+    await editor.replaceAsset({
+      assetId: "asset-a",
+      source: replacementFile,
+      label: replacementFile.name,
+      mimeType: replacementFile.type
+    });
+    await nextTick();
+
+    const exported = editor.exportProject({ partial: true });
+    const serialized = editor.serialize();
+    const packageBytes = await resolveProjectPackageBytes(exported.packageBytes);
+    const packageText = decodeProjectPackageText(packageBytes);
+
+    expect(packageBytes).toBeInstanceOf(Uint8Array);
+    expect(serialized.objects["object-a"].transform.position[0]).toBe(2);
+    expect(editor.getAssetWorkspacePayloads().find((payload) => payload.assetId === "asset-a")?.byteSize).toBe(4);
+    expectAuthoredValuesPresent(serialized);
+    expectAuthoredValuesPresent(packageText);
+    expectNoI18nDurableLeakage(serialized);
+    expectNoI18nDurableLeakage(packageText);
+    expectNoRuntimeOnlyLeakage(serialized);
+    expectNoRuntimeOnlyLeakage(packageText);
+    expect(JSON.stringify(serialized)).not.toContain("宿主打开");
+    expect(packageText).not.toContain("宿主打开");
     wrapper.unmount();
   });
 

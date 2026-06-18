@@ -3,10 +3,11 @@ import { BoxGeometry, Mesh, MeshStandardMaterial } from "three";
 import {
   AssetResolverBridge,
   type EditorRuntimeOptions,
+  type EditorWithGlbImport,
   type Problem,
   type WorkbenchModel
 } from "@ek-aiot/3d-editor-core";
-import { EditorWorkbench, useEditor, type WorkbenchContext } from "@ek-aiot/3d-editor-react";
+import { EditorWorkbench, useEditor, type WorkbenchContext, type WorkbenchLocale } from "@ek-aiot/3d-editor-react";
 
 const RECOVERABLE_ASSET_ID = "recoverable-box";
 
@@ -22,11 +23,12 @@ const demoLoader: EditorRuntimeOptions["loader"] = {
 };
 
 export interface AppProps {
+  locale?: WorkbenchLocale;
   rendererFactory?: EditorRuntimeOptions["rendererFactory"];
 }
 
-export function App({ rendererFactory }: AppProps = {}) {
-  const editor = useEditor();
+export function App({ locale, rendererFactory }: AppProps = {}) {
+  const editor = useEditor() as EditorWithGlbImport;
   const resolver = useMemo(() => new AssetResolverBridge((asset) => {
     if (asset.kind !== "glb" || asset.id === RECOVERABLE_ASSET_ID) {
       return null;
@@ -73,6 +75,7 @@ export function App({ rendererFactory }: AppProps = {}) {
       resolver={resolver}
       loader={demoLoader}
       rendererFactory={rendererFactory}
+      locale={locale}
       viewportClassName="starter-viewport"
       onRuntimeReady={(runtime) => setRuntimeReady(Boolean(runtime))}
       viewportOverlay={(context) => (

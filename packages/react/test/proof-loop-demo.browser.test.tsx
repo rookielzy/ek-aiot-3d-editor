@@ -35,6 +35,20 @@ describe("proof-loop starter demo browser verification", () => {
 
     await verifyStarterFlow(root.host);
   }, 15000);
+
+  it("keeps the React starter workbench usable in Simplified Chinese", async () => {
+    const root = mountReactDemo({ locale: "zh-CN" });
+    cleanup = root.cleanup;
+
+    await verifyChineseWorkbenchLayout(root.host);
+  }, 15000);
+
+  it("keeps the Vue starter workbench usable in Simplified Chinese", async () => {
+    const root = mountVueDemo({ locale: "zh-CN" });
+    cleanup = root.cleanup;
+
+    await verifyChineseWorkbenchLayout(root.host);
+  }, 15000);
 });
 
 async function verifyStarterFlow(host: HTMLElement): Promise<void> {
@@ -143,11 +157,42 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
   }
 }
 
-function mountReactDemo(): { host: HTMLElement; cleanup(): void } {
+async function verifyChineseWorkbenchLayout(host: HTMLElement): Promise<void> {
+  await waitFor(() => {
+    expect(text(section(host, "层级"))).toContain("Simple box");
+    expect(text(section(host, "资源"))).toContain("Recoverable asset");
+    expect(text(section(host, "项目"))).toContain("对象");
+    expect(text(section(host, "场景检查器"))).toContain("变换");
+    expect(text(host)).toContain("选择 Simple box");
+  });
+
+  const viewport = host.querySelector(".starter-viewport") as HTMLElement | null;
+  expect(viewport).toBeTruthy();
+  await findReadyCanvas(viewport!);
+  assertLocalizedWorkbenchLayout(host);
+
+  await clickByText(host, "捕获视图");
+  await waitFor(() => {
+    expect(text(host)).toContain("相机视图");
+    expect(text(host)).toContain("Camera view 1");
+  });
+  await clickByText(host, "设为默认");
+  expect(text(host)).toContain("默认");
+  await clickByText(host, "应用视图");
+  assertLocalizedCameraLayout(host);
+
+  await waitFor(() => {
+    expect(text(section(host, "缺失资源恢复"))).toContain("替换资源");
+    expect(text(section(host, "项目"))).toContain("1 个问题");
+  });
+  assertLocalizedWorkbenchLayout(host);
+}
+
+function mountReactDemo(options: { locale?: "en" | "zh-CN" } = {}): { host: HTMLElement; cleanup(): void } {
   installStyles("react-demo-styles", [WorkbenchStyles, InspectorStyles, ReactDemoStyles]);
   const host = createHost();
   const root = createRoot(host);
-  root.render(<ReactProofLoopApp rendererFactory={paintedRenderer} />);
+  root.render(<ReactProofLoopApp rendererFactory={paintedRenderer} locale={options.locale} />);
   return {
     host,
     cleanup() {
@@ -157,10 +202,10 @@ function mountReactDemo(): { host: HTMLElement; cleanup(): void } {
   };
 }
 
-function mountVueDemo(): { host: HTMLElement; cleanup(): void } {
+function mountVueDemo(options: { locale?: "en" | "zh-CN" } = {}): { host: HTMLElement; cleanup(): void } {
   installStyles("vue-demo-styles", [WorkbenchStyles, InspectorStyles, VueDemoStyles]);
   const host = createHost();
-  const app: VueApp = createApp(VueProofLoopApp, { rendererFactory: paintedRenderer });
+  const app: VueApp = createApp(VueProofLoopApp, { rendererFactory: paintedRenderer, locale: options.locale });
   app.mount(host);
   return {
     host,
@@ -423,6 +468,29 @@ function assertAssetWorkspaceLayout(host: HTMLElement): void {
   }
 }
 
+function assertLocalizedWorkbenchLayout(host: HTMLElement): void {
+  const sections = [
+    section(host, "编辑器控件"),
+    section(host, "资源"),
+    section(host, "项目"),
+    section(host, "场景检查器"),
+    section(host, "编辑器状态")
+  ];
+  const originalWidth = host.style.width;
+  try {
+    for (const width of ["1280px", "390px"]) {
+      host.style.width = width;
+      window.dispatchEvent(new Event("resize"));
+      for (const localizedSection of sections) {
+        assertChildrenInside(localizedSection, `Localized ${localizedSection.getAttribute("aria-label")}`);
+      }
+    }
+  } finally {
+    host.style.width = originalWidth;
+    window.dispatchEvent(new Event("resize"));
+  }
+}
+
 function assertCameraLayout(host: HTMLElement): void {
   const cameraToolbar = section(host, "Camera");
   const cameraInspector = [...host.querySelectorAll(".ek-inspector-section")]
@@ -435,6 +503,25 @@ function assertCameraLayout(host: HTMLElement): void {
       window.dispatchEvent(new Event("resize"));
       assertChildrenInside(cameraToolbar, "Camera toolbar");
       assertChildrenInside(cameraInspector!, "Camera inspector");
+    }
+  } finally {
+    host.style.width = originalWidth;
+    window.dispatchEvent(new Event("resize"));
+  }
+}
+
+function assertLocalizedCameraLayout(host: HTMLElement): void {
+  const cameraToolbar = section(host, "相机");
+  const cameraInspector = [...host.querySelectorAll(".ek-inspector-section")]
+    .find((candidate) => text(candidate).includes("相机视图")) as HTMLElement | undefined;
+  expect(cameraInspector, "Expected localized camera views inspector section").toBeTruthy();
+  const originalWidth = host.style.width;
+  try {
+    for (const width of ["1280px", "390px"]) {
+      host.style.width = width;
+      window.dispatchEvent(new Event("resize"));
+      assertChildrenInside(cameraToolbar, "Localized camera toolbar");
+      assertChildrenInside(cameraInspector!, "Localized camera inspector");
     }
   } finally {
     host.style.width = originalWidth;

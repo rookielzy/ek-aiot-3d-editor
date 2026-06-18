@@ -4,6 +4,7 @@
     :resolver="resolver"
     :loader="demoLoader"
     :renderer-factory="rendererFactory"
+    :locale="locale"
     viewport-class-name="starter-viewport"
     @runtime-ready="runtimeReady = Boolean($event)"
   >
@@ -25,19 +26,22 @@ import { BoxGeometry, Mesh, MeshStandardMaterial } from "three";
 import {
   AssetResolverBridge,
   type EditorRuntimeOptions,
+  type EditorWithGlbImport,
   type Problem,
   type WorkbenchModel
 } from "@ek-aiot/3d-editor-core";
-import { EditorWorkbench, useEditor } from "@ek-aiot/3d-editor-vue";
+import { EditorWorkbench, useEditor, type WorkbenchLocale } from "@ek-aiot/3d-editor-vue";
 import { ref } from "vue";
 
 const RECOVERABLE_ASSET_ID = "recoverable-box";
 
 defineProps<{
+  locale?: WorkbenchLocale;
   rendererFactory?: EditorRuntimeOptions["rendererFactory"];
 }>();
 
-const { editor } = useEditor();
+const { editor: baseEditor } = useEditor();
+const editor = baseEditor as EditorWithGlbImport;
 const runtimeReady = ref(false);
 const resolver = new AssetResolverBridge((asset) => {
   if (asset.kind !== "glb" || asset.id === RECOVERABLE_ASSET_ID) {

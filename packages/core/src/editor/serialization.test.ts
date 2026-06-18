@@ -5,6 +5,7 @@ import type { SceneSnapshot, V3SceneSnapshot } from "../snapshot/types";
 import { validateSerializedSceneSnapshot } from "../snapshot/migrations";
 import { createLegacyProofLoopSnapshot } from "../../test/fixtures/legacy-proof-loop";
 import { validateSceneSnapshot } from "../snapshot/validation";
+import { expectAuthoredValuesPresent, expectNoI18nDurableLeakage, expectNoRuntimeOnlyLeakage } from "../../../test/i18n-durable-sentinels";
 import { restoreSnapshot, serializeSnapshot } from "./serialization";
 
 describe("snapshot serialization", () => {
@@ -245,11 +246,25 @@ describe("snapshot serialization", () => {
   it("keeps i18n descriptor data out of durable snapshots in this slice", () => {
     const snapshot: SceneSnapshot = {
       ...createEmptySnapshot("scene-a"),
+      scene: {
+        id: "scene-a",
+        name: "Pump A scene"
+      },
       assets: {
         "asset-a": {
           id: "asset-a",
           kind: "glb",
-          label: "Pump A"
+          label: "motor-control-panel.glb"
+        },
+        "texture-a": {
+          id: "texture-a",
+          kind: "texture",
+          label: "Body"
+        },
+        "hdr-a": {
+          id: "hdr-a",
+          kind: "hdr",
+          label: "Studio HDR"
         }
       },
       nodes: {
@@ -261,9 +276,23 @@ describe("snapshot serialization", () => {
           parentId: null,
           children: [],
           transform: createTransform()
+        },
+        "light-a": createLightNode(createLightDefinition("point", {
+          id: "light-a",
+          name: "Key light",
+          transform: { position: [1, 2, 3] }
+        })),
+        "view-a": {
+          id: "view-a",
+          kind: "camera",
+          name: "Hero view",
+          cameraId: "view-a",
+          parentId: null,
+          children: [],
+          transform: createTransform({ position: [4, 3, 2] })
         }
       },
-      rootNodeIds: ["object-a"],
+      rootNodeIds: ["object-a", "light-a", "view-a"],
       objects: {
         "object-a": {
           id: "object-a",
@@ -274,25 +303,82 @@ describe("snapshot serialization", () => {
           asset: {
             id: "asset-a",
             kind: "glb",
-            label: "Pump A"
+            label: "motor-control-panel.glb"
           },
           transform: createTransform()
         }
       },
-      rootObjectIds: ["object-a"]
+      rootObjectIds: ["object-a"],
+      materials: {
+        definitions: {
+          "material-a": {
+            id: "material-a",
+            name: "Body",
+            kind: "mesh-standard",
+            override: {
+              color: "#336699",
+              textures: {
+                map: {
+                  assetId: "texture-a"
+                }
+              }
+            }
+          }
+        },
+        assignments: {
+          "object:object-a": {
+            id: "object:object-a",
+            target: { kind: "object", objectId: "object-a" },
+            materialId: "material-a"
+          }
+        }
+      },
+      environment: {
+        lighting: {
+          source: { kind: "hdr", assetId: "hdr-a" },
+          intensity: 1,
+          rotation: { x: 0, y: 0, z: 0 }
+        },
+        background: {
+          source: { kind: "solid", color: "#eef3f8" }
+        }
+      },
+      lights: {
+        "light-a": createLightDefinition("point", {
+          id: "light-a",
+          name: "Key light",
+          transform: { position: [1, 2, 3] }
+        })
+      },
+      cameras: {
+        "view-a": {
+          id: "view-a",
+          name: "Hero view",
+          projection: { kind: "perspective", fov: 45 },
+          position: [4, 3, 2],
+          target: [0, 1, 0],
+          near: 0.1,
+          far: 250
+        }
+      },
+      presentation: {
+        defaultCameraId: "view-a"
+      }
     };
 
     const serialized = serializeSnapshot(snapshot);
-    const serializedText = JSON.stringify(serialized);
+    const restored = restoreSnapshot(serialized);
 
-    expect(serialized.scene).toEqual({ id: "scene-a", name: "Untitled scene" });
+    expect(serialized.scene).toEqual({ id: "scene-a", name: "Pump A scene" });
     expect(serialized.objects["object-a"].name).toBe("Pump A");
-    expect(serialized.assets["asset-a"].label).toBe("Pump A");
-    expect(serializedText).toContain("Pump A");
-    expect(serializedText).not.toContain("workbench.");
-    expect(serializedText).not.toContain("Runtime ready");
-    expect(serializedText).not.toContain("locale");
-    expect(serializedText).not.toContain("dictionary");
-    expect(serializedText).not.toContain("translated");
+    expect(serialized.assets["asset-a"].label).toBe("motor-control-panel.glb");
+    expect(serialized.assets["texture-a"].label).toBe("Body");
+    expect(serialized.assets["hdr-a"].label).toBe("Studio HDR");
+    expect(serialized.lights["light-a"].name).toBe("Key light");
+    expect(serialized.cameras["view-a"].name).toBe("Hero view");
+    expect(restored).toEqual(serialized);
+    expectAuthoredValuesPresent(serialized);
+    expectNoI18nDurableLeakage(serialized);
+    expectNoRuntimeOnlyLeakage(serialized);
   });
 });

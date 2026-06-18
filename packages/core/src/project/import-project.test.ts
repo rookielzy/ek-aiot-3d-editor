@@ -5,6 +5,8 @@ import { createMaterialAssignmentId } from "../materials/defaults";
 import { createEditor } from "../editor/create-editor";
 import type { SceneImportedGlbNode } from "../snapshot/types";
 import { Group } from "three";
+import { expectAuthoredValuesPresent, expectNoI18nDurableLeakage, expectNoRuntimeOnlyLeakage } from "../../../test/i18n-durable-sentinels";
+import { seedI18nDurableEditor } from "../../../test/i18n-durable-fixture";
 
 describe("project import", () => {
   it("restores a valid package and resolves packaged payloads", async () => {
@@ -191,6 +193,27 @@ describe("project import", () => {
     });
     expect(JSON.stringify(fresh.serialize())).not.toContain("OrbitControls");
     expect(JSON.stringify(fresh.serialize())).not.toContain("PerspectiveCamera");
+  });
+
+  it("round-trips authored values without introducing locale or dictionary data", () => {
+    const editor = createEditor();
+    seedI18nDurableEditor(editor);
+    const exported = editor.exportProject();
+    const fresh = createEditor();
+
+    const imported = fresh.importProject(exported.packageBytes as Uint8Array);
+
+    expect(imported.ok).toBe(true);
+    expect(fresh.getSnapshot().objects["object-a"].name).toBe("Pump A");
+    expect(fresh.getSnapshot().assets["asset-a"].label).toBe("motor-control-panel.glb");
+    expect(fresh.getSnapshot().assets["texture-a"].label).toBe("Body");
+    expect(fresh.getSnapshot().assets["hdr-a"].label).toBe("Studio HDR");
+    expect(fresh.getSnapshot().lights["light-a"].name).toBe("Key light");
+    expect(fresh.getSnapshot().cameras["view-a"].name).toBe("Hero view");
+    expect(fresh.exportProject().ok).toBe(true);
+    expectAuthoredValuesPresent(fresh.serialize());
+    expectNoI18nDurableLeakage(fresh.serialize());
+    expectNoRuntimeOnlyLeakage(fresh.serialize());
   });
 
   it("round-trips reimported GLB remap metadata and replacement payloads through project import", async () => {
