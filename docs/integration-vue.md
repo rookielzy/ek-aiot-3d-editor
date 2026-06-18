@@ -56,6 +56,58 @@ if (!editor.getSnapshot().objects.box) {
 
 不传 `toolbar`、`leftPanel`、`rightPanel` 或 `status` slot 时，Workbench 会使用 package-owned 默认 UI。默认 toolbar 已包含 open/export、undo/redo、transform mode、snap、marquee selection 开关、grid/floor/axes/hover/bounds/snap guide helper、camera reset/frame、camera view capture/apply、copy/paste/duplicate/delete/group/ungroup/select controls；默认 viewport 开启 pointer picking，并保留左键拖拽给相机旋转。用户打开 toolbar 的 `Marquee` 后才启用 viewport marquee selection。默认右侧 inspector 包含 Camera views section，可以编辑 authored camera view、设置 default presentation view、删除 view，或把 view 应用回 transient editor camera。默认左栏会显示 hierarchy、可批量导入的 asset workspace、project summary、project/runtime problems 和缺失资产恢复入口。
 
+## 双语 Workbench UI
+
+默认 Workbench UI 内置 `en` 和 `zh-CN` 字典，默认语言是 English，不需要 Vue I18n、FormatJS 或其他第三方 i18n runtime。宿主继续从 package root 和公开 CSS 子路径导入：
+
+```ts
+import {
+  EditorWorkbench,
+  type WorkbenchLocale,
+  type WorkbenchTranslate
+} from "@ek-aiot/3d-editor-vue";
+import "@ek-aiot/3d-editor-vue/styles.css";
+```
+
+宿主拥有语言设置时，把 locale 放在 Vue ref、Pinia 或其他宿主 store 中：
+
+```vue
+<template>
+  <EditorWorkbench
+    v-model:locale="locale"
+    :show-locale-switcher="false"
+    :locale-switcher-disabled="isSaving"
+    :translate="translate"
+    @update:locale="onLocaleChange"
+  >
+    <template #status="context">
+      <span>{{ context.i18n.t(statusMessage) }}</span>
+    </template>
+  </EditorWorkbench>
+</template>
+
+<script setup lang="ts">
+import { ref } from "vue";
+import type { WorkbenchLocale, WorkbenchTranslate } from "@ek-aiot/3d-editor-vue";
+
+const locale = ref<WorkbenchLocale>("zh-CN");
+const isSaving = false;
+const statusMessage = { key: "host.status.saved", fallback: "Saved" } as const;
+const translate: WorkbenchTranslate = (descriptor, activeLocale) =>
+  descriptor.key === "host.status.saved" && activeLocale === "zh-CN"
+    ? "已保存"
+    : undefined;
+
+function onLocaleChange(nextLocale: WorkbenchLocale) {
+  locale.value = nextLocale;
+}
+</script>
+```
+
+不需要宿主控制时，可以用 `default-locale="zh-CN"` 让 Workbench 自己维护初始语言。`:show-locale-switcher="false"` 会隐藏内置切换器，`:locale-switcher-disabled="isSaving"` 会保留切换器但禁止交互。
+
+`locale`、switch visibility、disabled 状态、dictionary、translated copy 和 translate callback 都是 Vue/host session UI state。不要写入 `SceneSnapshot`、`.ek3d`、command history、asset records 或 runtime metadata。文件名、asset label、object name、project metadata 是 authored values；它们作为插值显示，不默认翻译。
+
 ## Primitive 组件
 
 如果不使用 `EditorWorkbench`，可以直接组合：

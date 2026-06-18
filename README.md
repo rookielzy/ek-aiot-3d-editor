@@ -46,6 +46,8 @@ Vue and React packages now include a shared inspector surface over the core cont
 
 The framework packages also expose `EditorWorkbench` and `useWorkbench()` convenience surfaces. They compose the existing viewport, inspector, snapshot subscription, runtime problem observation, project import/export, asset replacement, and command dispatch into a compact editor shell. React customization uses render props; Vue customization uses scoped slots. These shell extension regions receive the core editor, current snapshot, inspector model, runtime problems, and dispatch helper, but they do not expose private runtime projectors or create a core plugin API.
 
+The React and Vue package READMEs document the built-in `en` and `zh-CN` Workbench UI contract. Hosts can control locale, hide or disable the built-in switcher, supply an optional translation callback, and read `context.i18n` from render props or scoped slots. Locale preference, dictionaries, translated copy, and switch state are host/session UI state: there is no persisted language preference in `SceneSnapshot`, `.ek3d`, command history, asset records, or runtime metadata.
+
 ## Local Demo Verification
 
 - `pnpm dev:demo:react`: run the React proof-loop workbench locally.
@@ -65,4 +67,4 @@ In each framework demo, the visible validation path is camera helper use, hierar
 
 ## Current Non-Goals
 
-Box/lasso selection, system clipboard formats, full asset libraries, cloud asset storage, model marketplaces, local import queues, dockable or persisted layouts, schema-driven inspector plugins, per-submesh material slot discovery, full GLTF material graph editing, advanced render pipelines beyond basic shadows, animation timelines, data binding, event orchestration, hosted publishing, stable non-`0.x` API guarantees, and Le5le-style low-code runtime workflows are deferred follow-up work.
+Box/lasso selection, system clipboard formats, full asset libraries, cloud asset storage, model marketplaces, local import queues, dockable or persisted layouts, schema-driven inspector plugins, per-submesh material slot discovery, full GLTF material graph editing, advanced render pipelines beyond basic shadows, animation timelines, data binding, event orchestration, hosted publishing, stable non-`0.x` API guarantees, languages beyond built-in `en`/`zh-CN`, persisted language preference, external locale packs, and Le5le-style low-code runtime workflows are deferred follow-up work.

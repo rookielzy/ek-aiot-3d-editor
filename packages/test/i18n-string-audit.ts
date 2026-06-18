@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export interface StringAuditFinding {
   path: string;
@@ -23,12 +25,14 @@ const TECHNICAL_LITERAL_PATTERNS = [
   /^[A-Za-z]+$/,
 ];
 
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+
 export function auditReactComponentStrings(paths: readonly string[]): StringAuditFinding[] {
-  return paths.flatMap((path) => auditSource(path, readFileSync(path, "utf8"), "react"));
+  return paths.flatMap((path) => auditSource(path, readFileSync(resolve(repoRoot, path), "utf8"), "react"));
 }
 
 export function auditVueComponentStrings(paths: readonly string[]): StringAuditFinding[] {
-  return paths.flatMap((path) => auditSource(path, readFileSync(path, "utf8"), "vue"));
+  return paths.flatMap((path) => auditSource(path, readFileSync(resolve(repoRoot, path), "utf8"), "vue"));
 }
 
 function auditSource(path: string, source: string, framework: "react" | "vue"): StringAuditFinding[] {
