@@ -5,9 +5,11 @@ import {
   attachGlbImportManifestMetadata,
   createEditor,
   createGlbImportManifest,
+  createMessageDescriptor,
   type RendererLike
 } from "@ek-aiot/3d-editor-core";
 import { InspectorPanel } from "../src/components/InspectorPanel";
+import { ProblemsPanel } from "../src/components/ProblemsPanel";
 
 describe("React InspectorPanel", () => {
   it("renders disabled node transform sections and available scene sections with no selection", () => {
@@ -210,6 +212,43 @@ describe("React InspectorPanel", () => {
 
     expect(await screen.findByText("Asset missing")).toBeTruthy();
     expect(screen.getByText(/asset-a unavailable/)).toBeTruthy();
+  });
+
+  it("renders descriptor-only problem details and action labels", () => {
+    render(
+      <ProblemsPanel
+        section={{
+          id: "problems",
+          title: "Problems",
+          enabled: true,
+          fields: [],
+          problems: [{
+            id: "problem-a",
+            severity: "warning",
+            code: "texture-missing",
+            source: "runtime",
+            target: { kind: "texture-slot", materialId: "material-a", slot: "map", assetId: "asset-a" },
+            title: "Texture missing",
+            detailDescriptor: createMessageDescriptor({
+              key: "problem.material.textureAssetUnresolved.detail",
+              fallback: "Texture slot {slot} references missing or unavailable asset {assetId}.",
+              values: { slot: "map", assetId: "asset-a" }
+            }),
+            assetId: "asset-a",
+            recoverability: "user-action",
+            acknowledged: false,
+            actionLabelDescriptor: createMessageDescriptor({
+              key: "problem.importedTarget.reviewRemap.actionLabel",
+              fallback: "Review remap"
+            }),
+            runtime: true
+          }]
+        }}
+      />
+    );
+
+    expect(screen.getByText("Texture slot map references missing or unavailable asset asset-a.")).toBeTruthy();
+    expect(screen.getByText(/Review remap/)).toBeTruthy();
   });
 
   it("selects an HDR environment asset from the default scene state", () => {

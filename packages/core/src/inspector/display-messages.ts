@@ -16,7 +16,7 @@ export function inspectorSectionReasonDescriptor(id: string, reason: string) {
     path: `section.${id}`,
     field: "reason",
     fallback: reason,
-    values: { sectionId: id }
+    values: { sectionId: id, message: reason }
   });
 }
 
@@ -36,6 +36,6 @@ export function inspectorCommandMessageDescriptor(path: string, fieldId: string,
     path,
     field: "message",
     fallback: message,
-    values: { fieldId }
+    values: { fieldId, message }
   });
 }

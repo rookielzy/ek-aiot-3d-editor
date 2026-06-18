@@ -470,13 +470,43 @@ describe("Vue EditorWorkbench", () => {
     expect(wrapper.find('[aria-label="3D 视口"]').exists()).toBe(true);
     expect(wrapper.find('[aria-label="检查器面板"]').exists()).toBe(true);
     expect(wrapper.find('[aria-label="编辑器状态"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="场景检查器"]').exists()).toBe(true);
     expect(wrapper.text()).toContain("层级");
     expect(wrapper.text()).toContain("资源");
     expect(wrapper.text()).toContain("项目");
+    expect(wrapper.text()).toContain("变换");
+    expect(wrapper.text()).toContain("材质");
+    expect(wrapper.text()).toContain("环境");
+    expect(wrapper.text()).toContain("灯光");
+    expect(wrapper.text()).toContain("相机视图");
+    expect(wrapper.text()).toContain("问题");
+    expect(wrapper.text()).toContain("选择可变换节点以编辑变换。");
+    expect(wrapper.text()).toContain("选择 GLB 对象以编辑材质覆盖。");
+    expect(wrapper.text()).toContain("添加灯光以编辑场景灯光。");
+    expect(wrapper.text()).toContain("捕获相机视图以编写展示状态。");
+    expect(wrapper.text()).toContain("没有运行时问题。");
+    expect(wrapper.findAll("label").some((label) => label.text().includes("灯光源"))).toBe(true);
+    expect(wrapper.find('[aria-label="添加灯光"]').exists()).toBe(true);
+    expect(wrapper.findAll("button").some((button) => button.text() === "纯色背景")).toBe(true);
     expect(wrapper.text()).toContain("选择 无");
     expect(wrapper.text()).toContain("Robot arm");
     expect(wrapper.text()).toContain("robot.glb");
     expect(wrapper.text()).not.toContain("Hierarchy");
+
+    await wrapper.findAll(".ek-workbench__tree-row").find((button) => button.text().includes("Robot arm"))!.trigger("click");
+    await nextTick();
+    const positionLabel = wrapper.findAll("label").find((label) => label.text().includes("位置 X"));
+    const opacityLabel = wrapper.findAll("label").find((label) => label.text().includes("不透明度"));
+    if (!positionLabel || !opacityLabel) {
+      throw new Error("Localized transform/material fields were not rendered");
+    }
+    expect((positionLabel.find("input").element as HTMLInputElement).value).toBe("0");
+    await opacityLabel.find("input").setValue("2");
+    await opacityLabel.find("input").trigger("blur");
+    await nextTick();
+    expect(wrapper.text()).toMatch(/输入无效：.*less than or equal to 1/);
+    expect(wrapper.text()).toContain("选择 Robot arm");
+
     expect(JSON.stringify(editor.serialize())).not.toContain("zh-CN");
     expect(JSON.stringify(editor.serialize())).not.toContain("层级");
 
@@ -911,6 +941,34 @@ describe("Vue EditorWorkbench", () => {
       label: "box.glb",
       mimeType: "model/gltf-binary"
     });
+    wrapper.unmount();
+  });
+
+  it("renders descriptor-backed missing asset problems in zh-CN", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a", label: "Missing box" } });
+    const wrapper = mount(EditorWorkbench, {
+      props: {
+        editor,
+        resolver: new AssetResolverBridge(() => null),
+        rendererFactory: fakeRenderer,
+        locale: "zh-CN"
+      }
+    });
+
+    await editor.getRuntime()?.project();
+    await nextTick();
+
+    const inspector = wrapper.find('[aria-label="场景检查器"]');
+    expect(wrapper.find('[aria-label="缺失资源恢复"]').exists()).toBe(true);
+    expect(inspector.text()).toContain("问题");
+    expect(inspector.text()).toContain("无法解析资源");
+    expect(inspector.text()).toContain("资源 asset-a 缺失或不可用。");
+    expect(inspector.text().replace(/\s+/g, " ")).toContain("警告 · 资源解析器 · asset-a · 替换资源");
+    expect(wrapper.text()).toContain("Missing box");
+    expect(JSON.stringify(editor.serialize())).not.toContain("zh-CN");
+    expect(JSON.stringify(editor.serialize())).not.toContain("无法解析资源");
+
     wrapper.unmount();
   });
 

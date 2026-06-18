@@ -372,7 +372,7 @@ function disabledAction(id: string, label: string, message: string): InspectorAc
         path: "action.environment.presetUnavailable",
         field: "message",
         fallback: message,
-        values: { actionId: id }
+        values: { actionId: id, message }
       }),
       severity: "info"
     }

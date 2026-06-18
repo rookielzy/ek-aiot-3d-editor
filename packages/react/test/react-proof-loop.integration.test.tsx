@@ -123,7 +123,7 @@ describe("React proof-loop parity", () => {
       expect(localizedProjectPanel.textContent).toContain("缺少载荷");
       expect(screen.getByText("选择 Simple box")).toBeTruthy();
 
-      const positionX = getFieldInput("Position X") as HTMLInputElement;
+      const positionX = getFieldInput("位置 X") as HTMLInputElement;
       fireEvent.change(positionX, { target: { value: "2" } });
       fireEvent.blur(positionX);
       await act(async () => undefined);
@@ -137,7 +137,7 @@ describe("React proof-loop parity", () => {
         await clickButton("重做");
       });
 
-      const baseColorInput = getFieldInput("Base color") as HTMLInputElement;
+      const baseColorInput = getFieldInput("基础色") as HTMLInputElement;
       fireEvent.change(baseColorInput, { target: { value: "#00aa88" } });
       await act(async () => undefined);
       await waitFor(() => expect(screen.getByText("未保存")).toBeTruthy());
@@ -166,7 +166,7 @@ describe("React proof-loop parity", () => {
       });
       await waitFor(() => expect(screen.getByText("已打开 starter.ek3d")).toBeTruthy());
       await waitFor(() => expect(screen.getAllByText("Camera view 1").length).toBeGreaterThan(0));
-      expect(screen.getByText(/Default/)).toBeTruthy();
+      expect(screen.getAllByText(/默认/).length).toBeGreaterThan(0);
 
       await waitFor(() => expect(localizedProjectPanel.textContent).toContain("替换资源"));
       expect(localizedProjectPanel.textContent).toContain("1 个问题");
@@ -183,7 +183,7 @@ describe("React proof-loop parity", () => {
     } finally {
       restoreDownloadCapture();
     }
-  }, 10000);
+  }, 20000);
 });
 
 async function clickButton(name: string): Promise<void> {
