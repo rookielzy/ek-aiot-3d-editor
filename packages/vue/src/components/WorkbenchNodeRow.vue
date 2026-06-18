@@ -6,7 +6,7 @@
       :data-selected="row.selected ? 'true' : undefined"
       :data-severity="row.highestProblemSeverity ?? undefined"
       :style="treeRowStyle"
-      @click="context.dispatch({ type: 'select-node', nodeId: row.id })"
+      @click="selectNode(row.id)"
     >
       <span>{{ row.label }}</span>
       <small>{{ row.kind }}{{ row.problemCount ? ` · ${row.problemCount}` : "" }}</small>
@@ -15,8 +15,9 @@
       <WorkbenchNodeRow
         v-for="child in children"
         :key="child.id"
-        :context="context"
         :row="child"
+        :rows-by-id="rowsById"
+        :select-node="selectNode"
       />
     </ul>
   </li>
@@ -25,20 +26,20 @@
 <script setup lang="ts">
 import { computed, type CSSProperties } from "vue";
 import type { WorkbenchHierarchyRow } from "@ek-aiot/3d-editor-core";
-import type { WorkbenchContext } from "../composables/use-workbench";
 
 defineOptions({
   name: "WorkbenchNodeRow"
 });
 
 const props = defineProps<{
-  context: WorkbenchContext;
   row: WorkbenchHierarchyRow;
+  rowsById: ReadonlyMap<string, WorkbenchHierarchyRow>;
+  selectNode(nodeId: string): void;
 }>();
 
 const children = computed(() =>
   props.row.childIds
-    .map((childId) => props.context.model.hierarchy.rows.find((candidate) => candidate.id === childId))
+    .map((childId) => props.rowsById.get(childId))
     .filter((child): child is WorkbenchHierarchyRow => Boolean(child))
 );
 const treeRowStyle = computed(() => ({

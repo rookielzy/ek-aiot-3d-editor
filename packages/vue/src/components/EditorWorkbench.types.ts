@@ -1,5 +1,6 @@
 import type { AssetResolverBridge, EditorOptions, EditorRuntime, EditorRuntimeOptions, EditorWithGlbImport } from "@ek-aiot/3d-editor-core";
-import type { WorkbenchContext } from "../composables/use-workbench";
+import type { ResolvedWorkbenchContext } from "../composables/use-workbench";
+import type { WorkbenchLocale, WorkbenchTranslate } from "../i18n/workbench-i18n";
 
 export type WorkbenchRegionName = "toolbar" | "leftPanel" | "sidePanel" | "viewportOverlay" | "rightPanel" | "status";
 
@@ -10,24 +11,35 @@ export interface EditorWorkbenchProps {
   loader?: EditorRuntimeOptions["loader"];
   rendererFactory?: EditorRuntimeOptions["rendererFactory"];
   interactions?: EditorRuntimeOptions["interactions"];
+  locale?: WorkbenchLocale;
+  defaultLocale?: WorkbenchLocale;
+  translate?: WorkbenchTranslate;
   showDefaultToolbar?: boolean;
+  showLocaleSwitcher?: boolean;
+  localeSwitcherDisabled?: boolean;
   class?: string;
   viewportClassName?: string;
   inspectorClassName?: string;
 }
 
 export interface EditorWorkbenchSlots {
-  toolbar?(context: WorkbenchContext): unknown;
-  leftPanel?(context: WorkbenchContext): unknown;
+  toolbar?(context: ResolvedWorkbenchContext): unknown;
+  leftPanel?(context: ResolvedWorkbenchContext): unknown;
   /**
    * @deprecated Use leftPanel for the install-ready workbench's left project panel.
    */
-  sidePanel?(context: WorkbenchContext): unknown;
-  viewportOverlay?(context: WorkbenchContext): unknown;
-  rightPanel?(context: WorkbenchContext): unknown;
-  status?(context: WorkbenchContext): unknown;
+  sidePanel?(context: ResolvedWorkbenchContext): unknown;
+  viewportOverlay?(context: ResolvedWorkbenchContext): unknown;
+  rightPanel?(context: ResolvedWorkbenchContext): unknown;
+  status?(context: ResolvedWorkbenchContext): unknown;
 }
 
 export interface EditorWorkbenchEmits {
   runtimeReady: [runtime: EditorRuntime | null];
+  "update:locale"?: [locale: WorkbenchLocale];
+}
+
+export interface EditorWorkbenchEmitDefinitions {
+  runtimeReady: [runtime: EditorRuntime | null];
+  "update:locale": [locale: WorkbenchLocale];
 }

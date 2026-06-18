@@ -1,10 +1,12 @@
 <template>
-  <main ref="root" :class="rootClassName" tabindex="0">
+  <main ref="root" :class="rootClassName" tabindex="0" :aria-label="context.i18n.t('reactWorkbench.shell.main.label')">
     <div v-if="showDefaultToolbar || $slots.toolbar" class="ek-workbench__toolbar">
       <WorkbenchToolbar
         v-if="showDefaultToolbar"
         :context="context"
         :marquee-selection-enabled="marqueeSelectionEnabled"
+        :show-locale-switcher="showLocaleSwitcher"
+        :locale-switcher-disabled="localeSwitcherDisabled"
         @toggle-marquee-selection="marqueeSelectionEnabled = !marqueeSelectionEnabled"
       />
       <div v-if="$slots.toolbar" class="ek-workbench__toolbar-region">
@@ -12,7 +14,7 @@
       </div>
     </div>
 
-    <section class="ek-workbench__viewport-shell" aria-label="3D viewport">
+    <section class="ek-workbench__viewport-shell" :aria-label="context.i18n.t('reactWorkbench.shell.viewport.label')">
       <EditorViewport
         :editor="workbench.editor"
         :resolver="resolver"
@@ -27,13 +29,13 @@
       </div>
     </section>
 
-    <aside class="ek-workbench__side-panel" aria-label="Project panel">
+    <aside class="ek-workbench__side-panel" :aria-label="context.i18n.t('reactWorkbench.shell.projectPanel.label')">
       <slot v-if="$slots.leftPanel" name="leftPanel" v-bind="context" />
       <slot v-else-if="$slots.sidePanel" name="sidePanel" v-bind="context" />
       <WorkbenchLeftPanel v-else :context="context" />
     </aside>
 
-    <aside class="ek-workbench__right-panel" aria-label="Inspector panel">
+    <aside class="ek-workbench__right-panel" :aria-label="context.i18n.t('reactWorkbench.shell.inspectorPanel.label')">
       <slot v-if="$slots.rightPanel" name="rightPanel" v-bind="context" />
       <InspectorView
         v-else
@@ -48,7 +50,7 @@
       />
     </aside>
 
-    <footer class="ek-workbench__status" aria-label="Editor status">
+    <footer class="ek-workbench__status" :aria-label="context.i18n.t('reactWorkbench.shell.status.label')">
       <slot v-if="$slots.status" name="status" v-bind="context" />
       <WorkbenchStatusBar v-else :context="context" />
     </footer>
@@ -58,8 +60,8 @@
 <script setup lang="ts">
 import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, toRef } from "vue";
 import { resolveEditorShortcut, type EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
-import { useWorkbench, type WorkbenchContext } from "../composables/use-workbench";
-import type { EditorWorkbenchEmits, EditorWorkbenchProps, EditorWorkbenchSlots } from "./EditorWorkbench.types";
+import { useWorkbench } from "../composables/use-workbench";
+import type { EditorWorkbenchEmitDefinitions, EditorWorkbenchProps, EditorWorkbenchSlots } from "./EditorWorkbench.types";
 import EditorViewport from "./EditorViewport.vue";
 import InspectorView from "./InspectorView.vue";
 import WorkbenchLeftPanel from "./WorkbenchLeftPanel.vue";
@@ -78,17 +80,23 @@ const DEFAULT_WORKBENCH_INTERACTIONS = {
 } satisfies EditorRuntimeOptions["interactions"];
 
 const props = withDefaults(defineProps<EditorWorkbenchProps>(), {
-  showDefaultToolbar: true
+  showDefaultToolbar: true,
+  showLocaleSwitcher: true,
+  localeSwitcherDisabled: false
 });
 
-const emit = defineEmits<EditorWorkbenchEmits>();
+const emit = defineEmits<EditorWorkbenchEmitDefinitions>();
 defineSlots<EditorWorkbenchSlots>();
 const instance = getCurrentInstance();
 
 const workbench = useWorkbench({
   editor: toRef(props, "editor"),
   snapshot: props.snapshot,
-  loader: toRef(props, "loader")
+  loader: toRef(props, "loader"),
+  locale: toRef(props, "locale"),
+  defaultLocale: props.defaultLocale,
+  translate: toRef(props, "translate"),
+  onLocaleChange: (locale) => emit("update:locale", locale)
 });
 
 const context = computed(() => workbench.context.value);
@@ -103,6 +111,8 @@ const resolvedInteractions = computed(() =>
     : interactions.value
 );
 const showDefaultToolbar = computed(() => props.showDefaultToolbar);
+const showLocaleSwitcher = computed(() => props.showLocaleSwitcher);
+const localeSwitcherDisabled = computed(() => props.localeSwitcherDisabled);
 const root = ref<HTMLElement | null>(null);
 
 function replaceAsset(assetId: string, file: File): void {

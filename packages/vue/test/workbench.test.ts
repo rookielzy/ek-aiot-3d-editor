@@ -220,6 +220,7 @@ describe("Vue EditorWorkbench", () => {
     await waitForAssertion(() => {
       expect(wrapper.find('[aria-label="Asset import queue"]').text()).toContain("Imported asset-");
     });
+    const importedAssetId = Object.values(editor.getSnapshot().objects)[0]?.asset.id;
 
     expect(loader.analyze).toHaveBeenCalledWith(expect.objectContaining({
       uri: "blob:vue-workbench-0",
@@ -231,6 +232,12 @@ describe("Vue EditorWorkbench", () => {
       name: "robot",
       asset: { kind: "glb", label: "robot.glb" }
     });
+
+    await wrapper.find(".ek-workbench__locale-switcher select").setValue("zh-CN");
+    await nextTick();
+
+    expect(wrapper.find('[aria-label="资源导入队列"]').text()).toContain(`已导入 ${importedAssetId}`);
+    expect(wrapper.find('[aria-label="资源工作区行"]').text()).toContain("robot.glb");
     urls.restore();
     wrapper.unmount();
   });
@@ -331,6 +338,12 @@ describe("Vue EditorWorkbench", () => {
     await waitForAssertion(() => {
       expect(wrapper.text()).toContain("remapped");
     });
+
+    await wrapper.find(".ek-workbench__locale-switcher select").setValue("zh-CN");
+    await nextTick();
+
+    expect(wrapper.text()).toContain("个重映射");
+    expect(wrapper.text()).toContain("robot.glb");
     expect(editor.getSnapshot().objects["object-a"].asset.id).toBe("asset-a");
     expect(Object.values(editor.getSnapshot().nodes).some((node) =>
       node.kind === "imported" && node.importKey === "glb:object-a/primitive:meshes/panel/primitives/0"
@@ -371,11 +384,47 @@ describe("Vue EditorWorkbench", () => {
     expect(importProject.mock.calls[0]?.[0]).toBeInstanceOf(Uint8Array);
     expect(wrapper.text()).toContain("Restored robot");
 
+    await wrapper.find(".ek-workbench__locale-switcher select").setValue("zh-CN");
+    await nextTick();
+    expect(wrapper.text()).toContain("已打开 restored.ek3d");
+
+    await wrapper.find(".ek-workbench__locale-switcher select").setValue("en");
+    await nextTick();
     await wrapper.find('[title="Export complete project"]').trigger("click");
     await nextTick();
 
     expect(exportProject).toHaveBeenLastCalledWith({ partial: false });
     expect(wrapper.text()).toContain("Exported project");
+
+    await wrapper.find(".ek-workbench__locale-switcher select").setValue("zh-CN");
+    await nextTick();
+    expect(wrapper.text()).toContain("已导出项目");
+    wrapper.unmount();
+  });
+
+  it("localizes project failure statuses while preserving raw problem details", async () => {
+    const editor = markRaw(createEditor());
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer, defaultLocale: "en" }
+    });
+    const fileInput = wrapper.find(".ek-workbench__file-input").element as HTMLInputElement;
+    const file = new File([new Uint8Array([123, 34, 109, 34, 58, 49, 125])], "broken.ek3d", { type: "application/octet-stream" });
+    Object.defineProperty(fileInput, "files", {
+      configurable: true,
+      value: [file]
+    });
+
+    await wrapper.find(".ek-workbench__file-input").trigger("change");
+    await waitForAssertion(() => {
+      expect(wrapper.text()).toContain("Project open failed");
+      expect(wrapper.text()).toContain("invalid zip data");
+    });
+
+    await wrapper.find(".ek-workbench__locale-switcher select").setValue("zh-CN");
+    await nextTick();
+
+    expect(wrapper.text()).toContain("项目打开失败");
+    expect(wrapper.text()).toContain("invalid zip data");
     wrapper.unmount();
   });
 
@@ -406,6 +455,135 @@ describe("Vue EditorWorkbench", () => {
 
     expect(wrapper.text()).toContain("Selection 2 nodes");
     wrapper.unmount();
+  });
+
+  it("renders default workbench chrome in Simplified Chinese without translating authored values", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Robot arm", asset: { id: "asset-a", label: "robot.glb" } });
+
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer, locale: "zh-CN" }
+    });
+
+    expect(wrapper.find('[aria-label="编辑器控件"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="项目面板"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="3D 视口"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="检查器面板"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="编辑器状态"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain("层级");
+    expect(wrapper.text()).toContain("资源");
+    expect(wrapper.text()).toContain("项目");
+    expect(wrapper.text()).toContain("选择 无");
+    expect(wrapper.text()).toContain("Robot arm");
+    expect(wrapper.text()).toContain("robot.glb");
+    expect(wrapper.text()).not.toContain("Hierarchy");
+    expect(JSON.stringify(editor.serialize())).not.toContain("zh-CN");
+    expect(JSON.stringify(editor.serialize())).not.toContain("层级");
+
+    wrapper.unmount();
+  });
+
+  it("switches uncontrolled locale without changing editor state or viewport helper state", async () => {
+    const editor = markRaw(createEditor());
+    const mountRuntime = vi.spyOn(editor, "mountRuntime");
+    editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Robot arm", asset: { id: "asset-a" } });
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer, defaultLocale: "en" }
+    });
+
+    await waitForAssertion(() => {
+      expect(wrapper.find('[title="Toggle viewport grid"]').attributes("aria-pressed")).toBe("true");
+    });
+    const mountCallsBeforeSwitch = mountRuntime.mock.calls.length;
+    await wrapper.find('[title="Toggle viewport grid"]').trigger("click");
+    const helperState = editor.viewportHelpers.get();
+    const snapshotBefore = editor.serialize();
+    const selector = wrapper.find(".ek-workbench__locale-switcher select");
+
+    await selector.setValue("zh-CN");
+    await nextTick();
+
+    expect(wrapper.text()).toContain("层级");
+    expect(wrapper.text()).toContain("Robot arm");
+    expect(wrapper.emitted("update:locale")?.[0]).toEqual(["zh-CN"]);
+    expect(mountRuntime).toHaveBeenCalledTimes(mountCallsBeforeSwitch);
+    expect(editor.viewportHelpers.get()).toEqual(helperState);
+    expect(editor.serialize()).toEqual(snapshotBefore);
+    expect(JSON.stringify(editor.serialize())).not.toContain("locale");
+    wrapper.unmount();
+  });
+
+  it("supports controlled locale, hidden switch, disabled switch, host translation override, and locale emits", async () => {
+    const editor = markRaw(createEditor());
+    const onLocaleChange = vi.fn();
+    const wrapper = mount(EditorWorkbench, {
+      props: {
+        editor,
+        rendererFactory: fakeRenderer,
+        locale: "en",
+        showLocaleSwitcher: false,
+        "onUpdate:locale": onLocaleChange,
+        translate: (descriptor, locale) =>
+          descriptor.key === "reactWorkbench.toolbar.project.open.label" && locale === "zh-CN"
+            ? "Host open"
+            : undefined
+      }
+    });
+
+    expect(wrapper.find(".ek-workbench__locale-switcher").exists()).toBe(false);
+    await wrapper.setProps({ locale: "zh-CN" });
+    await nextTick();
+    expect(wrapper.text()).toContain("Host open");
+
+    await wrapper.setProps({ locale: "en", showLocaleSwitcher: true });
+    await nextTick();
+    let selector = wrapper.find(".ek-workbench__locale-switcher select");
+    await selector.setValue("zh-CN");
+    await nextTick();
+
+    expect(onLocaleChange).toHaveBeenCalledWith("zh-CN");
+    expect(wrapper.emitted("update:locale")?.[0]).toEqual(["zh-CN"]);
+    expect(wrapper.text()).toContain("Open");
+    expect(wrapper.text()).not.toContain("Host open");
+
+    await wrapper.setProps({ locale: "zh-CN" });
+    await nextTick();
+    expect(wrapper.text()).toContain("Host open");
+
+    onLocaleChange.mockClear();
+    await wrapper.setProps({ localeSwitcherDisabled: true });
+    selector = wrapper.find(".ek-workbench__locale-switcher select");
+    expect((selector.element as HTMLSelectElement).disabled).toBe(true);
+    await selector.trigger("change");
+    expect(onLocaleChange).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it("exposes i18n helpers through scoped slots and direct useWorkbench", async () => {
+    const editor = markRaw(createEditor());
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer, locale: "zh-CN" },
+      slots: {
+        status: ({ i18n }) => h("span", `${i18n.locale}:${i18n.t("reactWorkbench.status.dirty")}`)
+      }
+    });
+
+    expect(wrapper.text()).toContain("zh-CN:未保存");
+    wrapper.unmount();
+
+    let locale = "zh-CN" as const;
+    let workbench!: ReturnType<typeof useWorkbench>;
+    const Harness = defineComponent({
+      setup() {
+        workbench = useWorkbench({ editor, locale });
+        return () => null;
+      }
+    });
+    const direct = mount(Harness);
+
+    expect(workbench.context.value.i18n.locale).toBe("zh-CN");
+    expect(workbench.context.value.i18n.t("reactWorkbench.toolbar.project.open.label")).toBe("打开");
+    direct.unmount();
   });
 
   it("selects hierarchy rows through core node selection and updates inspector and status", async () => {
