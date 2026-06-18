@@ -6,9 +6,11 @@ import {
   attachGlbImportManifestMetadata,
   createEditor,
   createGlbImportManifest,
+  createMessageDescriptor,
   type RendererLike
 } from "@ek-aiot/3d-editor-core";
 import InspectorPanel from "../src/components/InspectorPanel.vue";
+import ProblemsPanel from "../src/components/ProblemsPanel.vue";
 import { useInspector } from "../src/composables/use-inspector";
 
 describe("Vue InspectorPanel", () => {
@@ -235,6 +237,44 @@ describe("Vue InspectorPanel", () => {
     await nextTick();
 
     expect(wrapper.text()).toContain("Asset could not be resolved");
+    wrapper.unmount();
+  });
+
+  it("renders descriptor-only problem details and action labels", () => {
+    const wrapper = mount(ProblemsPanel, {
+      props: {
+        section: {
+          id: "problems",
+          title: "Problems",
+          enabled: true,
+          fields: [],
+          problems: [{
+            id: "problem-a",
+            severity: "warning",
+            code: "texture-missing",
+            source: "runtime",
+            target: { kind: "texture-slot", materialId: "material-a", slot: "map", assetId: "asset-a" },
+            title: "Texture missing",
+            detailDescriptor: createMessageDescriptor({
+              key: "problem.material.textureAssetUnresolved.detail",
+              fallback: "Texture slot {slot} references missing or unavailable asset {assetId}.",
+              values: { slot: "map", assetId: "asset-a" }
+            }),
+            assetId: "asset-a",
+            recoverability: "user-action",
+            acknowledged: false,
+            actionLabelDescriptor: createMessageDescriptor({
+              key: "problem.importedTarget.reviewRemap.actionLabel",
+              fallback: "Review remap"
+            }),
+            runtime: true
+          }]
+        }
+      }
+    });
+
+    expect(wrapper.text()).toContain("Texture slot map references missing or unavailable asset asset-a.");
+    expect(wrapper.text()).toContain("Review remap");
     wrapper.unmount();
   });
 

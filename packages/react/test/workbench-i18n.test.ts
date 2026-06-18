@@ -18,9 +18,14 @@ describe("React Workbench i18n", () => {
     expect(englishKeys).toContain("reactWorkbench.toolbar.project.open.label");
     expect(englishKeys).toContain("reactWorkbench.leftPanel.assets.search.placeholder");
     expect(englishKeys).toContain("reactWorkbench.status.assets");
+    expect(englishKeys).toContain("reactWorkbench.inspector.scene.label");
+    expect(englishKeys).toContain("reactWorkbench.inspector.problems.empty");
+    expect(englishKeys).toContain("inspector.section.material.title");
+    expect(englishKeys).toContain("inspector.option.light.kind.point.label");
+    expect(englishKeys).toContain("problem.lighting.pointShadowCost.title");
   });
 
-  it("resolves core descriptors in the active locale and interpolates values", () => {
+  it("resolves core and inspector descriptors in the active locale and interpolates values", () => {
     const descriptor = createMessageDescriptor({
       key: "workbench.project.status.problems.label",
       fallback: "{problemCount} problems",
@@ -28,6 +33,20 @@ describe("React Workbench i18n", () => {
     });
 
     expect(resolveWorkbenchMessage("zh-CN", descriptor)).toBe("2 个问题");
+    expect(resolveWorkbenchMessage("zh-CN", createMessageDescriptor({
+      key: "inspector.field.position.x.label",
+      fallback: "Position X"
+    }))).toBe("位置 X");
+    expect(resolveWorkbenchMessage("zh-CN", createMessageDescriptor({
+      key: "problem.lighting.pointShadowCost.detail",
+      fallback: "{lightName} uses {formattedTexelCost} effective shadow texels because point shadows render six faces.",
+      values: { lightName: "Key light", formattedTexelCost: "12K" }
+    }))).toBe("Key light 使用 12K 有效阴影纹素，因为点光阴影会渲染六个面。");
+    expect(resolveWorkbenchMessage("zh-CN", {
+      key: "reactWorkbench.inspector.environment.presetFailedDetail.message",
+      fallback: "Environment preset failed: {detail}",
+      values: { detail: "Unsupported environment field." }
+    })).toBe("环境预设失败：Unsupported environment field.");
   });
 
   it("lets host translation overrides win over built-in dictionaries", () => {
@@ -37,6 +56,20 @@ describe("React Workbench i18n", () => {
         : undefined;
 
     expect(resolveWorkbenchMessage("zh-CN", "reactWorkbench.toolbar.project.open.label", undefined, translate)).toBe("Host open");
+  });
+
+  it("falls back when host translation throws or returns a non-string value", () => {
+    const throwingTranslate: WorkbenchTranslate = () => {
+      throw new Error("host translator failed");
+    };
+    const nonStringTranslate = (() => 42) as unknown as WorkbenchTranslate;
+
+    expect(resolveWorkbenchMessage("zh-CN", "reactWorkbench.toolbar.project.open.label", undefined, throwingTranslate)).toBe("打开");
+    expect(resolveWorkbenchMessage("zh-CN", {
+      key: "host.custom.missing.message",
+      fallback: "Missing {name}",
+      values: { name: "Robot arm" }
+    }, undefined, nonStringTranslate)).toBe("Missing Robot arm");
   });
 
   it("falls back to descriptor fallback text when a dictionary entry is missing", () => {
@@ -60,5 +93,10 @@ describe("React Workbench i18n", () => {
       fallback: "Reimported {fileName}",
       values: { fileName: "Camera view 1" }
     })).toBe("已重新导入 Camera view 1");
+    expect(resolveWorkbenchMessage("zh-CN", {
+      key: "reactWorkbench.inspector.problems.replaceAsset.label",
+      fallback: "Replace asset",
+      values: { assetId: "asset-a" }
+    })).toBe("替换资源");
   });
 });

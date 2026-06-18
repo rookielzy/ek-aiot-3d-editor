@@ -20,9 +20,14 @@ describe("Vue Workbench i18n", () => {
       "reactWorkbench.toolbar.project.open.label",
       "reactWorkbench.leftPanel.assets.import.label",
       "reactWorkbench.status.selection",
+      "reactWorkbench.inspector.scene.label",
+      "reactWorkbench.inspector.problems.empty",
+      "inspector.section.material.title",
+      "inspector.option.light.kind.point.label",
       "workbench.selection.none.label",
       "assetWorkspace.importDiagnostic.glb.decoder.missing.title",
       "problem.asset.unresolved.title",
+      "problem.lighting.pointShadowCost.title",
       "workbenchImport.diagnostic.workbench.import.kind.unsupported.title"
     ]));
   });
@@ -46,6 +51,24 @@ describe("Vue Workbench i18n", () => {
     });
 
     expect(resolveWorkbenchMessage("zh-CN", descriptor)).toBe("2 个问题");
+    expect(resolveWorkbenchMessage("zh-CN", createDisplayMessageDescriptor({
+      namespace: "inspector",
+      path: "field.position.x",
+      field: "label",
+      fallback: "Position X"
+    }))).toBe("位置 X");
+    expect(resolveWorkbenchMessage("zh-CN", createDisplayMessageDescriptor({
+      namespace: "problem",
+      path: "lighting.pointShadowCost",
+      field: "detail",
+      fallback: "{lightName} uses {formattedTexelCost} effective shadow texels because point shadows render six faces.",
+      values: { lightName: "Key light", formattedTexelCost: "12K" }
+    }))).toBe("Key light 使用 12K 有效阴影纹素，因为点光阴影会渲染六个面。");
+    expect(resolveWorkbenchMessage("zh-CN", {
+      key: "reactWorkbench.inspector.environment.presetFailedDetail.message",
+      fallback: "Environment preset failed: {detail}",
+      values: { detail: "Unsupported environment field." }
+    })).toBe("环境预设失败：Unsupported environment field.");
   });
 
   it("lets host translation win before built-in dictionaries", () => {
@@ -90,5 +113,10 @@ describe("Vue Workbench i18n", () => {
       fallback: "Selection {selection}",
       values: { selection: "Robot arm" }
     })).toBe("选择 Robot arm");
+    expect(resolveWorkbenchMessage("zh-CN", {
+      key: "reactWorkbench.inspector.problems.replaceAsset.label",
+      fallback: "Replace asset",
+      values: { assetId: "asset-a" }
+    })).toBe("替换资源");
   });
 });

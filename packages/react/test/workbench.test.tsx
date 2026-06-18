@@ -376,16 +376,40 @@ describe("React EditorWorkbench", () => {
     expect(screen.getByLabelText("编辑器控件")).toBeTruthy();
     expect(screen.getByLabelText("项目面板")).toBeTruthy();
     expect(screen.getByLabelText("3D 视口")).toBeTruthy();
+    expect(screen.getByLabelText("检查器面板")).toBeTruthy();
     expect(screen.getByLabelText("编辑器状态")).toBeTruthy();
+    expect(screen.getByLabelText("场景检查器")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "层级" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "资源" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "项目" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "变换" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "材质" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "环境" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "灯光" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "相机视图" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "问题" })).toBeTruthy();
+    expect(screen.getByText("选择可变换节点以编辑变换。")).toBeTruthy();
+    expect(screen.getByText("选择 GLB 对象以编辑材质覆盖。")).toBeTruthy();
+    expect(screen.getByText("添加灯光以编辑场景灯光。")).toBeTruthy();
+    expect(screen.getByText("捕获相机视图以编写展示状态。")).toBeTruthy();
+    expect(screen.getByText("没有运行时问题。")).toBeTruthy();
+    expect(screen.getByLabelText("灯光源")).toBeTruthy();
+    expect(screen.getByLabelText("添加灯光")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "纯色背景" })).toBeTruthy();
     expect(screen.getByTitle("旋转模式")).toBeTruthy();
     expect(screen.getByPlaceholderText("标签、ID、状态、诊断")).toBeTruthy();
     expect(screen.getByText("Robot arm")).toBeTruthy();
     expect(screen.getByText("robot.glb")).toBeTruthy();
     expect(screen.getByText("项目 部分")).toBeTruthy();
     expect(screen.getByText("选择 无")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Robot arm"));
+    expect((screen.getByLabelText("位置 X") as HTMLInputElement).value).toBe("0");
+    expect(screen.getByLabelText("基础色")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("不透明度"), { target: { value: "2" } });
+    fireEvent.blur(screen.getByLabelText("不透明度"));
+    expect(screen.getByText(/输入无效：.*less than or equal to 1/)).toBeTruthy();
+    expect(screen.getByText("选择 Robot arm")).toBeTruthy();
   });
 
   it("uses defaultLocale for uncontrolled initial Workbench copy", () => {
@@ -597,6 +621,13 @@ describe("React EditorWorkbench", () => {
     expect(await screen.findByLabelText("缺失资源恢复")).toBeTruthy();
     expect(screen.getAllByText("替换资源").length).toBeGreaterThan(0);
     expect(screen.getAllByText("无法解析资源").length).toBeGreaterThan(0);
+    const inspector = within(screen.getByLabelText("场景检查器"));
+    expect(inspector.getByRole("heading", { name: "问题" })).toBeTruthy();
+    expect(inspector.getByText("无法解析资源")).toBeTruthy();
+    expect(inspector.getByText("资源 asset-a 缺失或不可用。")).toBeTruthy();
+    expect(inspector.getByText(/警告 · 资源解析器 · asset-a · 替换资源/)).toBeTruthy();
+    expect(JSON.stringify(editor.serialize())).not.toContain("zh-CN");
+    expect(JSON.stringify(editor.serialize())).not.toContain("无法解析资源");
   });
 
   it("does not recreate editor or remount runtime when controlled locale changes", () => {

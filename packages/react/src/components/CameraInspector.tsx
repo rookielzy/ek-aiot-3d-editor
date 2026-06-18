@@ -12,16 +12,19 @@ import {
   type SceneSnapshot
 } from "@ek-aiot/3d-editor-core";
 import type { WorkbenchCameraContext } from "../hooks/use-workbench";
+import type { InspectorI18n } from "./inspector-i18n";
+import { DEFAULT_INSPECTOR_I18N, renderFieldLabel, renderProblemMessage, renderSectionReason, renderSectionTitle } from "./inspector-i18n";
 
 export interface CameraInspectorProps {
   editor: Editor;
   snapshot: SceneSnapshot;
   section: CameraInspectorSection;
   camera?: WorkbenchCameraContext;
+  i18n?: InspectorI18n;
   onActiveCameraViewIdChange(value: string | null): void;
 }
 
-export function CameraInspector({ editor, snapshot, section, camera, onActiveCameraViewIdChange }: CameraInspectorProps) {
+export function CameraInspector({ editor, snapshot, section, camera, i18n = DEFAULT_INSPECTOR_I18N, onActiveCameraViewIdChange }: CameraInspectorProps) {
   const targetKey = section.activeCameraViewId ?? "none";
   const activeView = section.activeCameraViewId ? snapshot.cameras[section.activeCameraViewId] : null;
   const [problem, setProblem] = useState<string | null>(null);
@@ -29,7 +32,7 @@ export function CameraInspector({ editor, snapshot, section, camera, onActiveCam
   function captureNewView() {
     const captured = camera?.capture({ name: nextCameraViewName(snapshot) });
     if (!captured) {
-      setProblem("Camera capture unavailable.");
+      setProblem(i18n.t("reactWorkbench.inspector.camera.captureUnavailable.message"));
       return;
     }
     const view = buildCreateCameraViewInput(snapshot, captured);
@@ -40,10 +43,10 @@ export function CameraInspector({ editor, snapshot, section, camera, onActiveCam
         onActiveCameraViewIdChange(view?.id ?? null);
         setProblem(null);
       } else {
-        setProblem(dispatch.error ?? "Camera view create failed.");
+        setProblem(dispatch.error ?? i18n.t("reactWorkbench.inspector.camera.createFailed.message"));
       }
     } else {
-      setProblem(result.problem.message);
+      setProblem(renderProblemMessage(i18n, result.problem));
     }
   }
 
@@ -53,7 +56,7 @@ export function CameraInspector({ editor, snapshot, section, camera, onActiveCam
     }
     const captured = camera?.capture({ name: activeView?.name });
     if (!captured) {
-      setProblem("Camera capture unavailable.");
+      setProblem(i18n.t("reactWorkbench.inspector.camera.captureUnavailable.message"));
       return;
     }
     const { id: _id, name: _name, metadata: _metadata, ...patch } = captured;
@@ -62,12 +65,12 @@ export function CameraInspector({ editor, snapshot, section, camera, onActiveCam
       viewId: section.activeCameraViewId,
       patch
     });
-    setProblem(result.ok ? null : result.error ?? "Camera view update failed.");
+    setProblem(result.ok ? null : result.error ?? i18n.t("reactWorkbench.inspector.camera.updateFailed.message"));
   }
 
   function applyActive() {
     if (!activeView || !camera?.apply(activeView)) {
-      setProblem("Camera apply unavailable.");
+      setProblem(i18n.t("reactWorkbench.inspector.camera.applyUnavailable.message"));
       return;
     }
     setProblem(null);
@@ -79,7 +82,7 @@ export function CameraInspector({ editor, snapshot, section, camera, onActiveCam
       editor.dispatch(result.command);
       setProblem(null);
     } else {
-      setProblem(result.problem.message);
+      setProblem(renderProblemMessage(i18n, result.problem));
     }
   }
 
@@ -92,7 +95,7 @@ export function CameraInspector({ editor, snapshot, section, camera, onActiveCam
       editor.dispatch(result.command);
       setProblem(null);
     } else {
-      setProblem(result.problem.message);
+      setProblem(renderProblemMessage(i18n, result.problem));
     }
   }
 
@@ -107,16 +110,16 @@ export function CameraInspector({ editor, snapshot, section, camera, onActiveCam
       onActiveCameraViewIdChange(nextActiveViewId);
       setProblem(null);
     } else {
-      setProblem(result.problem.message);
+      setProblem(renderProblemMessage(i18n, result.problem));
     }
   }
 
   return (
     <section className="ek-inspector-section">
       <header className="ek-inspector-section__header">
-        <h2>Camera views</h2>
+        <h2>{renderSectionTitle(i18n, section)}</h2>
         <button type="button" className="ek-inspector-compact-action" onClick={captureNewView} disabled={!section.canCapture}>
-          Capture
+          {i18n.t("reactWorkbench.inspector.camera.capture.label")}
         </button>
       </header>
       {section.cameraViews.length ? (
@@ -130,36 +133,36 @@ export function CameraInspector({ editor, snapshot, section, camera, onActiveCam
               onClick={() => onActiveCameraViewIdChange(view.id)}
             >
               <span>{view.label}</span>
-              <small>{view.default ? `Default · ${view.summary}` : view.summary}</small>
+              <small>{view.default ? `${i18n.t("reactWorkbench.inspector.camera.default.label")} · ${view.summary}` : view.summary}</small>
             </button>
           ))}
         </div>
       ) : (
-        <p className="ek-inspector-empty">{section.reason}</p>
+        <p className="ek-inspector-empty">{renderSectionReason(i18n, section)}</p>
       )}
       {problem ? <p className="ek-inspector-warning">{problem}</p> : null}
       {section.activeCameraViewId ? (
         <div className="ek-inspector-grid">
           <div className="ek-inspector-button-row">
             <button type="button" onClick={applyActive} disabled={!section.canApply}>
-              Apply
+              {i18n.t("reactWorkbench.inspector.camera.apply.label")}
             </button>
             <button type="button" onClick={updateFromRuntime} disabled={!section.canCapture}>
-              Update
+              {i18n.t("reactWorkbench.inspector.camera.update.label")}
             </button>
             {section.defaultCameraViewId === section.activeCameraViewId ? (
               <button type="button" onClick={() => setDefault(null)}>
-                Clear default
+                {i18n.t("reactWorkbench.inspector.camera.clearDefault.label")}
               </button>
             ) : (
               <button type="button" onClick={() => setDefault(section.activeCameraViewId)}>
-                Set default
+                {i18n.t("reactWorkbench.inspector.camera.setDefault.label")}
               </button>
             )}
           </div>
           {section.fields.map((field) => (
             <label key={field.id} className="ek-inspector-field">
-              <span>{field.label}</span>
+              <span>{renderFieldLabel(i18n, field)}</span>
               <input
                 key={`${targetKey}:${field.id}:${String(field.value)}`}
                 defaultValue={String(field.value)}
@@ -172,7 +175,7 @@ export function CameraInspector({ editor, snapshot, section, camera, onActiveCam
             </label>
           ))}
           <button className="ek-inspector-danger" type="button" onClick={removeActive}>
-            Delete view
+            {i18n.t("reactWorkbench.inspector.camera.delete.label")}
           </button>
         </div>
       ) : null}

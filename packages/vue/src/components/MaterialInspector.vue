@@ -1,12 +1,12 @@
 <template>
   <section class="ek-inspector-section">
     <header class="ek-inspector-section__header">
-      <h2>Material</h2>
+      <h2>{{ renderSectionTitle(resolvedI18n, section) }}</h2>
     </header>
-    <p v-if="section.empty" class="ek-inspector-empty">{{ section.reason }}</p>
+    <p v-if="section.empty" class="ek-inspector-empty">{{ renderSectionReason(resolvedI18n, section) }}</p>
     <template v-else>
-      <fieldset v-if="section.targets.length > 1" class="ek-material-targets" aria-label="Material target">
-        <legend>Target</legend>
+      <fieldset v-if="section.targets.length > 1" class="ek-material-targets" :aria-label="resolvedI18n.t('reactWorkbench.inspector.material.target.label')">
+        <legend>{{ resolvedI18n.t("reactWorkbench.inspector.material.target.legend") }}</legend>
         <div class="ek-material-target-list">
           <label
             v-for="target in section.targets"
@@ -30,59 +30,59 @@
           </label>
         </div>
       </fieldset>
-      <p v-if="activeTarget?.unresolved" class="ek-inspector-warning" role="status">This material slot is unresolved. Existing override values remain editable when safe.</p>
+      <p v-if="activeTarget?.unresolved" class="ek-inspector-warning" role="status">{{ resolvedI18n.t("reactWorkbench.inspector.material.target.unresolvedWarning") }}</p>
       <div class="ek-inspector-grid">
-      <label v-for="field in fields" :key="field.id" class="ek-inspector-field">
-        <span>{{ field.label }}</span>
-        <input
-          v-if="field.kind === 'number'"
-          :key="`${effectiveTargetKey}:${field.id}:${String(field.value)}`"
-          :value="field.value"
-          :disabled="field.disabled"
-          type="number"
-          :min="field.min"
-          :max="field.max"
-          :step="field.step ?? 0.01"
-          :aria-invalid="fieldProblem?.fieldId === field.id ? true : undefined"
-          :aria-describedby="fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined"
-          @blur="commit(field.id as MaterialFieldId, ($event.target as HTMLInputElement).value)"
-          @keydown.enter.prevent="blurOnEnter"
-        />
-        <input
-          v-else-if="field.kind === 'color'"
-          :key="`${effectiveTargetKey}:${field.id}:${String(field.value)}`"
-          :value="field.value"
-          :disabled="field.disabled"
-          type="color"
-          :aria-invalid="fieldProblem?.fieldId === field.id ? true : undefined"
-          :aria-describedby="fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined"
-          @change="commit(field.id as MaterialFieldId, ($event.target as HTMLInputElement).value)"
-        />
-        <input
-          v-else-if="field.kind === 'checkbox'"
-          :key="`${effectiveTargetKey}:${field.id}:${String(field.value)}`"
-          :checked="Boolean(field.value)"
-          :disabled="field.disabled"
-          type="checkbox"
-          :aria-invalid="fieldProblem?.fieldId === field.id ? true : undefined"
-          :aria-describedby="fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined"
-          @change="commit(field.id as MaterialFieldId, ($event.target as HTMLInputElement).checked)"
-        />
-        <select
-          v-else
-          :key="`${effectiveTargetKey}:${field.id}:${String(field.value)}`"
-          :value="String(field.value)"
-          :disabled="field.disabled"
-          :aria-invalid="fieldProblem?.fieldId === field.id ? true : undefined"
-          :aria-describedby="fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined"
-          @change="commit(field.id as MaterialFieldId, ($event.target as HTMLSelectElement).value)"
-        >
-          <option v-if="field.kind === 'asset'" value="">None</option>
-          <option v-for="option in field.options ?? []" :key="option.value" :value="option.value">{{ option.label }}</option>
-        </select>
-        <small v-if="fieldProblem?.fieldId === field.id" :id="problemId(field.id)" class="ek-inspector-field-problem" role="alert">{{ fieldProblem.message }}</small>
-      </label>
-    </div>
+        <label v-for="field in fields" :key="field.id" class="ek-inspector-field">
+          <span>{{ renderFieldLabel(resolvedI18n, field) }}</span>
+          <input
+            v-if="field.kind === 'number'"
+            :key="`${effectiveTargetKey}:${field.id}:${String(field.value)}`"
+            :value="field.value"
+            :disabled="field.disabled"
+            type="number"
+            :min="field.min"
+            :max="field.max"
+            :step="field.step ?? 0.01"
+            :aria-invalid="fieldProblem?.fieldId === field.id ? true : undefined"
+            :aria-describedby="fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined"
+            @blur="commit(field.id as MaterialFieldId, ($event.target as HTMLInputElement).value)"
+            @keydown.enter.prevent="blurOnEnter"
+          />
+          <input
+            v-else-if="field.kind === 'color'"
+            :key="`${effectiveTargetKey}:${field.id}:${String(field.value)}`"
+            :value="field.value"
+            :disabled="field.disabled"
+            type="color"
+            :aria-invalid="fieldProblem?.fieldId === field.id ? true : undefined"
+            :aria-describedby="fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined"
+            @change="commit(field.id as MaterialFieldId, ($event.target as HTMLInputElement).value)"
+          />
+          <input
+            v-else-if="field.kind === 'checkbox'"
+            :key="`${effectiveTargetKey}:${field.id}:${String(field.value)}`"
+            :checked="Boolean(field.value)"
+            :disabled="field.disabled"
+            type="checkbox"
+            :aria-invalid="fieldProblem?.fieldId === field.id ? true : undefined"
+            :aria-describedby="fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined"
+            @change="commit(field.id as MaterialFieldId, ($event.target as HTMLInputElement).checked)"
+          />
+          <select
+            v-else
+            :key="`${effectiveTargetKey}:${field.id}:${String(field.value)}`"
+            :value="String(field.value)"
+            :disabled="field.disabled"
+            :aria-invalid="fieldProblem?.fieldId === field.id ? true : undefined"
+            :aria-describedby="fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined"
+            @change="commit(field.id as MaterialFieldId, ($event.target as HTMLSelectElement).value)"
+          >
+            <option v-if="field.kind === 'asset'" value="">{{ resolvedI18n.t("reactWorkbench.inspector.field.asset.none") }}</option>
+            <option v-for="option in field.options ?? []" :key="option.value" :value="option.value">{{ renderOptionLabel(resolvedI18n, option) }}</option>
+          </select>
+          <small v-if="fieldProblem?.fieldId === field.id" :id="problemId(field.id)" class="ek-inspector-field-problem" role="alert">{{ renderProblemMessage(resolvedI18n, fieldProblem) }}</small>
+        </label>
+      </div>
     </template>
   </section>
 </template>
@@ -99,13 +99,24 @@ import {
   type MaterialInspectorTarget,
   type SceneSnapshot
 } from "@ek-aiot/3d-editor-core";
+import {
+  DEFAULT_INSPECTOR_I18N,
+  renderFieldLabel,
+  renderOptionLabel,
+  renderProblemMessage,
+  renderSectionReason,
+  renderSectionTitle,
+  type InspectorI18n
+} from "./inspector-i18n";
 
 const props = defineProps<{
   editor: Editor;
   snapshot: SceneSnapshot;
   section: MaterialInspectorSection;
+  i18n?: InspectorI18n;
 }>();
 
+const resolvedI18n = computed(() => props.i18n ?? DEFAULT_INSPECTOR_I18N);
 const activeTargetKey = ref<string | null>(props.section.activeTargetKey);
 const fieldProblem = ref<InspectorCommandProblem | null>(null);
 
@@ -168,8 +179,12 @@ function blurOnEnter(event: KeyboardEvent) {
 
 function describeTarget(target: MaterialInspectorTarget): string {
   return [
-    target.kind === "object" ? "Broad override" : target.hasOverride ? "Slot override" : "No override",
-    target.unresolved ? "Unresolved" : null
+    target.kind === "object"
+      ? resolvedI18n.value.t("reactWorkbench.inspector.material.target.objectOverride")
+      : target.hasOverride
+        ? resolvedI18n.value.t("reactWorkbench.inspector.material.target.slotOverride")
+        : resolvedI18n.value.t("reactWorkbench.inspector.material.target.noOverride"),
+    target.unresolved ? resolvedI18n.value.t("reactWorkbench.inspector.material.target.unresolved") : null
   ].filter(Boolean).join(" · ");
 }
 

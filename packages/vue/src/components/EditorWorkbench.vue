@@ -43,6 +43,7 @@
         :snapshot="currentSnapshot"
         :inspector="currentInspector"
         :camera="context.camera"
+        :i18n="context.i18n"
         :class="inspectorClassName"
         @update:active-light-id="workbench.setActiveLightId"
         @update:active-camera-view-id="workbench.setActiveCameraViewId"

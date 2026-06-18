@@ -1,9 +1,9 @@
 <template>
   <section class="ek-inspector-section">
     <header class="ek-inspector-section__header">
-      <h2>Camera views</h2>
+      <h2>{{ renderSectionTitle(resolvedI18n, section) }}</h2>
       <button type="button" class="ek-inspector-compact-action" :disabled="!section.canCapture" @click="captureNewView">
-        Capture
+        {{ resolvedI18n.t("reactWorkbench.inspector.camera.capture.label") }}
       </button>
     </header>
     <div v-if="section.cameraViews.length" class="ek-inspector-camera-list" role="list">
@@ -16,20 +16,20 @@
         @click="emit('update:activeCameraViewId', view.id)"
       >
         <span>{{ view.label }}</span>
-        <small>{{ view.default ? `Default · ${view.summary}` : view.summary }}</small>
+        <small>{{ view.default ? `${resolvedI18n.t("reactWorkbench.inspector.camera.default.label")} · ${view.summary}` : view.summary }}</small>
       </button>
     </div>
-    <p v-else class="ek-inspector-empty">{{ section.reason }}</p>
+    <p v-else class="ek-inspector-empty">{{ renderSectionReason(resolvedI18n, section) }}</p>
     <p v-if="problem" class="ek-inspector-warning">{{ problem }}</p>
     <div v-if="section.activeCameraViewId" class="ek-inspector-grid">
       <div class="ek-inspector-button-row">
-        <button type="button" :disabled="!section.canApply" @click="applyActive">Apply</button>
-        <button type="button" :disabled="!section.canCapture" @click="updateFromRuntime">Update</button>
-        <button v-if="section.defaultCameraViewId === section.activeCameraViewId" type="button" @click="setDefault(null)">Clear default</button>
-        <button v-else type="button" @click="setDefault(section.activeCameraViewId)">Set default</button>
+        <button type="button" :disabled="!section.canApply" @click="applyActive">{{ resolvedI18n.t("reactWorkbench.inspector.camera.apply.label") }}</button>
+        <button type="button" :disabled="!section.canCapture" @click="updateFromRuntime">{{ resolvedI18n.t("reactWorkbench.inspector.camera.update.label") }}</button>
+        <button v-if="section.defaultCameraViewId === section.activeCameraViewId" type="button" @click="setDefault(null)">{{ resolvedI18n.t("reactWorkbench.inspector.camera.clearDefault.label") }}</button>
+        <button v-else type="button" @click="setDefault(section.activeCameraViewId)">{{ resolvedI18n.t("reactWorkbench.inspector.camera.setDefault.label") }}</button>
       </div>
       <label v-for="field in section.fields" :key="field.id" class="ek-inspector-field">
-        <span>{{ field.label }}</span>
+        <span>{{ renderFieldLabel(resolvedI18n, field) }}</span>
         <input
           :value="field.value"
           :type="field.kind === 'number' ? 'number' : 'text'"
@@ -40,7 +40,7 @@
           @keydown.enter.prevent="blurOnEnter"
         />
       </label>
-      <button class="ek-inspector-danger" type="button" @click="removeActive">Delete view</button>
+      <button class="ek-inspector-danger" type="button" @click="removeActive">{{ resolvedI18n.t("reactWorkbench.inspector.camera.delete.label") }}</button>
     </div>
   </section>
 </template>
@@ -60,12 +60,21 @@ import {
   type SceneSnapshot
 } from "@ek-aiot/3d-editor-core";
 import type { WorkbenchCameraContext } from "../composables/use-workbench";
+import {
+  DEFAULT_INSPECTOR_I18N,
+  renderFieldLabel,
+  renderProblemMessage,
+  renderSectionReason,
+  renderSectionTitle,
+  type InspectorI18n
+} from "./inspector-i18n";
 
 const props = defineProps<{
   editor: Editor;
   snapshot: SceneSnapshot;
   section: CameraInspectorSection;
   camera?: WorkbenchCameraContext;
+  i18n?: InspectorI18n;
 }>();
 
 const emit = defineEmits<{
@@ -74,11 +83,12 @@ const emit = defineEmits<{
 
 const problem = ref<string | null>(null);
 const activeView = computed(() => props.section.activeCameraViewId ? props.snapshot.cameras[props.section.activeCameraViewId] : null);
+const resolvedI18n = computed(() => props.i18n ?? DEFAULT_INSPECTOR_I18N);
 
 function captureNewView(): void {
   const captured = props.camera?.capture({ name: nextCameraViewName(props.snapshot) });
   if (!captured) {
-    problem.value = "Camera capture unavailable.";
+    problem.value = resolvedI18n.value.t("reactWorkbench.inspector.camera.captureUnavailable.message");
     return;
   }
   const view = buildCreateCameraViewInput(props.snapshot, captured);
@@ -89,10 +99,10 @@ function captureNewView(): void {
       emit("update:activeCameraViewId", view?.id ?? null);
       problem.value = null;
     } else {
-      problem.value = dispatch.error ?? "Camera view create failed.";
+      problem.value = dispatch.error ?? resolvedI18n.value.t("reactWorkbench.inspector.camera.createFailed.message");
     }
   } else {
-    problem.value = result.problem.message;
+    problem.value = renderProblemMessage(resolvedI18n.value, result.problem);
   }
 }
 
@@ -102,7 +112,7 @@ function updateFromRuntime(): void {
   }
   const captured = props.camera?.capture({ name: activeView.value?.name });
   if (!captured) {
-    problem.value = "Camera capture unavailable.";
+    problem.value = resolvedI18n.value.t("reactWorkbench.inspector.camera.captureUnavailable.message");
     return;
   }
   const { id: _id, name: _name, metadata: _metadata, ...patch } = captured;
@@ -111,12 +121,12 @@ function updateFromRuntime(): void {
     viewId: props.section.activeCameraViewId,
     patch
   });
-  problem.value = result.ok ? null : result.error ?? "Camera view update failed.";
+  problem.value = result.ok ? null : result.error ?? resolvedI18n.value.t("reactWorkbench.inspector.camera.updateFailed.message");
 }
 
 function applyActive(): void {
   if (!activeView.value || !props.camera?.apply(activeView.value)) {
-    problem.value = "Camera apply unavailable.";
+    problem.value = resolvedI18n.value.t("reactWorkbench.inspector.camera.applyUnavailable.message");
     return;
   }
   problem.value = null;
@@ -128,7 +138,7 @@ function setDefault(viewId: string | null): void {
     props.editor.dispatch(result.command);
     problem.value = null;
   } else {
-    problem.value = result.problem.message;
+    problem.value = renderProblemMessage(resolvedI18n.value, result.problem);
   }
 }
 
@@ -141,7 +151,7 @@ function commit(fieldId: CameraViewFieldId, value: string): void {
     props.editor.dispatch(result.command);
     problem.value = null;
   } else {
-    problem.value = result.problem.message;
+    problem.value = renderProblemMessage(resolvedI18n.value, result.problem);
   }
 }
 
@@ -156,7 +166,7 @@ function removeActive(): void {
     emit("update:activeCameraViewId", nextActiveViewId);
     problem.value = null;
   } else {
-    problem.value = result.problem.message;
+    problem.value = renderProblemMessage(resolvedI18n.value, result.problem);
   }
 }
 

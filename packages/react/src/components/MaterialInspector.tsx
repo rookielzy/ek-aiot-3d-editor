@@ -9,14 +9,17 @@ import {
   type SceneSnapshot
 } from "@ek-aiot/3d-editor-core";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { InspectorI18n } from "./inspector-i18n";
+import { DEFAULT_INSPECTOR_I18N, renderFieldLabel, renderOptionLabel, renderProblemMessage, renderSectionReason, renderSectionTitle } from "./inspector-i18n";
 
 export interface MaterialInspectorProps {
   editor: Editor;
   snapshot: SceneSnapshot;
   section: MaterialInspectorSection;
+  i18n?: InspectorI18n;
 }
 
-export function MaterialInspector({ editor, snapshot, section }: MaterialInspectorProps) {
+export function MaterialInspector({ editor, snapshot, section, i18n = DEFAULT_INSPECTOR_I18N }: MaterialInspectorProps) {
   const selectableTargets = useMemo(() => section.targets.filter((target) => target.canSelect), [section.targets]);
   const defaultTargetKey = section.activeTargetKey ?? selectableTargets[0]?.key ?? null;
   const targetsSignature = targetSignature(section);
@@ -71,14 +74,14 @@ export function MaterialInspector({ editor, snapshot, section }: MaterialInspect
   return (
     <section className="ek-inspector-section">
       <header className="ek-inspector-section__header">
-        <h2>Material</h2>
+        <h2>{renderSectionTitle(i18n, section)}</h2>
       </header>
-      {section.empty ? <p className="ek-inspector-empty">{section.reason}</p> : null}
+      {section.empty ? <p className="ek-inspector-empty">{renderSectionReason(i18n, section)}</p> : null}
       {!section.empty ? (
         <>
           {section.targets.length > 1 ? (
-            <fieldset className="ek-material-targets" aria-label="Material target">
-              <legend>Target</legend>
+            <fieldset className="ek-material-targets" aria-label={i18n.t("reactWorkbench.inspector.material.target.label")}>
+              <legend>{i18n.t("reactWorkbench.inspector.material.target.legend")}</legend>
               <div className="ek-material-target-list">
                 {section.targets.map((target) => (
                   <label key={target.key} className="ek-material-target-option" data-unresolved={target.unresolved ? "true" : undefined}>
@@ -96,7 +99,7 @@ export function MaterialInspector({ editor, snapshot, section }: MaterialInspect
                     <span className="ek-material-target-option__body">
                       <span className="ek-material-target-option__label">{target.label}</span>
                       <span className="ek-material-target-option__meta">
-                        {describeTarget(target)}
+                        {describeTarget(i18n, target)}
                       </span>
                       {target.disabledReason ? (
                         <span className="ek-material-target-option__reason">{target.disabledReason}</span>
@@ -108,12 +111,12 @@ export function MaterialInspector({ editor, snapshot, section }: MaterialInspect
             </fieldset>
           ) : null}
           {activeTarget?.unresolved ? (
-            <p className="ek-inspector-warning" role="status">This material slot is unresolved. Existing override values remain editable when safe.</p>
+            <p className="ek-inspector-warning" role="status">{i18n.t("reactWorkbench.inspector.material.target.unresolvedWarning")}</p>
           ) : null}
           <div className="ek-inspector-grid">
             {fields.map((field) => (
               <label key={field.id} className="ek-inspector-field">
-                <span>{field.label}</span>
+                <span>{renderFieldLabel(i18n, field)}</span>
                 {field.kind === "number" ? (
                   <input
                     key={`${effectiveTargetKey}:${field.id}:${String(field.value)}`}
@@ -156,16 +159,16 @@ export function MaterialInspector({ editor, snapshot, section }: MaterialInspect
                     aria-describedby={fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined}
                     onChange={(event) => commit(field.id as MaterialFieldId, event.currentTarget.value)}
                   >
-                    {field.kind === "asset" ? <option value="">None</option> : null}
+                    {field.kind === "asset" ? <option value="">{i18n.t("reactWorkbench.inspector.field.asset.none")}</option> : null}
                     {(field.options ?? []).map((option) => (
                       <option key={option.value} value={option.value}>
-                        {option.label}
+                        {renderOptionLabel(i18n, option)}
                       </option>
                     ))}
                   </select>
                 )}
                 {fieldProblem?.fieldId === field.id ? (
-                  <small id={problemId(field.id)} className="ek-inspector-field-problem" role="alert">{fieldProblem.message}</small>
+                  <small id={problemId(field.id)} className="ek-inspector-field-problem" role="alert">{renderProblemMessage(i18n, fieldProblem)}</small>
                 ) : null}
               </label>
             ))}
@@ -176,10 +179,14 @@ export function MaterialInspector({ editor, snapshot, section }: MaterialInspect
   );
 }
 
-function describeTarget(target: MaterialInspectorTarget): string {
+function describeTarget(i18n: InspectorI18n, target: MaterialInspectorTarget): string {
   const parts = [
-    target.kind === "object" ? "Broad override" : target.hasOverride ? "Slot override" : "No override",
-    target.unresolved ? "Unresolved" : null
+    target.kind === "object"
+      ? i18n.t("reactWorkbench.inspector.material.target.objectOverride")
+      : target.hasOverride
+        ? i18n.t("reactWorkbench.inspector.material.target.slotOverride")
+        : i18n.t("reactWorkbench.inspector.material.target.noOverride"),
+    target.unresolved ? i18n.t("reactWorkbench.inspector.material.target.unresolved") : null
   ].filter(Boolean);
   return parts.join(" · ");
 }
