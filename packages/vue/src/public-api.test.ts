@@ -129,6 +129,8 @@ describe("vue public API", () => {
     expect(packageJson.publishConfig?.access).toBe("public");
     expect(packageJson.repository?.directory).toBe("packages/vue");
     expect(packageJson.dependencies["@ek-aiot/3d-editor-core"]).toBe(`workspace:^${corePackageJson.version}`);
+    expect(packageJson.dependencies["@phosphor-icons/vue"]).toMatch(/^\^2\./);
     expect(packageJson.peerDependencies.vue).toMatch(/^\^3/);
+    expect(packageJson.peerDependencies).not.toHaveProperty("@phosphor-icons/vue");
   });
 });

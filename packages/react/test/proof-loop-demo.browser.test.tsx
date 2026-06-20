@@ -9,8 +9,10 @@ import { App as ReactProofLoopApp } from "../../../examples/react-proof-loop/src
 import ReactDemoStyles from "../../../examples/react-proof-loop/src/styles.css?raw";
 import VueProofLoopApp from "../../../examples/vue-proof-loop/src/App.vue";
 import VueDemoStyles from "../../../examples/vue-proof-loop/src/styles.css?raw";
-import WorkbenchStyles from "../src/components/workbench.css?raw";
-import InspectorStyles from "../src/components/inspector.css?raw";
+import ReactWorkbenchStyles from "../src/components/workbench.css?raw";
+import ReactInspectorStyles from "../src/components/inspector.css?raw";
+import VueWorkbenchStyles from "../../vue/src/components/workbench.css?raw";
+import VueInspectorStyles from "../../vue/src/components/inspector.css?raw";
 import simpleBoxUrl from "../../core/test/fixtures/simple-box.glb?url";
 
 describe("proof-loop starter demo browser verification", () => {
@@ -27,32 +29,32 @@ describe("proof-loop starter demo browser verification", () => {
     const root = mountReactDemo();
     cleanup = root.cleanup;
 
-    await verifyStarterFlow(root.host, { professionalUi: "react" });
+    await verifyStarterFlow(root.host, { assertProfessionalUi: true });
   }, 15000);
 
   it("drives the Vue starter through the package default workbench", async () => {
     const root = mountVueDemo();
     cleanup = root.cleanup;
 
-    await verifyStarterFlow(root.host);
+    await verifyStarterFlow(root.host, { assertProfessionalUi: true });
   }, 15000);
 
   it("keeps the React starter workbench usable in Simplified Chinese", async () => {
     const root = mountReactDemo({ locale: "zh-CN" });
     cleanup = root.cleanup;
 
-    await verifyChineseWorkbenchLayout(root.host, { professionalUi: "react" });
+    await verifyChineseWorkbenchLayout(root.host, { assertProfessionalUi: true });
   }, 15000);
 
   it("keeps the Vue starter workbench usable in Simplified Chinese", async () => {
     const root = mountVueDemo({ locale: "zh-CN" });
     cleanup = root.cleanup;
 
-    await verifyChineseWorkbenchLayout(root.host);
+    await verifyChineseWorkbenchLayout(root.host, { assertProfessionalUi: true });
   }, 15000);
 });
 
-async function verifyStarterFlow(host: HTMLElement, options: { professionalUi?: "react" } = {}): Promise<void> {
+async function verifyStarterFlow(host: HTMLElement, options: { assertProfessionalUi?: boolean } = {}): Promise<void> {
   const restoreDownloadCapture = installDownloadCapture();
   try {
     await waitFor(() => {
@@ -70,7 +72,7 @@ async function verifyStarterFlow(host: HTMLElement, options: { professionalUi?: 
       expect(text(assets)).toContain("1 refs");
     });
     await assertAssetWorkspaceLayout(host);
-    if (options.professionalUi === "react") {
+    if (options.assertProfessionalUi) {
       await assertProfessionalWorkbenchLayout(host);
     }
     await openLeftWorkspaceView(host, "Scene");
@@ -166,7 +168,7 @@ async function verifyStarterFlow(host: HTMLElement, options: { professionalUi?: 
       expect(host.querySelector('[aria-label="Missing asset recovery"]')).toBeNull();
       expect(text(host)).toContain("Problems 0");
     });
-    if (options.professionalUi === "react") {
+    if (options.assertProfessionalUi) {
       expect(text(section(host, "Asset recovery status"))).toContain("Replaced with");
     }
     expect(text(visibleSection(host, "Assets"))).toContain("Recoverable asset");
@@ -176,7 +178,7 @@ async function verifyStarterFlow(host: HTMLElement, options: { professionalUi?: 
   }
 }
 
-async function verifyChineseWorkbenchLayout(host: HTMLElement, options: { professionalUi?: "react" } = {}): Promise<void> {
+async function verifyChineseWorkbenchLayout(host: HTMLElement, options: { assertProfessionalUi?: boolean } = {}): Promise<void> {
   await waitFor(() => {
     expect(text(section(host, "层级"))).toContain("Simple box");
     expect(text(section(host, "场景检查器"))).toContain("变换");
@@ -192,7 +194,7 @@ async function verifyChineseWorkbenchLayout(host: HTMLElement, options: { profes
   expect(viewport).toBeTruthy();
   await findReadyCanvas(viewport!);
   await assertLocalizedWorkbenchLayout(host);
-  if (options.professionalUi === "react") {
+  if (options.assertProfessionalUi) {
     await assertProfessionalWorkbenchLayout(host, {
       commandBarLabel: "编辑器控件",
       statusLabel: "编辑器状态",
@@ -225,7 +227,7 @@ async function verifyChineseWorkbenchLayout(host: HTMLElement, options: { profes
 }
 
 function mountReactDemo(options: { locale?: "en" | "zh-CN" } = {}): { host: HTMLElement; cleanup(): void } {
-  installStyles("react-demo-styles", [WorkbenchStyles, InspectorStyles, ReactDemoStyles]);
+  installStyles("react-demo-styles", [ReactWorkbenchStyles, ReactInspectorStyles, ReactDemoStyles]);
   const host = createHost();
   const root = createRoot(host);
   root.render(<ReactProofLoopApp loader={proofLoopLoader} rendererFactory={paintedRenderer} locale={options.locale} />);
@@ -239,7 +241,7 @@ function mountReactDemo(options: { locale?: "en" | "zh-CN" } = {}): { host: HTML
 }
 
 function mountVueDemo(options: { locale?: "en" | "zh-CN" } = {}): { host: HTMLElement; cleanup(): void } {
-  installStyles("vue-demo-styles", [WorkbenchStyles, InspectorStyles, VueDemoStyles]);
+  installStyles("vue-demo-styles", [VueWorkbenchStyles, VueInspectorStyles, VueDemoStyles]);
   const host = createHost();
   const app: VueApp = createApp(VueProofLoopApp, { loader: proofLoopLoader, rendererFactory: paintedRenderer, locale: options.locale });
   app.mount(host);

@@ -113,19 +113,41 @@ describe("Vue EditorWorkbench", () => {
     const runtime = editor.getRuntime();
     const resetCamera = vi.spyOn(runtime!, "resetCamera");
     const frameSelected = vi.spyOn(runtime!, "frameSelected");
+    const frameAll = vi.spyOn(runtime!, "frameAll");
     const captureCameraView = vi.spyOn(runtime!, "captureCameraView");
     const applyCameraView = vi.spyOn(runtime!, "applyCameraView");
-    const duplicate = vi.spyOn(editor.operations, "duplicate");
+    const operationResult = { ok: true as const, snapshot: editor.getSnapshot() };
+    const copy = vi.spyOn(editor.operations, "copy").mockReturnValue(null);
+    const paste = vi.spyOn(editor.operations, "paste").mockReturnValue(operationResult);
+    const duplicate = vi.spyOn(editor.operations, "duplicate").mockReturnValue(operationResult);
+    const remove = vi.spyOn(editor.operations, "delete").mockReturnValue(operationResult);
+    const group = vi.spyOn(editor.operations, "group").mockReturnValue(operationResult);
+    const ungroup = vi.spyOn(editor.operations, "ungroup").mockReturnValue(operationResult);
+    const selectAll = vi.spyOn(editor.operations, "selectAll").mockReturnValue(operationResult);
+    const clearSelection = vi.spyOn(editor.operations, "clearSelection").mockReturnValue(operationResult);
 
     await wrapper.find('[title="Rotate mode"]').trigger("click");
     await nextTick();
     expect(editor.transformMode.get()).toBe("rotate");
     expect(wrapper.find('[title="Rotate mode"]').attributes("aria-pressed")).toBe("true");
 
+    await wrapper.find('[title="Scale mode"]').trigger("click");
+    await nextTick();
+    expect(editor.transformMode.get()).toBe("scale");
+    expect(wrapper.find('[title="Scale mode"]').attributes("aria-pressed")).toBe("true");
+
     await wrapper.find('[title="Toggle move snap"]').trigger("click");
     await nextTick();
     expect(editor.snap.get().translate).toBe(0.5);
     expect(wrapper.find('[title="Toggle move snap"]').attributes("aria-pressed")).toBe("true");
+
+    await wrapper.find('[title="Toggle rotate snap"]').trigger("click");
+    await wrapper.find('[title="Toggle scale snap"]').trigger("click");
+    await nextTick();
+    expect(editor.snap.get().rotate).toBe(Math.PI / 12);
+    expect(editor.snap.get().scale).toBe(0.1);
+    expect(wrapper.find('[title="Toggle rotate snap"]').attributes("aria-pressed")).toBe("true");
+    expect(wrapper.find('[title="Toggle scale snap"]').attributes("aria-pressed")).toBe("true");
 
     await waitForAssertion(() => {
       expect(wrapper.find('[title="Toggle viewport grid"]').attributes("aria-pressed")).toBe("true");
@@ -155,13 +177,16 @@ describe("Vue EditorWorkbench", () => {
 
     await wrapper.find('[title="Move mode"]').trigger("click");
     await nextTick();
+    expect(editor.transformMode.get()).toBe("translate");
     expect(Object.values(editor.viewportHelpers.get().visibility)).toEqual([false, false, false, false, false, false, true, true, false]);
     expect(JSON.stringify(editor.serialize())).not.toContain("viewportHelpers");
 
     await wrapper.find('[title="Reset camera"]').trigger("click");
     await wrapper.find('[title="Frame selected"]').trigger("click");
+    await wrapper.find('[title="Frame all"]').trigger("click");
     expect(resetCamera).toHaveBeenCalledTimes(1);
     expect(frameSelected).toHaveBeenCalledTimes(1);
+    expect(frameAll).toHaveBeenCalledTimes(1);
 
     captureCameraView.mockReturnValueOnce({
       ok: true,
@@ -182,7 +207,27 @@ describe("Vue EditorWorkbench", () => {
     expect(applyCameraView).toHaveBeenCalledWith(editor.getSnapshot().cameras["view-a"]);
 
     await wrapper.find('[title="Duplicate selection"]').trigger("click");
+    await wrapper.find('[title="Copy selection"]').trigger("click");
+    await wrapper.find('[title="Paste objects"]').trigger("click");
+    await wrapper.find('[title="Delete selection"]').trigger("click");
+    await wrapper.find('[title="Select all"]').trigger("click");
+    await wrapper.find('[title="Clear selection"]').trigger("click");
+    editor.dispatch({ type: "import-glb", objectId: "object-b", asset: { id: "asset-b" } });
+    editor.dispatch({ type: "select-nodes", mode: "replace", nodeIds: ["object-a", "object-b"], primaryNodeId: "object-a" });
+    await nextTick();
+    await wrapper.find('[title="Group selection"]').trigger("click");
+    editor.dispatch({ type: "create-group", nodeId: "group-a", name: "Group A" });
+    editor.dispatch({ type: "select-node", nodeId: "group-a" });
+    await nextTick();
+    await wrapper.find('[title="Ungroup selection"]').trigger("click");
     expect(duplicate).toHaveBeenCalledTimes(1);
+    expect(copy).toHaveBeenCalledTimes(1);
+    expect(paste).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(group).toHaveBeenCalledTimes(1);
+    expect(ungroup).toHaveBeenCalledTimes(1);
+    expect(selectAll).toHaveBeenCalledTimes(1);
+    expect(clearSelection).toHaveBeenCalledTimes(1);
 
     wrapper.unmount();
   });
@@ -212,6 +257,7 @@ describe("Vue EditorWorkbench", () => {
       props: { editor, loader, rendererFactory: fakeRenderer }
     });
 
+    await openPanelView(wrapper, "Assets");
     const input = wrapper.find('[aria-label="Import assets"]').element as HTMLInputElement;
     const file = new File([new Uint8Array([1, 2, 3])], "robot.glb", { type: "model/gltf-binary" });
     Object.defineProperty(input, "files", {
@@ -249,6 +295,7 @@ describe("Vue EditorWorkbench", () => {
     const wrapper = mount(EditorWorkbench, {
       props: { editor, rendererFactory: fakeRenderer }
     });
+    await openPanelView(wrapper, "Assets");
     const input = wrapper.find('[aria-label="Import assets"]').element as HTMLInputElement;
     Object.defineProperty(input, "files", {
       configurable: true,
@@ -278,6 +325,7 @@ describe("Vue EditorWorkbench", () => {
     const wrapper = mount(EditorWorkbench, {
       props: { editor, rendererFactory: fakeRenderer }
     });
+    await openPanelView(wrapper, "Assets");
     const expectedIds = filterAssetWorkspaceItems(
       buildAssetWorkspaceModel(editor.getSnapshot(), {
         payloads: editor.getAssetWorkspacePayloads()
@@ -319,6 +367,7 @@ describe("Vue EditorWorkbench", () => {
     const wrapper = mount(EditorWorkbench, {
       props: { editor, loader, rendererFactory: fakeRenderer }
     });
+    await openPanelView(wrapper, "Assets");
     const project = vi.spyOn(editor.getRuntime()!, "project");
     const projectCallsBeforeReimport = project.mock.calls.length;
 
@@ -444,18 +493,37 @@ describe("Vue EditorWorkbench", () => {
     expect(wrapper.find('[aria-label="3D viewport"]').exists()).toBe(true);
     expect(wrapper.find('[aria-label="Inspector panel"]').exists()).toBe(true);
     expect(wrapper.find('[aria-label="Editor status"]').exists()).toBe(true);
+    expect(wrapper.find(".ek-workbench__command-button svg").exists()).toBe(true);
+    expect(wrapper.find(".ek-workbench__panel-nav").exists()).toBe(true);
+    expect(wrapper.find(".ek-inspector-summary").exists()).toBe(true);
+    expect(wrapper.find(".ek-workbench__status-chip").exists()).toBe(true);
     expect(wrapper.text()).toContain("Hierarchy");
+    expect(wrapper.text()).toContain("Scene");
     expect(wrapper.text()).toContain("Assets");
     expect(wrapper.text()).toContain("Project");
     expect(wrapper.text()).toContain("Robot arm");
-    expect(wrapper.text()).toContain("robot.glb");
     expect(wrapper.text()).toContain("Project Partial");
     expect(wrapper.text()).toContain("Selection none");
+    expect(wrapper.text()).toContain("No editable selection");
+    expect(wrapper.find('[aria-label="Hierarchy"]').attributes("hidden")).toBeUndefined();
+    expect(wrapper.find('[aria-label="Assets"]').attributes("hidden")).toBeDefined();
+    expect(wrapper.find('[aria-label="Project"]').attributes("hidden")).toBeDefined();
+
+    await wrapper.findAll(".ek-workbench__panel-tab").find((button) => button.text().includes("Assets"))!.trigger("click");
+    await nextTick();
+    expect(wrapper.find('[aria-label="Assets"]').attributes("hidden")).toBeUndefined();
+    expect(wrapper.text()).toContain("robot.glb");
+
+    await wrapper.findAll(".ek-workbench__panel-tab").find((button) => button.text().includes("Project"))!.trigger("click");
+    await nextTick();
+    expect(wrapper.find('[aria-label="Project"]').attributes("hidden")).toBeUndefined();
 
     await wrapper.find('[title="Select all"]').trigger("click");
     await nextTick();
 
     expect(wrapper.text()).toContain("Selection 2 nodes");
+    expect(JSON.stringify(editor.serialize())).not.toContain("activeView");
+    expect(JSON.stringify(editor.serialize())).not.toContain("Scene");
     wrapper.unmount();
   });
 
@@ -492,8 +560,10 @@ describe("Vue EditorWorkbench", () => {
     expect(wrapper.findAll("button").some((button) => button.text() === "纯色背景")).toBe(true);
     expect(wrapper.text()).toContain("选择 无");
     expect(wrapper.text()).toContain("Robot arm");
-    expect(wrapper.text()).toContain("robot.glb");
     expect(wrapper.text()).not.toContain("Hierarchy");
+    await openPanelView(wrapper, "资源");
+    expect(wrapper.text()).toContain("robot.glb");
+    await openPanelView(wrapper, "场景");
 
     await wrapper.findAll(".ek-workbench__tree-row").find((button) => button.text().includes("Robot arm"))!.trigger("click");
     await nextTick();
@@ -542,6 +612,53 @@ describe("Vue EditorWorkbench", () => {
     expect(editor.viewportHelpers.get()).toEqual(helperState);
     expect(editor.serialize()).toEqual(snapshotBefore);
     expect(JSON.stringify(editor.serialize())).not.toContain("locale");
+    wrapper.unmount();
+  });
+
+  it("renders grouped status chips with counts, tones, and problem breakdown", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Missing box", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+    const wrapper = mount(EditorWorkbench, {
+      props: {
+        editor,
+        resolver: new AssetResolverBridge(() => null),
+        rendererFactory: fakeRenderer
+      }
+    });
+
+    await editor.getRuntime()?.project();
+    await nextTick();
+
+    const status = wrapper.get('[aria-label="Editor status"]');
+    const chips = status.findAll(".ek-workbench__status-chip");
+    expect(chips).toHaveLength(9);
+    expect(chips.map((chip) => chip.find("strong").exists() ? chip.find("strong").text() : "")).toEqual([
+      "Selection",
+      "History",
+      "Runtime",
+      "Snap",
+      "Project",
+      "Assets",
+      "Save",
+      "Problems",
+      ""
+    ]);
+    expect(chips[0].attributes("data-tone")).toBe("active");
+    expect(chips[0].text()).toContain("Selection Missing box");
+    expect(chips[1].text()).toContain("Undo 2");
+    expect(chips[2].attributes("data-tone")).toBe("success");
+    expect(chips[4].attributes("data-tone")).toBe("warning");
+    expect(chips[5].attributes("data-tone")).toBe("warning");
+    expect(chips[6].attributes("data-tone")).toBe("warning");
+    expect(chips[7].attributes("data-tone")).toBe("warning");
+    expect(chips[7].text()).toContain("Problems 1");
+    expect(chips[8].text()).toContain("Authored 0 · Runtime 1 · Project 0");
+
+    await wrapper.find(".ek-workbench__locale-switcher select").setValue("zh-CN");
+    await nextTick();
+    expect(wrapper.get('[aria-label="编辑器状态"]').text()).toContain("问题 1");
+    expect(wrapper.get('[aria-label="编辑器状态"]').text()).toContain("作者 0 · 运行时 1 · 项目 0");
     wrapper.unmount();
   });
 
@@ -960,6 +1077,7 @@ describe("Vue EditorWorkbench", () => {
 
     await editor.getRuntime()?.project();
     await nextTick();
+    await openPanelView(wrapper, "资源");
 
     const inspector = wrapper.find('[aria-label="场景检查器"]');
     expect(wrapper.find('[aria-label="缺失资源恢复"]').exists()).toBe(true);
@@ -1040,6 +1158,7 @@ describe("Vue EditorWorkbench", () => {
 
     await editor.getRuntime()?.project();
     await nextTick();
+    await openPanelView(wrapper, "Assets");
 
     expect(wrapper.find('[aria-label="Missing asset recovery"]').exists()).toBe(true);
     const input = wrapper.find('[aria-label="Missing asset recovery"] input').element as HTMLInputElement;
@@ -1052,6 +1171,20 @@ describe("Vue EditorWorkbench", () => {
     await waitForAssertion(() => {
       expect(wrapper.find('[aria-label="Missing asset recovery"]').exists()).toBe(false);
       expect(wrapper.text()).toContain("Problems 0");
+    });
+    expect(wrapper.find('[aria-label="Asset recovery status"]').text()).toContain("Replaced with recovered.glb");
+    const nextProject = markRaw(createEditor());
+    nextProject.dispatch({
+      type: "import-glb",
+      objectId: "next-object",
+      name: "Next box",
+      asset: { id: "next-asset", label: "next.glb", source: new Uint8Array([4, 5, 6]) }
+    });
+    editor.importProject(await resolveProjectPackageBytes(nextProject.exportProject().packageBytes));
+    await nextTick();
+    await waitForAssertion(() => {
+      expect(wrapper.find('[aria-label="Asset recovery status"]').exists()).toBe(false);
+      expect(wrapper.text()).toContain("Next box");
     });
 
     expect(replaceAsset).toHaveBeenCalledWith({
@@ -1189,6 +1322,13 @@ async function waitForAssertion(assertion: () => void, timeout = 1000): Promise<
     }
   }
   throw lastError;
+}
+
+async function openPanelView(wrapper: ReturnType<typeof mount>, label: string): Promise<void> {
+  const tab = wrapper.findAll(".ek-workbench__panel-tab").find((button) => button.text().includes(label));
+  expect(tab, `Expected panel tab ${label}`).toBeTruthy();
+  await tab!.trigger("click");
+  await nextTick();
 }
 
 function mockObjectUrls(): {

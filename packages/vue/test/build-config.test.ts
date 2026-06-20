@@ -55,4 +55,20 @@ describe("Vue package build config", () => {
     expect(FORBIDDEN_I18N_RUNTIME_PACKAGES).toContain("vue-i18n");
     expect(findForbiddenI18nRuntimeDependencies(packageJson)).toEqual([]);
   });
+
+  it("keeps the command icon layer private to the Vue package", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const packageJson = JSON.parse(readFileSync(resolve(here, "../package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+      peerDependencies?: Record<string, string>;
+      exports: Record<string, unknown>;
+    };
+    const publicApi = readFileSync(resolve(here, "../src/index.ts"), "utf8");
+
+    expect(packageJson.dependencies?.["@phosphor-icons/vue"]).toMatch(/^\^2\./);
+    expect(packageJson.peerDependencies).not.toHaveProperty("@phosphor-icons/vue");
+    expect(packageJson.exports).not.toHaveProperty("./components/WorkbenchIcon");
+    expect(publicApi).not.toContain("WorkbenchIcon");
+    expect(publicApi).not.toContain("@phosphor-icons/vue");
+  });
 });
