@@ -1,8 +1,9 @@
 <template>
   <div class="ek-workbench__default-toolbar" :aria-label="t('reactWorkbench.toolbar.controls.label')">
-    <div class="ek-workbench__tool-group" :aria-label="t('reactWorkbench.toolbar.project.label')">
-      <button type="button" :title="t('reactWorkbench.toolbar.project.open.title')" @click="fileInput?.click()">
-        {{ t("reactWorkbench.toolbar.project.open.label") }}
+    <div class="ek-workbench__tool-group ek-workbench__tool-group--project" :aria-label="t('reactWorkbench.toolbar.project.label')">
+      <button class="ek-workbench__command-button ek-workbench__command-button--primary" type="button" :title="t('reactWorkbench.toolbar.project.open.title')" @click="fileInput?.click()">
+        <WorkbenchIcon name="open" />
+        <span>{{ t("reactWorkbench.toolbar.project.open.label") }}</span>
       </button>
       <input
         ref="fileInput"
@@ -11,125 +12,29 @@
         :accept="ACCEPT_PROJECT_PACKAGE"
         @change="openProject"
       />
-      <button type="button" :title="t('reactWorkbench.toolbar.project.export.title')" @click="exportProject(false)">
-        {{ t("reactWorkbench.toolbar.project.export.label") }}
+      <button class="ek-workbench__command-button" type="button" :title="t('reactWorkbench.toolbar.project.export.title')" @click="exportProject(false)">
+        <WorkbenchIcon name="export" />
+        <span>{{ t("reactWorkbench.toolbar.project.export.label") }}</span>
       </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.project.exportPartial.title')" @click="exportProject(true)">
-        {{ t("reactWorkbench.toolbar.project.exportPartial.label") }}
-      </button>
-    </div>
-
-    <div class="ek-workbench__tool-group" :aria-label="t('reactWorkbench.toolbar.history.label')">
-      <button type="button" :title="t('reactWorkbench.toolbar.history.undo.title')" :disabled="!toolbar.canUndo" @click="context.runAction('undo')">
-        {{ t("reactWorkbench.toolbar.history.undo.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.history.redo.title')" :disabled="!toolbar.canRedo" @click="context.runAction('redo')">
-        {{ t("reactWorkbench.toolbar.history.redo.label") }}
+      <button class="ek-workbench__command-button" type="button" :title="t('reactWorkbench.toolbar.project.exportPartial.title')" @click="exportProject(true)">
+        <WorkbenchIcon name="export-partial" />
+        <span>{{ t("reactWorkbench.toolbar.project.exportPartial.label") }}</span>
       </button>
     </div>
 
-    <div class="ek-workbench__tool-group" :aria-label="t('reactWorkbench.toolbar.transform.label')">
-      <button type="button" :title="t('reactWorkbench.toolbar.transform.move.title')" :aria-pressed="toolbar.transformMode === 'translate'" @click="context.runAction('transform-translate')">
-        {{ t("reactWorkbench.toolbar.transform.move.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.transform.rotate.title')" :aria-pressed="toolbar.transformMode === 'rotate'" @click="context.runAction('transform-rotate')">
-        {{ t("reactWorkbench.toolbar.transform.rotate.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.transform.scale.title')" :aria-pressed="toolbar.transformMode === 'scale'" @click="context.runAction('transform-scale')">
-        {{ t("reactWorkbench.toolbar.transform.scale.label") }}
-      </button>
-    </div>
-
-    <div class="ek-workbench__tool-group" :aria-label="t('reactWorkbench.toolbar.snap.label')">
-      <button type="button" :title="t('reactWorkbench.toolbar.snap.move.title')" :aria-pressed="toolbar.snapEnabled.translate" @click="context.runAction('toggle-translate-snap')">
-        {{ t("reactWorkbench.toolbar.snap.move.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.snap.rotate.title')" :aria-pressed="toolbar.snapEnabled.rotate" @click="context.runAction('toggle-rotate-snap')">
-        {{ t("reactWorkbench.toolbar.snap.rotate.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.snap.scale.title')" :aria-pressed="toolbar.snapEnabled.scale" @click="context.runAction('toggle-scale-snap')">
-        {{ t("reactWorkbench.toolbar.snap.scale.label") }}
-      </button>
-    </div>
-
-    <div class="ek-workbench__tool-group" :aria-label="t('reactWorkbench.toolbar.selection.label')">
-      <button type="button" :title="t('reactWorkbench.toolbar.selection.marquee.title')" :aria-pressed="marqueeSelectionEnabled" @click="emit('toggleMarqueeSelection')">
-        {{ t("reactWorkbench.toolbar.selection.marquee.label") }}
-      </button>
-    </div>
-
-    <div class="ek-workbench__tool-group" :aria-label="t('reactWorkbench.toolbar.helpers.label')">
-      <button type="button" :title="t('reactWorkbench.toolbar.helpers.grid.title')" :aria-pressed="toolbar.viewportHelpers.grid" @click="context.toggleViewportHelper('grid')">
-        {{ t("reactWorkbench.toolbar.helpers.grid.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.helpers.floor.title')" :aria-pressed="toolbar.viewportHelpers.floor" @click="context.toggleViewportHelper('floor')">
-        {{ t("reactWorkbench.toolbar.helpers.floor.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.helpers.axes.title')" :aria-pressed="toolbar.viewportHelpers.axes" @click="context.toggleViewportHelper('axes')">
-        {{ t("reactWorkbench.toolbar.helpers.axes.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.helpers.hover.title')" :aria-pressed="toolbar.viewportHelpers.hover" @click="context.toggleViewportHelper('hover')">
-        {{ t("reactWorkbench.toolbar.helpers.hover.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.helpers.bounds.title')" :aria-pressed="toolbar.viewportHelpers.selectionBounds" @click="context.toggleViewportHelper('selectionBounds')">
-        {{ t("reactWorkbench.toolbar.helpers.bounds.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.helpers.guide.title')" :aria-pressed="toolbar.viewportHelpers.snapFeedback" @click="context.toggleViewportHelper('snapFeedback')">
-        {{ t("reactWorkbench.toolbar.helpers.guide.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.helpers.lights.title')" :aria-pressed="toolbar.viewportHelpers.lightGizmos" @click="context.toggleViewportHelper('lightGizmos')">
-        {{ t("reactWorkbench.toolbar.helpers.lights.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.helpers.targets.title')" :aria-pressed="toolbar.viewportHelpers.lightTargets" @click="context.toggleViewportHelper('lightTargets')">
-        {{ t("reactWorkbench.toolbar.helpers.targets.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.helpers.shadowCam.title')" :aria-pressed="toolbar.viewportHelpers.shadowCameras" @click="context.toggleViewportHelper('shadowCameras')">
-        {{ t("reactWorkbench.toolbar.helpers.shadowCam.label") }}
-      </button>
-    </div>
-
-    <div class="ek-workbench__tool-group" :aria-label="t('reactWorkbench.toolbar.camera.label')">
-      <button type="button" :title="t('reactWorkbench.toolbar.camera.reset.title')" :disabled="!context.camera.ready" @click="context.resetCamera">
-        {{ t("reactWorkbench.toolbar.camera.reset.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.camera.frameSelected.title')" :disabled="!toolbar.canFrameSelected" @click="context.frameSelected()">
-        {{ t("reactWorkbench.toolbar.camera.frameSelected.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.camera.frameAll.title')" :disabled="!toolbar.canFrameAll" @click="context.frameAll()">
-        {{ t("reactWorkbench.toolbar.camera.frameAll.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.camera.capture.title')" :disabled="!toolbar.canCaptureCameraView" @click="captureCameraView">
-        {{ t("reactWorkbench.toolbar.camera.capture.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.camera.apply.title')" :disabled="!toolbar.canApplyCameraView" @click="applyCameraView">
-        {{ t("reactWorkbench.toolbar.camera.apply.label") }}
-      </button>
-    </div>
-
-    <div class="ek-workbench__tool-group" :aria-label="t('reactWorkbench.toolbar.node.label')">
-      <button type="button" :title="t('reactWorkbench.toolbar.node.copy.title')" :disabled="!toolbar.canCopy" @click="context.runAction('copy')">
-        {{ t("reactWorkbench.toolbar.node.copy.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.node.paste.title')" :disabled="!toolbar.canPaste" @click="context.runAction('paste')">
-        {{ t("reactWorkbench.toolbar.node.paste.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.node.duplicate.title')" :disabled="!toolbar.canDuplicate" @click="context.runAction('duplicate')">
-        {{ t("reactWorkbench.toolbar.node.duplicate.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.node.delete.title')" :disabled="!toolbar.canDelete" @click="context.runAction('delete')">
-        {{ t("reactWorkbench.toolbar.node.delete.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.node.group.title')" :disabled="!toolbar.canGroup" @click="context.runAction('group')">
-        {{ t("reactWorkbench.toolbar.node.group.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.node.ungroup.title')" :disabled="!toolbar.canUngroup" @click="context.runAction('ungroup')">
-        {{ t("reactWorkbench.toolbar.node.ungroup.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.node.selectAll.title')" :disabled="!toolbar.canSelectAll" @click="context.runAction('select-all')">
-        {{ t("reactWorkbench.toolbar.node.selectAll.label") }}
-      </button>
-      <button type="button" :title="t('reactWorkbench.toolbar.node.clear.title')" :disabled="!toolbar.canClearSelection" @click="context.runAction('clear-selection')">
-        {{ t("reactWorkbench.toolbar.node.clear.label") }}
+    <div v-for="group in commandGroups" :key="group.key" class="ek-workbench__tool-group" :aria-label="t(group.label)">
+      <button
+        v-for="command in group.commands"
+        :key="command.key"
+        :class="command.primary ? 'ek-workbench__command-button ek-workbench__command-button--primary' : 'ek-workbench__command-button'"
+        type="button"
+        :title="t(command.title)"
+        :disabled="command.disabled"
+        :aria-pressed="typeof command.pressed === 'boolean' ? command.pressed : undefined"
+        @click="command.onClick"
+      >
+        <WorkbenchIcon :name="command.icon" />
+        <span>{{ t(command.label) }}</span>
       </button>
     </div>
 
@@ -149,6 +54,7 @@
     </label>
 
     <span class="ek-workbench__toolbar-status" :data-tone="projectStatus.tone">
+      <span class="ek-workbench__toolbar-status-label">{{ t("reactWorkbench.toolbar.status.label") }}</span>
       {{ projectStatusLabel }}
     </span>
   </div>
@@ -159,6 +65,7 @@ import { computed, ref } from "vue";
 import { createAuthoredCameraViewInput, type ProjectExportResult } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext } from "../composables/use-workbench";
 import type { WorkbenchLocale, WorkbenchMessageKey, WorkbenchMessageValues } from "../i18n/workbench-i18n";
+import WorkbenchIcon, { type WorkbenchIconName } from "./WorkbenchIcon.vue";
 
 type ProjectActionStatus = {
   tone: "neutral" | "success" | "warning" | "error";
@@ -169,6 +76,23 @@ type ProjectActionStatus = {
   };
   fallback?: string;
 };
+
+interface CommandButton {
+  key: string;
+  icon: WorkbenchIconName;
+  label: WorkbenchMessageKey;
+  title: WorkbenchMessageKey;
+  onClick(): void;
+  disabled?: boolean;
+  pressed?: boolean;
+  primary?: boolean;
+}
+
+interface CommandGroup {
+  key: string;
+  label: WorkbenchMessageKey;
+  commands: CommandButton[];
+}
 
 const ACCEPT_PROJECT_PACKAGE = ".ek3d,application/octet-stream";
 
@@ -196,6 +120,301 @@ const projectStatusLabel = computed(() => projectStatus.value.message
       key: "workbench.project.status.partial.label",
       fallback: props.context.model.project.statusLabel
     }));
+const commandGroups = computed<CommandGroup[]>(() => [
+  {
+    key: "history",
+    label: "reactWorkbench.toolbar.history.label",
+    commands: [
+      {
+        key: "undo",
+        icon: "undo",
+        label: "reactWorkbench.toolbar.history.undo.label",
+        title: "reactWorkbench.toolbar.history.undo.title",
+        disabled: !toolbar.value.canUndo,
+        onClick: () => props.context.runAction("undo")
+      },
+      {
+        key: "redo",
+        icon: "redo",
+        label: "reactWorkbench.toolbar.history.redo.label",
+        title: "reactWorkbench.toolbar.history.redo.title",
+        disabled: !toolbar.value.canRedo,
+        onClick: () => props.context.runAction("redo")
+      }
+    ]
+  },
+  {
+    key: "transform",
+    label: "reactWorkbench.toolbar.transform.label",
+    commands: [
+      {
+        key: "move",
+        icon: "move",
+        label: "reactWorkbench.toolbar.transform.move.label",
+        title: "reactWorkbench.toolbar.transform.move.title",
+        pressed: toolbar.value.transformMode === "translate",
+        primary: true,
+        onClick: () => props.context.runAction("transform-translate")
+      },
+      {
+        key: "rotate",
+        icon: "rotate",
+        label: "reactWorkbench.toolbar.transform.rotate.label",
+        title: "reactWorkbench.toolbar.transform.rotate.title",
+        pressed: toolbar.value.transformMode === "rotate",
+        primary: true,
+        onClick: () => props.context.runAction("transform-rotate")
+      },
+      {
+        key: "scale",
+        icon: "scale",
+        label: "reactWorkbench.toolbar.transform.scale.label",
+        title: "reactWorkbench.toolbar.transform.scale.title",
+        pressed: toolbar.value.transformMode === "scale",
+        primary: true,
+        onClick: () => props.context.runAction("transform-scale")
+      }
+    ]
+  },
+  {
+    key: "snap",
+    label: "reactWorkbench.toolbar.snap.label",
+    commands: [
+      {
+        key: "snap-move",
+        icon: "snap",
+        label: "reactWorkbench.toolbar.snap.move.label",
+        title: "reactWorkbench.toolbar.snap.move.title",
+        pressed: toolbar.value.snapEnabled.translate,
+        onClick: () => props.context.runAction("toggle-translate-snap")
+      },
+      {
+        key: "snap-rotate",
+        icon: "snap",
+        label: "reactWorkbench.toolbar.snap.rotate.label",
+        title: "reactWorkbench.toolbar.snap.rotate.title",
+        pressed: toolbar.value.snapEnabled.rotate,
+        onClick: () => props.context.runAction("toggle-rotate-snap")
+      },
+      {
+        key: "snap-scale",
+        icon: "snap",
+        label: "reactWorkbench.toolbar.snap.scale.label",
+        title: "reactWorkbench.toolbar.snap.scale.title",
+        pressed: toolbar.value.snapEnabled.scale,
+        onClick: () => props.context.runAction("toggle-scale-snap")
+      }
+    ]
+  },
+  {
+    key: "selection",
+    label: "reactWorkbench.toolbar.selection.label",
+    commands: [
+      {
+        key: "marquee",
+        icon: "marquee",
+        label: "reactWorkbench.toolbar.selection.marquee.label",
+        title: "reactWorkbench.toolbar.selection.marquee.title",
+        pressed: props.marqueeSelectionEnabled ?? false,
+        onClick: () => emit("toggleMarqueeSelection")
+      }
+    ]
+  },
+  {
+    key: "helpers",
+    label: "reactWorkbench.toolbar.helpers.label",
+    commands: [
+      {
+        key: "grid",
+        icon: "grid",
+        label: "reactWorkbench.toolbar.helpers.grid.label",
+        title: "reactWorkbench.toolbar.helpers.grid.title",
+        pressed: toolbar.value.viewportHelpers.grid,
+        onClick: () => props.context.toggleViewportHelper("grid")
+      },
+      {
+        key: "floor",
+        icon: "floor",
+        label: "reactWorkbench.toolbar.helpers.floor.label",
+        title: "reactWorkbench.toolbar.helpers.floor.title",
+        pressed: toolbar.value.viewportHelpers.floor,
+        onClick: () => props.context.toggleViewportHelper("floor")
+      },
+      {
+        key: "axes",
+        icon: "axes",
+        label: "reactWorkbench.toolbar.helpers.axes.label",
+        title: "reactWorkbench.toolbar.helpers.axes.title",
+        pressed: toolbar.value.viewportHelpers.axes,
+        onClick: () => props.context.toggleViewportHelper("axes")
+      },
+      {
+        key: "hover",
+        icon: "hover",
+        label: "reactWorkbench.toolbar.helpers.hover.label",
+        title: "reactWorkbench.toolbar.helpers.hover.title",
+        pressed: toolbar.value.viewportHelpers.hover,
+        onClick: () => props.context.toggleViewportHelper("hover")
+      },
+      {
+        key: "bounds",
+        icon: "bounds",
+        label: "reactWorkbench.toolbar.helpers.bounds.label",
+        title: "reactWorkbench.toolbar.helpers.bounds.title",
+        pressed: toolbar.value.viewportHelpers.selectionBounds,
+        onClick: () => props.context.toggleViewportHelper("selectionBounds")
+      },
+      {
+        key: "guide",
+        icon: "snap",
+        label: "reactWorkbench.toolbar.helpers.guide.label",
+        title: "reactWorkbench.toolbar.helpers.guide.title",
+        pressed: toolbar.value.viewportHelpers.snapFeedback,
+        onClick: () => props.context.toggleViewportHelper("snapFeedback")
+      },
+      {
+        key: "lights",
+        icon: "lights",
+        label: "reactWorkbench.toolbar.helpers.lights.label",
+        title: "reactWorkbench.toolbar.helpers.lights.title",
+        pressed: toolbar.value.viewportHelpers.lightGizmos,
+        onClick: () => props.context.toggleViewportHelper("lightGizmos")
+      },
+      {
+        key: "targets",
+        icon: "targets",
+        label: "reactWorkbench.toolbar.helpers.targets.label",
+        title: "reactWorkbench.toolbar.helpers.targets.title",
+        pressed: toolbar.value.viewportHelpers.lightTargets,
+        onClick: () => props.context.toggleViewportHelper("lightTargets")
+      },
+      {
+        key: "shadow-camera",
+        icon: "shadow-camera",
+        label: "reactWorkbench.toolbar.helpers.shadowCam.label",
+        title: "reactWorkbench.toolbar.helpers.shadowCam.title",
+        pressed: toolbar.value.viewportHelpers.shadowCameras,
+        onClick: () => props.context.toggleViewportHelper("shadowCameras")
+      }
+    ]
+  },
+  {
+    key: "camera",
+    label: "reactWorkbench.toolbar.camera.label",
+    commands: [
+      {
+        key: "reset-camera",
+        icon: "reset-camera",
+        label: "reactWorkbench.toolbar.camera.reset.label",
+        title: "reactWorkbench.toolbar.camera.reset.title",
+        disabled: !props.context.camera.ready,
+        onClick: props.context.resetCamera
+      },
+      {
+        key: "frame-selected",
+        icon: "frame-selected",
+        label: "reactWorkbench.toolbar.camera.frameSelected.label",
+        title: "reactWorkbench.toolbar.camera.frameSelected.title",
+        disabled: !toolbar.value.canFrameSelected,
+        onClick: () => props.context.frameSelected()
+      },
+      {
+        key: "frame-all",
+        icon: "frame-all",
+        label: "reactWorkbench.toolbar.camera.frameAll.label",
+        title: "reactWorkbench.toolbar.camera.frameAll.title",
+        disabled: !toolbar.value.canFrameAll,
+        onClick: () => props.context.frameAll()
+      },
+      {
+        key: "capture-view",
+        icon: "capture-view",
+        label: "reactWorkbench.toolbar.camera.capture.label",
+        title: "reactWorkbench.toolbar.camera.capture.title",
+        disabled: !toolbar.value.canCaptureCameraView,
+        onClick: captureCameraView
+      },
+      {
+        key: "apply-view",
+        icon: "apply-view",
+        label: "reactWorkbench.toolbar.camera.apply.label",
+        title: "reactWorkbench.toolbar.camera.apply.title",
+        disabled: !toolbar.value.canApplyCameraView,
+        onClick: applyCameraView
+      }
+    ]
+  },
+  {
+    key: "node",
+    label: "reactWorkbench.toolbar.node.label",
+    commands: [
+      {
+        key: "copy",
+        icon: "copy",
+        label: "reactWorkbench.toolbar.node.copy.label",
+        title: "reactWorkbench.toolbar.node.copy.title",
+        disabled: !toolbar.value.canCopy,
+        onClick: () => props.context.runAction("copy")
+      },
+      {
+        key: "paste",
+        icon: "paste",
+        label: "reactWorkbench.toolbar.node.paste.label",
+        title: "reactWorkbench.toolbar.node.paste.title",
+        disabled: !toolbar.value.canPaste,
+        onClick: () => props.context.runAction("paste")
+      },
+      {
+        key: "duplicate",
+        icon: "duplicate",
+        label: "reactWorkbench.toolbar.node.duplicate.label",
+        title: "reactWorkbench.toolbar.node.duplicate.title",
+        disabled: !toolbar.value.canDuplicate,
+        onClick: () => props.context.runAction("duplicate")
+      },
+      {
+        key: "delete",
+        icon: "delete",
+        label: "reactWorkbench.toolbar.node.delete.label",
+        title: "reactWorkbench.toolbar.node.delete.title",
+        disabled: !toolbar.value.canDelete,
+        onClick: () => props.context.runAction("delete")
+      },
+      {
+        key: "group",
+        icon: "group",
+        label: "reactWorkbench.toolbar.node.group.label",
+        title: "reactWorkbench.toolbar.node.group.title",
+        disabled: !toolbar.value.canGroup,
+        onClick: () => props.context.runAction("group")
+      },
+      {
+        key: "ungroup",
+        icon: "ungroup",
+        label: "reactWorkbench.toolbar.node.ungroup.label",
+        title: "reactWorkbench.toolbar.node.ungroup.title",
+        disabled: !toolbar.value.canUngroup,
+        onClick: () => props.context.runAction("ungroup")
+      },
+      {
+        key: "select-all",
+        icon: "select-all",
+        label: "reactWorkbench.toolbar.node.selectAll.label",
+        title: "reactWorkbench.toolbar.node.selectAll.title",
+        disabled: !toolbar.value.canSelectAll,
+        onClick: () => props.context.runAction("select-all")
+      },
+      {
+        key: "clear-selection",
+        icon: "clear-selection",
+        label: "reactWorkbench.toolbar.node.clear.label",
+        title: "reactWorkbench.toolbar.node.clear.title",
+        disabled: !toolbar.value.canClearSelection,
+        onClick: () => props.context.runAction("clear-selection")
+      }
+    ]
+  }
+]);
 
 async function openProject(event: Event): Promise<void> {
   const input = event.currentTarget as HTMLInputElement;

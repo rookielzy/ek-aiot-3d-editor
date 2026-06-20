@@ -20,6 +20,11 @@ export default defineConfig({
         },
         {
           browser: "chromium",
+          name: "chromium-desktop-boundary",
+          viewport: { width: 1024, height: 900 }
+        },
+        {
+          browser: "chromium",
           name: "chromium-mobile",
           viewport: { width: 390, height: 900 }
         }

@@ -1,4 +1,6 @@
 import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Group } from "three";
 import { describe, expect, it } from "vitest";
 import { h, markRaw, nextTick } from "vue";
@@ -7,6 +9,8 @@ import { createEditor, AssetResolverBridge, resolveDefaultPresentationView, type
 import EditorWorkbench from "../src/components/EditorWorkbench.vue";
 import { useEditor } from "../src/composables/use-editor";
 import VueProofLoopApp from "../../../examples/vue-proof-loop/src/App.vue";
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 describe("Vue proof-loop parity", () => {
   it("uses core command, asset, history, and runtime behavior for restored snapshots", async () => {
@@ -104,6 +108,7 @@ describe("Vue proof-loop parity", () => {
       expect(hierarchy.text()).toContain("Simple box");
       expect(hierarchy.text()).toContain("Recoverable asset");
       expect(hierarchy.text()).toContain("Ambient light");
+      await clickPanelTab(wrapper, "Assets");
       const assets = projectPanel.get('[aria-label="Assets"]');
       expect(assets.text()).toContain("Recoverable asset");
       expect(assets.text()).toContain("glb");
@@ -137,6 +142,7 @@ describe("Vue proof-loop parity", () => {
       await waitForVue(() => expect(wrapper.text()).toContain("Dirty"));
 
       await clickButton(wrapper, "Duplicate");
+      await clickPanelTab(wrapper, "Project");
       await waitForVue(() => expect(projectPanel.text()).toContain("Objects4"));
 
       await clickButton(wrapper, "Export partial");
@@ -152,6 +158,7 @@ describe("Vue proof-loop parity", () => {
       await waitForVue(() => expect(wrapper.text()).toContain("Camera view 1"));
       expect(wrapper.text()).toContain("Default");
 
+      await clickPanelTab(wrapper, "Assets");
       await waitForVue(() => expect(projectPanel.text()).toContain("Replace asset"));
       expect(projectPanel.text()).toContain("1 problems");
 
@@ -173,6 +180,14 @@ describe("Vue proof-loop parity", () => {
 async function clickButton(wrapper: ReturnType<typeof mount>, text: string): Promise<void> {
   const button = wrapper.findAll("button").filter((candidate) => candidate.text() === text).at(-1);
   expect(button, `Expected button ${text}`).toBeTruthy();
+  await button!.trigger("click");
+  await nextTick();
+  await nextTick();
+}
+
+async function clickPanelTab(wrapper: ReturnType<typeof mount>, text: string): Promise<void> {
+  const button = wrapper.findAll(".ek-workbench__panel-tab").find((candidate) => candidate.text().includes(text));
+  expect(button, `Expected panel tab ${text}`).toBeTruthy();
   await button!.trigger("click");
   await nextTick();
   await nextTick();
@@ -256,7 +271,7 @@ function copyBytes(bytes: Uint8Array): ArrayBuffer {
 }
 
 async function glbFixtureFile(): Promise<File> {
-  const bytes = await readFile("packages/core/test/fixtures/simple-box.glb");
+  const bytes = await readFile(resolve(repoRoot, "packages/core/test/fixtures/simple-box.glb"));
   return new File([toArrayBuffer(bytes)], "recovered.glb", { type: "model/gltf-binary" });
 }
 

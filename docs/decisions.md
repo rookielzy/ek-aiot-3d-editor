@@ -147,3 +147,15 @@ React command bar 图标通过包内 `WorkbenchIcon` layer 使用 `@phosphor-ico
 - 默认 UI 应该像专业编辑器，而不是示例级 toolbar；布局和视觉基线需要在 package 内长期稳定。
 - CSS variables 给宿主足够的品牌化入口，同时避免把主题对象、第三方组件类型或 icon library 变成公共 contract。
 - 图标依赖可以改善按钮可扫读性，但必须保持可替换，不能要求宿主代码 deep import 或传入第三方 icon 组件。
+
+## D13. Vue Workbench mirrors the professional UI contract natively
+
+Vue 默认 Workbench 采用与 React 同一套专业编辑器 UX contract：command bar、Scene/Assets/Project task workspace、selection-first inspector summary、grouped status chips，以及语义化 `--ek-workbench-*` CSS variables。Vue 组件保持 Vue-native 实现，不共享 React 组件，也不把 command、history、asset import、project packaging、runtime projection 或 inspector model ownership 从 core 搬进 Vue。
+
+Vue command bar 图标通过包内 `WorkbenchIcon` layer 使用 `@phosphor-icons/vue`。该依赖是 Vue 包内部实现细节，不暴露在 public exports、props、slot context、host setup requirements 或 durable editor state 中。
+
+原因：
+
+- React 已验证的专业 UI direction 应成为跨 adapter 的默认产品体验，但实现仍要尊重框架边界。
+- 共享 semantic CSS variables 能让宿主覆盖品牌化 surface，同时保持 npm 默认 UI 安装即用。
+- Scene/Assets/Project active view、导入队列、恢复提示、locale copy 和 icon component 都是 transient UI state，不能进入 `SceneSnapshot`、`.ek3d`、command history 或 project JSON。

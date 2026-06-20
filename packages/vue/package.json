@@ -48,7 +48,8 @@
     "test": "vitest run --root ../.. packages/vue"
   },
   "dependencies": {
-    "@ek-aiot/3d-editor-core": "workspace:^0.2.0"
+    "@ek-aiot/3d-editor-core": "workspace:^0.2.0",
+    "@phosphor-icons/vue": "^2.2.1"
   },
   "peerDependencies": {
     "vue": "^3.5.0"

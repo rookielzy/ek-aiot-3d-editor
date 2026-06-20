@@ -8,7 +8,9 @@ This package is experimental `0.x`. It tracks the current core package contract 
 
 `useInspector()` and `InspectorPanel` render the shared core inspector model for selected node transform availability, object/material fields, scene lighting/background/skybox source fields, selected light nodes, and runtime problems. Edits dispatch core commands on commit boundaries, while Vue only owns draft inputs and rendering lifecycle.
 
-`useWorkbench()` and `EditorWorkbench` compose the primitive pieces into a compact viewport-plus-inspector shell. Pass a raw host-owned editor when the host owns editor lifetime; the workbench will not dispose it on unmount. If no editor is passed, the shell creates one and disposes it with the workbench. The composable keeps editor/runtime instances out of deep reactivity and exposes shallow snapshot/problem state.
+`useWorkbench()` and `EditorWorkbench` compose the primitive pieces into a professional default editor workbench: command bar, task-oriented Scene/Assets/Project workspace, viewport, selection-first inspector, and grouped status chips. Pass a raw host-owned editor when the host owns editor lifetime; the workbench will not dispose it on unmount. If no editor is passed, the shell creates one and disposes it with the workbench. The composable keeps editor/runtime instances out of deep reactivity and exposes shallow snapshot/problem state.
+
+The default command bar uses a private icon layer backed by `@phosphor-icons/vue`. Consumers do not install icon packages, import icon components, or receive icon types through public props; icon rendering remains an implementation detail behind the Vue package surface.
 
 ```vue
 <template>
@@ -35,6 +37,8 @@ const resolver = new AssetResolverBridge((asset) => asset.kind === "glb" ? { uri
 ```
 
 Scoped slots receive the core editor, current snapshot, inspector model, runtime problems, active light state, selected node/object/light IDs, advanced operation helpers, selection count, project import/export helpers, asset replacement, and a dispatch helper. Runtime options such as `resolver`, loader, and renderer factory are passed through to core runtime mounting; Vue shell code does not resolve assets or serialize runtime problems.
+
+The package CSS exposes semantic `--ek-workbench-*` variables for surfaces, text, borders, accent, focus, spacing, radius, control height, and status tones. Hosts may override those variables after importing `@ek-aiot/3d-editor-vue/styles.css`; Vue does not require a host theme provider or third-party design system.
 
 ## Bilingual Workbench UI
 

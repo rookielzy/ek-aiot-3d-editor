@@ -1,6 +1,6 @@
 # 集成指南：Vue
 
-`@ek-aiot/3d-editor-vue` 是 `@ek-aiot/3d-editor-core` 的 Vue 适配层。默认路径是安装包、导入 CSS、渲染 `EditorWorkbench`，它会直接给出完整 editor shell：顶部工具栏、左侧 hierarchy/assets/project 面板、中心 3D viewport、右侧 inspector/problems 面板和底部状态栏。
+`@ek-aiot/3d-editor-vue` 是 `@ek-aiot/3d-editor-core` 的 Vue 适配层。默认路径是安装包、导入 CSS、渲染 `EditorWorkbench`，它会直接给出完整专业 editor shell：顶部 command bar、左侧 Scene/Assets/Project 工作区、中心 3D viewport、右侧 selection-first inspector/problems 面板和底部 grouped status chips。
 
 ## 安装
 
@@ -17,6 +17,8 @@ Vue 是 peer dependency。
 ```ts
 import "@ek-aiot/3d-editor-vue/styles.css";
 ```
+
+默认 workbench 和 inspector 使用 package-owned `ek-` class 与语义化 `--ek-workbench-*` CSS variables。宿主可以覆盖 surfaces、text、border、accent、focus、spacing、radius、control height 和 status tone 变量来做品牌适配，但不需要接入外部 Vue design system。默认 command bar 图标来自 Vue 包内部 `WorkbenchIcon` layer，并由包内依赖 `@phosphor-icons/vue` 渲染；宿主不需要安装、导入或传入 icon 组件，public props、slots context 和类型定义也不会暴露第三方 icon 类型。
 
 ## Workbench 用法
 
@@ -54,7 +56,7 @@ if (!editor.getSnapshot().objects.box) {
 </script>
 ```
 
-不传 `toolbar`、`leftPanel`、`rightPanel` 或 `status` slot 时，Workbench 会使用 package-owned 默认 UI。默认 toolbar 已包含 open/export、undo/redo、transform mode、snap、marquee selection 开关、grid/floor/axes/hover/bounds/snap guide helper、camera reset/frame、camera view capture/apply、copy/paste/duplicate/delete/group/ungroup/select controls；默认 viewport 开启 pointer picking，并保留左键拖拽给相机旋转。用户打开 toolbar 的 `Marquee` 后才启用 viewport marquee selection。默认右侧 inspector 包含 Camera views section，可以编辑 authored camera view、设置 default presentation view、删除 view，或把 view 应用回 transient editor camera。默认左栏会显示 hierarchy、可批量导入的 asset workspace、project summary、project/runtime problems 和缺失资产恢复入口。
+不传 `toolbar`、`leftPanel`、`rightPanel` 或 `status` slot 时，Workbench 会使用 package-owned 默认 UI。默认 command bar 已包含 open/export、undo/redo、transform mode、snap、marquee selection 开关、grid/floor/axes/hover/bounds/snap guide helper、camera reset/frame、camera view capture/apply、copy/paste/duplicate/delete/group/ungroup/select controls；默认 viewport 开启 pointer picking，并保留左键拖拽给相机旋转。用户打开 command bar 的 `Marquee` 后才启用 viewport marquee selection。默认右侧 inspector 包含 summary 和 Camera views section，可以编辑 authored camera view、设置 default presentation view、删除 view，或把 view 应用回 transient editor camera。默认左侧工作区用 Scene、Assets、Project 三个视图组织 hierarchy、可批量导入的 asset workspace、project summary、project/runtime problems 和缺失资产恢复入口；active view、导入队列和恢复提示都是 Vue transient UI state。
 
 ## 双语 Workbench UI
 
