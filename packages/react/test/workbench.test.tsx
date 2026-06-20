@@ -17,6 +17,7 @@ import {
 } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
 import { useWorkbench } from "../src/hooks/use-workbench";
+import { problemToneFromCounts, problemToneFromSeverities } from "../src/components/workbench-model-helpers";
 import { expectAuthoredValuesPresent, expectNoI18nDurableLeakage, expectNoRuntimeOnlyLeakage } from "../../test/i18n-durable-sentinels";
 import { decodeProjectPackageText, resolveProjectPackageBytes, seedI18nDurableEditor } from "../../test/i18n-durable-fixture";
 
@@ -249,6 +250,7 @@ describe("React EditorWorkbench", () => {
     editor.dispatch({ type: "register-asset", asset: { id: "texture-a", kind: "texture", label: "Panel paint", source: new Uint8Array([1]) } });
     editor.dispatch({ type: "register-asset", asset: { id: "image-a", kind: "image", label: "Manual label", source: new Uint8Array([2]) } });
     render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    openLeftPanelView("Assets 2");
 
     const expectedIds = filterAssetWorkspaceItems(
       buildAssetWorkspaceModel(editor.getSnapshot(), {
@@ -293,6 +295,7 @@ describe("React EditorWorkbench", () => {
     render(<EditorWorkbench editor={editor} loader={loader} rendererFactory={fakeRenderer} />);
     const project = vi.spyOn(editor.getRuntime()!, "project");
     const projectCallsBeforeReimport = project.mock.calls.length;
+    openLeftPanelView("Assets 1");
 
     const input = screen.getByLabelText("Reimport robot.glb") as HTMLInputElement;
     const file = new File([new Uint8Array([4, 5, 6])], "robot-v2.glb", { type: "model/gltf-binary" });
@@ -357,16 +360,63 @@ describe("React EditorWorkbench", () => {
     expect(screen.getByLabelText("Inspector panel")).toBeTruthy();
     expect(screen.getByLabelText("Editor status")).toBeTruthy();
     expect(screen.getByText("Hierarchy")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Assets" })).toBeTruthy();
-    expect(screen.getByText("Project")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Scene 2" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Assets 1" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Project 0" })).toBeTruthy();
+    expect(screen.getByTitle("Move mode").querySelector("svg")).toBeTruthy();
+    expect(screen.getByTitle("Export complete project").querySelector("svg")).toBeTruthy();
     expect(screen.getByText("Robot arm")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Assets" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Project" })).toBeNull();
+    openLeftPanelView("Assets 1");
+    expect(screen.getByRole("heading", { name: "Assets" })).toBeTruthy();
     expect(screen.getByText("robot.glb")).toBeTruthy();
+    openLeftPanelView("Project 0");
+    expect(screen.getByRole("heading", { name: "Project" })).toBeTruthy();
     expect(screen.getByText("Project Partial")).toBeTruthy();
     expect(screen.getByText("Selection none")).toBeTruthy();
+    expect(within(screen.getByLabelText("Scene inspector")).getByText("No editable selection")).toBeTruthy();
+    expect(screen.getByText("History")).toBeTruthy();
+    expect(within(screen.getByLabelText("Editor status")).getByText(/Undo \d+/)).toBeTruthy();
+    expect(within(screen.getByLabelText("Editor status")).getByText(/Redo \d+/)).toBeTruthy();
 
     fireEvent.click(screen.getByTitle("Select all"));
 
     expect(screen.getByText("Selection 2 nodes")).toBeTruthy();
+    expect(within(screen.getByLabelText("Scene inspector")).getByText("2")).toBeTruthy();
+  });
+
+  it("keeps task-oriented left workspace tabs as UI-only state", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Robot arm", asset: { id: "asset-a", label: "robot.glb" } });
+    const serializedBefore = editor.serialize();
+
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+
+    const assetsTab = screen.getByRole("button", { name: "Assets 1" });
+    const projectTab = screen.getByRole("button", { name: "Project 0" });
+    fireEvent.click(assetsTab);
+    expect(assetsTab.getAttribute("aria-pressed")).toBe("true");
+    expect((screen.getByLabelText("Hierarchy") as HTMLElement).hidden).toBe(true);
+    expect(screen.getByLabelText("Assets")).toBeTruthy();
+    expect((screen.getByLabelText("Project") as HTMLElement).hidden).toBe(true);
+    fireEvent.click(projectTab);
+    expect(projectTab.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByLabelText("Project")).toBeTruthy();
+    expect((screen.getByLabelText("Hierarchy") as HTMLElement).hidden).toBe(true);
+    expect((screen.getByLabelText("Assets") as HTMLElement).hidden).toBe(true);
+    expect(editor.serialize()).toEqual(serializedBefore);
+  });
+
+  it("derives problem tones consistently from counts and severities", () => {
+    expect(problemToneFromCounts({ warning: 0, error: 0 }, 0)).toBe("neutral");
+    expect(problemToneFromCounts({ warning: 0, error: 0 }, 1)).toBe("info");
+    expect(problemToneFromCounts({ warning: 1, error: 0 }, 1)).toBe("warning");
+    expect(problemToneFromCounts({ warning: 1, error: 1 }, 2)).toBe("error");
+    expect(problemToneFromSeverities([])).toBe("neutral");
+    expect(problemToneFromSeverities([{ severity: "info" }])).toBe("info");
+    expect(problemToneFromSeverities([{ severity: "warning" }, { severity: "info" }])).toBe("warning");
+    expect(problemToneFromSeverities([{ severity: "warning" }, { severity: "error" }])).toBe("error");
   });
 
   it("renders representative default Workbench text in Simplified Chinese", () => {
@@ -382,7 +432,9 @@ describe("React EditorWorkbench", () => {
     expect(screen.getByLabelText("编辑器状态")).toBeTruthy();
     expect(screen.getByLabelText("场景检查器")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "层级" })).toBeTruthy();
+    openLeftPanelView("资源 1");
     expect(screen.getByRole("heading", { name: "资源" })).toBeTruthy();
+    openLeftPanelView("项目 0");
     expect(screen.getByRole("heading", { name: "项目" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "变换" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "材质" })).toBeTruthy();
@@ -401,10 +453,13 @@ describe("React EditorWorkbench", () => {
     expect(screen.getByTitle("旋转模式")).toBeTruthy();
     expect(screen.getByPlaceholderText("标签、ID、状态、诊断")).toBeTruthy();
     expect(screen.getByText("Robot arm")).toBeTruthy();
+    openLeftPanelView("资源 1");
     expect(screen.getByText("robot.glb")).toBeTruthy();
+    openLeftPanelView("项目 0");
     expect(screen.getByText("项目 部分")).toBeTruthy();
     expect(screen.getByText("选择 无")).toBeTruthy();
 
+    openLeftPanelView("场景 1");
     fireEvent.click(screen.getByText("Robot arm"));
     expect((screen.getByLabelText("位置 X") as HTMLInputElement).value).toBe("0");
     expect(screen.getByLabelText("基础色")).toBeTruthy();
@@ -591,6 +646,7 @@ describe("React EditorWorkbench", () => {
 
     render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} locale="zh-CN" />);
 
+    openLeftPanelView("资源 2");
     const rows = within(screen.getByLabelText("资源工作区行"));
     const rowText = rows.getByText("robot.glb").closest("li")!.textContent ?? "";
 
@@ -620,6 +676,7 @@ describe("React EditorWorkbench", () => {
       await editor.getRuntime()?.project();
     });
 
+    openLeftPanelView("资源 1");
     expect(await screen.findByLabelText("缺失资源恢复")).toBeTruthy();
     expect(screen.getAllByText("替换资源").length).toBeGreaterThan(0);
     expect(screen.getAllByText("无法解析资源").length).toBeGreaterThan(0);
@@ -946,11 +1003,11 @@ describe("React EditorWorkbench", () => {
     }));
     const viewport = container.querySelector(".ek-workbench__viewport");
     expect(viewport).not.toBeNull();
-    expect(screen.getByText("Marquee").getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "Marquee" }).getAttribute("aria-pressed")).toBe("false");
 
-    fireEvent.click(screen.getByText("Marquee"));
+    fireEvent.click(screen.getByRole("button", { name: "Marquee" }));
 
-    expect(screen.getByText("Marquee").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Marquee" }).getAttribute("aria-pressed")).toBe("true");
     expect(mountRuntime).toHaveBeenLastCalledWith(expect.objectContaining({
       interactions: expect.objectContaining({
         marqueeSelection: true
@@ -1028,6 +1085,7 @@ describe("React EditorWorkbench", () => {
       await editor.getRuntime()?.project();
     });
 
+    openLeftPanelView("Assets 1");
     expect(await screen.findByLabelText("Missing asset recovery")).toBeTruthy();
     const recoveryPanel = screen.getByLabelText("Missing asset recovery");
     const input = recoveryPanel.querySelector("input") as HTMLInputElement;
@@ -1043,6 +1101,70 @@ describe("React EditorWorkbench", () => {
     await waitFor(() => {
       expect(screen.queryByLabelText("Missing asset recovery")).toBeNull();
     });
+    expect(within(screen.getByLabelText("Asset recovery status")).getByText("Replaced with recovered.glb")).toBeTruthy();
+  });
+
+  it("keeps stale overlapping missing-asset replacements from overwriting newer success feedback", async () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a", label: "Missing box" } });
+    const replaceAssetOriginal = editor.replaceAsset.bind(editor);
+    const first = createDeferred<Awaited<ReturnType<typeof editor.replaceAsset>>>();
+    const second = createDeferred<Awaited<ReturnType<typeof editor.replaceAsset>>>();
+    const replaceAsset = vi.spyOn(editor, "replaceAsset")
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+
+    render(
+      <EditorWorkbench
+        editor={editor}
+        resolver={new AssetResolverBridge(() => null)}
+        rendererFactory={fakeRenderer}
+      />
+    );
+
+    await act(async () => {
+      await editor.getRuntime()?.project();
+    });
+
+    openLeftPanelView("Assets 1");
+    const recoveryPanel = await screen.findByLabelText("Missing asset recovery");
+    const input = recoveryPanel.querySelector("input") as HTMLInputElement;
+    const firstFile = new File([new Uint8Array([1])], "first.glb", { type: "model/gltf-binary" });
+    const secondFile = new File([new Uint8Array([2])], "second.glb", { type: "model/gltf-binary" });
+
+    fireEvent.change(input, { target: { files: [firstFile] } });
+    fireEvent.change(input, { target: { files: [secondFile] } });
+
+    expect(replaceAsset).toHaveBeenNthCalledWith(1, expect.objectContaining({ label: "first.glb" }));
+    expect(replaceAsset).toHaveBeenNthCalledWith(2, expect.objectContaining({ label: "second.glb" }));
+
+    await act(async () => {
+      second.resolve(await replaceAssetOriginal({
+        assetId: "asset-a",
+        source: secondFile,
+        label: "second.glb",
+        mimeType: "model/gltf-binary"
+      }));
+      await second.promise;
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Missing asset recovery")).toBeNull();
+    });
+    expect(within(screen.getByLabelText("Asset recovery status")).getByText("Replaced with second.glb")).toBeTruthy();
+
+    await act(async () => {
+      first.resolve(await replaceAssetOriginal({
+        assetId: "asset-a",
+        source: firstFile,
+        label: "first.glb",
+        mimeType: "model/gltf-binary"
+      }));
+      await first.promise;
+    });
+
+    expect(within(screen.getByLabelText("Asset recovery status")).getByText("Replaced with second.glb")).toBeTruthy();
+    expect(screen.queryByText("Replaced with first.glb")).toBeNull();
   });
 
   it("does not dispose a host-owned editor on unmount", () => {
@@ -1207,6 +1329,24 @@ function renderHookWithResult<T>(callback: () => T) {
     ...view,
     result: () => value!
   };
+}
+
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve(value: T): void;
+  reject(reason?: unknown): void;
+} {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function openLeftPanelView(label: string): void {
+  fireEvent.click(screen.getByRole("button", { name: label }));
 }
 
 function mockObjectUrls(): {

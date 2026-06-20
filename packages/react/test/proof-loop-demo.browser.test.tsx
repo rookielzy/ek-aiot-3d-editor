@@ -2,8 +2,8 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { createApp, type App as VueApp } from "vue";
 import { afterEach, describe, expect, it } from "vitest";
-import { PerspectiveCamera, Vector3 } from "three";
-import type { RendererLike } from "@ek-aiot/3d-editor-core";
+import { BoxGeometry, Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Vector3 } from "three";
+import type { GltfLoaderAdapter, RendererLike } from "@ek-aiot/3d-editor-core";
 import { decodeArchiveJson, defaultArchiveAdapter } from "../../core/src/project/archive-adapter";
 import { App as ReactProofLoopApp } from "../../../examples/react-proof-loop/src/App";
 import ReactDemoStyles from "../../../examples/react-proof-loop/src/styles.css?raw";
@@ -27,7 +27,7 @@ describe("proof-loop starter demo browser verification", () => {
     const root = mountReactDemo();
     cleanup = root.cleanup;
 
-    await verifyStarterFlow(root.host);
+    await verifyStarterFlow(root.host, { professionalUi: "react" });
   }, 15000);
 
   it("drives the Vue starter through the package default workbench", async () => {
@@ -41,7 +41,7 @@ describe("proof-loop starter demo browser verification", () => {
     const root = mountReactDemo({ locale: "zh-CN" });
     cleanup = root.cleanup;
 
-    await verifyChineseWorkbenchLayout(root.host);
+    await verifyChineseWorkbenchLayout(root.host, { professionalUi: "react" });
   }, 15000);
 
   it("keeps the Vue starter workbench usable in Simplified Chinese", async () => {
@@ -52,7 +52,7 @@ describe("proof-loop starter demo browser verification", () => {
   }, 15000);
 });
 
-async function verifyStarterFlow(host: HTMLElement): Promise<void> {
+async function verifyStarterFlow(host: HTMLElement, options: { professionalUi?: "react" } = {}): Promise<void> {
   const restoreDownloadCapture = installDownloadCapture();
   try {
     await waitFor(() => {
@@ -60,12 +60,20 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
       expect(text(section(host, "Hierarchy"))).toContain("Recoverable asset");
       expect(text(section(host, "Hierarchy"))).toContain("Ambient light");
     });
-    expect(text(section(host, "Assets"))).toContain("Recoverable asset");
-    expect(text(section(host, "Assets"))).toContain("GLB");
-    expect(text(section(host, "Assets"))).toContain("missing payload");
-    expect(text(section(host, "Assets"))).toContain("blocked");
-    expect(text(section(host, "Assets"))).toContain("1 refs");
-    assertAssetWorkspaceLayout(host);
+    await openLeftWorkspaceView(host, "Assets");
+    await waitFor(() => {
+      const assets = visibleSection(host, "Assets");
+      expect(text(assets)).toContain("Recoverable asset");
+      expect(text(assets)).toContain("GLB");
+      expect(text(assets)).toContain("missing payload");
+      expect(text(assets)).toContain("blocked");
+      expect(text(assets)).toContain("1 refs");
+    });
+    await assertAssetWorkspaceLayout(host);
+    if (options.professionalUi === "react") {
+      await assertProfessionalWorkbenchLayout(host);
+    }
+    await openLeftWorkspaceView(host, "Scene");
     expect(text(testId(host, "starter-overlay"))).toContain("3 objects");
     expect(text(host)).toContain("Selection Simple box");
 
@@ -98,7 +106,7 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
     await clickByText(host, "Set default");
     expect(text(host)).toContain("Default");
     await clickByText(host, "Apply view");
-    assertCameraLayout(host);
+    await assertCameraLayout(host);
 
     const positionX = findFieldInput(host, "Position X", 'input[type="number"]') as HTMLInputElement | null;
     expect(positionX, "Expected transform Position X input").toBeTruthy();
@@ -117,7 +125,7 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
 
     await clickByText(host, "Export partial");
     await waitFor(() => expect(text(host)).toContain("Exported partial project"));
-    await waitFor(() => expect(window.__lastDownloadedProject).toBeInstanceOf(Uint8Array));
+    await waitForDownloadedProject();
     expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("asset-unresolved");
     expectExportedMarqueeSelection(window.__lastDownloadedProject!);
     expectExportedPresentation(window.__lastDownloadedProject!);
@@ -135,42 +143,63 @@ async function verifyStarterFlow(host: HTMLElement): Promise<void> {
       expect(text(host)).toContain("Camera view 1");
       expect(text(host)).toContain("Default");
     });
+    await openLeftWorkspaceView(host, "Scene");
 
     await clickByText(host, "Duplicate");
-    await waitFor(() => expect(text(section(host, "Project"))).toContain("Objects5"));
+    await openLeftWorkspaceView(host, "Project");
+    await waitFor(() => expect(text(visibleSection(host, "Project"))).toContain("Objects5"));
 
+    await openLeftWorkspaceView(host, "Assets");
     await waitFor(() => {
-      expect(text(section(host, "Missing asset recovery"))).toContain("Replace asset");
-      expect(text(section(host, "Project"))).toContain("1 problems");
+      expect(text(visibleSection(host, "Missing asset recovery"))).toContain("Replace asset");
+      if (hasLeftWorkspaceTabs(host)) {
+        expect(text(host)).toContain("Problems 1");
+      } else {
+        expect(text(section(host, "Project"))).toContain("1 problems");
+      }
     });
 
-    const recoveryInput = section(host, "Missing asset recovery").querySelector('input[type="file"]') as HTMLInputElement | null;
+    const recoveryInput = visibleSection(host, "Missing asset recovery").querySelector('input[type="file"]') as HTMLInputElement | null;
     expect(recoveryInput, "Expected default missing asset recovery input").toBeTruthy();
     await uploadFile(recoveryInput!, await glbFixtureFile());
     await waitFor(() => {
       expect(host.querySelector('[aria-label="Missing asset recovery"]')).toBeNull();
       expect(text(host)).toContain("Problems 0");
     });
-    expect(text(section(host, "Assets"))).toContain("Recoverable asset");
+    if (options.professionalUi === "react") {
+      expect(text(section(host, "Asset recovery status"))).toContain("Replaced with");
+    }
+    expect(text(visibleSection(host, "Assets"))).toContain("Recoverable asset");
     expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("Import assets");
   } finally {
     restoreDownloadCapture();
   }
 }
 
-async function verifyChineseWorkbenchLayout(host: HTMLElement): Promise<void> {
+async function verifyChineseWorkbenchLayout(host: HTMLElement, options: { professionalUi?: "react" } = {}): Promise<void> {
   await waitFor(() => {
     expect(text(section(host, "层级"))).toContain("Simple box");
-    expect(text(section(host, "资源"))).toContain("Recoverable asset");
-    expect(text(section(host, "项目"))).toContain("对象");
     expect(text(section(host, "场景检查器"))).toContain("变换");
     expect(text(host)).toContain("选择 Simple box");
   });
+  await openLeftWorkspaceView(host, "资源");
+  await waitFor(() => expect(text(visibleSection(host, "资源"))).toContain("Recoverable asset"));
+  await openLeftWorkspaceView(host, "项目");
+  await waitFor(() => expect(text(visibleSection(host, "项目"))).toContain("对象"));
+  await openLeftWorkspaceView(host, "场景");
 
   const viewport = host.querySelector(".starter-viewport") as HTMLElement | null;
   expect(viewport).toBeTruthy();
   await findReadyCanvas(viewport!);
-  assertLocalizedWorkbenchLayout(host);
+  await assertLocalizedWorkbenchLayout(host);
+  if (options.professionalUi === "react") {
+    await assertProfessionalWorkbenchLayout(host, {
+      commandBarLabel: "编辑器控件",
+      statusLabel: "编辑器状态",
+      projectPanelLabel: "项目面板",
+      inspectorLabel: "场景检查器"
+    });
+  }
 
   await clickByText(host, "捕获视图");
   await waitFor(() => {
@@ -180,20 +209,26 @@ async function verifyChineseWorkbenchLayout(host: HTMLElement): Promise<void> {
   await clickByText(host, "设为默认");
   expect(text(host)).toContain("默认");
   await clickByText(host, "应用视图");
-  assertLocalizedCameraLayout(host);
+  await assertLocalizedCameraLayout(host);
 
+  await openLeftWorkspaceView(host, "资源");
   await waitFor(() => {
-    expect(text(section(host, "缺失资源恢复"))).toContain("替换资源");
-    expect(text(section(host, "项目"))).toContain("1 个问题");
+    expect(text(visibleSection(host, "缺失资源恢复"))).toContain("替换资源");
+    if (hasLeftWorkspaceTabs(host)) {
+      expect(text(host)).toContain("问题 1");
+    } else {
+      expect(text(section(host, "项目"))).toContain("1 个问题");
+    }
   });
-  assertLocalizedWorkbenchLayout(host);
+  await openLeftWorkspaceView(host, "资源");
+  await assertLocalizedWorkbenchLayout(host);
 }
 
 function mountReactDemo(options: { locale?: "en" | "zh-CN" } = {}): { host: HTMLElement; cleanup(): void } {
   installStyles("react-demo-styles", [WorkbenchStyles, InspectorStyles, ReactDemoStyles]);
   const host = createHost();
   const root = createRoot(host);
-  root.render(<ReactProofLoopApp rendererFactory={paintedRenderer} locale={options.locale} />);
+  root.render(<ReactProofLoopApp loader={proofLoopLoader} rendererFactory={paintedRenderer} locale={options.locale} />);
   return {
     host,
     cleanup() {
@@ -206,7 +241,7 @@ function mountReactDemo(options: { locale?: "en" | "zh-CN" } = {}): { host: HTML
 function mountVueDemo(options: { locale?: "en" | "zh-CN" } = {}): { host: HTMLElement; cleanup(): void } {
   installStyles("vue-demo-styles", [WorkbenchStyles, InspectorStyles, VueDemoStyles]);
   const host = createHost();
-  const app: VueApp = createApp(VueProofLoopApp, { rendererFactory: paintedRenderer, locale: options.locale });
+  const app: VueApp = createApp(VueProofLoopApp, { loader: proofLoopLoader, rendererFactory: paintedRenderer, locale: options.locale });
   app.mount(host);
   return {
     host,
@@ -216,6 +251,18 @@ function mountVueDemo(options: { locale?: "en" | "zh-CN" } = {}): { host: HTMLEl
     }
   };
 }
+
+const proofLoopLoader: GltfLoaderAdapter = {
+  async load() {
+    const group = new Group();
+    group.name = "Proof-loop test GLB";
+    group.add(new Mesh(
+      new BoxGeometry(1, 1, 1),
+      new MeshBasicMaterial({ color: 0x6fa8dc })
+    ));
+    return group;
+  }
+};
 
 function createHost(): HTMLElement {
   const host = document.createElement("div");
@@ -284,6 +331,27 @@ async function clickByText(host: HTMLElement, label: string): Promise<void> {
   expect(target, `Expected button ${label}`).toBeTruthy();
   target!.click();
   await waitForAnimationFrame();
+}
+
+async function openLeftWorkspaceView(host: HTMLElement, label: string): Promise<void> {
+  const tabs = [...host.querySelectorAll<HTMLButtonElement>(".ek-workbench__panel-tab")];
+  if (tabs.length === 0) {
+    return;
+  }
+
+  const target = tabs
+    .find((candidate) => (candidate.getAttribute("aria-label") ?? "").startsWith(`${label} `));
+  expect(target, `Expected workspace tab ${label}`).toBeTruthy();
+
+  target!.click();
+  await waitForAnimationFrame();
+  await waitFor(() => {
+    expect(target!.getAttribute("aria-pressed")).toBe("true");
+  });
+}
+
+function hasLeftWorkspaceTabs(host: HTMLElement): boolean {
+  return host.querySelector(".ek-workbench__panel-tab") !== null;
 }
 
 async function dragMarquee(canvas: HTMLCanvasElement, start: { x: number; y: number }, end: { x: number; y: number }): Promise<void> {
@@ -424,8 +492,14 @@ function section(host: HTMLElement, label: string): HTMLElement {
   return element!;
 }
 
+function visibleSection(host: HTMLElement, label: string): HTMLElement {
+  const element = section(host, label);
+  expect(element.getClientRects().length, `Expected visible [aria-label="${label}"]`).toBeGreaterThan(0);
+  return element;
+}
+
 function hierarchyRow(host: HTMLElement, label: string): HTMLButtonElement {
-  const row = [...section(host, "Hierarchy").querySelectorAll<HTMLButtonElement>(".ek-workbench__tree-row")]
+  const row = [...visibleSection(host, "Hierarchy").querySelectorAll<HTMLButtonElement>(".ek-workbench__tree-row")]
     .find((candidate) => text(candidate).startsWith(label));
   expect(row, `Expected hierarchy row ${label}`).toBeTruthy();
   return row!;
@@ -441,99 +515,119 @@ function text(element: Element): string {
   return element.textContent?.replace(/\s+/g, " ").trim() ?? "";
 }
 
-function assertAssetWorkspaceLayout(host: HTMLElement): void {
-  const assets = section(host, "Assets");
-  const originalWidth = host.style.width;
-  try {
-    for (const width of ["1280px", "390px"]) {
-      host.style.width = width;
-      window.dispatchEvent(new Event("resize"));
-      const panelRect = assets.getBoundingClientRect();
-      expect(panelRect.width).toBeGreaterThan(0);
-      for (const selector of [
-        ".ek-workbench__asset-import",
-        ".ek-workbench__asset-controls",
-        ".ek-workbench__asset-list",
-        ".ek-workbench__asset-row"
-      ]) {
-        const element = assets.querySelector(selector) as HTMLElement | null;
-        expect(element, `Expected ${selector} in Assets`).toBeTruthy();
-        const rect = element!.getBoundingClientRect();
-        expect(rect.left).toBeGreaterThanOrEqual(panelRect.left - 1);
-        expect(rect.right).toBeLessThanOrEqual(panelRect.right + 1);
-      }
-    }
-  } finally {
-    host.style.width = originalWidth;
-    window.dispatchEvent(new Event("resize"));
+async function assertAssetWorkspaceLayout(host: HTMLElement): Promise<void> {
+  await openLeftWorkspaceView(host, "Assets");
+  await waitForAnimationFrame();
+  const assets = visibleSection(host, "Assets");
+  const panelRect = assets.getBoundingClientRect();
+  expect(panelRect.width).toBeGreaterThan(0);
+  for (const selector of [
+    ".ek-workbench__asset-import",
+    ".ek-workbench__asset-controls",
+    ".ek-workbench__asset-list",
+    ".ek-workbench__asset-row"
+  ]) {
+    const element = assets.querySelector(selector) as HTMLElement | null;
+    expect(element, `Expected ${selector} in Assets`).toBeTruthy();
+    const rect = element!.getBoundingClientRect();
+    expect(rect.left).toBeGreaterThanOrEqual(panelRect.left - 1);
+    expect(rect.right).toBeLessThanOrEqual(panelRect.right + 1);
   }
+  assertViewportWidthWasExercised();
 }
 
-function assertLocalizedWorkbenchLayout(host: HTMLElement): void {
-  const sections = [
+async function assertLocalizedWorkbenchLayout(host: HTMLElement): Promise<void> {
+  await waitForAnimationFrame();
+  for (const localizedSection of [
     section(host, "编辑器控件"),
-    section(host, "资源"),
-    section(host, "项目"),
     section(host, "场景检查器"),
     section(host, "编辑器状态")
-  ];
-  const originalWidth = host.style.width;
-  try {
-    for (const width of ["1280px", "390px"]) {
-      host.style.width = width;
-      window.dispatchEvent(new Event("resize"));
-      for (const localizedSection of sections) {
-        assertChildrenInside(localizedSection, `Localized ${localizedSection.getAttribute("aria-label")}`);
-      }
-    }
-  } finally {
-    host.style.width = originalWidth;
-    window.dispatchEvent(new Event("resize"));
+  ]) {
+    assertChildrenInside(localizedSection, `Localized ${localizedSection.getAttribute("aria-label")}`);
   }
+  await openLeftWorkspaceView(host, "资源");
+  assertChildrenInside(visibleSection(host, "资源"), "Localized 资源");
+  await openLeftWorkspaceView(host, "项目");
+  assertChildrenInside(visibleSection(host, "项目"), "Localized 项目");
+  await openLeftWorkspaceView(host, "场景");
+  assertChildrenInside(visibleSection(host, "层级"), "Localized 层级");
+  assertViewportWidthWasExercised();
 }
 
-function assertCameraLayout(host: HTMLElement): void {
+async function assertProfessionalWorkbenchLayout(
+  host: HTMLElement,
+  labels: {
+    commandBarLabel: string;
+    statusLabel: string;
+    projectPanelLabel: string;
+    inspectorLabel: string;
+  } = {
+    commandBarLabel: "Editor controls",
+    statusLabel: "Editor status",
+    projectPanelLabel: "Project panel",
+    inspectorLabel: "Scene inspector"
+  }
+): Promise<void> {
+  const workbench = host.querySelector(".ek-workbench") as HTMLElement | null;
+  expect(workbench, "Expected React workbench root").toBeTruthy();
+  const commandBar = section(host, labels.commandBarLabel);
+  const status = section(host, labels.statusLabel);
+  const projectPanel = section(host, labels.projectPanelLabel);
+  const inspector = section(host, labels.inspectorLabel);
+
+  await waitForAnimationFrame();
+  expect(document.documentElement.scrollWidth, `Page overflow at ${currentViewportLabel()}`).toBeLessThanOrEqual(document.documentElement.clientWidth + 1);
+  expect(workbench!.getBoundingClientRect().right, `Workbench right edge at ${currentViewportLabel()}`).toBeLessThanOrEqual(document.documentElement.clientWidth + 1);
+  assertChildrenInside(commandBar, `Command bar ${currentViewportLabel()}`);
+  assertChildrenInside(projectPanel, `Project panel ${currentViewportLabel()}`);
+  assertChildrenInside(inspector, `Inspector ${currentViewportLabel()}`);
+  assertChildrenInside(status, `Status ${currentViewportLabel()}`);
+  expect(projectPanel.querySelector(".ek-workbench__panel-nav"), `Workspace nav ${currentViewportLabel()}`).toBeTruthy();
+  expect(commandBar.querySelector(".ek-workbench__command-button svg"), `Command icon ${currentViewportLabel()}`).toBeTruthy();
+  expect(inspector.querySelector(".ek-inspector-summary"), `Inspector summary ${currentViewportLabel()}`).toBeTruthy();
+  expect(status.querySelector(".ek-workbench__status-chip"), `Status chip ${currentViewportLabel()}`).toBeTruthy();
+  assertViewportWidthWasExercised();
+}
+
+async function assertCameraLayout(host: HTMLElement): Promise<void> {
   const cameraToolbar = section(host, "Camera");
   const cameraInspector = [...host.querySelectorAll(".ek-inspector-section")]
     .find((candidate) => text(candidate).includes("Camera views")) as HTMLElement | undefined;
   expect(cameraInspector, "Expected Camera views inspector section").toBeTruthy();
-  const originalWidth = host.style.width;
-  try {
-    for (const width of ["1280px", "390px"]) {
-      host.style.width = width;
-      window.dispatchEvent(new Event("resize"));
-      assertChildrenInside(cameraToolbar, "Camera toolbar");
-      assertChildrenInside(cameraInspector!, "Camera inspector");
-    }
-  } finally {
-    host.style.width = originalWidth;
-    window.dispatchEvent(new Event("resize"));
-  }
+  await waitForAnimationFrame();
+  assertChildrenInside(cameraToolbar, `Camera toolbar ${currentViewportLabel()}`);
+  assertChildrenInside(cameraInspector!, `Camera inspector ${currentViewportLabel()}`);
 }
 
-function assertLocalizedCameraLayout(host: HTMLElement): void {
+async function assertLocalizedCameraLayout(host: HTMLElement): Promise<void> {
   const cameraToolbar = section(host, "相机");
   const cameraInspector = [...host.querySelectorAll(".ek-inspector-section")]
     .find((candidate) => text(candidate).includes("相机视图")) as HTMLElement | undefined;
   expect(cameraInspector, "Expected localized camera views inspector section").toBeTruthy();
-  const originalWidth = host.style.width;
-  try {
-    for (const width of ["1280px", "390px"]) {
-      host.style.width = width;
-      window.dispatchEvent(new Event("resize"));
-      assertChildrenInside(cameraToolbar, "Localized camera toolbar");
-      assertChildrenInside(cameraInspector!, "Localized camera inspector");
-    }
-  } finally {
-    host.style.width = originalWidth;
-    window.dispatchEvent(new Event("resize"));
-  }
+  await waitForAnimationFrame();
+  assertChildrenInside(cameraToolbar, `Localized camera toolbar ${currentViewportLabel()}`);
+  assertChildrenInside(cameraInspector!, `Localized camera inspector ${currentViewportLabel()}`);
+}
+
+function assertViewportWidthWasExercised(): void {
+  const width = document.documentElement.clientWidth;
+  expect(
+    width >= 1024 || width <= 480,
+    `Expected desktop or narrow browser viewport, got ${width}px`
+  ).toBe(true);
+}
+
+function currentViewportLabel(): string {
+  return `${document.documentElement.clientWidth}px`;
 }
 
 function assertChildrenInside(container: HTMLElement, label: string): void {
   const parent = container.getBoundingClientRect();
   expect(parent.width, label).toBeGreaterThan(0);
-  for (const child of container.querySelectorAll("button, input, .ek-inspector-camera-list")) {
+  for (const child of container.querySelectorAll("button, input, select, .ek-inspector-camera-list, .ek-workbench__panel-nav, .ek-workbench__status-chip")) {
+    if (child.getClientRects().length === 0) {
+      continue;
+    }
     const rect = child.getBoundingClientRect();
     expect(rect.left, `${label} child left`).toBeGreaterThanOrEqual(parent.left - 1);
     expect(rect.right, `${label} child right`).toBeLessThanOrEqual(parent.right + 1);
@@ -600,20 +694,41 @@ function installDownloadCapture(): () => void {
   const originalCreateObjectURL = URL.createObjectURL;
   const originalRevokeObjectURL = URL.revokeObjectURL;
   const originalAnchorClick = HTMLAnchorElement.prototype.click;
+  const blobsByUrl = new Map<string, Blob>();
+  let nextObjectUrlId = 0;
   URL.createObjectURL = ((blob: Blob) => {
+    const objectUrl = `blob:starter-project-${nextObjectUrlId++}`;
+    blobsByUrl.set(objectUrl, blob);
+    return objectUrl;
+  }) as typeof URL.createObjectURL;
+  URL.revokeObjectURL = ((url: string) => {
+    blobsByUrl.delete(url);
+  }) as typeof URL.revokeObjectURL;
+  HTMLAnchorElement.prototype.click = function clickAnchor() {
+    if (!this.download) {
+      return;
+    }
+    const blob = blobsByUrl.get(this.href);
+    if (!blob) {
+      return;
+    }
     void blob.arrayBuffer().then((buffer) => {
       window.__lastDownloadedProject = new Uint8Array(buffer);
     });
-    return "blob:starter-project";
-  }) as typeof URL.createObjectURL;
-  URL.revokeObjectURL = (() => undefined) as typeof URL.revokeObjectURL;
-  HTMLAnchorElement.prototype.click = () => undefined;
+  };
 
   return () => {
     URL.createObjectURL = originalCreateObjectURL;
     URL.revokeObjectURL = originalRevokeObjectURL;
     HTMLAnchorElement.prototype.click = originalAnchorClick;
   };
+}
+
+async function waitForDownloadedProject(): Promise<void> {
+  await waitFor(() => {
+    expect(window.__lastDownloadedProject).toBeInstanceOf(Uint8Array);
+    expect(() => defaultArchiveAdapter.read(window.__lastDownloadedProject!)).not.toThrow();
+  });
 }
 
 function copyBytes(bytes: Uint8Array): ArrayBuffer {

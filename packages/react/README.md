@@ -8,7 +8,7 @@ This package is experimental `0.x`. It tracks the current core package contract 
 
 `useInspector()` and `InspectorPanel` render the shared core inspector model for selected node transform availability, object/material fields, scene lighting/background/skybox source fields, selected light nodes, and runtime problems. Edits dispatch core commands on commit boundaries, so undo/redo remains owned by core history.
 
-`useWorkbench()` and `EditorWorkbench` compose the primitive pieces into a compact viewport-plus-inspector shell. Pass an existing editor when the host owns editor lifetime; the workbench will not dispose it on unmount. If no editor is passed, the shell creates one and disposes it with the workbench.
+`useWorkbench()` and `EditorWorkbench` compose the primitive pieces into a package-owned professional editor workbench: command bar, task-oriented left workspace, viewport, selection-first inspector, grouped status bar, and project/problem recovery surfaces. Pass an existing editor when the host owns editor lifetime; the workbench will not dispose it on unmount. If no editor is passed, the shell creates one and disposes it with the workbench.
 
 ```tsx
 import { AssetResolverBridge } from "@ek-aiot/3d-editor-core";
@@ -36,6 +36,12 @@ function Workbench() {
 ```
 
 Render-prop regions receive the core editor, current snapshot, inspector model, runtime problems, active light state, selected node/object/light IDs, advanced operation helpers, selection count, project import/export helpers, asset replacement, and a dispatch helper. Runtime options such as `resolver`, loader, and renderer factory are passed through to core runtime mounting; React shell code does not resolve assets or serialize runtime problems.
+
+## Default Workbench Styling
+
+The default Workbench imports a compact package-owned visual system from `@ek-aiot/3d-editor-react/styles.css`. It uses semantic `--ek-workbench-*` CSS variables for surfaces, text, borders, accents, severity tones, focus rings, compact control heights, spacing, and radius. Hosts can override those variables on `.ek-workbench` or a wrapping container without replacing the default components.
+
+The command bar uses an internal icon layer backed by `@phosphor-icons/react`. Consumers do not install icon packages, import icon components, or receive icon types through public props; icon rendering remains an implementation detail behind the React package surface.
 
 ## Bilingual Workbench UI
 

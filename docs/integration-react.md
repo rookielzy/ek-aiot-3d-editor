@@ -1,6 +1,6 @@
 # 集成指南：React
 
-`@ek-aiot/3d-editor-react` 是 `@ek-aiot/3d-editor-core` 的 React 适配层。默认路径是安装包、导入 CSS、渲染 `EditorWorkbench`，它会直接给出完整 editor shell：顶部工具栏、左侧 hierarchy/assets/project 面板、中心 3D viewport、右侧 inspector/problems 面板和底部状态栏。
+`@ek-aiot/3d-editor-react` 是 `@ek-aiot/3d-editor-core` 的 React 适配层。默认路径是安装包、导入 CSS、渲染 `EditorWorkbench`，它会直接给出完整专业 editor shell：顶部 command bar、左侧任务工作区、中心 3D viewport、右侧 selection-first inspector/problems 面板和底部分组状态栏。
 
 ## 安装
 
@@ -17,6 +17,10 @@ React 和 React DOM 是 peer dependencies。
 ```ts
 import "@ek-aiot/3d-editor-react/styles.css";
 ```
+
+默认 UI 的视觉系统由 React 包内 CSS 拥有，使用语义化 `--ek-workbench-*` variables 表达 surface、text、border、accent、success/warning/error/info、focus ring、control height、spacing 和 8px 以内圆角。宿主可以在 `.ek-workbench` 或外层容器覆盖这些 variables 做品牌适配，但不需要引入第三方 UI library 或主题对象。
+
+默认 command bar 的图标来自 React 包内部的 `WorkbenchIcon` layer，并由包内依赖 `@phosphor-icons/react` 渲染。宿主不需要安装、导入或传入 icon 组件；public props、render prop context 和类型定义不会暴露第三方 icon 类型。
 
 ## Workbench 用法
 
@@ -58,7 +62,7 @@ export function EditorPage() {
 }
 ```
 
-不传 `toolbar`、`leftPanel`、`rightPanel` 或 `status` 时，Workbench 会使用 package-owned 默认 UI。默认 toolbar 已包含 open/export、undo/redo、transform mode、snap、marquee selection 开关、grid/floor/axes/hover/bounds/snap guide helper、camera reset/frame、camera view capture/apply、copy/paste/duplicate/delete/group/ungroup/select controls；默认 viewport 开启 pointer picking，并保留左键拖拽给相机旋转。用户打开 toolbar 的 `Marquee` 后才启用 viewport marquee selection。默认右侧 inspector 包含 Camera views section，可以编辑 authored camera view、设置 default presentation view、删除 view，或把 view 应用回 transient editor camera。默认左栏会显示 hierarchy、可批量导入的 asset workspace、project summary、project/runtime problems 和缺失资产恢复入口。
+不传 `toolbar`、`leftPanel`、`rightPanel` 或 `status` 时，Workbench 会使用 package-owned 默认 UI。默认 command bar 已包含 open/export、undo/redo、transform mode、snap、marquee selection 开关、grid/floor/axes/hover/bounds/snap guide helper、camera reset/frame、camera view capture/apply、copy/paste/duplicate/delete/group/ungroup/select controls；默认 viewport 开启 pointer picking，并保留左键拖拽给相机旋转。用户打开 command bar 的 `Marquee` 后才启用 viewport marquee selection。默认右侧 inspector 包含 selection summary 和 Camera views section，可以编辑 authored camera view、设置 default presentation view、删除 view，或把 view 应用回 transient editor camera。默认左侧任务工作区提供 Scene、Assets、Project 三个任务入口，并在同一个 shell 中显示 hierarchy、可批量导入的 asset workspace、project summary、project/runtime problems 和缺失资产恢复入口。
 
 ## 双语 Workbench UI
 
@@ -248,7 +252,7 @@ interface WorkbenchContext {
 pnpm --filter @ek-aiot/react-proof-loop dev
 ```
 
-示例首屏就是可操作 workbench，不是 landing page。示例代码只保留真实宿主通常需要拥有的部分：创建 editor、初始化 starter snapshot、配置 resolver/loader、选择可选 renderer factory，以及一个很薄的 viewport overlay。toolbar、hierarchy、assets、project status、missing-asset recovery、inspector 和 status 都来自 `@ek-aiot/3d-editor-react` 默认 Workbench。
+示例首屏就是可操作 workbench，不是 landing page。示例代码只保留真实宿主通常需要拥有的部分：创建 editor、初始化 starter snapshot、配置 resolver/loader、选择可选 renderer factory，以及一个很薄的 viewport overlay。command bar、task workspace、hierarchy、assets、project status、missing-asset recovery、inspector 和 grouped status 都来自 `@ek-aiot/3d-editor-react` 默认 Workbench。
 
 默认 UI 可以完成 starter flow：选择 hierarchy row、viewport picking 或打开 `Marquee` 后使用 marquee selection，capture/edit/default/apply authored camera view，编辑 Transform/Material inspector、在 expanded GLB 上选择 broad object 或 material slot target、切换 helper/snap/transform、undo/redo、duplicate、export partial package、通过 Open 重新载入 `.ek3d`、从左栏恢复缺失资产，以及对 registered GLB 执行 reimport。缺失资产恢复使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem；GLB reimport 使用 `context.assets.reimportGlbAsset()`，提交 replacement manifest 和 target remap，并在按钮反馈中显示 exact/remapped/new/unresolved summary。
 
@@ -257,6 +261,8 @@ pnpm --filter @ek-aiot/react-proof-loop dev
 ```bash
 pnpm test:browser
 ```
+
+浏览器测试会覆盖 starter flow、英文/中文 UI、桌面宽度和窄屏宽度下的 command bar、左侧工作区、inspector 和 status bar，确保默认 shell 不产生横向页面溢出，控件文字不会明显越界。
 
 该命令使用 headless Chromium 验证 React starter 的默认 workbench 区域、selection、transform/history、material inspector smoke、project export/open、missing-asset recovery、problem status 和 canvas 非空渲染状态。它不是端到端托管发布测试，也不承诺完整资产库、外部 paste、数据绑定或事件编排能力。
 

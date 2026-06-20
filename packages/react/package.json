@@ -48,6 +48,7 @@
     "test": "vitest run --root ../.. packages/react"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
     "@ek-aiot/3d-editor-core": "workspace:^0.2.0"
   },
   "peerDependencies": {

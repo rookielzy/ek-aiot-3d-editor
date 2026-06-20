@@ -1,4 +1,4 @@
-import { useMemo, useState, type ChangeEvent, type CSSProperties, type Dispatch, type DragEvent, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type Dispatch, type DragEvent, type MutableRefObject, type SetStateAction } from "react";
 import {
   filterAssetWorkspaceItems,
   sortAssetWorkspaceItems,
@@ -19,6 +19,7 @@ import {
 } from "@ek-aiot/3d-editor-core";
 import type { WorkbenchI18n, WorkbenchMessageKey, WorkbenchMessageValues } from "../i18n/workbench-i18n";
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
+import { problemToneFromCounts } from "./workbench-model-helpers";
 
 export interface WorkbenchLeftPanelProps {
   context: ResolvedWorkbenchContext;
@@ -44,6 +45,7 @@ type AssetRecoveryState = Record<string, LocalizedStatusMessage>;
 type AssetQueueStatus = "queued" | "importing" | "succeeded" | "failed";
 type AssetStatusFilter = "all" | AssetWorkspaceStatus;
 type AssetKindFilter = "all" | AssetKind;
+type WorkbenchPanelView = "scene" | "assets" | "project";
 
 interface AssetQueueItem {
   id: string;
@@ -56,6 +58,9 @@ interface AssetQueueItem {
 
 export function WorkbenchLeftPanel({ context }: WorkbenchLeftPanelProps) {
   const [recoveryState, setRecoveryState] = useState<AssetRecoveryState>({});
+  const [recoverySuccessState, setRecoverySuccessState] = useState<AssetRecoveryState>({});
+  const missingReplacementTokens = useRef<Record<string, symbol>>({});
+  const [activeView, setActiveView] = useState<WorkbenchPanelView>("scene");
   const [assetQuery, setAssetQuery] = useState("");
   const [assetKind, setAssetKind] = useState<AssetKindFilter>("all");
   const [assetStatus, setAssetStatus] = useState<AssetStatusFilter>("all");
@@ -66,6 +71,14 @@ export function WorkbenchLeftPanel({ context }: WorkbenchLeftPanelProps) {
   const model = context.model;
   const workspace = model.assets.workspace;
   const t = context.i18n.t;
+  const missingProblemIdKey = model.assets.missing.map((item) => item.problemId).join("\n");
+  const missingProblemIds = useMemo(() => new Set(
+    missingProblemIdKey ? missingProblemIdKey.split("\n") : []
+  ), [missingProblemIdKey]);
+  const workspaceAssetIdKey = (workspace?.items ?? []).map((item) => item.id).join("\n");
+  const workspaceAssetIds = useMemo(() => new Set(
+    workspaceAssetIdKey ? workspaceAssetIdKey.split("\n") : []
+  ), [workspaceAssetIdKey]);
   const visibleAssets = useMemo(() => {
     const items = workspace?.items ?? [];
     const filtered = filterAssetWorkspaceItems(items, {
@@ -75,6 +88,57 @@ export function WorkbenchLeftPanel({ context }: WorkbenchLeftPanelProps) {
     });
     return sortAssetWorkspaceItems(filtered, { key: assetSort });
   }, [assetKind, assetQuery, assetSort, assetStatus, workspace]);
+  const problemTone = problemToneFromCounts(model.problems.bySeverity, model.problems.totalCount);
+  const panelViews = [
+    {
+      id: "scene",
+      label: t("reactWorkbench.leftPanel.nav.scene"),
+      count: model.hierarchy.totalCount,
+      tone: model.hierarchy.selectedCount > 0 ? "active" : "neutral"
+    },
+    {
+      id: "assets",
+      label: t("reactWorkbench.leftPanel.nav.assets"),
+      count: workspace?.totalCount ?? model.assets.totalCount,
+      tone: model.assets.missingCount > 0 ? "warning" : "neutral"
+    },
+    {
+      id: "project",
+      label: t("reactWorkbench.leftPanel.nav.project"),
+      count: model.problems.totalCount,
+      tone: problemTone
+    }
+  ] satisfies Array<{ id: WorkbenchPanelView; label: string; count: number; tone: string }>;
+
+  useEffect(() => {
+    setRecoveryState((current) => {
+      let changed = false;
+      const next: AssetRecoveryState = {};
+      for (const [problemId, status] of Object.entries(current)) {
+        if (missingProblemIds.has(problemId)) {
+          next[problemId] = status;
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [missingProblemIds]);
+
+  useEffect(() => {
+    setRecoverySuccessState((current) => {
+      let changed = false;
+      const next: AssetRecoveryState = {};
+      for (const [assetId, status] of Object.entries(current)) {
+        if (workspaceAssetIds.has(assetId)) {
+          next[assetId] = status;
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [workspaceAssetIds]);
 
   async function importAssetFiles(files: readonly File[]) {
     if (files.length === 0) {
@@ -87,10 +151,11 @@ export function WorkbenchLeftPanel({ context }: WorkbenchLeftPanelProps) {
       status: "queued" as const,
       diagnostics: []
     }));
-    setQueue((current) => [...queueItems, ...current].slice(0, 8));
-    setQueue((current) => current.map((item) =>
-      queueItems.some((queued) => queued.id === item.id) ? { ...item, status: "importing" } : item
-    ));
+    const queuedIds = new Set(queueItems.map((item) => item.id));
+    setQueue((current) => [
+      ...queueItems.map((item) => ({ ...item, status: "importing" as const })),
+      ...current
+    ].slice(0, 8));
 
     let results;
     try {
@@ -104,7 +169,7 @@ export function WorkbenchLeftPanel({ context }: WorkbenchLeftPanelProps) {
       });
     } catch (error) {
       setQueue((current) => current.map((item) =>
-        queueItems.some((queued) => queued.id === item.id)
+        queuedIds.has(item.id)
           ? {
               ...item,
               status: "failed",
@@ -154,6 +219,16 @@ export function WorkbenchLeftPanel({ context }: WorkbenchLeftPanelProps) {
       return;
     }
 
+    const operationToken = Symbol(item.problemId);
+    missingReplacementTokens.current[item.assetId] = operationToken;
+    setRecoverySuccessState((current) => {
+      if (!current[item.assetId]) {
+        return current;
+      }
+      const next = { ...current };
+      delete next[item.assetId];
+      return next;
+    });
     setRecoveryState((current) => ({
       ...current,
       [item.problemId]: localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.progress", "Replacing...")
@@ -167,13 +242,26 @@ export function WorkbenchLeftPanel({ context }: WorkbenchLeftPanelProps) {
     if (result.ok) {
       await context.runtime?.project();
       context.refreshProblems();
-      setRecoveryState((current) => ({
+      if (missingReplacementTokens.current[item.assetId] !== operationToken) {
+        return;
+      }
+      delete missingReplacementTokens.current[item.assetId];
+      setRecoverySuccessState((current) => ({
         ...current,
-        [item.problemId]: localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.success", "Replaced with {fileName}", { fileName: file.name })
+        [item.assetId]: localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.success", "Replaced with {fileName}", { fileName: file.name })
       }));
+      setRecoveryState((current) => {
+        const next = { ...current };
+        delete next[item.problemId];
+        return next;
+      });
       return;
     }
 
+    if (missingReplacementTokens.current[item.assetId] !== operationToken) {
+      return;
+    }
+    delete missingReplacementTokens.current[item.assetId];
     setRecoveryState((current) => ({
       ...current,
       [item.problemId]: projectProblemStatusMessage(result.problems[0]) ?? localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.failed", "Replacement failed")
@@ -182,10 +270,34 @@ export function WorkbenchLeftPanel({ context }: WorkbenchLeftPanelProps) {
 
   return (
     <div className="ek-workbench__default-left-panel">
-      <section className="ek-workbench__panel-section" aria-label={t("reactWorkbench.leftPanel.hierarchy.label")}>
+      <nav className="ek-workbench__panel-nav" aria-label={t("reactWorkbench.leftPanel.nav.label")}>
+        {panelViews.map((view) => (
+          <button
+            key={view.id}
+            type="button"
+            className="ek-workbench__panel-tab"
+            aria-label={`${view.label} ${view.count}`}
+            aria-pressed={activeView === view.id}
+            data-tone={view.tone}
+            onClick={() => setActiveView(view.id)}
+          >
+            <span>{view.label}</span>
+            <strong>{view.count}</strong>
+          </button>
+        ))}
+      </nav>
+
+      <section
+        className="ek-workbench__panel-section"
+        aria-label={t("reactWorkbench.leftPanel.hierarchy.label")}
+        hidden={activeView !== "scene"}
+      >
         <div className="ek-workbench__section-header">
           <h2>{t("reactWorkbench.leftPanel.hierarchy.label")}</h2>
-          <span>{model.hierarchy.totalCount}</span>
+          <span>{t("reactWorkbench.leftPanel.hierarchy.count", {
+            selectedCount: model.hierarchy.selectedCount,
+            totalCount: model.hierarchy.totalCount
+          })}</span>
         </div>
         {model.hierarchy.empty ? (
           <p className="ek-workbench__empty">{t("reactWorkbench.leftPanel.hierarchy.empty")}</p>
@@ -198,7 +310,11 @@ export function WorkbenchLeftPanel({ context }: WorkbenchLeftPanelProps) {
         )}
       </section>
 
-      <section className="ek-workbench__panel-section" aria-label={t("reactWorkbench.leftPanel.assets.label")}>
+      <section
+        className="ek-workbench__panel-section"
+        aria-label={t("reactWorkbench.leftPanel.assets.label")}
+        hidden={activeView !== "assets"}
+      >
         <div className="ek-workbench__section-header">
           <h2>{t("reactWorkbench.leftPanel.assets.label")}</h2>
           <span>{visibleAssets.length}/{workspace?.totalCount ?? model.assets.totalCount}</span>
@@ -292,7 +408,15 @@ export function WorkbenchLeftPanel({ context }: WorkbenchLeftPanelProps) {
         ) : (
           <ul className="ek-workbench__asset-list" aria-label={t("reactWorkbench.leftPanel.assets.rows.label")}>
             {visibleAssets.map((asset) => (
-              <AssetWorkspaceRow key={asset.id} context={context} asset={asset} recoveryState={recoveryState} setRecoveryState={setRecoveryState} />
+              <AssetWorkspaceRow
+                key={asset.id}
+                context={context}
+                asset={asset}
+                recoveryState={recoveryState}
+                setRecoveryState={setRecoveryState}
+                setRecoverySuccessState={setRecoverySuccessState}
+                replacementTokens={missingReplacementTokens}
+              />
             ))}
           </ul>
         )}
@@ -308,9 +432,24 @@ export function WorkbenchLeftPanel({ context }: WorkbenchLeftPanelProps) {
             ))}
           </div>
         ) : null}
+        {Object.keys(recoverySuccessState).length > 0 ? (
+          <div className="ek-workbench__recovery-list" aria-label={t("reactWorkbench.leftPanel.assets.recovery.status.label")}>
+            {Object.entries(recoverySuccessState).map(([assetId, status]) => (
+              <div key={assetId} className="ek-workbench__file-action" data-severity="success">
+                <span>{t("reactWorkbench.leftPanel.assets.recovery.success.label")}</span>
+                <strong>{assetId}</strong>
+                <small>{renderStatusMessage(context.i18n, status)}</small>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </section>
 
-      <section className="ek-workbench__panel-section" aria-label={t("reactWorkbench.leftPanel.project.label")}>
+      <section
+        className="ek-workbench__panel-section"
+        aria-label={t("reactWorkbench.leftPanel.project.label")}
+        hidden={activeView !== "project"}
+      >
         <div className="ek-workbench__section-header">
           <h2>{t("reactWorkbench.leftPanel.project.label")}</h2>
           <span>{t(model.project.statusLabelDescriptor ?? { key: "workbench.project.status.partial.label", fallback: model.project.statusLabel })}</span>
@@ -360,12 +499,16 @@ function AssetWorkspaceRow({
   context,
   asset,
   recoveryState,
-  setRecoveryState
+  setRecoveryState,
+  setRecoverySuccessState,
+  replacementTokens
 }: {
   context: ResolvedWorkbenchContext;
   asset: AssetWorkspaceItem;
   recoveryState: AssetRecoveryState;
   setRecoveryState: Dispatch<SetStateAction<AssetRecoveryState>>;
+  setRecoverySuccessState: Dispatch<SetStateAction<AssetRecoveryState>>;
+  replacementTokens: MutableRefObject<Record<string, symbol>>;
 }) {
   const t = context.i18n.t;
   const recoveryId = asset.problems.find((problem) => problem.actionLabel || problem.recoverability === "user-action")?.id ?? asset.id;
@@ -377,6 +520,16 @@ function AssetWorkspaceRow({
       return;
     }
 
+    const operationToken = Symbol(asset.id);
+    replacementTokens.current[asset.id] = operationToken;
+    setRecoverySuccessState((current) => {
+      if (!current[asset.id]) {
+        return current;
+      }
+      const next = { ...current };
+      delete next[asset.id];
+      return next;
+    });
     setRecoveryState((current) => ({
       ...current,
       [recoveryId]: localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.progress", "Replacing...")
@@ -390,12 +543,20 @@ function AssetWorkspaceRow({
     if (result.ok) {
       await context.runtime?.project();
       context.refreshProblems();
+      if (replacementTokens.current[asset.id] !== operationToken) {
+        return;
+      }
+      delete replacementTokens.current[asset.id];
       setRecoveryState((current) => ({
         ...current,
         [recoveryId]: localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.success", "Replaced with {fileName}", { fileName: file.name })
       }));
       return;
     }
+    if (replacementTokens.current[asset.id] !== operationToken) {
+      return;
+    }
+    delete replacementTokens.current[asset.id];
     setRecoveryState((current) => ({
       ...current,
       [recoveryId]: projectProblemStatusMessage(result.problems[0]) ?? localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.failed", "Replacement failed")
