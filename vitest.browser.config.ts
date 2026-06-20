@@ -17,6 +17,11 @@ export default defineConfig({
         {
           browser: "chromium",
           viewport: { width: 1280, height: 900 }
+        },
+        {
+          browser: "chromium",
+          name: "chromium-mobile",
+          viewport: { width: 390, height: 900 }
         }
       ]
     }

@@ -36,6 +36,10 @@ describe("React package build config", () => {
     const css = readFileSync(resolve(here, "../src/components/workbench.css"), "utf8");
 
     expect(css).toContain(".ek-workbench");
+    expect(css).toContain("--ek-workbench-panel-bg");
+    expect(css).toContain("--ek-workbench-surface-raised");
+    expect(css).toContain("--ek-workbench-control-height");
+    expect(css).toContain("--ek-workbench-focus");
     expect(css).not.toContain("body");
   });
 
@@ -45,6 +49,24 @@ describe("React package build config", () => {
 
     expect(css).toContain("overflow: auto;");
     expect(css).toContain("contain: paint;");
+    expect(css).toContain("var(--ek-workbench-surface");
+    expect(css).toContain("var(--ek-workbench-control-height");
+  });
+
+  it("keeps the icon dependency internal to the React implementation", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const packageJson = JSON.parse(readFileSync(resolve(here, "../package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+      peerDependencies?: Record<string, string>;
+      exports: Record<string, unknown>;
+    };
+    const publicApi = readFileSync(resolve(here, "../src/index.ts"), "utf8");
+
+    expect(packageJson.dependencies?.["@phosphor-icons/react"]).toMatch(/^\^2\./);
+    expect(packageJson.peerDependencies).not.toHaveProperty("@phosphor-icons/react");
+    expect(packageJson.exports).not.toHaveProperty("./components/WorkbenchIcon");
+    expect(publicApi).not.toContain("WorkbenchIcon");
+    expect(publicApi).not.toContain("@phosphor-icons/react");
   });
 
   it("does not require a third-party i18n runtime", () => {

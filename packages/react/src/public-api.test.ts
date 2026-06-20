@@ -136,7 +136,9 @@ describe("react public API", () => {
     expect(packageJson.publishConfig?.access).toBe("public");
     expect(packageJson.repository?.directory).toBe("packages/react");
     expect(packageJson.dependencies["@ek-aiot/3d-editor-core"]).toBe(`workspace:^${corePackageJson.version}`);
+    expect(packageJson.dependencies["@phosphor-icons/react"]).toMatch(/^\^2\./);
     expect(packageJson.peerDependencies.react).toMatch(/^\^19/);
     expect(packageJson.peerDependencies["react-dom"]).toMatch(/^\^19/);
+    expect(packageJson.peerDependencies).not.toHaveProperty("@phosphor-icons/react");
   });
 });

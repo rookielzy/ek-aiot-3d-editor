@@ -1,4 +1,6 @@
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 import React from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Group } from "three";
@@ -241,7 +243,8 @@ function copyBytes(bytes: Uint8Array): ArrayBuffer {
 }
 
 async function glbFixtureFile(): Promise<File> {
-  const bytes = await readFile("packages/core/test/fixtures/simple-box.glb");
+  const here = dirname(fileURLToPath(import.meta.url));
+  const bytes = await readFile(resolve(here, "../../core/test/fixtures/simple-box.glb"));
   return new File([toArrayBuffer(bytes)], "recovered.glb", { type: "model/gltf-binary" });
 }
 

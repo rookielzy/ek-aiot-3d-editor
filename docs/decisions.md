@@ -135,3 +135,15 @@ React 和 Vue 默认 Workbench shell 暂不引入第三方 UI 组件库。Toolba
 - 安装即用路径不应要求宿主配置、主题化或类型依赖第三方 UI library。
 - 当前 shell 需要的是编辑器专用的紧凑布局、状态按钮、文件输入和问题恢复入口，React/Vue 包内组件足够覆盖并能保持行为等价。
 - 后续如果引入菜单、tooltip、dockable layout 或复杂 tree 控件，依赖必须先包在内部组件后面，不能泄漏到 public props/types。
+
+## D12. React Workbench visual system is semantic and internal
+
+React 默认 Workbench 的专业 UI 由包内组件、`ek-` class 和语义化 `--ek-workbench-*` CSS variables 组成。布局密度、颜色、focus ring、8px 以内圆角、control height、panel spacing 和状态 tone 都属于 package-owned visual system；宿主可以覆盖 CSS variables，但不需要接入外部 design system 才能得到可用默认界面。
+
+React command bar 图标通过包内 `WorkbenchIcon` layer 使用 `@phosphor-icons/react`。该依赖是 React 包内部实现细节，不暴露在 public exports、props、render prop context 或宿主类型中。
+
+原因：
+
+- 默认 UI 应该像专业编辑器，而不是示例级 toolbar；布局和视觉基线需要在 package 内长期稳定。
+- CSS variables 给宿主足够的品牌化入口，同时避免把主题对象、第三方组件类型或 icon library 变成公共 contract。
+- 图标依赖可以改善按钮可扫读性，但必须保持可替换，不能要求宿主代码 deep import 或传入第三方 icon 组件。
