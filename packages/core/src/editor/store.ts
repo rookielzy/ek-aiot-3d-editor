@@ -10,6 +10,8 @@ export class EditorStore {
   #snapshot: SceneSnapshot;
   #subscriptions = new SubscriptionSet();
   #disposed = false;
+  #suppressNotifyDepth = 0;
+  #pendingNotify = false;
 
   constructor(initialSnapshot: SceneSnapshot = createEmptySnapshot()) {
     assertValidSceneSnapshot(initialSnapshot);
@@ -25,12 +27,44 @@ export class EditorStore {
     return this.#subscriptions.subscribe(listener);
   }
 
+  /**
+   * Apply a store mutation without notifying snapshot subscribers.
+   * Used so command side-effects (for example project asset payload registration)
+   * can complete before runtime projection observes the new snapshot.
+   */
+  runWithoutNotify<T>(operation: () => T): T {
+    this.#assertActive();
+    this.#suppressNotifyDepth += 1;
+    try {
+      return operation();
+    } finally {
+      this.#suppressNotifyDepth -= 1;
+    }
+  }
+
   replaceSnapshot(nextSnapshot: SceneSnapshot): SceneSnapshot {
     this.#assertActive();
     assertValidSceneSnapshot(nextSnapshot);
     this.#snapshot = immutableClone(nextSnapshot);
-    this.#subscriptions.notify(this.#snapshot);
+    if (this.#suppressNotifyDepth === 0) {
+      this.#pendingNotify = false;
+      this.#subscriptions.notify(this.#snapshot);
+    } else {
+      this.#pendingNotify = true;
+    }
     return this.#snapshot;
+  }
+
+  /**
+   * Flush a notification deferred by {@link runWithoutNotify}, if any.
+   */
+  flushNotify(): void {
+    this.#assertActive();
+    if (!this.#pendingNotify) {
+      return;
+    }
+    this.#pendingNotify = false;
+    this.#subscriptions.notify(this.#snapshot);
   }
 
   update(producer: SnapshotProducer): SceneSnapshot {

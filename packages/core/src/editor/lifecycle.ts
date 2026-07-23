@@ -89,13 +89,17 @@ export class CoreEditor implements EditorWithGlbImport {
   }
 
   dispatch(command: Command): CommandResult {
-    const result = this.dispatcher.dispatch(command);
+    // Suppress store notifications until project asset payloads are registered.
+    // Runtime projection must not observe imported objects before their local
+    // sources exist in projectAssets, or it will emit asset-unresolved permanently.
+    const result = this.store.runWithoutNotify(() => this.dispatcher.dispatch(command));
     if (result.ok) {
       try {
         this.#registerCommandProjectAsset(command, result.snapshot);
       } catch {
         // Transient payload registration must not change durable command results.
       }
+      this.store.flushNotify();
       this.#notifyAssetWorkspaceSubscribers();
     }
     return result;

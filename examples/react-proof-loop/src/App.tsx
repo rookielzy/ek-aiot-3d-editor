@@ -1,16 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import {
-  AssetResolverBridge,
   type EditorRuntimeOptions,
-  type EditorWithGlbImport,
   type Problem,
   type WorkbenchModel
 } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench, useEditor, type WorkbenchContext, type WorkbenchLocale } from "@ek-aiot/3d-editor-react";
-import simpleBoxUrl from "../../../packages/core/test/fixtures/simple-box.glb?url";
 import { createDemoGltfLoader } from "./demo-gltf-loader";
-
-const RECOVERABLE_ASSET_ID = "recoverable-box";
 
 const demoLoader = createDemoGltfLoader();
 
@@ -21,51 +16,12 @@ export interface AppProps {
 }
 
 export function App({ locale, loader = demoLoader, rendererFactory }: AppProps = {}) {
-  const editor = useEditor() as EditorWithGlbImport;
-  const resolver = useMemo(() => new AssetResolverBridge((asset) => {
-    if (asset.kind !== "glb" || asset.id === RECOVERABLE_ASSET_ID) {
-      return null;
-    }
-    return { uri: simpleBoxUrl, metadata: { assetId: asset.id, ...(asset.label ? { label: asset.label } : {}) } };
-  }), []);
+  const editor = useEditor();
   const [runtimeReady, setRuntimeReady] = useState(false);
-
-  useEffect(() => {
-    if (editor.getSnapshot().objects.box) {
-      return;
-    }
-
-    editor.dispatch({ type: "import-glb", objectId: "box", name: "Simple box", asset: { id: "simple-box", label: "Simple box" } });
-    editor.dispatch({
-      type: "import-glb",
-      objectId: "detail",
-      name: "Detail block",
-      asset: { id: "detail-box", label: "Detail block" },
-      transform: { position: [-1.35, 0, 0] }
-    });
-    editor.dispatch({
-      type: "import-glb",
-      objectId: "recoverable",
-      name: "Recoverable asset",
-      asset: { id: RECOVERABLE_ASSET_ID, label: "Recoverable asset" },
-      transform: { position: [1.35, 0, 0] }
-    });
-    editor.dispatch({ type: "select-object", objectId: "box" });
-    editor.dispatch({
-      type: "set-environment",
-      environment: {
-        lighting: { source: { kind: "none" } },
-        background: { source: { kind: "solid", color: "#eef3f8" } }
-      }
-    });
-    editor.dispatch({ type: "add-light", light: { id: "fill", kind: "ambient", intensity: 0.6 } });
-    editor.restore(editor.serialize());
-  }, [editor]);
 
   return (
     <EditorWorkbench
       editor={editor}
-      resolver={resolver}
       loader={loader}
       rendererFactory={rendererFactory}
       locale={locale}

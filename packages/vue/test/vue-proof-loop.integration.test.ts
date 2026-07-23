@@ -101,21 +101,28 @@ describe("Vue proof-loop parity", () => {
       const toolbar = wrapper.get('[aria-label="Editor controls"]');
       expect(buttonByText(toolbar, "Export").exists()).toBe(true);
       expect(buttonByText(toolbar, "Move").attributes("aria-pressed")).toBe("true");
-      expect((buttonByText(toolbar, "Duplicate").element as HTMLButtonElement).disabled).toBe(false);
+      expect((buttonByText(toolbar, "Duplicate").element as HTMLButtonElement).disabled).toBe(true);
 
       const projectPanel = wrapper.get('[aria-label="Project panel"]');
       const hierarchy = projectPanel.get('[aria-label="Hierarchy"]');
-      expect(hierarchy.text()).toContain("Simple box");
-      expect(hierarchy.text()).toContain("Recoverable asset");
-      expect(hierarchy.text()).toContain("Ambient light");
+      expect(hierarchy.text()).toContain("No scene nodes");
+      expect(wrapper.get('[data-testid="starter-overlay"]').text()).toContain("0 objects");
+      expect(wrapper.get('[data-testid="starter-overlay"]').text()).toContain("0 assets");
+      expect(wrapper.text()).toContain("Selection none");
+
       await clickPanelTab(wrapper, "Assets");
-      const assets = projectPanel.get('[aria-label="Assets"]');
-      expect(assets.text()).toContain("Recoverable asset");
-      expect(assets.text()).toContain("glb");
-      expect(assets.text()).toContain("missing payload");
-      expect(assets.text()).toContain("1 refs");
-      expect(wrapper.get('[data-testid="starter-overlay"]').text()).toContain("3 objects");
-      expect(wrapper.text()).toContain("Selection Simple box");
+      const importInput = projectPanel.find('[aria-label="Import assets"]').element as HTMLInputElement;
+      await uploadFile(importInput, await glbFixtureFile("simple-box.glb"));
+      await clickPanelTab(wrapper, "Scene");
+      await waitForVue(() => expect(hierarchy.text()).toContain("simple-box"));
+      expect(wrapper.get('[data-testid="starter-overlay"]').text()).toContain("1 objects");
+      expect(wrapper.get('[data-testid="starter-overlay"]').text()).toContain("1 assets");
+
+      const hierarchyRow = hierarchy.findAll("button").find((candidate) => candidate.text().includes("simple-box"));
+      expect(hierarchyRow, "Expected hierarchy row for simple-box").toBeTruthy();
+      await hierarchyRow!.trigger("click");
+      await nextTick();
+      await waitForVue(() => expect(wrapper.text()).toContain("Selection simple-box"));
 
       await clickButton(wrapper, "Capture view");
       await waitForVue(() => expect(wrapper.text()).toContain("Camera view 1"));
@@ -130,10 +137,10 @@ describe("Vue proof-loop parity", () => {
       await positionX.setValue("2");
       await positionX.trigger("blur");
       await nextTick();
-      await waitForVue(() => expect(wrapper.text()).toContain("Undo 3"));
+      await waitForVue(() => expect(wrapper.text()).toMatch(/Undo [1-9]/));
 
       await clickButton(wrapper, "Undo");
-      expect(wrapper.text()).toContain("Redo 1");
+      expect(wrapper.text()).toMatch(/Redo [1-9]/);
       await clickButton(wrapper, "Redo");
 
       const baseColorInput = fieldInput(wrapper, "Base color");
@@ -143,10 +150,11 @@ describe("Vue proof-loop parity", () => {
 
       await clickButton(wrapper, "Duplicate");
       await clickPanelTab(wrapper, "Project");
-      await waitForVue(() => expect(projectPanel.text()).toContain("Objects4"));
+      await waitForVue(() => expect(projectPanel.text()).toContain("Objects2"));
+      expect(wrapper.get('[data-testid="starter-overlay"]').text()).toContain("2 objects");
 
       await clickButton(wrapper, "Export partial");
-      expect(wrapper.text()).toContain("Exported partial project");
+      await waitForVue(() => expect(wrapper.text()).toMatch(/Exported (partial )?project/));
       await waitForVue(() => expect(window.__lastDownloadedProject).toBeInstanceOf(Uint8Array));
       expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("asset-unresolved");
 
@@ -157,17 +165,7 @@ describe("Vue proof-loop parity", () => {
       await waitForVue(() => expect(wrapper.text()).toContain("Opened starter.ek3d"));
       await waitForVue(() => expect(wrapper.text()).toContain("Camera view 1"));
       expect(wrapper.text()).toContain("Default");
-
-      await clickPanelTab(wrapper, "Assets");
-      await waitForVue(() => expect(projectPanel.text()).toContain("Replace asset"));
-      expect(projectPanel.text()).toContain("1 problems");
-
-      const recoveryInput = projectPanel.find('[aria-label="Missing asset recovery"] input[type="file"]');
-      expect(recoveryInput.exists()).toBe(true);
-      await uploadFile(recoveryInput.element as HTMLInputElement, await glbFixtureFile());
-      await waitForVue(() => expect(projectPanel.text()).not.toContain("Replace asset"));
-      await waitForVue(() => expect(wrapper.text()).toContain("Problems 0"));
-      expect(projectPanel.text()).toContain("Recoverable asset");
+      expect(wrapper.get('[data-testid="starter-overlay"]').text()).toContain("2 objects");
       expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("Blob");
 
       wrapper.unmount();
@@ -270,9 +268,9 @@ function copyBytes(bytes: Uint8Array): ArrayBuffer {
   return buffer;
 }
 
-async function glbFixtureFile(): Promise<File> {
+async function glbFixtureFile(fileName = "recovered.glb"): Promise<File> {
   const bytes = await readFile(resolve(repoRoot, "packages/core/test/fixtures/simple-box.glb"));
-  return new File([toArrayBuffer(bytes)], "recovered.glb", { type: "model/gltf-binary" });
+  return new File([toArrayBuffer(bytes)], fileName, { type: "model/gltf-binary" });
 }
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {

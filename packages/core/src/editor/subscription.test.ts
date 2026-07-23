@@ -42,4 +42,27 @@ describe("editor subscriptions", () => {
 
     expect(listener).not.toHaveBeenCalled();
   });
+
+  it("defers snapshot notifications until flushNotify after runWithoutNotify", () => {
+    const store = new EditorStore(createEmptySnapshot("scene-a"));
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    store.runWithoutNotify(() => {
+      store.update((snapshot) => ({
+        ...snapshot,
+        scene: {
+          ...snapshot.scene,
+          name: "Deferred"
+        }
+      }));
+      expect(listener).not.toHaveBeenCalled();
+      expect(store.getSnapshot().scene.name).toBe("Deferred");
+    });
+
+    expect(listener).not.toHaveBeenCalled();
+    store.flushNotify();
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].scene.name).toBe("Deferred");
+  });
 });

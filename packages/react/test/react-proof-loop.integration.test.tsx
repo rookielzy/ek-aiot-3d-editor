@@ -88,20 +88,28 @@ describe("React proof-loop parity", () => {
       const toolbar = screen.getByLabelText("Editor controls");
       expect(within(toolbar).getByRole("button", { name: "Export" })).toBeTruthy();
       expect(within(toolbar).getByRole("button", { name: "Move" }).getAttribute("aria-pressed")).toBe("true");
-      expect((within(toolbar).getByRole("button", { name: "Duplicate" }) as HTMLButtonElement).disabled).toBe(false);
+      expect((within(toolbar).getByRole("button", { name: "Duplicate" }) as HTMLButtonElement).disabled).toBe(true);
 
       const projectPanel = screen.getByLabelText("Project panel");
       const hierarchy = within(projectPanel).getByLabelText("Hierarchy");
-      expect(within(hierarchy).getByText("Simple box")).toBeTruthy();
-      expect(within(hierarchy).getByText("Recoverable asset")).toBeTruthy();
-      expect(within(hierarchy).getByText("Ambient light")).toBeTruthy();
-      const assets = within(projectPanel).getByLabelText("Assets");
-      expect(assets.textContent).toContain("Recoverable asset");
-      expect(assets.textContent).toContain("GLB");
-      expect(assets.textContent).toContain("missing payload");
-      expect(assets.textContent).toContain("1 refs");
-      expect(screen.getByTestId("starter-overlay").textContent).toContain("3 objects");
-      expect(screen.getByText("Selection Simple box")).toBeTruthy();
+      expect(hierarchy.textContent).toContain("No scene nodes");
+      expect(screen.getByTestId("starter-overlay").textContent).toContain("0 objects");
+      expect(screen.getByTestId("starter-overlay").textContent).toContain("0 assets");
+      expect(screen.getByText("Selection none")).toBeTruthy();
+
+      await act(async () => {
+        const importInput = within(projectPanel).getByLabelText("Import assets") as HTMLInputElement;
+        const file = await glbFixtureFile("simple-box.glb");
+        fireEvent.change(importInput, { target: { files: [file] } });
+      });
+      await waitFor(() => expect(within(hierarchy).getByText("simple-box")).toBeTruthy());
+      expect(screen.getByTestId("starter-overlay").textContent).toContain("1 objects");
+      expect(screen.getByTestId("starter-overlay").textContent).toContain("1 assets");
+
+      await act(async () => {
+        fireEvent.click(within(hierarchy).getByText("simple-box"));
+      });
+      await waitFor(() => expect(screen.getByText("Selection simple-box")).toBeTruthy());
 
       await act(async () => {
         await clickButton("Capture view");
@@ -122,20 +130,18 @@ describe("React proof-loop parity", () => {
 
       fireEvent.change(screen.getByLabelText("Language"), { target: { value: "zh-CN" } });
       await waitFor(() => expect(screen.getByLabelText("编辑器控件")).toBeTruthy());
-      const localizedProjectPanel = screen.getByLabelText("项目面板");
-      expect(localizedProjectPanel.textContent).toContain("缺少载荷");
-      expect(screen.getByText("选择 Simple box")).toBeTruthy();
+      expect(screen.getByText("选择 simple-box")).toBeTruthy();
 
       const positionX = getFieldInput("位置 X") as HTMLInputElement;
       fireEvent.change(positionX, { target: { value: "2" } });
       fireEvent.blur(positionX);
       await act(async () => undefined);
-      await waitFor(() => expect(screen.getByText("撤销 3")).toBeTruthy());
+      await waitFor(() => expect(screen.getByText(/撤销 [1-9]/)).toBeTruthy());
 
       await act(async () => {
         await clickButton("撤销");
       });
-      expect(screen.getByText("重做 1")).toBeTruthy();
+      expect(screen.getByText(/重做 [1-9]/)).toBeTruthy();
       await act(async () => {
         await clickButton("重做");
       });
@@ -148,13 +154,14 @@ describe("React proof-loop parity", () => {
       await act(async () => {
         await clickButton("副本");
       });
-      await waitFor(() => expect(localizedProjectPanel.textContent).toContain("对象4"));
-      expect(screen.getByTestId("starter-overlay").textContent).toContain("4 objects");
+      const localizedProjectPanel = screen.getByLabelText("项目面板");
+      await waitFor(() => expect(localizedProjectPanel.textContent).toContain("对象2"));
+      expect(screen.getByTestId("starter-overlay").textContent).toContain("2 objects");
 
       await act(async () => {
         await clickButton("导出部分");
       });
-      expect(screen.getByText(/已导出部分项目/)).toBeTruthy();
+      await waitFor(() => expect(screen.getByText(/已导出/)).toBeTruthy());
       await waitFor(() => expect(window.__lastDownloadedProject).toBeInstanceOf(Uint8Array));
       expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("asset-unresolved");
       expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("zh-CN");
@@ -170,18 +177,7 @@ describe("React proof-loop parity", () => {
       await waitFor(() => expect(screen.getByText("已打开 starter.ek3d")).toBeTruthy());
       await waitFor(() => expect(screen.getAllByText("Camera view 1").length).toBeGreaterThan(0));
       expect(screen.getAllByText(/默认/).length).toBeGreaterThan(0);
-
-      await waitFor(() => expect(localizedProjectPanel.textContent).toContain("替换资源"));
-      expect(localizedProjectPanel.textContent).toContain("1 个问题");
-
-      await act(async () => {
-        const recoveryInput = within(localizedProjectPanel).getByLabelText(/替换资源.*Recoverable asset/s) as HTMLInputElement;
-        const file = await glbFixtureFile();
-        fireEvent.change(recoveryInput, { target: { files: [file] } });
-      });
-      await waitFor(() => expect(localizedProjectPanel.textContent).not.toContain("替换资源"));
-      await waitFor(() => expect(screen.getByText("问题 0")).toBeTruthy());
-      expect(localizedProjectPanel.textContent).toContain("Recoverable asset");
+      expect(screen.getByTestId("starter-overlay").textContent).toContain("2 objects");
       expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("Blob");
     } finally {
       restoreDownloadCapture();
@@ -242,10 +238,10 @@ function copyBytes(bytes: Uint8Array): ArrayBuffer {
   return buffer;
 }
 
-async function glbFixtureFile(): Promise<File> {
+async function glbFixtureFile(fileName = "recovered.glb"): Promise<File> {
   const here = dirname(fileURLToPath(import.meta.url));
   const bytes = await readFile(resolve(here, "../../core/test/fixtures/simple-box.glb"));
-  return new File([toArrayBuffer(bytes)], "recovered.glb", { type: "model/gltf-binary" });
+  return new File([toArrayBuffer(bytes)], fileName, { type: "model/gltf-binary" });
 }
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {

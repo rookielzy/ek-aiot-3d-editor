@@ -1,7 +1,6 @@
 <template>
   <EditorWorkbench
     :editor="editor"
-    :resolver="resolver"
     :loader="loader ?? demoLoader"
     :renderer-factory="rendererFactory"
     :locale="locale"
@@ -23,18 +22,13 @@
 
 <script setup lang="ts">
 import {
-  AssetResolverBridge,
   type EditorRuntimeOptions,
-  type EditorWithGlbImport,
   type Problem,
   type WorkbenchModel
 } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench, useEditor, type WorkbenchLocale } from "@ek-aiot/3d-editor-vue";
 import { ref } from "vue";
-import simpleBoxUrl from "../../../packages/core/test/fixtures/simple-box.glb?url";
 import { createDemoGltfLoader } from "./demo-gltf-loader";
-
-const RECOVERABLE_ASSET_ID = "recoverable-box";
 
 defineProps<{
   locale?: WorkbenchLocale;
@@ -42,44 +36,9 @@ defineProps<{
   rendererFactory?: EditorRuntimeOptions["rendererFactory"];
 }>();
 
-const { editor: baseEditor } = useEditor();
-const editor = baseEditor as EditorWithGlbImport;
+const { editor } = useEditor();
 const runtimeReady = ref(false);
-const resolver = new AssetResolverBridge((asset) => {
-  if (asset.kind !== "glb" || asset.id === RECOVERABLE_ASSET_ID) {
-    return null;
-  }
-  return { uri: simpleBoxUrl, metadata: { assetId: asset.id, ...(asset.label ? { label: asset.label } : {}) } };
-});
 const demoLoader = createDemoGltfLoader();
-
-if (!editor.getSnapshot().objects.box) {
-  editor.dispatch({ type: "import-glb", objectId: "box", name: "Simple box", asset: { id: "simple-box", label: "Simple box" } });
-  editor.dispatch({
-    type: "import-glb",
-    objectId: "detail",
-    name: "Detail block",
-    asset: { id: "detail-box", label: "Detail block" },
-    transform: { position: [-1.35, 0, 0] }
-  });
-  editor.dispatch({
-    type: "import-glb",
-    objectId: "recoverable",
-    name: "Recoverable asset",
-    asset: { id: RECOVERABLE_ASSET_ID, label: "Recoverable asset" },
-    transform: { position: [1.35, 0, 0] }
-  });
-  editor.dispatch({ type: "select-object", objectId: "box" });
-  editor.dispatch({
-    type: "set-environment",
-    environment: {
-      lighting: { source: { kind: "none" } },
-      background: { source: { kind: "solid", color: "#eef3f8" } }
-    }
-  });
-  editor.dispatch({ type: "add-light", light: { id: "fill", kind: "ambient", intensity: 0.6 } });
-  editor.restore(editor.serialize());
-}
 
 function formatProblems(runtimeProblems: readonly Problem[], model: WorkbenchModel): string {
   if (model.problems.totalCount === 0) {

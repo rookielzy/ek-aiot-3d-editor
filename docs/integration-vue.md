@@ -233,9 +233,9 @@ await context.assets.importFiles({
 pnpm --filter @ek-aiot/vue-proof-loop dev
 ```
 
-示例首屏就是可操作 workbench，不是 landing page。示例代码只保留真实宿主通常需要拥有的部分：创建 editor、初始化 starter snapshot、配置 resolver/loader、选择可选 renderer factory，以及一个很薄的 viewport overlay。toolbar、hierarchy、assets、project status、missing-asset recovery、inspector 和 status 都来自 `@ek-aiot/3d-editor-vue` 默认 Workbench。
+示例首屏就是可操作 workbench，不是 landing page。初始化时是干净空画布（无默认 seed 对象/资产）。示例代码只保留真实宿主通常需要拥有的部分：创建 editor、配置 loader、选择可选 renderer factory，以及一个很薄的 viewport overlay。toolbar、hierarchy、assets、project status、missing-asset recovery、inspector 和 status 都来自 `@ek-aiot/3d-editor-vue` 默认 Workbench。
 
-默认 UI 可以完成 starter flow：选择 hierarchy row、viewport picking 或打开 `Marquee` 后使用 marquee selection，capture/edit/default/apply authored camera view，编辑 Transform/Material inspector、在 expanded GLB 上选择 broad object 或 material slot target、切换 helper/snap/transform、undo/redo、duplicate、搜索/过滤资产、export partial package、通过 Open 重新载入 `.ek3d`、从左栏恢复缺失资产，以及对 registered GLB 执行 reimport。缺失资产恢复使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem；GLB reimport 使用 `context.assets.reimportGlbAsset()`，提交 replacement manifest 和 target remap，并在按钮反馈中显示 exact/remapped/new/unresolved summary。
+默认 UI 可以完成 starter flow：从空场景导入 GLB、选择 hierarchy row、viewport picking 或打开 `Marquee` 后使用 marquee selection，capture/edit/default/apply authored camera view，编辑 Transform/Material inspector、在 expanded GLB 上选择 broad object 或 material slot target、切换 helper/snap/transform、undo/redo、duplicate、搜索/过滤资产、export partial package、通过 Open 重新载入 `.ek3d`、从左栏恢复缺失资产，以及对 registered GLB 执行 reimport。缺失资产恢复使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem；GLB reimport 使用 `context.assets.reimportGlbAsset()`，提交 replacement manifest 和 target remap，并在按钮反馈中显示 exact/remapped/new/unresolved summary。
 
 浏览器证据通过仓库根目录命令运行：
 
@@ -243,7 +243,7 @@ pnpm --filter @ek-aiot/vue-proof-loop dev
 pnpm test:browser
 ```
 
-该命令使用 headless Chromium 验证 Vue starter 的默认 workbench 区域、selection、transform/history、material inspector smoke、project export/open、missing-asset recovery、problem status 和 canvas 非空渲染状态，并和 React starter 保持同等行为。它不是端到端托管发布测试，也不承诺完整资产库、外部 paste、数据绑定或事件编排能力。
+该命令使用 headless Chromium 验证 Vue starter 的默认 workbench 区域、selection、transform/history、material inspector smoke、project export/open、problem status 和 canvas 非空渲染状态，并和 React starter 保持同等行为。它不是端到端托管发布测试，也不承诺完整资产库、外部 paste、数据绑定或事件编排能力。
 
 ## 响应式边界
 

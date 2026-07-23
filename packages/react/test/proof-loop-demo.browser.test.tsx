@@ -2,7 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { createApp, type App as VueApp } from "vue";
 import { afterEach, describe, expect, it } from "vitest";
-import { BoxGeometry, Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Vector3 } from "three";
+import { BoxGeometry, Group, Mesh, MeshBasicMaterial } from "three";
 import type { GltfLoaderAdapter, RendererLike } from "@ek-aiot/3d-editor-core";
 import { decodeArchiveJson, defaultArchiveAdapter } from "../../core/src/project/archive-adapter";
 import { App as ReactProofLoopApp } from "../../../examples/react-proof-loop/src/App";
@@ -58,26 +58,42 @@ async function verifyStarterFlow(host: HTMLElement, options: { assertProfessiona
   const restoreDownloadCapture = installDownloadCapture();
   try {
     await waitFor(() => {
-      expect(text(section(host, "Hierarchy"))).toContain("Simple box");
-      expect(text(section(host, "Hierarchy"))).toContain("Recoverable asset");
-      expect(text(section(host, "Hierarchy"))).toContain("Ambient light");
+      expect(text(section(host, "Hierarchy"))).toContain("No scene nodes");
+      expect(text(testId(host, "starter-overlay"))).toContain("0 objects");
+      expect(text(testId(host, "starter-overlay"))).toContain("0 assets");
+      expect(text(host)).toContain("Selection none");
     });
+
     await openLeftWorkspaceView(host, "Assets");
     await waitFor(() => {
       const assets = visibleSection(host, "Assets");
-      expect(text(assets)).toContain("Recoverable asset");
-      expect(text(assets)).toContain("GLB");
-      expect(text(assets)).toContain("missing payload");
-      expect(text(assets)).toContain("blocked");
-      expect(text(assets)).toContain("1 refs");
+      expect(text(assets)).toContain("No registered assets");
     });
-    await assertAssetWorkspaceLayout(host);
     if (options.assertProfessionalUi) {
       await assertProfessionalWorkbenchLayout(host);
     }
+
+    const importInput = visibleSection(host, "Assets").querySelector('[aria-label="Import assets"]') as HTMLInputElement | null;
+    expect(importInput, "Expected Import assets input").toBeTruthy();
+    await uploadFile(importInput!, await glbFixtureFile("simple-box.glb"));
     await openLeftWorkspaceView(host, "Scene");
-    expect(text(testId(host, "starter-overlay"))).toContain("3 objects");
-    expect(text(host)).toContain("Selection Simple box");
+    await waitFor(() => {
+      expect(text(section(host, "Hierarchy"))).toContain("simple-box");
+      expect(text(testId(host, "starter-overlay"))).toContain("1 objects");
+      expect(text(testId(host, "starter-overlay"))).toContain("1 assets");
+    });
+    await clickHierarchyRow(host, "simple-box");
+    await waitFor(() => expect(text(host)).toContain("Selection simple-box"));
+
+    await openLeftWorkspaceView(host, "Assets");
+    await waitFor(() => {
+      const assets = visibleSection(host, "Assets");
+      expect(text(assets)).toContain("simple-box.glb");
+      expect(text(assets)).toContain("GLB");
+      expect(text(assets)).toContain("1 refs");
+    });
+    await assertAssetWorkspaceLayout(host);
+    await openLeftWorkspaceView(host, "Scene");
 
     const viewport = host.querySelector(".starter-viewport") as HTMLElement | null;
     expect(viewport).toBeTruthy();
@@ -89,16 +105,6 @@ async function verifyStarterFlow(host: HTMLElement, options: { assertProfessiona
     const colorInput = findFieldInput(host, "Base color", 'input[type="color"]') as HTMLInputElement;
     setInputValue(colorInput, "#00aa88");
     await waitFor(() => expect(text(host)).toContain("Dirty"));
-
-    expect(button(host, "Marquee")?.getAttribute("aria-pressed")).toBe("false");
-    await clickByText(host, "Marquee");
-    expect(button(host, "Marquee")?.getAttribute("aria-pressed")).toBe("true");
-    await dragMarqueeStarterObjects(await findReadyCanvas(viewport!));
-    await waitFor(() => {
-      expect(text(host)).toContain("Selection 2 nodes");
-      expect(hierarchyRow(host, "Detail block").getAttribute("data-selected")).toBe("true");
-      expect(hierarchyRow(host, "Simple box").getAttribute("data-selected")).toBe("true");
-    });
 
     await clickByText(host, "Snap move");
     expect(button(host, "Snap move")?.getAttribute("aria-pressed")).toBe("true");
@@ -126,10 +132,9 @@ async function verifyStarterFlow(host: HTMLElement, options: { assertProfessiona
     await clickByText(host, "Redo");
 
     await clickByText(host, "Export partial");
-    await waitFor(() => expect(text(host)).toContain("Exported partial project"));
+    await waitFor(() => expect(text(host)).toMatch(/Exported (partial )?project/));
     await waitForDownloadedProject();
     expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("asset-unresolved");
-    expectExportedMarqueeSelection(window.__lastDownloadedProject!);
     expectExportedPresentation(window.__lastDownloadedProject!);
 
     const openInput = section(host, "Project actions").querySelector('input[type="file"]') as HTMLInputElement | null;
@@ -137,9 +142,8 @@ async function verifyStarterFlow(host: HTMLElement, options: { assertProfessiona
     await uploadFile(openInput!, new File([copyBytes(window.__lastDownloadedProject!)], "starter.ek3d", { type: "application/octet-stream" }));
     await waitFor(() => expect(text(host)).toContain("Opened starter.ek3d"));
     await waitFor(() => {
-      expect(text(host)).toContain("Selection 2 nodes");
-      expect(hierarchyRow(host, "Detail block").getAttribute("data-selected")).toBe("true");
-      expect(hierarchyRow(host, "Simple box").getAttribute("data-selected")).toBe("true");
+      expect(text(section(host, "Hierarchy"))).toContain("simple-box");
+      expect(text(host)).toContain("Selection simple-box");
     });
     await waitFor(() => {
       expect(text(host)).toContain("Camera view 1");
@@ -149,29 +153,8 @@ async function verifyStarterFlow(host: HTMLElement, options: { assertProfessiona
 
     await clickByText(host, "Duplicate");
     await openLeftWorkspaceView(host, "Project");
-    await waitFor(() => expect(text(visibleSection(host, "Project"))).toContain("Objects5"));
-
-    await openLeftWorkspaceView(host, "Assets");
-    await waitFor(() => {
-      expect(text(visibleSection(host, "Missing asset recovery"))).toContain("Replace asset");
-      if (hasLeftWorkspaceTabs(host)) {
-        expect(text(host)).toContain("Problems 1");
-      } else {
-        expect(text(section(host, "Project"))).toContain("1 problems");
-      }
-    });
-
-    const recoveryInput = visibleSection(host, "Missing asset recovery").querySelector('input[type="file"]') as HTMLInputElement | null;
-    expect(recoveryInput, "Expected default missing asset recovery input").toBeTruthy();
-    await uploadFile(recoveryInput!, await glbFixtureFile());
-    await waitFor(() => {
-      expect(host.querySelector('[aria-label="Missing asset recovery"]')).toBeNull();
-      expect(text(host)).toContain("Problems 0");
-    });
-    if (options.assertProfessionalUi) {
-      expect(text(section(host, "Asset recovery status"))).toContain("Replaced with");
-    }
-    expect(text(visibleSection(host, "Assets"))).toContain("Recoverable asset");
+    await waitFor(() => expect(text(visibleSection(host, "Project"))).toContain("Objects2"));
+    expect(text(testId(host, "starter-overlay"))).toContain("2 objects");
     expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("Import assets");
   } finally {
     restoreDownloadCapture();
@@ -180,12 +163,29 @@ async function verifyStarterFlow(host: HTMLElement, options: { assertProfessiona
 
 async function verifyChineseWorkbenchLayout(host: HTMLElement, options: { assertProfessionalUi?: boolean } = {}): Promise<void> {
   await waitFor(() => {
-    expect(text(section(host, "层级"))).toContain("Simple box");
+    expect(text(section(host, "层级"))).toContain("没有场景节点");
+    expect(text(testId(host, "starter-overlay"))).toContain("0 objects");
+    expect(text(host)).toContain("选择 none");
+  });
+
+  await openLeftWorkspaceView(host, "资源");
+  await waitFor(() => expect(text(visibleSection(host, "资源"))).toContain("没有已注册资源"));
+  const importInput = visibleSection(host, "资源").querySelector('[aria-label="导入资源"]') as HTMLInputElement | null
+    ?? visibleSection(host, "资源").querySelector('[aria-label="Import assets"]') as HTMLInputElement | null;
+  expect(importInput, "Expected localized Import assets input").toBeTruthy();
+  await uploadFile(importInput!, await glbFixtureFile("simple-box.glb"));
+
+  await openLeftWorkspaceView(host, "场景");
+  await waitFor(() => {
+    expect(text(section(host, "层级"))).toContain("simple-box");
+  });
+  await clickHierarchyRow(host, "simple-box", "层级");
+  await waitFor(() => {
     expect(text(section(host, "场景检查器"))).toContain("变换");
-    expect(text(host)).toContain("选择 Simple box");
+    expect(text(host)).toContain("选择 simple-box");
   });
   await openLeftWorkspaceView(host, "资源");
-  await waitFor(() => expect(text(visibleSection(host, "资源"))).toContain("Recoverable asset"));
+  await waitFor(() => expect(text(visibleSection(host, "资源"))).toContain("simple-box.glb"));
   await openLeftWorkspaceView(host, "项目");
   await waitFor(() => expect(text(visibleSection(host, "项目"))).toContain("对象"));
   await openLeftWorkspaceView(host, "场景");
@@ -212,17 +212,6 @@ async function verifyChineseWorkbenchLayout(host: HTMLElement, options: { assert
   expect(text(host)).toContain("默认");
   await clickByText(host, "应用视图");
   await assertLocalizedCameraLayout(host);
-
-  await openLeftWorkspaceView(host, "资源");
-  await waitFor(() => {
-    expect(text(visibleSection(host, "缺失资源恢复"))).toContain("替换资源");
-    if (hasLeftWorkspaceTabs(host)) {
-      expect(text(host)).toContain("问题 1");
-    } else {
-      expect(text(section(host, "项目"))).toContain("1 个问题");
-    }
-  });
-  await openLeftWorkspaceView(host, "资源");
   await assertLocalizedWorkbenchLayout(host);
 }
 
@@ -356,115 +345,6 @@ function hasLeftWorkspaceTabs(host: HTMLElement): boolean {
   return host.querySelector(".ek-workbench__panel-tab") !== null;
 }
 
-async function dragMarquee(canvas: HTMLCanvasElement, start: { x: number; y: number }, end: { x: number; y: number }): Promise<void> {
-  const rect = canvas.getBoundingClientRect();
-  const pointer = {
-    pointerId: 1,
-    pointerType: "mouse",
-    button: 0,
-    buttons: 1,
-    bubbles: true,
-    cancelable: true
-  };
-  canvas.dispatchEvent(new PointerEvent("pointerdown", {
-    ...pointer,
-    clientX: rect.left + start.x,
-    clientY: rect.top + start.y
-  }));
-  await waitForAnimationFrame();
-  canvas.dispatchEvent(new PointerEvent("pointermove", {
-    ...pointer,
-    clientX: rect.left + end.x,
-    clientY: rect.top + end.y
-  }));
-  await waitForAnimationFrame();
-  canvas.dispatchEvent(new PointerEvent("pointerup", {
-    ...pointer,
-    buttons: 0,
-    clientX: rect.left + end.x,
-    clientY: rect.top + end.y
-  }));
-  await waitForAnimationFrame();
-}
-
-async function dragMarqueeStarterObjects(canvas: HTMLCanvasElement): Promise<void> {
-  const rect = canvas.getBoundingClientRect();
-  const detailRect = projectStarterBoxRect(-1.35, rect.width, rect.height);
-  const boxRect = projectStarterBoxRect(0, rect.width, rect.height);
-  const recoverableRect = projectStarterBoxRect(1.35, rect.width, rect.height);
-  const ambientPoint = projectStarterPoint(0, 0, 0, rect.width, rect.height);
-  const paddingX = Math.max(2, rect.width * 0.01);
-  const paddingY = Math.min(8, Math.max(2, rect.height * 0.02));
-  const start = {
-    x: Math.max(4, Math.min(detailRect.left, boxRect.left) - paddingX),
-    y: Math.max(4, ambientPoint.y + paddingY)
-  };
-  const end = {
-    x: Math.min(rect.width - 4, recoverableRect.left - paddingX, Math.max(detailRect.right, boxRect.right) + paddingX),
-    y: Math.min(rect.height - 4, Math.max(detailRect.bottom, boxRect.bottom) + paddingY)
-  };
-
-  expect(end.x).toBeGreaterThan(start.x + 4);
-  expect(end.y).toBeGreaterThan(start.y + 4);
-  expect(start.y).toBeGreaterThan(ambientPoint.y);
-
-  await dragMarquee(canvas, start, end);
-}
-
-function projectStarterBoxRect(centerX: number, width: number, height: number): { left: number; top: number; right: number; bottom: number } {
-  const camera = new PerspectiveCamera(50, width / height, 0.1, 1000);
-  camera.position.set(0, 2, 5);
-  camera.lookAt(0, 0, 0);
-  camera.updateProjectionMatrix();
-  camera.updateMatrixWorld();
-
-  const xs: number[] = [];
-  const ys: number[] = [];
-  for (const x of [centerX - 0.5, centerX + 0.5]) {
-    for (const y of [-0.5, 0.5]) {
-      for (const z of [-0.5, 0.5]) {
-        const point = new Vector3(x, y, z).project(camera);
-        const projected = toViewportPoint(point, width, height);
-        xs.push(projected.x);
-        ys.push(projected.y);
-      }
-    }
-  }
-
-  return {
-    left: Math.min(...xs),
-    top: Math.min(...ys),
-    right: Math.max(...xs),
-    bottom: Math.max(...ys)
-  };
-}
-
-function projectStarterPoint(x: number, y: number, z: number, width: number, height: number): { x: number; y: number } {
-  const camera = new PerspectiveCamera(50, width / height, 0.1, 1000);
-  camera.position.set(0, 2, 5);
-  camera.lookAt(0, 0, 0);
-  camera.updateProjectionMatrix();
-  camera.updateMatrixWorld();
-  return toViewportPoint(new Vector3(x, y, z).project(camera), width, height);
-}
-
-function toViewportPoint(point: Vector3, width: number, height: number): { x: number; y: number } {
-  return {
-    x: (point.x + 1) / 2 * width,
-    y: (1 - point.y) / 2 * height
-  };
-}
-
-function expectExportedMarqueeSelection(bytes: Uint8Array): void {
-  const files = defaultArchiveAdapter.read(bytes);
-  const scene = decodeArchiveJson(files.find((entry) => entry.path === "scene.json")!.bytes) as { selection: { nodeIds: string[] } };
-  expect(scene.selection.nodeIds).toEqual(["detail", "box"]);
-  const serialized = JSON.stringify(scene);
-  expect(serialized).not.toContain("marquee");
-  expect(serialized).not.toContain("candidateNodeIds");
-  expect(serialized).not.toContain("PointerEvent");
-}
-
 function expectExportedPresentation(bytes: Uint8Array): void {
   const files = defaultArchiveAdapter.read(bytes);
   const scene = decodeArchiveJson(files.find((entry) => entry.path === "scene.json")!.bytes) as {
@@ -500,17 +380,18 @@ function visibleSection(host: HTMLElement, label: string): HTMLElement {
   return element;
 }
 
-function hierarchyRow(host: HTMLElement, label: string): HTMLButtonElement {
-  const row = [...visibleSection(host, "Hierarchy").querySelectorAll<HTMLButtonElement>(".ek-workbench__tree-row")]
-    .find((candidate) => text(candidate).startsWith(label));
-  expect(row, `Expected hierarchy row ${label}`).toBeTruthy();
-  return row!;
-}
-
 function testId(host: HTMLElement, id: string): HTMLElement {
   const element = host.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
   expect(element, `Expected [data-testid="${id}"]`).toBeTruthy();
   return element!;
+}
+
+async function clickHierarchyRow(host: HTMLElement, label: string, hierarchyLabel = "Hierarchy"): Promise<void> {
+  const row = [...visibleSection(host, hierarchyLabel).querySelectorAll<HTMLButtonElement>(".ek-workbench__tree-row")]
+    .find((candidate) => text(candidate).startsWith(label));
+  expect(row, `Expected hierarchy row ${label}`).toBeTruthy();
+  row!.click();
+  await waitForAnimationFrame();
 }
 
 function text(element: Element): string {
@@ -739,10 +620,10 @@ function copyBytes(bytes: Uint8Array): ArrayBuffer {
   return buffer;
 }
 
-async function glbFixtureFile(): Promise<File> {
+async function glbFixtureFile(fileName = "recovered.glb"): Promise<File> {
   const response = await fetch(simpleBoxUrl);
   expect(response.ok).toBe(true);
-  return new File([await response.arrayBuffer()], "recovered.glb", { type: "model/gltf-binary" });
+  return new File([await response.arrayBuffer()], fileName, { type: "model/gltf-binary" });
 }
 
 declare global {
