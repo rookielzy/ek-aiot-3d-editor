@@ -20,6 +20,89 @@ import { expectAuthoredValuesPresent, expectNoI18nDurableLeakage, expectNoRuntim
 import { decodeProjectPackageText, resolveProjectPackageBytes, seedI18nDurableEditor } from "../../test/i18n-durable-fixture";
 
 describe("React EditorWorkbench", () => {
+  it("distinguishes blocked complete exports from explicit partial packages and updates repaired diagnostics", async () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    const urls = mockObjectUrls();
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} rightPanel={() => null} defaultLocale="zh-CN" />);
+    clickToolbarCommand("导出完整项目");
+    await within(screen.getByLabelText("编辑器控件")).findByText("无法完整导出：资源载荷缺失");
+    expect(urls.createObjectURL).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "问题详情" }));
+    const drawer = screen.getByRole("region", { name: "问题详情" });
+    expect(drawer.textContent).toContain("资源 asset-a 没有可导出的载荷");
+    clickToolbarCommand("导出部分项目");
+    await screen.findByText(/已导出部分项目/);
+    expect(urls.createObjectURL).toHaveBeenCalled();
+    const input = drawer.querySelector("input")!;
+    fireEvent.change(input, { target: { files: [new File([new Uint8Array([1, 2, 3])], "repaired.glb")] } });
+    await waitFor(() => expect(drawer.textContent).not.toContain("无法完整导出"));
+    clickToolbarCommand("导出完整项目");
+    await screen.findByText("已导出项目");
+    urls.restore();
+  });
+
+  it("keeps failed project-open diagnostics in the drawer without replacing the scene", async () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "add-group", groupId: "keep", name: "Keep me" });
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} rightPanel={() => null} />);
+    const before = editor.serialize();
+    fireEvent.click(screen.getByRole("button", { name: "Project menu" }));
+    const file = new File(["invalid"], "broken.ek3d");
+    Object.defineProperty(file, "arrayBuffer", { value: async () => new TextEncoder().encode("invalid").buffer });
+    fireEvent.change(screen.getByLabelText("Open project package"), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "Problem details" }));
+    const drawer = screen.getByRole("region", { name: "Problem details" });
+    await waitFor(() => expect(drawer.textContent).toContain("Project Archive Invalid"));
+    expect(editor.serialize()).toEqual(before);
+    fireEvent.click(within(drawer).getByRole("button", { name: "Close details" }));
+    fireEvent.click(screen.getByRole("button", { name: "Problem details" }));
+    expect(drawer.textContent).toContain("Project Archive Invalid");
+  });
+
+  it("keeps project commands in a dismissible global menu with the locale switch", () => {
+    const editor = createEditor();
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} rightPanel={() => null} />);
+    const trigger = screen.getByRole("button", { name: "Project menu" });
+    expect(screen.queryByRole("button", { name: "Export", exact: true })).toBeNull();
+    fireEvent.click(trigger);
+    const menu = screen.getByRole("region", { name: "Project actions" });
+    expect(within(menu).getByRole("button", { name: "Open", exact: true })).toBeTruthy();
+    expect(within(menu).getByRole("button", { name: "Export partial", exact: true })).toBeTruthy();
+    fireEvent.change(within(menu).getByLabelText("Language"), { target: { value: "zh-CN" } });
+    expect(editor.getRuntime()).toBeTruthy();
+    fireEvent.keyDown(screen.getByLabelText("语言"), { key: "Escape" });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(trigger);
+    fireEvent.click(trigger);
+    fireEvent.pointerDown(screen.getByLabelText("3D 视口"));
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("opens status diagnostics, retains problems on close and recovers missing payloads", async () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    render(<EditorWorkbench editor={editor} resolver={new AssetResolverBridge(() => null)} rendererFactory={fakeRenderer} rightPanel={() => null} />);
+    await act(async () => { await editor.getRuntime()?.project(); });
+    const trigger = screen.getByRole("button", { name: "Problem details" });
+    fireEvent.click(trigger);
+    const drawer = screen.getByRole("region", { name: "Problem details" });
+    expect(drawer.textContent).toContain("asset-a");
+    expect(drawer.textContent).toContain("asset resolver");
+    const before = editor.serialize();
+    fireEvent.click(within(drawer).getByRole("button", { name: "Close details" }));
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(trigger);
+    expect(editor.serialize()).toEqual(before);
+    fireEvent.click(trigger);
+    const input = drawer.querySelector("input")!;
+    fireEvent.change(input, { target: { files: [new File([new Uint8Array([1, 2, 3])], "recovered.glb", { type: "model/gltf-binary" })] } });
+    await waitFor(() => expect(within(drawer).getByText("Replaced with recovered.glb")).toBeTruthy());
+    expect(drawer.querySelector("input")).toBeNull();
+    expect(editor.exportProject().packageBytes).toBeTruthy();
+  });
+
   it("organizes nodes through dismissible viewport tools without losing selection on Escape", () => {
     const editor = createEditor();
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
@@ -1729,6 +1812,8 @@ function createReplacementProblem(): ProjectProblem {
 
 function clickToolbarCommand(title: string): void {
   const button = screen.getByTitle(title);
+  const menu = button.closest<HTMLElement>(".ek-workbench__project-menu");
+  if (menu?.hidden) fireEvent.click(document.querySelector(`[aria-controls="${menu.id}"]`)!);
   const panel = button.closest<HTMLElement>(".ek-workbench__tool-popover");
   if (panel?.hidden) {
     fireEvent.click(document.querySelector(`[aria-controls="${panel.id}"]`)!);

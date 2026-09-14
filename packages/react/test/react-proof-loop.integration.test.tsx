@@ -87,6 +87,7 @@ describe("React proof-loop parity", () => {
 
       const toolbar = screen.getByLabelText("Editor controls");
       const viewport = screen.getByLabelText("3D viewport");
+      fireEvent.click(within(toolbar).getByRole("button", { name: "Project menu" }));
       expect(within(toolbar).getByRole("button", { name: "Export" })).toBeTruthy();
       expect(within(viewport).getByRole("button", { name: "Move", exact: true }).getAttribute("aria-pressed")).toBe("true");
       fireEvent.click(within(viewport).getByRole("button", { name: "Node operations" }));
@@ -191,8 +192,8 @@ describe("React proof-loop parity", () => {
 });
 
 async function clickButton(name: string): Promise<void> {
-  const command = [...document.querySelectorAll<HTMLButtonElement>("button[aria-label]")]
-    .find((button) => button.getAttribute("aria-label") === name);
+  const command = [...document.querySelectorAll<HTMLButtonElement>("button")]
+    .find((button) => button.getAttribute("aria-label") === name || button.textContent === name);
   const panel = command?.closest<HTMLElement>("[hidden][id]");
   if (panel) {
     fireEvent.click(document.querySelector(`[aria-controls="${panel.id}"]`)!);

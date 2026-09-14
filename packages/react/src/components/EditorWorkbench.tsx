@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { resolveEditorShortcut, type AssetResolverBridge, type EditorRuntime, type EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
+import { buildWorkbenchModel, resolveEditorShortcut, type Problem, type AssetResolverBridge, type EditorRuntime, type EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
 import { useWorkbench, type ResolvedWorkbenchContext, type UseWorkbenchOptions } from "../hooks/use-workbench";
 import { EditorViewport } from "./EditorViewport";
 import { InspectorView } from "./InspectorView";
@@ -76,7 +76,7 @@ export function EditorWorkbench({
   viewportOverlay,
   status
 }: EditorWorkbenchProps) {
-  const workbench = useWorkbench({
+  const session = useWorkbench({
     editor: providedEditor,
     snapshot,
     loader,
@@ -85,6 +85,27 @@ export function EditorWorkbench({
     onLocaleChange,
     translate
   });
+  const [projectFeedback, setProjectFeedback] = useState<{ editor: typeof session.editor; problems: Problem[] } | null>(null);
+  const projectProblems = projectFeedback?.editor === session.editor ? projectFeedback.problems.filter((problem) => {
+    if (problem.assetId && (problem.code === "project-export-payload-missing" || problem.code === "project-export-asset-missing")) {
+      return session.model.assets.workspace?.items.some((asset) => asset.id === problem.assetId && asset.packageBlocking);
+    }
+    return true;
+  }) : [];
+  const model = projectProblems.length ? buildWorkbenchModel(session.snapshot, {
+    inspector: session.inspector,
+    runtimeProblems: session.runtimeProblems,
+    projectProblems,
+    assetPayloads: session.assets.payloads,
+    history: session.historyState,
+    snap: session.snap,
+    viewportHelpers: session.viewportHelperState,
+    transformMode: session.transformMode,
+    runtimeReady: session.runtimeReady
+  }) : session.model;
+  const workbench = { ...session, model, problems: {
+    ...session.problems, items: model.problems.items, totalCount: model.problems.totalCount
+  } };
   const pendingDisposeRef = useRef<{ dispose(): void; timer: ReturnType<typeof setTimeout> } | null>(null);
   const rootRef = useRef<HTMLElement | null>(null);
   const panelId = useId();
@@ -179,6 +200,7 @@ export function EditorWorkbench({
           {showDefaultToolbar ? (
             <WorkbenchToolbar
               context={workbench}
+              onProjectProblems={(problems) => setProjectFeedback({ editor: session.editor, problems })}
               showLocaleSwitcher={showLocaleSwitcher}
               localeSwitcherDisabled={localeSwitcherDisabled}
             />

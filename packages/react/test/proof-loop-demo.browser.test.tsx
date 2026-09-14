@@ -28,6 +28,172 @@ describe("proof-loop starter demo browser verification", () => {
     delete window.__lastDownloadedProject;
   });
 
+  it("repairs a real missing GLB from the React problem drawer at desktop sizes", async () => {
+    const originalSize = { width: window.innerWidth, height: window.innerHeight };
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "recover-box", name: "Recovery box", asset: { id: "recover-asset" } });
+    editor.dispatch({ type: "select-object", objectId: "recover-box" });
+    const inheritedStyles = [...document.querySelectorAll<HTMLStyleElement>("style[data-vite-dev-id]")].map((style) => ({ style, disabled: style.disabled }));
+    inheritedStyles.forEach(({ style }) => { style.disabled = true; });
+    installStyles("react-recovery-styles", [ReactWorkbenchStyles, ReactInspectorStyles]);
+    const host = createHost();
+    const root = createRoot(host);
+    root.render(<EditorWorkbench editor={editor} loader={new ThreeGltfLoaderAdapter()} />);
+    cleanup = () => { root.unmount(); editor.dispose(); removeStyles("react-recovery-styles"); inheritedStyles.forEach(({ style, disabled }) => { style.disabled = disabled; }); };
+    try {
+      await page.viewport(1440, 900);
+      await waitFor(() => expect(editor.getRuntime()).toBeTruthy());
+      await editor.getRuntime()!.project();
+      await clickByText(host, "Problem details");
+      const drawer = host.querySelector<HTMLElement>(".ek-workbench__problems-drawer")!;
+      expect(text(drawer)).toContain("recover-asset");
+      expect(text(drawer)).toContain("asset resolver");
+      expect(text(drawer)).toContain("Object · recover-box");
+      for (const [width, height] of [[1440, 900], [1920, 1080], [1100, 800]]) {
+        await page.viewport(width, height);
+        await waitForAnimationFrame();
+        expect(drawer.getBoundingClientRect().bottom).toBeLessThanOrEqual(height);
+        expect(drawer.scrollWidth).toBeLessThanOrEqual(drawer.clientWidth);
+        const close = button(host, "Close details")!;
+        const rect = close.getBoundingClientRect();
+        expect(close.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2))).toBe(true);
+      }
+      await userEvent.keyboard("{Escape}");
+      expect(drawer.hidden).toBe(true);
+      expect(editor.getSnapshot().selection.objectId).toBe("recover-box");
+      await clickByText(host, "Problem details");
+      expect(drawer.querySelector('input[type="file"]')).toBeTruthy();
+      const geometry = new BoxGeometry();
+      const material = new MeshStandardMaterial();
+      const glb = await new GLTFExporter().parseAsync(new Mesh(geometry, material), { binary: true }) as ArrayBuffer;
+      geometry.dispose(); material.dispose();
+      await uploadFile(drawer.querySelector('input[type="file"]') as HTMLInputElement, new File([glb], "recovered.glb", { type: "model/gltf-binary" }));
+      await waitFor(() => expect(text(drawer)).toContain("Replaced with recovered.glb"));
+      expect(text(drawer)).toContain("No problems.");
+      expect(drawer.querySelector('input[type="file"]')).toBeNull();
+      expect(editor.getRuntime()!.getObject("recover-box")).toBeTruthy();
+      expect(editor.exportProject().ok).toBe(true);
+    } finally { await page.viewport(originalSize.width, originalSize.height); }
+  });
+
+  it.each(["en", "zh-CN"] as const)("round-trips a complete React project and keeps diagnostics usable in %s", async (locale) => {
+    const originalSize = { width: window.innerWidth, height: window.innerHeight };
+    const editor = createEditor();
+    const inheritedStyles = [...document.querySelectorAll<HTMLStyleElement>("style[data-vite-dev-id]")].map((style) => ({ style, disabled: style.disabled }));
+    inheritedStyles.forEach(({ style }) => { style.disabled = true; });
+    installStyles("react-project-styles", [ReactWorkbenchStyles, ReactInspectorStyles]);
+    const host = createHost();
+    const root = createRoot(host);
+    const loader = new ThreeGltfLoaderAdapter();
+    root.render(<EditorWorkbench editor={editor} loader={loader} defaultLocale={locale} />);
+    const restoreDownloads = installDownloadCapture();
+    cleanup = () => { root.unmount(); editor.dispose(); removeStyles("react-project-styles"); inheritedStyles.forEach(({ style, disabled }) => { style.disabled = disabled; }); restoreDownloads(); };
+    const label = (en: string, zh: string) => locale === "en" ? en : zh;
+    const click = (en: string, zh: string) => clickByText(host, label(en, zh));
+    const input = (en: string, zh: string) => findFieldInput(host, label(en, zh), 'input[type="number"]') as HTMLInputElement;
+    try {
+      await page.viewport(1440, 900);
+      await waitFor(() => expect(editor.getRuntime()).toBeTruthy());
+      const runtime = editor.getRuntime()!;
+      const canvas = host.querySelector("canvas")!;
+      await click("Problem details", "问题详情");
+      const diagnostics = host.querySelector<HTMLElement>('.ek-workbench__problems-drawer')!;
+      expect(text(diagnostics)).toContain(label("No problems.", "暂无问题。"));
+      await click("Close details", "关闭详情");
+      await openLeftWorkspaceView(host, label("Assets", "资源"));
+      const geometry = new BoxGeometry();
+      const material = new MeshStandardMaterial({ color: 0x6688aa });
+      const glb = await new GLTFExporter().parseAsync(new Mesh(geometry, material), { binary: true }) as ArrayBuffer;
+      geometry.dispose();
+      material.dispose();
+      await uploadFile(section(host, label("Import assets", "导入资源")) as HTMLInputElement,
+        new File([glb], "saved-box.glb", { type: "model/gltf-binary" }));
+      await waitFor(() => expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(1));
+      await openLeftWorkspaceView(host, label("Scene", "场景"));
+      await clickHierarchyRow(host, "saved-box", label("Hierarchy", "层级"));
+      await editor.getRuntime()!.project();
+      await click("Frame all", "框选全部");
+      await userEvent.fill(input("Position X", "位置 X"), "2");
+      await userEvent.keyboard("{Enter}{Tab}");
+      const objectId = Object.keys(editor.getSnapshot().objects)[0]!;
+      await click("Undo", "撤销");
+      expect(editor.getSnapshot().objects[objectId].transform.position[0]).toBe(0);
+      await click("Redo", "重做");
+      expect(editor.getSnapshot().objects[objectId].transform.position[0]).toBe(2);
+      await userEvent.fill(input("Opacity", "不透明度"), "0.6");
+      await userEvent.keyboard("{Enter}{Tab}");
+      await openInspectorGroup(host, label("Environment", "环境"));
+      await userEvent.selectOptions(findFieldInput(host, label("Background source", "背景源"), "select") as HTMLSelectElement, "solid");
+      const background = findFieldInput(host, label("Background color", "背景颜色"), 'input[type="color"]') as HTMLInputElement;
+      setInputValue(background, "#ccddee");
+      await openInspectorGroup(host, label("Scene", "场景"));
+      await userEvent.selectOptions(section(host, label("Add light", "添加灯光")) as HTMLSelectElement, "directional");
+      await click("Frame all", "框选全部");
+      const inspector = section(host, label("Scene inspector", "场景检查器"));
+      await userEvent.click([...inspector.querySelectorAll("button")].find((button) => text(button) === label("Capture", "捕获"))!);
+      await userEvent.click([...inspector.querySelectorAll("button")].find((button) => text(button) === label("Set default", "设为默认"))!);
+      await userEvent.click([...inspector.querySelectorAll("button")].find((button) => text(button) === label("Apply", "应用"))!);
+      await clickHierarchyRow(host, "saved-box", label("Hierarchy", "层级"));
+      await openInspectorGroup(host, label("Properties", "属性"));
+      const saved = editor.getSnapshot();
+      const history = editor.getHistoryState();
+      const positionField = input("Position X", "位置 X");
+      await click("Project menu", "项目菜单");
+      const menu = host.querySelector<HTMLElement>(".ek-workbench__project-menu")!;
+      const switcher = section(host, label("Language", "语言")) as HTMLSelectElement;
+      await userEvent.selectOptions(switcher, locale === "en" ? "zh-CN" : "en");
+      expect(editor.getSnapshot()).toEqual(saved);
+      expect(editor.getHistoryState()).toEqual(history);
+      expect(host.querySelector("canvas")).toBe(canvas);
+      expect(editor.getRuntime()).toBe(runtime);
+      expect(positionField.isConnected).toBe(true);
+      await userEvent.selectOptions(switcher, locale);
+      await userEvent.keyboard("{Escape}");
+      expect(menu.hidden).toBe(true);
+      expect(editor.getSnapshot().selection).toEqual(saved.selection);
+      await click("Export", "导出");
+      await waitForDownloadedProject();
+      const bytes = window.__lastDownloadedProject!;
+      const entries = defaultArchiveAdapter.read(bytes);
+      const exported = decodeArchiveJson(entries.find((entry) => entry.path === "scene.json")!.bytes);
+      expect(exported).toEqual(saved);
+      expect(decodeArchiveJson(entries.find((entry) => entry.path === "project.json")!.bytes)).toMatchObject({ completeness: "complete" });
+      const json = JSON.stringify(exported);
+      for (const forbidden of ["leftWidth", "rightWidth", "Collapsed", "locale", "zh-CN", "blob:", "Object3D", "PMREM"]) expect(json).not.toContain(forbidden);
+      await userEvent.fill(positionField, "7");
+      await userEvent.keyboard("{Enter}{Tab}");
+      await click("Project menu", "项目菜单");
+      await uploadFile(menu.querySelector('input[type="file"]') as HTMLInputElement, new File([copyBytes(bytes)], "restored.ek3d"));
+      await waitFor(() => expect(editor.getSnapshot()).toEqual(saved));
+      await runtime.project();
+      expect(runtime.getObject(objectId)).toBeTruthy();
+      const captured = runtime.captureCameraView();
+      expect(captured.ok).toBe(true);
+      if (captured.ok) {
+        const view = saved.cameras[saved.presentation.defaultCameraId!]!;
+        expect(captured.view.position).toEqual(view.position);
+        expect(captured.view.target).toEqual(view.target);
+      }
+      for (const [width, height] of [[1440, 900], [1920, 1080], [1100, 800]]) {
+        await page.viewport(width, height);
+        await waitForAnimationFrame();
+        const viewport = host.querySelector<HTMLElement>(".ek-workbench__viewport")!;
+        const before = viewport.clientHeight;
+        await click("Problem details", "问题详情");
+        await waitFor(() => expect(viewport.clientHeight).toBeLessThan(before));
+        expect(diagnostics.getBoundingClientRect().bottom).toBeLessThanOrEqual(height);
+        expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+        expect(host.querySelector("canvas")).toBe(canvas);
+        await click("Close details", "关闭详情");
+        await click("Project menu", "项目菜单");
+        const exportButton = button(host, label("Export", "导出"))!;
+        const rect = exportButton.getBoundingClientRect();
+        expect(exportButton.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2))).toBe(true);
+        await userEvent.keyboard("{Escape}");
+      }
+    } finally { await page.viewport(originalSize.width, originalSize.height); }
+  }, 20000);
+
   it("drives the React starter through the package default workbench", async () => {
     const root = mountReactDemo();
     cleanup = root.cleanup;
@@ -916,11 +1082,13 @@ async function openInspectorGroup(host: HTMLElement, label: string): Promise<voi
 async function clickByText(host: HTMLElement, label: string): Promise<void> {
   const target = button(host, label);
   expect(target, `Expected button ${label}`).toBeTruthy();
+  const menu = target!.closest<HTMLElement>(".ek-workbench__project-menu");
+  if (menu?.hidden) await userEvent.click(host.querySelector(`[aria-controls="${menu.id}"]`)!);
   const panel = target!.closest<HTMLElement>(".ek-workbench__tool-popover");
   if (panel?.hidden) {
     await userEvent.click(host.querySelector(`[aria-controls="${panel.id}"]`)!);
   }
-  if (panel || target!.closest(".ek-workbench__viewport-tools")) {
+  if (menu || panel || target!.closest(".ek-workbench__viewport-tools")) {
     await userEvent.click(target!);
     await waitForAnimationFrame();
     return;
@@ -1000,7 +1168,7 @@ function expectExportedPresentation(bytes: Uint8Array): void {
 }
 
 function button(host: HTMLElement, label: string): HTMLButtonElement | null {
-  return [...host.querySelectorAll("button")].find((candidate) => text(candidate) === label) ?? null;
+  return [...host.querySelectorAll("button")].find((candidate) => text(candidate) === label || candidate.getAttribute("aria-label") === label) ?? null;
 }
 
 function section(host: HTMLElement, label: string): HTMLElement {
