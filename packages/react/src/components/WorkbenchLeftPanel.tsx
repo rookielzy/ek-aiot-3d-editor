@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type Dispatch, type DragEvent, type MutableRefObject, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import {
   filterAssetWorkspaceItems,
   sortAssetWorkspaceItems,
@@ -13,7 +13,6 @@ import {
   type MessageDescriptor,
   type ProjectProblem,
   type WorkbenchAssetImportDiagnostic,
-  type WorkbenchMissingAssetItem,
   type WorkbenchRasterImportKind
 } from "@ek-aiot/3d-editor-core";
 import type { WorkbenchI18n, WorkbenchMessageKey, WorkbenchMessageValues } from "../i18n/workbench-i18n";
@@ -60,21 +59,18 @@ interface AssetQueueItem {
 export function WorkbenchLeftPanel({ context, activeView }: WorkbenchLeftPanelProps) {
   const [recoveryState, setRecoveryState] = useState<AssetRecoveryState>({});
   const [recoverySuccessState, setRecoverySuccessState] = useState<AssetRecoveryState>({});
-  const missingReplacementTokens = useRef<Record<string, symbol>>({});
+  const maintenanceTokens = useRef<Record<string, symbol>>({});
   const [assetQuery, setAssetQuery] = useState("");
   const [assetKind, setAssetKind] = useState<AssetKindFilter>("all");
   const [assetStatus, setAssetStatus] = useState<AssetStatusFilter>("all");
   const [assetSort, setAssetSort] = useState<AssetWorkspaceSortKey>("status");
   const [rasterKind, setRasterKind] = useState<WorkbenchRasterImportKind>("texture");
+  const nextQueueId = useRef(0);
   const [queue, setQueue] = useState<AssetQueueItem[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const model = context.model;
   const workspace = model.assets.workspace;
   const t = context.i18n.t;
-  const missingProblemIdKey = model.assets.missing.map((item) => item.problemId).join("\n");
-  const missingProblemIds = useMemo(() => new Set(
-    missingProblemIdKey ? missingProblemIdKey.split("\n") : []
-  ), [missingProblemIdKey]);
   const workspaceAssetIdKey = (workspace?.items ?? []).map((item) => item.id).join("\n");
   const workspaceAssetIds = useMemo(() => new Set(
     workspaceAssetIdKey ? workspaceAssetIdKey.split("\n") : []
@@ -91,19 +87,22 @@ export function WorkbenchLeftPanel({ context, activeView }: WorkbenchLeftPanelPr
   const problemTone = problemToneFromCounts(model.problems.bySeverity, model.problems.totalCount);
 
   useEffect(() => {
+    for (const assetId of Object.keys(maintenanceTokens.current)) {
+      if (!workspaceAssetIds.has(assetId)) delete maintenanceTokens.current[assetId];
+    }
     setRecoveryState((current) => {
       let changed = false;
       const next: AssetRecoveryState = {};
-      for (const [problemId, status] of Object.entries(current)) {
-        if (missingProblemIds.has(problemId)) {
-          next[problemId] = status;
+      for (const [assetId, status] of Object.entries(current)) {
+        if (workspaceAssetIds.has(assetId)) {
+          next[assetId] = status;
         } else {
           changed = true;
         }
       }
       return changed ? next : current;
     });
-  }, [missingProblemIds]);
+  }, [workspaceAssetIds]);
 
   useEffect(() => {
     setRecoverySuccessState((current) => {
@@ -125,8 +124,8 @@ export function WorkbenchLeftPanel({ context, activeView }: WorkbenchLeftPanelPr
       return;
     }
 
-    const queueItems = files.map((file, index) => ({
-      id: `${Date.now()}-${index}-${file.name}`,
+    const queueItems = files.map((file) => ({
+      id: String(nextQueueId.current++),
       label: file.name,
       status: "queued" as const,
       diagnostics: []
@@ -135,7 +134,7 @@ export function WorkbenchLeftPanel({ context, activeView }: WorkbenchLeftPanelPr
     setQueue((current) => [
       ...queueItems.map((item) => ({ ...item, status: "importing" as const })),
       ...current
-    ].slice(0, 8));
+    ]);
 
     let results;
     try {
@@ -192,60 +191,55 @@ export function WorkbenchLeftPanel({ context, activeView }: WorkbenchLeftPanelPr
     void importAssetFiles(Array.from(event.dataTransfer.files ?? []));
   }
 
-  async function replaceMissingAsset(item: WorkbenchMissingAssetItem, event: ChangeEvent<HTMLInputElement>) {
+  async function maintainAsset(assetId: string, event: ChangeEvent<HTMLInputElement>, mode: "replace" | "reimport") {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
-    if (!file) {
-      return;
-    }
+    if (!file) return;
 
-    const operationToken = Symbol(item.problemId);
-    missingReplacementTokens.current[item.assetId] = operationToken;
+    const recoveringMissing = model.assets.missing.some((item) => item.assetId === assetId);
+    const token = Symbol(assetId);
+    maintenanceTokens.current[assetId] = token;
     setRecoverySuccessState((current) => {
-      if (!current[item.assetId]) {
-        return current;
-      }
       const next = { ...current };
-      delete next[item.assetId];
+      delete next[assetId];
       return next;
     });
     setRecoveryState((current) => ({
       ...current,
-      [item.problemId]: localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.progress", "Replacing...")
+      [assetId]: mode === "reimport"
+        ? localizedStatusMessage("reactWorkbench.leftPanel.assets.reimport.progress", "Analyzing GLB...")
+        : localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.progress", "Replacing...")
     }));
-    const result = await context.replaceAsset({
-      assetId: item.assetId,
-      source: file,
-      label: file.name,
-      mimeType: file.type
-    });
-    if (result.ok) {
-      await context.runtime?.project();
-      context.refreshProblems();
-      if (missingReplacementTokens.current[item.assetId] !== operationToken) {
-        return;
-      }
-      delete missingReplacementTokens.current[item.assetId];
-      setRecoverySuccessState((current) => ({
-        ...current,
-        [item.assetId]: localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.success", "Replaced with {fileName}", { fileName: file.name })
-      }));
-      setRecoveryState((current) => {
-        const next = { ...current };
-        delete next[item.problemId];
-        return next;
-      });
-      return;
-    }
 
-    if (missingReplacementTokens.current[item.assetId] !== operationToken) {
-      return;
+    let message: LocalizedStatusMessage;
+    let replaced = false;
+    try {
+      if (mode === "reimport") {
+        const result = await context.assets.reimportGlbAsset({ assetId, source: file });
+        message = result.ok
+          ? reimportSummaryStatusMessage(file.name, result.remap?.summary)
+          : glbDiagnosticStatusMessage(result.diagnostics[0]) ??
+            (result.commandResult?.error ? rawStatusMessage(result.commandResult.error) : localizedStatusMessage("reactWorkbench.leftPanel.assets.reimport.failed", "Reimport failed"));
+      } else {
+        const result = await context.assets.replaceAsset({ assetId, source: file, label: file.name, mimeType: file.type });
+        if (result.ok) {
+          await context.runtime?.project();
+          replaced = true;
+        }
+        message = result.ok
+          ? localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.success", "Replaced with {fileName}", { fileName: file.name })
+          : projectProblemStatusMessage(result.problems[0]) ?? localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.failed", "Replacement failed");
+      }
+      context.refreshProblems();
+    } catch (error) {
+      message = rawStatusMessage(error instanceof Error ? error.message : String(error));
     }
-    delete missingReplacementTokens.current[item.assetId];
-    setRecoveryState((current) => ({
-      ...current,
-      [item.problemId]: projectProblemStatusMessage(result.problems[0]) ?? localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.failed", "Replacement failed")
-    }));
+    if (maintenanceTokens.current[assetId] !== token) return;
+    delete maintenanceTokens.current[assetId];
+    setRecoveryState((current) => ({ ...current, [assetId]: message }));
+    if (replaced && recoveringMissing) {
+      setRecoverySuccessState((current) => ({ ...current, [assetId]: message }));
+    }
   }
 
   return (
@@ -292,7 +286,7 @@ export function WorkbenchLeftPanel({ context, activeView }: WorkbenchLeftPanelPr
           </label>
           <label className="ek-workbench__field">
             <span>{t("reactWorkbench.leftPanel.assets.rasterIntent.label")}</span>
-            <select value={rasterKind} onChange={(event) => setRasterKind(event.target.value as WorkbenchRasterImportKind)}>
+            <select aria-label={t("reactWorkbench.leftPanel.assets.rasterIntent.label")} value={rasterKind} onChange={(event) => setRasterKind(event.target.value as WorkbenchRasterImportKind)}>
               <option value="texture">{t("reactWorkbench.leftPanel.assets.rasterIntent.texture")}</option>
               <option value="image">{t("reactWorkbench.leftPanel.assets.rasterIntent.image")}</option>
             </select>
@@ -302,6 +296,7 @@ export function WorkbenchLeftPanel({ context, activeView }: WorkbenchLeftPanelPr
           <label className="ek-workbench__field ek-workbench__field--search">
             <span>{t("reactWorkbench.leftPanel.assets.search.label")}</span>
             <input
+              type="search"
               aria-label={t("reactWorkbench.leftPanel.assets.search.label")}
               value={assetQuery}
               onChange={(event) => setAssetQuery(event.target.value)}
@@ -329,7 +324,7 @@ export function WorkbenchLeftPanel({ context, activeView }: WorkbenchLeftPanelPr
               <option value="unreferenced">{t("reactWorkbench.leftPanel.assets.status.unreferenced")}</option>
             </select>
           </label>
-          <label className="ek-workbench__field">
+          <label className="ek-workbench__field ek-workbench__field--sort">
             <span>{t("reactWorkbench.leftPanel.assets.sort.label")}</span>
             <select aria-label={t("reactWorkbench.leftPanel.assets.sort.label")} value={assetSort} onChange={(event) => setAssetSort(event.target.value as AssetWorkspaceSortKey)}>
               <option value="status">{t("reactWorkbench.leftPanel.assets.sort.status")}</option>
@@ -342,13 +337,13 @@ export function WorkbenchLeftPanel({ context, activeView }: WorkbenchLeftPanelPr
           </label>
         </div>
         {queue.length > 0 ? (
-          <ul className="ek-workbench__asset-queue" aria-label={t("reactWorkbench.leftPanel.assets.queue.label")}>
+          <ul className="ek-workbench__asset-queue" tabIndex={0} aria-live="polite" aria-label={t("reactWorkbench.leftPanel.assets.queue.label")}>
             {queue.map((item) => (
               <li key={item.id} data-status={item.status}>
                 <span>{item.label}</span>
                 <small>
                   {t(`reactWorkbench.leftPanel.assets.queue.${item.status}`)}
-                  {item.kind ? ` · ${item.kind}` : ""}
+                  {item.kind ? ` · ${formatAssetKind(context.i18n, item.kind)}` : ""}
                   {item.detail ? ` · ${renderStatusMessage(context.i18n, item.detail)}` : ""}
                 </small>
                 {item.diagnostics.length > 0 ? (
@@ -360,6 +355,8 @@ export function WorkbenchLeftPanel({ context, activeView }: WorkbenchLeftPanelPr
         ) : null}
         {!workspace || workspace.totalCount === 0 ? (
           <p className="ek-workbench__empty">{t("reactWorkbench.leftPanel.assets.empty")}</p>
+        ) : visibleAssets.length === 0 ? (
+          <p className="ek-workbench__empty" role="status">{t("reactWorkbench.leftPanel.assets.noMatches")}</p>
         ) : (
           <ul className="ek-workbench__asset-list" aria-label={t("reactWorkbench.leftPanel.assets.rows.label")}>
             {visibleAssets.map((asset) => (
@@ -368,9 +365,7 @@ export function WorkbenchLeftPanel({ context, activeView }: WorkbenchLeftPanelPr
                 context={context}
                 asset={asset}
                 recoveryState={recoveryState}
-                setRecoveryState={setRecoveryState}
-                setRecoverySuccessState={setRecoverySuccessState}
-                replacementTokens={missingReplacementTokens}
+                onMaintain={maintainAsset}
               />
             ))}
           </ul>
@@ -381,8 +376,8 @@ export function WorkbenchLeftPanel({ context, activeView }: WorkbenchLeftPanelPr
               <label key={item.problemId} className="ek-workbench__file-action" data-severity={item.severity}>
                 <span>{item.actionLabelDescriptor ? t(item.actionLabelDescriptor) : item.actionLabel ?? t("reactWorkbench.leftPanel.assets.replace.label")}</span>
                 <strong>{item.label}</strong>
-                <small>{recoveryState[item.problemId] ? renderStatusMessage(context.i18n, recoveryState[item.problemId]) : (item.titleDescriptor ? t(item.titleDescriptor) : item.title)}</small>
-                <input type="file" onChange={(event) => void replaceMissingAsset(item, event)} />
+                <small role="status">{recoveryState[item.assetId] ? renderStatusMessage(context.i18n, recoveryState[item.assetId]) : (item.titleDescriptor ? t(item.titleDescriptor) : item.title)}</small>
+                <input type="file" onChange={(event) => void maintainAsset(item.assetId, event, "replace")} />
               </label>
             ))}
           </div>
@@ -450,103 +445,14 @@ export function WorkbenchLeftPanel({ context, activeView }: WorkbenchLeftPanelPr
   );
 }
 
-function AssetWorkspaceRow({
-  context,
-  asset,
-  recoveryState,
-  setRecoveryState,
-  setRecoverySuccessState,
-  replacementTokens
-}: {
+function AssetWorkspaceRow({ context, asset, recoveryState, onMaintain }: {
   context: ResolvedWorkbenchContext;
   asset: AssetWorkspaceItem;
   recoveryState: AssetRecoveryState;
-  setRecoveryState: Dispatch<SetStateAction<AssetRecoveryState>>;
-  setRecoverySuccessState: Dispatch<SetStateAction<AssetRecoveryState>>;
-  replacementTokens: MutableRefObject<Record<string, symbol>>;
+  onMaintain: (assetId: string, event: ChangeEvent<HTMLInputElement>, mode: "replace" | "reimport") => Promise<void>;
 }) {
   const t = context.i18n.t;
-  const recoveryId = asset.problems.find((problem) => problem.actionLabel || problem.recoverability === "user-action")?.id ?? asset.id;
-
-  async function replaceAsset(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = "";
-    if (!file) {
-      return;
-    }
-
-    const operationToken = Symbol(asset.id);
-    replacementTokens.current[asset.id] = operationToken;
-    setRecoverySuccessState((current) => {
-      if (!current[asset.id]) {
-        return current;
-      }
-      const next = { ...current };
-      delete next[asset.id];
-      return next;
-    });
-    setRecoveryState((current) => ({
-      ...current,
-      [recoveryId]: localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.progress", "Replacing...")
-    }));
-    const result = await context.assets.replaceAsset({
-      assetId: asset.id,
-      source: file,
-      label: file.name,
-      mimeType: file.type
-    });
-    if (result.ok) {
-      await context.runtime?.project();
-      context.refreshProblems();
-      if (replacementTokens.current[asset.id] !== operationToken) {
-        return;
-      }
-      delete replacementTokens.current[asset.id];
-      setRecoveryState((current) => ({
-        ...current,
-        [recoveryId]: localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.success", "Replaced with {fileName}", { fileName: file.name })
-      }));
-      return;
-    }
-    if (replacementTokens.current[asset.id] !== operationToken) {
-      return;
-    }
-    delete replacementTokens.current[asset.id];
-    setRecoveryState((current) => ({
-      ...current,
-      [recoveryId]: projectProblemStatusMessage(result.problems[0]) ?? localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.failed", "Replacement failed")
-    }));
-  }
-
-  async function reimportGlbAsset(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = "";
-    if (!file) {
-      return;
-    }
-
-    setRecoveryState((current) => ({
-      ...current,
-      [recoveryId]: localizedStatusMessage("reactWorkbench.leftPanel.assets.reimport.progress", "Analyzing GLB...")
-    }));
-    const result = await context.assets.reimportGlbAsset({
-      assetId: asset.id,
-      source: file
-    });
-    if (result.ok) {
-      context.refreshProblems();
-      setRecoveryState((current) => ({
-        ...current,
-        [recoveryId]: reimportSummaryStatusMessage(file.name, result.remap?.summary)
-      }));
-      return;
-    }
-    setRecoveryState((current) => ({
-      ...current,
-      [recoveryId]: glbDiagnosticStatusMessage(result.diagnostics[0]) ??
-        (result.commandResult?.error ? rawStatusMessage(result.commandResult.error) : localizedStatusMessage("reactWorkbench.leftPanel.assets.reimport.failed", "Reimport failed"))
-    }));
-  }
+  const recoveryId = asset.id;
 
   return (
     <li
@@ -570,12 +476,12 @@ function AssetWorkspaceRow({
         {asset.referenced
           ? t("reactWorkbench.leftPanel.assets.refs", { count: asset.referenceCount })
           : t("reactWorkbench.leftPanel.assets.unreferenced")}
-        {asset.references.length > 0 ? ` · ${asset.references.slice(0, 2).map((reference) => reference.label).join(", ")}` : ""}
+        {asset.references.length > 0 ? ` · ${asset.references.map((reference) => reference.labelDescriptor ? t(reference.labelDescriptor) : reference.label).join(", ")}` : ""}
         {asset.problemCount ? ` · ${t("reactWorkbench.leftPanel.assets.problemCount", { count: asset.problemCount })}` : ""}
       </p>
       {asset.problems.length > 0 ? (
         <ul className="ek-workbench__asset-diagnostics" aria-label={t("reactWorkbench.leftPanel.assets.diagnostics.label", { assetLabel: asset.label })}>
-          {asset.problems.slice(0, 3).map((problem) => (
+          {asset.problems.map((problem) => (
             <li key={problem.id} data-severity={problem.severity}>
               <strong>{problem.titleDescriptor ? t(problem.titleDescriptor) : problem.title}</strong>
               {problem.detail ? <small>{problem.detailDescriptor ? t(problem.detailDescriptor) : problem.detail}</small> : null}
@@ -586,19 +492,19 @@ function AssetWorkspaceRow({
       {asset.kind === "glb" && asset.registered ? (
         <label className="ek-workbench__asset-replace">
           <span>{t("reactWorkbench.leftPanel.assets.reimport.label")}</span>
-          <small>{recoveryState[recoveryId] ? renderStatusMessage(context.i18n, recoveryState[recoveryId]) : t("reactWorkbench.leftPanel.assets.reimport.hint")}</small>
+          <small role="status">{recoveryState[recoveryId] ? renderStatusMessage(context.i18n, recoveryState[recoveryId]) : t("reactWorkbench.leftPanel.assets.reimport.hint")}</small>
           <input
             type="file"
             accept=".glb,.gltf,model/gltf-binary,model/gltf+json"
             aria-label={t("reactWorkbench.leftPanel.assets.reimport.aria", { assetLabel: asset.label })}
-            onChange={(event) => void reimportGlbAsset(event)}
+            onChange={(event) => void onMaintain(asset.id, event, "reimport")}
           />
         </label>
-      ) : asset.recoverable && asset.registered ? (
+      ) : asset.registered ? (
         <label className="ek-workbench__asset-replace">
           <span>{asset.actionLabelDescriptor ? t(asset.actionLabelDescriptor) : asset.actionLabel ?? t("reactWorkbench.leftPanel.assets.replace.label")}</span>
-          <small>{recoveryState[recoveryId] ? renderStatusMessage(context.i18n, recoveryState[recoveryId]) : t("reactWorkbench.leftPanel.assets.replace.hint")}</small>
-          <input type="file" aria-label={t("reactWorkbench.leftPanel.assets.replace.aria", { assetLabel: asset.label })} onChange={(event) => void replaceAsset(event)} />
+          <small role="status">{recoveryState[recoveryId] ? renderStatusMessage(context.i18n, recoveryState[recoveryId]) : t("reactWorkbench.leftPanel.assets.replace.hint")}</small>
+          <input type="file" aria-label={t("reactWorkbench.leftPanel.assets.replace.aria", { assetLabel: asset.label })} onChange={(event) => void onMaintain(asset.id, event, "replace")} />
         </label>
       ) : null}
     </li>

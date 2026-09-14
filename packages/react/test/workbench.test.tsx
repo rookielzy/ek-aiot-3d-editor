@@ -5,11 +5,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AssetResolverBridge,
   attachGlbImportManifestMetadata,
-  buildAssetWorkspaceModel,
   createGlbImportManifest,
   createMessageDescriptor,
   createEditor,
-  filterAssetWorkspaceItems,
   ThreeGltfLoaderAdapter,
   type EditorRuntimeOptions,
   type ProjectProblem,
@@ -365,6 +363,49 @@ describe("React EditorWorkbench", () => {
     urls.restore();
   });
 
+  it("keeps every result in a batch larger than eight files", async () => {
+    const editor = createEditor();
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    openLeftPanelView("Assets 0");
+    const files = Array.from({ length: 10 }, (_, index) => new File(["unsupported"], `notes-${index}.txt`));
+    fireEvent.change(screen.getByLabelText("Import assets"), { target: { files } });
+    const queue = within(screen.getByLabelText("Asset import queue"));
+    await waitFor(() => expect(queue.getAllByText(/failed ·/)).toHaveLength(10));
+    for (const file of files) expect(queue.getByText(file.name)).toBeTruthy();
+  });
+
+  it("replaces an available image from its file input and retains feedback across filters", async () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "register-asset", asset: { id: "image-a", kind: "image", label: "Original image", source: new Uint8Array([1]) } });
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    openLeftPanelView("Assets 1");
+    const input = screen.getByLabelText("Replace Original image");
+    fireEvent.change(input, { target: { files: [new File([new Uint8Array([2, 3, 4])], "updated.png", { type: "image/png" })] } });
+    const rows = within(screen.getByLabelText("Asset workspace rows"));
+    await waitFor(() => expect(rows.getByText("Replaced with updated.png")).toBeTruthy());
+    expect(editor.getAssetWorkspacePayloads().find((payload) => payload.assetId === "image-a")?.byteSize).toBe(3);
+    fireEvent.change(screen.getByLabelText("Search assets"), { target: { value: "no-match" } });
+    fireEvent.change(screen.getByLabelText("Search assets"), { target: { value: "" } });
+    expect(within(screen.getByLabelText("Asset workspace rows")).getByText("Replaced with updated.png")).toBeTruthy();
+  });
+
+  it("shows every referencing object and imports dropped rasters with the chosen intent", async () => {
+    const editor = createEditor();
+    for (const name of ["Arm", "Body", "Wheel", "Cabin"]) {
+      editor.dispatch({ type: "import-glb", objectId: name, name, asset: { id: "shared", label: "Shared model" } });
+    }
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    openLeftPanelView("Assets 1");
+    const rows = screen.getByLabelText("Asset workspace rows");
+    expect(rows.textContent).toContain("4 refs");
+    for (const name of ["Arm", "Body", "Wheel", "Cabin"]) expect(rows.textContent).toContain(name);
+    fireEvent.change(screen.getByLabelText("Raster intent"), { target: { value: "image" } });
+    const importArea = screen.getByLabelText("Import assets").closest(".ek-workbench__asset-import")!;
+    fireEvent.drop(importArea, { dataTransfer: { files: [new File([new Uint8Array([1])], "backdrop.png", { type: "image/png" })] } });
+    await waitFor(() => expect(Object.values(editor.getSnapshot().assets)).toContainEqual(expect.objectContaining({ kind: "image", label: "backdrop.png" })));
+    expect(within(screen.getByLabelText("Asset import queue")).getByText(/succeeded · Image/)).toBeTruthy();
+  });
+
   it("filters asset rows using core workspace search semantics", () => {
     const editor = createEditor();
     editor.dispatch({ type: "register-asset", asset: { id: "texture-a", kind: "texture", label: "Panel paint", source: new Uint8Array([1]) } });
@@ -372,21 +413,55 @@ describe("React EditorWorkbench", () => {
     render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
     openLeftPanelView("Assets 2");
 
-    const expectedIds = filterAssetWorkspaceItems(
-      buildAssetWorkspaceModel(editor.getSnapshot(), {
-        payloads: editor.getAssetWorkspacePayloads()
-      }).items,
-      { query: "manual" }
-    ).map((item) => item.id);
-
     act(() => {
       fireEvent.change(screen.getByLabelText("Search assets"), { target: { value: "manual" } });
     });
 
-    expect(expectedIds).toEqual(["image-a"]);
     const rows = within(screen.getByLabelText("Asset workspace rows"));
     expect(rows.getByText("Manual label")).toBeTruthy();
     expect(rows.queryByText("Panel paint")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Search assets"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Kind"), { target: { value: "texture" } });
+    expect(rows.getByText("Panel paint")).toBeTruthy();
+    expect(rows.queryByText("Manual label")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Status", { selector: "select" }), { target: { value: "missing-payload" } });
+    expect(screen.getByText("No matching assets. Adjust search or filters.")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Status", { selector: "select" }), { target: { value: "all" } });
+    fireEvent.change(screen.getByLabelText("Kind"), { target: { value: "all" } });
+    fireEvent.change(screen.getByLabelText("Sort"), { target: { value: "label" } });
+    const labels = within(screen.getByLabelText("Asset workspace rows")).getAllByText(/^(Manual label|Panel paint)$/);
+    expect(labels.map((label) => label.textContent)).toEqual(["Manual label", "Panel paint"]);
+  });
+
+  it("keeps the latest GLB reimport feedback when an older analysis fails", async () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: {
+      id: "asset-a", label: "robot.glb", source: new Uint8Array([1]),
+      metadata: attachGlbImportManifestMetadata(undefined, createWorkbenchManifest())
+    } });
+    const first = createDeferred<{ scene: Group; manifest: ReturnType<typeof createWorkbenchManifest> }>();
+    const second = createDeferred<{ scene: Group; manifest: ReturnType<typeof createWorkbenchManifest> }>();
+    const loader: EditorRuntimeOptions["loader"] = {
+      load: async () => new Group(),
+      analyze: vi.fn(async () => ({ scene: new Group(), manifest: createWorkbenchManifest() }))
+    };
+    const urls = mockObjectUrls();
+    render(<EditorWorkbench editor={editor} loader={loader} rendererFactory={fakeRenderer} />);
+    openLeftPanelView("Assets 1");
+    await act(async () => { await editor.getRuntime()!.project(); });
+    vi.mocked(loader.analyze!).mockClear().mockImplementationOnce(() => first.promise).mockImplementationOnce(() => second.promise);
+    const input = screen.getByLabelText("Reimport robot.glb");
+    fireEvent.change(input, { target: { files: [new File([new Uint8Array([1, 2, 3])], "older.glb", { type: "model/gltf-binary" })] } });
+    await waitFor(() => expect(loader.analyze).toHaveBeenCalledTimes(1));
+    fireEvent.change(input, { target: { files: [new File([new Uint8Array([4, 5, 6])], "newer.glb", { type: "model/gltf-binary" })] } });
+    await waitFor(() => expect(loader.analyze).toHaveBeenCalledTimes(2));
+    await act(async () => second.resolve({ scene: new Group(), manifest: createWorkbenchManifest() }));
+    const latest = await screen.findByText(/exact · .*remapped/);
+    const summary = latest.textContent;
+    await act(async () => first.reject(new Error("Older analysis failed")));
+    expect(screen.getByText(summary!)).toBeTruthy();
+    expect(editor.getSnapshot().objects["object-a"].asset.id).toBe("asset-a");
+    urls.restore();
   });
 
   it("reimports GLB assets from the default asset row through core remap API", async () => {
@@ -693,11 +768,11 @@ describe("React EditorWorkbench", () => {
       }
     });
 
-    expect(await screen.findByText(/succeeded · texture · Imported asset-/)).toBeTruthy();
+    expect(await screen.findByText(/succeeded · Texture · Imported asset-/)).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("Language"), { target: { value: "zh-CN" } });
 
-    expect(await screen.findByText(/已成功 · texture · 已导入 asset-/)).toBeTruthy();
+    expect(await screen.findByText(/已成功 · 纹理 · 已导入 asset-/)).toBeTruthy();
     expect(screen.getAllByText("paint.png").length).toBeGreaterThan(0);
     urls.restore();
   });

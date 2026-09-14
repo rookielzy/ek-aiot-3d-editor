@@ -536,6 +536,85 @@ describe("proof-loop starter demo browser verification", () => {
     } finally { await page.viewport(originalSize.width, originalSize.height); }
   }, 20000);
 
+  it("maintains React assets through native file inputs at desktop sizes", async () => {
+    const originalSize = { width: window.innerWidth, height: window.innerHeight };
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "box", name: "Recovery box", asset: { id: "box-asset", label: "Missing box" } });
+    const inheritedStyles = [...document.querySelectorAll<HTMLStyleElement>("style[data-vite-dev-id]")].map((style) => ({ style, disabled: style.disabled }));
+    inheritedStyles.forEach(({ style }) => { style.disabled = true; });
+    const geometry = new BoxGeometry();
+    const material = new MeshBasicMaterial({ color: "#6587bc" });
+    const mesh = new Mesh(geometry, material);
+    mesh.name = "RecoveryMesh";
+    const scene = new Group();
+    scene.add(mesh);
+    const bytes = await new GLTFExporter().parseAsync(scene, { binary: true }) as ArrayBuffer;
+    geometry.dispose(); material.dispose();
+    const modelFile = (name: string) => new File([bytes], name, { type: "model/gltf-binary" });
+    installStyles("react-assets-styles", [ReactWorkbenchStyles, ReactInspectorStyles]);
+    const host = createHost();
+    const root = createRoot(host);
+    const loader = new ThreeGltfLoaderAdapter();
+    root.render(<EditorWorkbench editor={editor} loader={loader} />);
+    cleanup = () => {
+      root.unmount(); editor.dispose(); removeStyles("react-assets-styles");
+      inheritedStyles.forEach(({ style, disabled }) => { style.disabled = disabled; });
+    };
+    try {
+      await page.viewport(1440, 900);
+      await waitFor(() => expect(editor.getRuntime()).toBeTruthy());
+      await openLeftWorkspaceView(host, "Assets");
+      await waitFor(() => expect(host.querySelector('[aria-label="Missing asset recovery"] input')).toBeTruthy());
+      await page.elementLocator(host.querySelector<HTMLInputElement>('[aria-label="Missing asset recovery"] input')!).upload(modelFile("restored.glb"));
+      await waitFor(() => {
+        expect(host.querySelector('[aria-label="Missing asset recovery"]')).toBeNull();
+        expect(text(section(host, "Asset recovery status"))).toContain("Replaced with restored.glb");
+        expect(editor.getRuntime()!.getObject("box")?.getObjectByName("RecoveryMesh")).toBeTruthy();
+      });
+      const runtime = editor.getRuntime();
+      runtime!.frameAll();
+      const canvas = host.querySelector("canvas");
+      await page.getByLabelText("Reimport Missing box", { exact: true }).upload(modelFile("updated.glb"));
+      await waitFor(() => expect(text(section(host, "Asset workspace rows"))).toContain("remapped"));
+      expect(editor.getSnapshot().objects.box.asset.id).toBe("box-asset");
+      expect(text(section(host, "Asset workspace rows"))).toContain("Recovery box");
+      expect(editor.getAssetWorkspacePayloads().find((payload) => payload.assetId === "box-asset")?.byteSize).toBeGreaterThan(0);
+
+      await page.getByLabelText("Raster intent", { exact: true }).selectOptions("image");
+      await page.getByLabelText("Import assets", { exact: true }).upload([
+        new File([new Uint8Array([1, 2, 3])], "reference.png", { type: "image/png" }),
+        new File(["unsupported"], "notes.txt", { type: "text/plain" })
+      ]);
+      await waitFor(() => {
+        expect(text(section(host, "Asset import queue"))).toContain("Unsupported asset type");
+        expect(Object.values(editor.getSnapshot().assets).some((asset) => asset.kind === "image" && asset.label === "reference.png")).toBe(true);
+      });
+      await page.getByLabelText("Replace reference.png", { exact: true }).upload(new File([new Uint8Array([4, 5])], "replaced.png", { type: "image/png" }));
+      await waitFor(() => expect(text(section(host, "Asset workspace rows"))).toContain("Replaced with replaced.png"));
+      await page.getByLabelText("Search assets", { exact: true }).fill("does-not-exist");
+      await waitFor(() => expect(text(section(host, "Assets"))).toContain("No matching assets"));
+      await page.getByLabelText("Search assets", { exact: true }).clear();
+      for (const [width, height] of [[1440, 900], [1920, 1080], [1100, 800]]) {
+        await page.viewport(width, height);
+        const panel = section(host, "Project panel");
+        const replace = page.getByLabelText("Replace reference.png", { exact: true });
+        await replace.element().scrollIntoView({ block: "nearest" });
+        (replace.element() as HTMLElement).focus();
+        expect(document.activeElement).toBe(replace.element());
+        await waitFor(() => {
+          expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
+          expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+          expect(section(host, "Editor status").getBoundingClientRect().bottom).toBeLessThanOrEqual(height);
+        });
+      }
+      root.render(<EditorWorkbench editor={editor} loader={loader} locale="zh-CN" />);
+      await waitFor(() => expect(text(host)).toContain("已替换为 replaced.png"));
+      expect(editor.getRuntime()).toBe(runtime);
+      expect(host.querySelector("canvas")).toBe(canvas);
+      expect(text(section(host, "资源工作区行"))).toContain("对象 Recovery box");
+    } finally { await page.viewport(originalSize.width, originalSize.height); }
+  }, 20000);
+
   it("drives the Vue starter through the package default workbench", async () => {
     const root = mountVueDemo();
     cleanup = root.cleanup;
