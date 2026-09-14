@@ -547,12 +547,19 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     activeLightNodeId: inspector.value.lights.activeLightNodeId,
     activeCameraViewId: activeCameraViewId.value,
     operations: {
-      ...currentEditor.value.operations,
       copy(...args) {
         const payload = currentEditor.value.operations.copy(...args);
         clipboardVersion.value++;
         return payload;
-      }
+      },
+      paste: (...args) => currentEditor.value.operations.paste(...args),
+      duplicate: (...args) => currentEditor.value.operations.duplicate(...args),
+      delete: (...args) => currentEditor.value.operations.delete(...args),
+      group: (...args) => currentEditor.value.operations.group(...args),
+      ungroup: (...args) => currentEditor.value.operations.ungroup(...args),
+      selectAll: () => currentEditor.value.operations.selectAll(),
+      clearSelection: () => currentEditor.value.operations.clearSelection(),
+      canPaste: () => currentEditor.value.operations.canPaste()
     },
     historyState: currentEditor.value.getHistoryState(),
     selectionCount: model.value.selection.count,

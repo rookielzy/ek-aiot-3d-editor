@@ -21,19 +21,23 @@ import { decodeProjectPackageText, resolveProjectPackageBytes, seedI18nDurableEd
 describe("Vue EditorWorkbench", () => {
   it("disables empty clipboard paste and refreshes it after scoped-slot copy", async () => {
     const editor = markRaw(createEditor());
+    // Host implementations may inherit their operations instead of using own properties.
+    Object.defineProperty(editor, "operations", { value: Object.create(editor.operations) });
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
     editor.dispatch({ type: "select-object", objectId: "object-a" });
     const wrapper = mount(EditorWorkbench, {
       props: { editor, rendererFactory: fakeRenderer },
-      slots: { toolbar: ({ operations }) => h("button", { "data-host-copy": "", onClick: () => operations.copy() }, "Host copy") }
+      slots: { toolbar: ({ operations }) => [
+        h("button", { "data-host-copy": "", onClick: () => operations.copy() }, "Host copy"),
+        h("button", { "data-host-paste": "", onClick: () => operations.paste() }, "Host paste")
+      ] }
     });
     const paste = () => wrapper.findAll("button").find((button) => button.text() === "Paste")!;
     expect(paste().attributes("disabled")).toBeDefined();
     expect(paste().attributes("title")).toBe("Copy a node before pasting.");
     await wrapper.get('[data-host-copy]').trigger("click");
     expect(paste().attributes("disabled")).toBeUndefined();
-    await wrapper.get('[aria-label="Node operations"]').trigger("click");
-    await paste().trigger("click");
+    await wrapper.get('[data-host-paste]').trigger("click");
     expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(2);
     wrapper.unmount();
   });
