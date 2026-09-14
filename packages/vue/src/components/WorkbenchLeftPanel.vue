@@ -1,21 +1,5 @@
 <template>
   <div class="ek-workbench__default-left-panel">
-    <nav class="ek-workbench__panel-nav" :aria-label="t('reactWorkbench.leftPanel.nav.label')">
-      <button
-        v-for="view in panelViews"
-        :key="view.id"
-        type="button"
-        class="ek-workbench__panel-tab"
-        :aria-label="`${view.label} ${view.count}`"
-        :aria-pressed="activeView === view.id"
-        :data-tone="view.tone"
-        @click="activeView = view.id"
-      >
-        <span>{{ view.label }}</span>
-        <strong>{{ view.count }}</strong>
-      </button>
-    </nav>
-
     <section class="ek-workbench__panel-section" :aria-label="t('reactWorkbench.leftPanel.hierarchy.label')" :hidden="activeView !== 'scene'">
       <template v-if="activeView === 'scene'">
         <div class="ek-workbench__section-header">
@@ -255,7 +239,6 @@ import {
 } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext } from "../composables/use-workbench";
 import type { WorkbenchMessageKey, WorkbenchMessageValues } from "../i18n/workbench-i18n";
-import { problemToneFromCounts, type WorkbenchTone } from "./workbench-model-helpers";
 import WorkbenchNodeRow from "./WorkbenchNodeRow.vue";
 
 type LocalizedStatusMessage =
@@ -278,7 +261,6 @@ type AssetRecoveryState = Record<string, LocalizedStatusMessage>;
 type AssetQueueStatus = "queued" | "importing" | "succeeded" | "failed";
 type AssetStatusFilter = "all" | AssetWorkspaceStatus;
 type AssetKindFilter = "all" | AssetKind;
-type WorkbenchPanelView = "scene" | "assets" | "project";
 
 interface AssetQueueItem {
   id: string;
@@ -291,6 +273,7 @@ interface AssetQueueItem {
 
 const props = defineProps<{
   context: ResolvedWorkbenchContext;
+  activeView: "scene" | "assets" | "project";
 }>();
 
 const recoveryState = reactive<AssetRecoveryState>({});
@@ -303,7 +286,7 @@ const assetSort = ref<AssetWorkspaceSortKey>("status");
 const rasterKind = ref<WorkbenchRasterImportKind>("texture");
 const queue = ref<AssetQueueItem[]>([]);
 const dragActive = ref(false);
-const activeView = ref<WorkbenchPanelView>("scene");
+
 const model = computed(() => props.context.model);
 const workspace = computed(() => model.value.assets.workspace);
 const t = (message: Parameters<ResolvedWorkbenchContext["i18n"]["t"]>[0], values?: WorkbenchMessageValues) => props.context.i18n.t(message, values);
@@ -312,26 +295,6 @@ const projectAssetKey = computed(() => [
   props.context.snapshot.scene.id,
   ...Object.keys(props.context.snapshot.assets).sort()
 ].join("\u0000"));
-const panelViews = computed<Array<{ id: WorkbenchPanelView; label: string; count: number; tone: WorkbenchTone | "active" }>>(() => [
-  {
-    id: "scene",
-    label: t("reactWorkbench.leftPanel.nav.scene"),
-    count: model.value.hierarchy.totalCount,
-    tone: model.value.hierarchy.selectedCount > 0 ? "active" : "neutral"
-  },
-  {
-    id: "assets",
-    label: t("reactWorkbench.leftPanel.nav.assets"),
-    count: workspace.value?.totalCount ?? model.value.assets.totalCount,
-    tone: model.value.assets.missingCount > 0 ? "warning" : "neutral"
-  },
-  {
-    id: "project",
-    label: t("reactWorkbench.leftPanel.nav.project"),
-    count: model.value.problems.totalCount,
-    tone: problemToneFromCounts(model.value.problems.bySeverity, model.value.problems.totalCount)
-  }
-]);
 const visibleAssets = computed(() => {
   const filtered = filterAssetWorkspaceItems(workspace.value?.items ?? [], {
     query: assetQuery.value,

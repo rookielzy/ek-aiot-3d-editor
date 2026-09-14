@@ -19,6 +19,50 @@ import { expectAuthoredValuesPresent, expectNoI18nDurableLeakage, expectNoRuntim
 import { decodeProjectPackageText, resolveProjectPackageBytes, seedI18nDurableEditor } from "../../test/i18n-durable-fixture";
 
 describe("Vue EditorWorkbench", () => {
+  it("opens secondary tools with the keyboard and restores focus when dismissed", async () => {
+    const wrapper = mount(EditorWorkbench, {
+      attachTo: document.body,
+      props: { editor: markRaw(createEditor()), rendererFactory: fakeRenderer }
+    });
+    const trigger = wrapper.get('button[aria-label="Viewport helpers"]');
+    await trigger.trigger("click");
+    const panel = wrapper.get(`#${trigger.attributes("aria-controls")}`);
+    expect(panel.attributes("hidden")).toBeUndefined();
+    expect(panel.element.contains(document.activeElement)).toBe(true);
+    await panel.trigger("keydown", { key: "Escape" });
+    expect(panel.attributes("hidden")).toBeDefined();
+    expect(document.activeElement).toBe(trigger.element);
+    wrapper.unmount();
+  });
+
+  it("keeps panel navigation, widths and locale in the shell without replacing the runtime", async () => {
+    const editor = markRaw(createEditor());
+    const ready = vi.fn();
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer, onRuntimeReady: ready }
+    });
+    await waitForAssertion(() => expect(ready).toHaveBeenCalled());
+    const canvas = wrapper.find("canvas").element;
+    const snapshot = editor.serialize();
+    const left = wrapper.get('[aria-label="Resize left panel"]');
+    await left.trigger("keydown", { key: "Home" });
+    expect(left.attributes("aria-valuenow")).toBe("220");
+    await left.trigger("keydown", { key: "ArrowRight" });
+    expect(left.attributes("aria-valuenow")).toBe("236");
+    await openPanelView(wrapper, "Assets");
+    await wrapper.get('[aria-label="Search assets"]').setValue("keep this filter");
+    await openPanelView(wrapper, "Assets");
+    expect(wrapper.get('[aria-label="Project panel"]').attributes("hidden")).toBeDefined();
+    await wrapper.get('[aria-label="Expand left panel"]').trigger("click");
+    expect((wrapper.get('[aria-label="Search assets"]').element as HTMLInputElement).value).toBe("keep this filter");
+    await wrapper.get('[aria-label="Language"]').setValue("zh-CN");
+    expect(wrapper.get('[aria-label="调整左面板宽度"]').attributes("aria-valuenow")).toBe("236");
+    expect(wrapper.find("canvas").element).toBe(canvas);
+    expect(ready).toHaveBeenCalledTimes(1);
+    expect(editor.serialize()).toEqual(snapshot);
+    wrapper.unmount();
+  });
+
   it("composes viewport, inspector, and scoped slots around one raw editor", () => {
     const editor = markRaw(createEditor());
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
@@ -494,7 +538,7 @@ describe("Vue EditorWorkbench", () => {
     expect(wrapper.find('[aria-label="Inspector panel"]').exists()).toBe(true);
     expect(wrapper.find('[aria-label="Editor status"]').exists()).toBe(true);
     expect(wrapper.find(".ek-workbench__command-button svg").exists()).toBe(true);
-    expect(wrapper.find(".ek-workbench__panel-nav").exists()).toBe(true);
+    expect(wrapper.find(".ek-workbench__navigation").exists()).toBe(true);
     expect(wrapper.find(".ek-inspector-summary").exists()).toBe(true);
     expect(wrapper.find(".ek-workbench__status-chip").exists()).toBe(true);
     expect(wrapper.text()).toContain("Hierarchy");
@@ -509,12 +553,12 @@ describe("Vue EditorWorkbench", () => {
     expect(wrapper.find('[aria-label="Assets"]').attributes("hidden")).toBeDefined();
     expect(wrapper.find('[aria-label="Project"]').attributes("hidden")).toBeDefined();
 
-    await wrapper.findAll(".ek-workbench__panel-tab").find((button) => button.text().includes("Assets"))!.trigger("click");
+    await wrapper.findAll(".ek-workbench__nav-button").find((button) => button.text().includes("Assets"))!.trigger("click");
     await nextTick();
     expect(wrapper.find('[aria-label="Assets"]').attributes("hidden")).toBeUndefined();
     expect(wrapper.text()).toContain("robot.glb");
 
-    await wrapper.findAll(".ek-workbench__panel-tab").find((button) => button.text().includes("Project"))!.trigger("click");
+    await wrapper.findAll(".ek-workbench__nav-button").find((button) => button.text().includes("Project"))!.trigger("click");
     await nextTick();
     expect(wrapper.find('[aria-label="Project"]').attributes("hidden")).toBeUndefined();
 
@@ -795,11 +839,13 @@ describe("Vue EditorWorkbench", () => {
       slots: {
         leftPanel: ({ assets, project, snapshot }) =>
           h("span", `Left ${Object.keys(snapshot.assets).length}:${project.exportProject().ok ? "exportable" : "blocked"}:${typeof assets.replaceAsset}`),
+        sidePanel: () => h("span", "Legacy slot must yield to leftPanel"),
         rightPanel: ({ inspector }) => h("span", `Right ${inspector.selection.count}`)
       }
     });
 
     expect(wrapper.text()).toContain("Left 1:blocked:function");
+    expect(wrapper.text()).not.toContain("Legacy slot must yield to leftPanel");
     expect(wrapper.text()).toContain("Right 0");
     expect(wrapper.text()).not.toContain("Hierarchy");
     expect(wrapper.text()).not.toContain("Transform");
@@ -1325,7 +1371,7 @@ async function waitForAssertion(assertion: () => void, timeout = 1000): Promise<
 }
 
 async function openPanelView(wrapper: ReturnType<typeof mount>, label: string): Promise<void> {
-  const tab = wrapper.findAll(".ek-workbench__panel-tab").find((button) => button.text().includes(label));
+  const tab = wrapper.findAll(".ek-workbench__nav-button").find((button) => button.text().includes(label));
   expect(tab, `Expected panel tab ${label}`).toBeTruthy();
   await tab!.trigger("click");
   await nextTick();

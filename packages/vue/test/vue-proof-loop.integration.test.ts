@@ -100,8 +100,8 @@ describe("Vue proof-loop parity", () => {
 
       const toolbar = wrapper.get('[aria-label="Editor controls"]');
       expect(buttonByText(toolbar, "Export").exists()).toBe(true);
-      expect(buttonByText(toolbar, "Move").attributes("aria-pressed")).toBe("true");
-      expect((buttonByText(toolbar, "Duplicate").element as HTMLButtonElement).disabled).toBe(true);
+      expect(buttonByText(wrapper, "Move").attributes("aria-pressed")).toBe("true");
+      expect((buttonByText(wrapper, "Duplicate").element as HTMLButtonElement).disabled).toBe(true);
 
       const projectPanel = wrapper.get('[aria-label="Project panel"]');
       const hierarchy = projectPanel.get('[aria-label="Hierarchy"]');
@@ -131,7 +131,7 @@ describe("Vue proof-loop parity", () => {
       await clickButton(wrapper, "Apply view");
 
       await clickButton(wrapper, "Snap move");
-      expect(buttonByText(toolbar, "Snap move").attributes("aria-pressed")).toBe("true");
+      expect(buttonByText(wrapper, "Snap move").attributes("aria-pressed")).toBe("true");
 
       const positionX = fieldInput(wrapper, "Position X");
       await positionX.setValue("2");
@@ -176,7 +176,7 @@ describe("Vue proof-loop parity", () => {
 });
 
 async function clickButton(wrapper: ReturnType<typeof mount>, text: string): Promise<void> {
-  const button = wrapper.findAll("button").filter((candidate) => candidate.text() === text).at(-1);
+  const button = wrapper.findAll("button").filter((candidate) => (candidate.attributes("aria-label") ?? candidate.text()) === text).at(-1);
   expect(button, `Expected button ${text}`).toBeTruthy();
   await button!.trigger("click");
   await nextTick();
@@ -184,7 +184,7 @@ async function clickButton(wrapper: ReturnType<typeof mount>, text: string): Pro
 }
 
 async function clickPanelTab(wrapper: ReturnType<typeof mount>, text: string): Promise<void> {
-  const button = wrapper.findAll(".ek-workbench__panel-tab").find((candidate) => candidate.text().includes(text));
+  const button = wrapper.findAll(".ek-workbench__nav-button").find((candidate) => candidate.text().includes(text));
   expect(button, `Expected panel tab ${text}`).toBeTruthy();
   await button!.trigger("click");
   await nextTick();
@@ -192,7 +192,7 @@ async function clickPanelTab(wrapper: ReturnType<typeof mount>, text: string): P
 }
 
 function buttonByText(wrapper: ReturnType<typeof mount> | ReturnType<ReturnType<typeof mount>["get"]>, text: string) {
-  const button = wrapper.findAll("button").find((candidate) => candidate.text() === text);
+  const button = wrapper.findAll("button").find((candidate) => (candidate.attributes("aria-label") ?? candidate.text()) === text);
   expect(button, `Expected button ${text}`).toBeTruthy();
   return button!;
 }

@@ -1,0 +1,156 @@
+{
+  "url": "http://127.0.0.1:5181/",
+  "failures": [],
+  "records": [
+    {
+      "width": 1440,
+      "state": "empty",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/vue-shell/1440-empty.png",
+      "overflow": false,
+      "statusBottom": 900,
+      "height": 900,
+      "canvasWidth": 772,
+      "canvasHeight": 808
+    },
+    {
+      "width": 1440,
+      "state": "selected",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/vue-shell/1440-selected.png",
+      "overflow": false,
+      "statusBottom": 900,
+      "height": 900,
+      "canvasWidth": 772,
+      "canvasHeight": 808
+    },
+    {
+      "width": 1440,
+      "state": "collapsed",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/vue-shell/1440-collapsed.png",
+      "overflow": false,
+      "statusBottom": 900,
+      "height": 900,
+      "canvasWidth": 1376,
+      "canvasHeight": 808
+    },
+    {
+      "width": 1440,
+      "state": "assets",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/vue-shell/1440-assets.png",
+      "overflow": false,
+      "statusBottom": 900,
+      "height": 900,
+      "canvasWidth": 772,
+      "canvasHeight": 808
+    },
+    {
+      "width": 1440,
+      "state": "zh-CN",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/vue-shell/1440-zh-CN.png",
+      "overflow": false,
+      "statusBottom": 900,
+      "height": 900,
+      "canvasWidth": 772,
+      "canvasHeight": 808
+    },
+    {
+      "width": 1920,
+      "state": "empty",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/vue-shell/1920-empty.png",
+      "overflow": false,
+      "statusBottom": 1080,
+      "height": 1080,
+      "canvasWidth": 1252,
+      "canvasHeight": 988
+    },
+    {
+      "width": 1920,
+      "state": "selected",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/vue-shell/1920-selected.png",
+      "overflow": false,
+      "statusBottom": 1080,
+      "height": 1080,
+      "canvasWidth": 1252,
+      "canvasHeight": 988
+    },
+    {
+      "width": 1920,
+      "state": "collapsed",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/vue-shell/1920-collapsed.png",
+      "overflow": false,
+      "statusBottom": 1080,
+      "height": 1080,
+      "canvasWidth": 1856,
+      "canvasHeight": 988
+    },
+    {
+      "width": 1920,
+      "state": "assets",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/vue-shell/1920-assets.png",
+      "overflow": false,
+      "statusBottom": 1080,
+      "height": 1080,
+      "canvasWidth": 1252,
+      "canvasHeight": 988
+    },
+    {
+      "width": 1920,
+      "state": "zh-CN",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/vue-shell/1920-zh-CN.png",
+      "overflow": false,
+      "statusBottom": 1080,
+      "height": 1080,
+      "canvasWidth": 1252,
+      "canvasHeight": 988
+    },
+    {
+      "width": 1100,
+      "state": "empty",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/vue-shell/1100-empty.png",
+      "overflow": false,
+      "statusBottom": 800,
+      "height": 800,
+      "canvasWidth": 432,
+      "canvasHeight": 630
+    },
+    {
+      "width": 1100,
+      "state": "selected",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/vue-shell/1100-selected.png",
+      "overflow": false,
+      "statusBottom": 800,
+      "height": 800,
+      "canvasWidth": 432,
+      "canvasHeight": 630
+    },
+    {
+      "width": 1100,
+      "state": "collapsed",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/vue-shell/1100-collapsed.png",
+      "overflow": false,
+      "statusBottom": 800,
+      "height": 800,
+      "canvasWidth": 1036,
+      "canvasHeight": 682
+    },
+    {
+      "width": 1100,
+      "state": "assets",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/vue-shell/1100-assets.png",
+      "overflow": false,
+      "statusBottom": 800,
+      "height": 800,
+      "canvasWidth": 432,
+      "canvasHeight": 630
+    },
+    {
+      "width": 1100,
+      "state": "zh-CN",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/vue-shell/1100-zh-CN.png",
+      "overflow": false,
+      "statusBottom": 800,
+      "height": 800,
+      "canvasWidth": 432,
+      "canvasHeight": 656
+    }
+  ]
+}

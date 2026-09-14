@@ -11,7 +11,7 @@ export default defineConfig({
       cssFileName: "index"
     },
     rollupOptions: {
-      external: ["vue", "@ek-aiot/3d-editor-core"]
+      external: ["vue", "three", "@ek-aiot/3d-editor-core"]
     }
   }
 });

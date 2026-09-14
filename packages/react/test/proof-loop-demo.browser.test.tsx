@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import { page, userEvent } from "vitest/browser";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { createRoot } from "react-dom/client";
-import { createApp, type App as VueApp } from "vue";
+import { createApp, h, markRaw, ref, type App as VueApp } from "vue";
+import { EditorWorkbench as VueEditorWorkbench } from "@ek-aiot/3d-editor-vue";
 import { afterEach, describe, expect, it } from "vitest";
 import { BoxGeometry, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial } from "three";
 import { AssetResolverBridge, createEditor, ThreeGltfLoaderAdapter, type GltfLoaderAdapter, type RendererLike } from "@ek-aiot/3d-editor-core";
@@ -201,9 +202,17 @@ describe("proof-loop starter demo browser verification", () => {
     await verifyStarterFlow(root.host, { assertProfessionalUi: true });
   }, 15000);
 
-  it("resizes and restores React panels across desktop sizes without replacing the canvas", async () => {
+  it.each([
+    { framework: "React", mount: mountReactEmptyHost },
+    { framework: "Vue", mount: mountVueDemo }
+  ])("resizes and restores $framework panels across desktop sizes without replacing the canvas", async ({ mount }) => {
+    const resizeErrors: string[] = [];
+    const captureResizeError = (event: ErrorEvent) => {
+      if (event.message.includes("ResizeObserver")) resizeErrors.push(event.message);
+    };
+    window.addEventListener("error", captureResizeError);
     const originalSize = { width: window.innerWidth, height: window.innerHeight };
-    const root = mountReactEmptyHost();
+    const root = mount();
     cleanup = root.cleanup;
     const { host } = root;
     try {
@@ -269,8 +278,119 @@ describe("proof-loop starter demo browser verification", () => {
       await verifyStarterFlow(host);
     } finally {
       await page.viewport(originalSize.width, originalSize.height);
+      await waitForAnimationFrame();
+      await waitForAnimationFrame();
+      window.removeEventListener("error", captureResizeError);
     }
+    expect(resizeErrors).toEqual([]);
   }, 30000);
+
+  it("keeps Vue host overlay actions and status drawers usable across desktop sizes", async () => {
+    const originalSize = { width: window.innerWidth, height: window.innerHeight };
+    const editor = markRaw(createEditor());
+    installStyles("vue-tools-drawer", [VueWorkbenchStyles, VueInspectorStyles]);
+    const host = createHost();
+    const app = createApp({
+      setup() {
+        const expanded = ref(false);
+        const overlayVisible = ref(true);
+        return () => h(VueEditorWorkbench, { editor, rendererFactory: paintedRenderer }, {
+          viewportOverlay: () => overlayVisible.value ? h("button", {
+            type: "button",
+            style: { position: "absolute", inset: "0 0 auto", height: "56px", width: "100%", maxWidth: "none" },
+            onClick: () => { overlayVisible.value = false; }
+          }, "Host overlay action") : null,
+          status: () => h("div", [
+            h("button", { type: "button", onClick: () => { expanded.value = !expanded.value; } }, "Host details"),
+            expanded.value ? h("div", { style: { height: "160px" } }, "Host diagnostic details") : null
+          ])
+        });
+      }
+    });
+    app.mount(host);
+    cleanup = () => { app.unmount(); editor.dispose(); removeStyles("vue-tools-drawer"); };
+    try {
+      await page.viewport(1440, 900);
+      await waitFor(() => expect(host.querySelector("canvas")).toBeTruthy());
+      const canvas = host.querySelector("canvas")!;
+      const snapshot = editor.serialize();
+      const rotate = host.querySelector('[title="Rotate mode"]')!.getBoundingClientRect();
+      const overlay = button(host, "Host overlay action")!;
+      expect(overlay.contains(document.elementFromPoint(rotate.left + rotate.width / 2, rotate.top + rotate.height / 2))).toBe(true);
+      await userEvent.click(overlay);
+      await waitFor(() => expect(button(host, "Host overlay action")).toBeNull());
+      for (const [width, height] of [[1440, 900], [1920, 1080], [1100, 800]]) {
+        await page.viewport(width, height);
+        await waitForAnimationFrame();
+        const before = canvas.getBoundingClientRect().height;
+        await userEvent.click(button(host, "Host details")!);
+        await waitFor(() => expect(canvas.getBoundingClientRect().height).toBeLessThan(before));
+        await verifyViewportToolsReachable(host);
+        await userEvent.click(button(host, "Host details")!);
+        await waitFor(() => expect(canvas.getBoundingClientRect().height).toBe(before));
+        expect(editor.serialize()).toEqual(snapshot);
+        expect(host.querySelector("canvas")).toBe(canvas);
+      }
+    } finally {
+      await page.viewport(originalSize.width, originalSize.height);
+    }
+  });
+
+  it.each(["en", "zh-CN"] as const)("edits a real GLB in the empty Vue shell and retains its runtime in %s", async (locale) => {
+    const originalSize = { width: window.innerWidth, height: window.innerHeight };
+    const editor = markRaw(createEditor());
+    const inheritedStyles = [...document.querySelectorAll<HTMLStyleElement>("style[data-vite-dev-id]")].map((style) => ({ style, disabled: style.disabled }));
+    inheritedStyles.forEach(({ style }) => { style.disabled = true; });
+    installStyles("vue-real-shell", [VueWorkbenchStyles, VueInspectorStyles]);
+    const host = createHost();
+    const app = createApp(VueEditorWorkbench, { editor, defaultLocale: locale, loader: new ThreeGltfLoaderAdapter() });
+    app.mount(host);
+    cleanup = () => {
+      app.unmount(); editor.dispose(); removeStyles("vue-real-shell");
+      inheritedStyles.forEach(({ style, disabled }) => { style.disabled = disabled; });
+    };
+    const label = (en: string, zh: string) => locale === "en" ? en : zh;
+    try {
+      await page.viewport(1440, 900);
+      await waitFor(() => expect(editor.getRuntime()).toBeTruthy());
+      const runtime = editor.getRuntime()!;
+      const canvas = host.querySelector("canvas")!;
+      expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(0);
+      const geometry = new BoxGeometry();
+      const material = new MeshStandardMaterial();
+      const bytes = await new GLTFExporter().parseAsync(new Mesh(geometry, material), { binary: true }) as ArrayBuffer;
+      geometry.dispose(); material.dispose();
+      await openLeftWorkspaceView(host, label("Assets", "资源"));
+      await uploadFile(section(host, label("Import assets", "导入资源")) as HTMLInputElement, new File([bytes], "editable-box.glb", { type: "model/gltf-binary" }));
+      await waitFor(() => expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(1));
+      const objectId = Object.keys(editor.getSnapshot().objects)[0];
+      await runtime.project();
+      expect(runtime.getObject(objectId)).toBeTruthy();
+      await openLeftWorkspaceView(host, label("Scene", "场景"));
+      await clickHierarchyRow(host, "editable-box", label("Hierarchy", "层级"));
+      expect(editor.getSnapshot().selection.objectId).toBe(objectId);
+      const position = findFieldInput(host, label("Position X", "位置 X"), 'input[type="number"]') as HTMLInputElement;
+      await userEvent.fill(position, "2");
+      await userEvent.keyboard("{Enter}{Tab}");
+      expect(editor.getSnapshot().objects[objectId].transform.position[0]).toBe(2);
+      await clickByText(host, label("Undo", "撤销"));
+      expect(editor.getSnapshot().objects[objectId].transform.position[0]).toBe(0);
+      const snapshot = editor.serialize();
+      const history = editor.getHistoryState();
+      await openLeftWorkspaceView(host, label("Assets", "资源"));
+      const resize = section(host, label("Resize right panel", "调整右面板宽度"));
+      resize.focus();
+      await userEvent.keyboard("{Home}{ArrowLeft}");
+      await userEvent.selectOptions(section(host, label("Language", "语言")) as HTMLSelectElement, locale === "en" ? "zh-CN" : "en");
+      expect(editor.serialize()).toEqual(snapshot);
+      expect(editor.getHistoryState()).toEqual(history);
+      expect(editor.getRuntime()).toBe(runtime);
+      expect(host.querySelector("canvas")).toBe(canvas);
+      expect(position.isConnected).toBe(true);
+    } finally {
+      await page.viewport(originalSize.width, originalSize.height);
+    }
+  });
 
   it("keeps tools reachable when a host status drawer reduces the viewport", async () => {
     const originalSize = { width: window.innerWidth, height: window.innerHeight };

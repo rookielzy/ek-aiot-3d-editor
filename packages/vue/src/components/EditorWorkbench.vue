@@ -1,13 +1,22 @@
 <template>
-  <main ref="root" :class="rootClassName" tabindex="0" :aria-label="context.i18n.t('reactWorkbench.shell.main.label')">
+  <main ref="root" :class="rootClassName" :data-desktop="desktop" :style="panelStyle" tabindex="0" :aria-label="context.i18n.t('reactWorkbench.shell.main.label')">
+    <nav class="ek-workbench__navigation" :aria-label="context.i18n.t('reactWorkbench.leftPanel.nav.label')">
+      <span class="ek-workbench__brand" aria-hidden="true">ek<span>.</span></span>
+      <button v-for="view in panelViews" :key="view.id" type="button" class="ek-workbench__nav-button"
+        :aria-label="`${context.i18n.t(`reactWorkbench.leftPanel.nav.${view.id}`)} ${view.count}`"
+        :aria-pressed="activeView === view.id" :aria-expanded="activeView === view.id && !leftCollapsed"
+        :aria-controls="`${panelId}-left`" @click="selectView(view.id)">
+        <WorkbenchIcon :name="view.icon" />
+        <span>{{ context.i18n.t(`reactWorkbench.leftPanel.nav.${view.id}`) }}</span>
+        <small>{{ view.count }}</small>
+      </button>
+    </nav>
     <div v-if="showDefaultToolbar || $slots.toolbar" class="ek-workbench__toolbar">
       <WorkbenchToolbar
         v-if="showDefaultToolbar"
         :context="context"
-        :marquee-selection-enabled="marqueeSelectionEnabled"
         :show-locale-switcher="showLocaleSwitcher"
         :locale-switcher-disabled="localeSwitcherDisabled"
-        @toggle-marquee-selection="marqueeSelectionEnabled = !marqueeSelectionEnabled"
       />
       <div v-if="$slots.toolbar" class="ek-workbench__toolbar-region">
         <slot name="toolbar" v-bind="context" />
@@ -15,27 +24,46 @@
     </div>
 
     <section class="ek-workbench__viewport-shell" :aria-label="context.i18n.t('reactWorkbench.shell.viewport.label')">
+      <div class="ek-workbench__panel-toggles">
+        <button type="button" :aria-controls="`${panelId}-left`" :aria-expanded="!leftCollapsed"
+          :aria-label="context.i18n.t(leftCollapsed ? 'reactWorkbench.shell.left.expand' : 'reactWorkbench.shell.left.collapse')"
+          @click="leftCollapsed = !leftCollapsed">{{ leftCollapsed ? "»" : "«" }}</button>
+        <button type="button" :aria-controls="`${panelId}-right`" :aria-expanded="!rightCollapsed"
+          :aria-label="context.i18n.t(rightCollapsed ? 'reactWorkbench.shell.right.expand' : 'reactWorkbench.shell.right.collapse')"
+          @click="rightCollapsed = !rightCollapsed">{{ rightCollapsed ? "«" : "»" }}</button>
+      </div>
+      <WorkbenchViewportTools v-if="showDefaultToolbar" :context="context"
+        :marquee-selection-enabled="marqueeSelectionEnabled"
+        @toggle-marquee-selection="marqueeSelectionEnabled = !marqueeSelectionEnabled" />
       <EditorViewport
         :editor="workbench.editor"
         :resolver="resolver"
         :loader="loader"
-        :renderer-factory="rendererFactory"
+        :renderer-factory="rendererFactory ?? createWorkbenchRenderer"
         :interactions="resolvedInteractions"
         :class="viewportClassName ? `ek-workbench__viewport ${viewportClassName}` : 'ek-workbench__viewport'"
         @runtime-ready="emit('runtimeReady', $event)"
       />
+      <div v-if="context.model.hierarchy.totalCount === 0" class="ek-workbench__empty-viewport">
+        <strong>{{ context.i18n.t("reactWorkbench.shell.empty.title") }}</strong>
+        <p>{{ context.i18n.t("reactWorkbench.shell.empty.description") }}</p>
+      </div>
       <div v-if="$slots.viewportOverlay" class="ek-workbench__overlay">
         <slot name="viewportOverlay" v-bind="context" />
       </div>
     </section>
 
-    <aside class="ek-workbench__side-panel" :aria-label="context.i18n.t('reactWorkbench.shell.projectPanel.label')">
+    <aside :id="`${panelId}-left`" :hidden="leftCollapsed" class="ek-workbench__side-panel" :aria-label="context.i18n.t('reactWorkbench.shell.projectPanel.label')">
       <slot v-if="$slots.leftPanel" name="leftPanel" v-bind="context" />
       <slot v-else-if="$slots.sidePanel" name="sidePanel" v-bind="context" />
-      <WorkbenchLeftPanel v-else :context="context" />
+      <WorkbenchLeftPanel v-else :context="context" :active-view="activeView" />
     </aside>
 
-    <aside class="ek-workbench__right-panel" :aria-label="context.i18n.t('reactWorkbench.shell.inspectorPanel.label')">
+    <WorkbenchPanelResize v-if="desktop && !leftCollapsed" side="left" :panel-id="`${panelId}-left`"
+      :label="context.i18n.t('reactWorkbench.shell.left.resize')" :width="leftWidth" :minimum="220" :maximum="maximum" @resize="setLeftWidth" />
+    <WorkbenchPanelResize v-if="desktop && !rightCollapsed" side="right" :panel-id="`${panelId}-right`"
+      :label="context.i18n.t('reactWorkbench.shell.right.resize')" :width="rightWidth" :minimum="260" :maximum="maximum" @resize="setRightWidth" />
+    <aside :id="`${panelId}-right`" :hidden="rightCollapsed" class="ek-workbench__right-panel" :aria-label="context.i18n.t('reactWorkbench.shell.inspectorPanel.label')">
       <slot v-if="$slots.rightPanel" name="rightPanel" v-bind="context" />
       <InspectorView
         v-else
@@ -59,7 +87,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, toRef } from "vue";
+import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, toRef, useId } from "vue";
 import { resolveEditorShortcut, type EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
 import { useWorkbench } from "../composables/use-workbench";
 import type { EditorWorkbenchEmitDefinitions, EditorWorkbenchProps, EditorWorkbenchSlots } from "./EditorWorkbench.types";
@@ -68,6 +96,11 @@ import InspectorView from "./InspectorView.vue";
 import WorkbenchLeftPanel from "./WorkbenchLeftPanel.vue";
 import WorkbenchStatusBar from "./WorkbenchStatusBar.vue";
 import WorkbenchToolbar from "./WorkbenchToolbar.vue";
+import WorkbenchViewportTools from "./WorkbenchViewportTools.vue";
+import WorkbenchIcon, { type WorkbenchIconName } from "./WorkbenchIcon.vue";
+import WorkbenchPanelResize from "./WorkbenchPanelResize.vue";
+import { useWorkbenchPanelWidths } from "../composables/use-workbench-panel-widths";
+import { createWorkbenchRenderer } from "./workbench-renderer";
 import "./workbench.css";
 
 const DEFAULT_WORKBENCH_INTERACTIONS = {
@@ -115,6 +148,28 @@ const showDefaultToolbar = computed(() => props.showDefaultToolbar);
 const showLocaleSwitcher = computed(() => props.showLocaleSwitcher);
 const localeSwitcherDisabled = computed(() => props.localeSwitcherDisabled);
 const root = ref<HTMLElement | null>(null);
+const panelId = useId();
+type PanelView = "scene" | "assets" | "project";
+const activeView = ref<PanelView>("scene");
+const leftCollapsed = ref(false);
+const rightCollapsed = ref(false);
+const { desktop, maximum, leftWidth, rightWidth, setLeftWidth, setRightWidth } = useWorkbenchPanelWidths(root);
+const panelStyle = computed(() => ({
+  "--ek-workbench-left-width": `${leftCollapsed.value ? 0 : leftWidth.value}px`,
+  "--ek-workbench-right-width": `${rightCollapsed.value ? 0 : rightWidth.value}px`,
+  "--ek-workbench-left-handle": leftCollapsed.value ? "0px" : "6px",
+  "--ek-workbench-right-handle": rightCollapsed.value ? "0px" : "6px"
+}));
+const panelViews = computed<Array<{ id: PanelView; icon: WorkbenchIconName; count: number }>>(() => [
+  { id: "scene", icon: "group", count: context.value.model.hierarchy.totalCount },
+  { id: "assets", icon: "floor", count: context.value.model.assets.workspace?.totalCount ?? context.value.model.assets.totalCount },
+  { id: "project", icon: "open", count: context.value.model.problems.totalCount }
+]);
+
+function selectView(view: PanelView): void {
+  leftCollapsed.value = activeView.value === view ? !leftCollapsed.value : false;
+  activeView.value = view;
+}
 
 function replaceAsset(assetId: string, file: File): void {
   void workbench.replaceAsset({ assetId, source: file, label: file.name, mimeType: file.type });
