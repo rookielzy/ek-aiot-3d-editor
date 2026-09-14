@@ -28,3 +28,17 @@ Git history uses Conventional Commit-style messages such as `feat(core): extend 
 ## Agent-Specific Instructions
 
 Do not serialize runtime-only values such as Three.js objects, `File`, `Blob`, object URLs, loaded textures, PMREM outputs, or resolver results into durable snapshots. Keep durable editor state in the versioned scene snapshot and expose transient runtime failures as problems instead.
+
+## Agent skills
+
+### Issue tracker
+
+任务与规格使用本地 Markdown 管理。创建、读取或更新任务前，阅读 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+使用五个默认分类标签。分类任务或变更分类状态前，阅读 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+采用 single-context 布局。探索代码或提出领域、架构变更前，阅读 `docs/agents/domain.md`。
