@@ -29,6 +29,29 @@ DOM 覆盖菜单关闭、焦点、缺失文件恢复、失败打开不替换场�
 
 Context7 未配置密钥；焦点 ref 的使用核对了 [React useRef 官方文档](https://react.dev/reference/react/useRef)。
 
-## 验证与审查
+## Standards
 
-待本次最终全量检查及双轴审查后补充命令与结果。
+审查基点 `51257a7`，实现提交 `e8b13a7`。规范轴未发现有证据的硬违规；确认瞬时 File 与操作错误未进入 durable snapshot，代码、测试、截图的位置及提交形式符合 AGENTS.md。
+
+提出 1 项判断性建议：EditorWorkbench 为注入项目操作问题，重复了 useWorkbench 的 model/problems 组装，存在潜在 Duplicated Code / Feature Envy 风险；建议将瞬时问题参数交给 hook 统一处理。此次保留这段工作台会话边界：Core 仍是唯一派生模型构建者，useWorkbench 的已有公开调用语义不增加副作用，也不为本次 UI 需求扩展公开选项。当前两处字段一致；后续模型扩展时需同步核对。
+
+## Spec
+
+规格轴未发现任务 08 范围内的偏差或实现错误。确认菜单三类项目结果、八类状态、诊断及恢复、关闭保留、中英项目往返、locale/runtime/input 稳定、UI/session 边界及 public render regions 保持；未发现越界行为。
+
+合计：Standards 0 项硬违规、1 项维护建议（按上述边界保留）；Spec 0 项问题。
+
+## 最终验证
+
+| 命令 | 结果 |
+| --- | --- |
+| `pnpm build` | Core / React / Vue 通过 |
+| `pnpm typecheck` | 三个包通过 |
+| `pnpm --filter @ek-aiot/react-proof-loop build` | 通过 |
+| `pnpm --filter @ek-aiot/vue-proof-loop build` | 通过 |
+| `pnpm exec vitest run packages/react/test/workbench.test.tsx packages/react/test/react-proof-loop.integration.test.tsx packages/react/test/i18n-string-audit.test.ts packages/react/test/workbench-i18n-parity.test.ts` | 4 文件、68/68 |
+| 新增原生 Chromium 浏览器用例 | 缺失资源恢复及 en/zh-CN 完整往返，3/3 |
+| `pnpm test` | 113 文件、915/915，50.34s |
+| `pnpm test:browser` | 9 个文件/配置实例、66/66，59.90s |
+
+浏览器使用本机 `LD_LIBRARY_PATH=/home/slimj/.cache/playwright-system-libs/ubuntu-noble/root/usr/lib/x86_64-linux-gnu`。沿用既有 JSDOM canvas 提示、示例大 chunk 提示；原生浏览器日志仍有 TransformControls 的 attached-object/scene-graph 提示，之前的宿主闭环也出现过。实际对象恢复、相机状态和所有行为断言通过，没有跳过测试或放宽 timeout。
