@@ -1,22 +1,11 @@
 <template>
   <div class="ek-workbench__default-left-panel">
     <section class="ek-workbench__panel-section" :aria-label="t('reactWorkbench.leftPanel.hierarchy.label')" :hidden="activeView !== 'scene'">
-      <template v-if="activeView === 'scene'">
-        <div class="ek-workbench__section-header">
-          <h2>{{ t("reactWorkbench.leftPanel.hierarchy.label") }}</h2>
-          <span>{{ t("reactWorkbench.leftPanel.hierarchy.count", { selectedCount: model.hierarchy.selectedCount, totalCount: model.hierarchy.totalCount }) }}</span>
-        </div>
-        <p v-if="model.hierarchy.empty" class="ek-workbench__empty">{{ t("reactWorkbench.leftPanel.hierarchy.empty") }}</p>
-        <ul v-else class="ek-workbench__tree">
-          <WorkbenchNodeRow
-            v-for="row in model.hierarchy.roots"
-            :key="row.id"
-            :row="row"
-            :rows-by-id="context.hierarchyRowsById"
-            :select-node="selectNode"
-          />
-        </ul>
-      </template>
+      <div class="ek-workbench__section-header">
+        <h2>{{ t("reactWorkbench.leftPanel.hierarchy.label") }}</h2>
+        <span>{{ t("reactWorkbench.leftPanel.hierarchy.count", { selectedCount: model.hierarchy.selectedCount, totalCount: model.hierarchy.totalCount }) }}</span>
+      </div>
+      <WorkbenchHierarchy :context="context" />
     </section>
 
     <section class="ek-workbench__panel-section" :aria-label="t('reactWorkbench.leftPanel.assets.label')" :hidden="activeView !== 'assets'">
@@ -239,7 +228,7 @@ import {
 } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext } from "../composables/use-workbench";
 import type { WorkbenchMessageKey, WorkbenchMessageValues } from "../i18n/workbench-i18n";
-import WorkbenchNodeRow from "./WorkbenchNodeRow.vue";
+import WorkbenchHierarchy from "./WorkbenchHierarchy.vue";
 
 type LocalizedStatusMessage =
   | {
@@ -333,10 +322,6 @@ watch(
   },
   { flush: "post" }
 );
-
-function selectNode(nodeId: string): void {
-  props.context.dispatch({ type: "select-node", nodeId });
-}
 
 async function importAssetFiles(files: readonly File[]): Promise<void> {
   if (files.length === 0) {

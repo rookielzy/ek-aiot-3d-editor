@@ -467,7 +467,8 @@ export function createImportedTargetNonTransformableProblem(match: RuntimeImport
     message: `Imported target ${match.importKey} is linked to a shared runtime object and cannot be transformed independently.`,
     display: {
       title: "Imported target cannot be transformed independently",
-      titleDescriptor: problemDescriptor("importedTarget.nonTransformable", "title", "Imported target cannot be transformed independently", { importKey: match.importKey, objectId: match.ownerObjectId })
+      titleDescriptor: problemDescriptor("importedTarget.nonTransformable", "title", "Imported target cannot be transformed independently", { importKey: match.importKey, objectId: match.ownerObjectId }),
+      detailDescriptor: problemDescriptor("importedTarget.nonTransformable", "detail", "Imported target {importKey} is linked to a shared runtime object and cannot be transformed independently.", { importKey: match.importKey, objectId: match.ownerObjectId })
     },
     metadata: {
       importKey: match.importKey,

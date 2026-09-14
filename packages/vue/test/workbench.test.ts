@@ -19,6 +19,105 @@ import { expectAuthoredValuesPresent, expectNoI18nDurableLeakage, expectNoRuntim
 import { decodeProjectPackageText, resolveProjectPackageBytes, seedI18nDurableEditor } from "../../test/i18n-durable-fixture";
 
 describe("Vue EditorWorkbench", () => {
+  it("keeps light and camera selection and search drafts across locale and panel changes", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "add-light", light: { id: "light-a", name: "Key light", kind: "point" } });
+    editor.dispatch({ type: "create-camera-view", view: { id: "camera-a", name: "Front view" } });
+    const wrapper = mount(EditorWorkbench, { props: { editor, rendererFactory: fakeRenderer } });
+    await wrapper.get('[title="Key light"]').trigger("click");
+    expect(editor.getSnapshot().nodes[editor.getSnapshot().selection.nodeId!].kind).toBe("light");
+    expect(wrapper.text()).toContain("Selection Key light");
+    await wrapper.get('[title="Front view"]').trigger("click");
+    expect(editor.getSnapshot().nodes[editor.getSnapshot().selection.nodeId!].kind).toBe("camera");
+    expect(wrapper.text()).toContain("Selection Front view");
+    await wrapper.get('input[type="search"]').setValue("Front");
+    const before = editor.getSnapshot();
+    const history = editor.getHistoryState();
+    const runtime = editor.getRuntime();
+    const canvas = wrapper.get("canvas").element;
+    await openPanelView(wrapper, "Assets");
+    await wrapper.get('[aria-label="Resize left panel"]').trigger("keydown", { key: "ArrowRight" });
+    await openPanelView(wrapper, "Scene");
+    await wrapper.get('[aria-label="Language"]').setValue("zh-CN");
+    expect(wrapper.get(".ek-workbench__hierarchy-search").text()).toBe("搜索层级");
+    expect((wrapper.get('input[type="search"]').element as HTMLInputElement).value).toBe("Front");
+    expect(wrapper.text()).toContain("选择 Front view");
+    expect(editor.getSnapshot()).toEqual(before);
+    expect(editor.getHistoryState()).toEqual(history);
+    expect(editor.getRuntime()).toBe(runtime);
+    expect(wrapper.get("canvas").element).toBe(canvas);
+    await wrapper.get('input[type="search"]').setValue("absent");
+    expect(wrapper.text()).toContain("没有匹配的节点");
+    wrapper.unmount();
+  });
+
+  it("synchronizes modifier selection and reveals imported descendants through live slot context", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Robot", asset: {
+      id: "asset-a", metadata: attachGlbImportManifestMetadata(undefined, createWorkbenchManifest({ twoSlots: true }))
+    }, expandImportedTargets: true });
+    const imported = Object.values(editor.getSnapshot().nodes).find((node) => node.kind === "imported")!;
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer },
+      slots: { toolbar: ({ snapshot, dispatch }) => h("button", {
+        "data-host-selection": snapshot.selection.nodeIds.join(","),
+        onClick: () => dispatch({ type: "select-node", nodeId: imported.id })
+      }, "Locate imported target") }
+    });
+    const hierarchy = wrapper.get('[aria-label="Hierarchy"]');
+    const importedButton = () => hierarchy.findAll(".ek-workbench__tree-row").find((row) => row.text().startsWith(imported.name))!;
+    await hierarchy.get('[title="Robot"]').trigger("click");
+    await importedButton().trigger("click", { ctrlKey: true });
+    expect(editor.getSnapshot().selection.nodeIds).toEqual(["object-a", imported.id]);
+    expect(wrapper.text()).toContain("Selection 2 nodes");
+    expect(wrapper.get('[data-host-selection]').attributes("data-host-selection")).toBe(`object-a,${imported.id}`);
+    expect(importedButton().attributes("aria-pressed")).toBe("true");
+    await importedButton().trigger("click", { metaKey: true });
+    expect(editor.getSnapshot().selection.nodeIds).toEqual(["object-a"]);
+    await importedButton().trigger("click", { shiftKey: true });
+    expect(editor.getSnapshot().selection.nodeIds).toEqual(["object-a", imported.id]);
+    await importedButton().trigger("click", { altKey: true });
+    expect(editor.getSnapshot().selection.nodeIds).toEqual(["object-a"]);
+    await hierarchy.get('[aria-label="Collapse Robot"]').trigger("click");
+    await hierarchy.get('input[type="search"]').setValue("absent");
+    await openPanelView(wrapper, "Assets");
+    await wrapper.get('[data-host-selection]').trigger("click");
+    await openPanelView(wrapper, "Scene");
+    expect((hierarchy.get('input[type="search"]').element as HTMLInputElement).value).toBe("");
+    expect(importedButton().attributes("aria-pressed")).toBe("true");
+    expect(wrapper.text()).toContain(`Selection ${imported.name}`);
+    expect(wrapper.findAll(".ek-inspector-section").find((section) => section.text().includes("Transform"))?.text()).toContain("Position X");
+    await wrapper.get('[title="Clear selection"]').trigger("click");
+    expect(editor.getSnapshot().selection.nodeIds).toEqual([]);
+    expect(importedButton().attributes("aria-pressed")).toBe("false");
+    wrapper.unmount();
+  });
+
+  it("searches descendants and retains collapsed branches across navigation without changing the scene", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "create-group", nodeId: "group-a", name: "Assembly" });
+    editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Robot arm", asset: { id: "asset-a" }, parentId: "group-a" });
+    const wrapper = mount(EditorWorkbench, { props: { editor, rendererFactory: fakeRenderer } });
+    const hierarchy = wrapper.get('[aria-label="Hierarchy"]');
+    const before = editor.getSnapshot();
+    await hierarchy.get('[aria-label="Collapse Assembly"]').trigger("click");
+    expect(hierarchy.text()).not.toContain("Robot arm");
+    await hierarchy.get('input[type="search"]').setValue("  ROBOT  ");
+    expect(hierarchy.text()).toContain("Assembly");
+    expect(hierarchy.text()).toContain("Robot arm");
+    await openPanelView(wrapper, "Assets");
+    await openPanelView(wrapper, "Scene");
+    expect((hierarchy.get('input[type="search"]').element as HTMLInputElement).value).toBe("  ROBOT  ");
+    await hierarchy.get('input[type="search"]').setValue("absent");
+    expect(hierarchy.get('[role="status"]').text()).toBe("No matching nodes");
+    await hierarchy.get('input[type="search"]').setValue("");
+    expect(hierarchy.text()).not.toContain("Robot arm");
+    await hierarchy.get('[aria-label="Expand Assembly"]').trigger("click");
+    expect(hierarchy.text()).toContain("Robot arm");
+    expect(editor.getSnapshot()).toEqual(before);
+    wrapper.unmount();
+  });
+
   it("opens secondary tools with the keyboard and restores focus when dismissed", async () => {
     const wrapper = mount(EditorWorkbench, {
       attachTo: document.body,

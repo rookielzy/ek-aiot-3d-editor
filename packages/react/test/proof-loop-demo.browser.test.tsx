@@ -446,7 +446,7 @@ describe("proof-loop starter demo browser verification", () => {
     }
   }, 15000);
 
-  it("searches and focuses real imported hierarchy targets at desktop sizes", async () => {
+  it.each(["react", "vue"] as const)("searches and focuses real imported hierarchy targets at desktop sizes in %s", async (framework) => {
     const originalSize = { width: window.innerWidth, height: window.innerHeight };
     const editor = createEditor();
     const geometry = new BoxGeometry(1, 1, 1);
@@ -465,15 +465,28 @@ describe("proof-loop starter demo browser verification", () => {
     expect(imported.ok).toBe(true);
     const inheritedStyles = [...document.querySelectorAll<HTMLStyleElement>("style[data-vite-dev-id]")].map((style) => ({ style, disabled: style.disabled }));
     inheritedStyles.forEach(({ style }) => { style.disabled = true; });
-    installStyles("react-hierarchy-styles", [ReactWorkbenchStyles, ReactInspectorStyles]);
+    installStyles("hierarchy-styles", framework === "react" ? [ReactWorkbenchStyles, ReactInspectorStyles] : [VueWorkbenchStyles, VueInspectorStyles]);
     const host = createHost();
-    const root = createRoot(host);
     const uri = URL.createObjectURL(new Blob([bytes], { type: "model/gltf-binary" }));
-    root.render(<EditorWorkbench editor={editor} loader={new ThreeGltfLoaderAdapter()} resolver={new AssetResolverBridge(() => ({ uri }))}
-      interactions={{ camera: true, pointerSelection: true, marqueeSelection: true, transform: true, resize: true, selectionVisuals: true }} />);
+    const props = {
+      editor: markRaw(editor),
+      loader: markRaw(new ThreeGltfLoaderAdapter()),
+      resolver: markRaw(new AssetResolverBridge(() => ({ uri }))),
+      interactions: { camera: true, pointerSelection: true, marqueeSelection: true, transform: true, resize: true, selectionVisuals: true }
+    };
+    let unmount: () => void;
+    if (framework === "react") {
+      const root = createRoot(host);
+      root.render(<EditorWorkbench {...props} />);
+      unmount = () => root.unmount();
+    } else {
+      const app = createApp(VueEditorWorkbench, props);
+      app.mount(host);
+      unmount = () => app.unmount();
+    }
     cleanup = () => {
-      root.unmount();
-      removeStyles("react-hierarchy-styles");
+      unmount();
+      removeStyles("hierarchy-styles");
       editor.dispose();
       URL.revokeObjectURL(uri);
       inheritedStyles.forEach(({ style, disabled }) => { style.disabled = disabled; });
@@ -513,7 +526,12 @@ describe("proof-loop starter demo browser verification", () => {
         expect(editor.getRuntime()!.captureCameraView()).not.toEqual(cameraBefore);
         expect(findFieldInput(host, "Position X", 'input[type="number"]')).toBeTruthy();
         expect(text(hierarchy)).toContain("cannot be transformed independently");
+        if (import.meta.env.VITE_CAPTURE_HIERARCHY) {
+          await page.screenshot({ path: `__screenshots__/hierarchy/${framework}-${width}-en.png` });
+        }
         expect(row.getBoundingClientRect().width).toBeGreaterThan(100);
+        const rootRow = hierarchy.querySelector<HTMLElement>('[title="Assembly 0"]')!;
+        expect(Math.abs(rootRow.getBoundingClientRect().right - rootRow.parentElement!.getBoundingClientRect().right)).toBeLessThanOrEqual(1);
         const panel = section(host, "Project panel");
         expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
         expect(panel.scrollLeft).toBe(0);
@@ -541,6 +559,37 @@ describe("proof-loop starter demo browser verification", () => {
         await userEvent.keyboard("{/Control}");
         await waitFor(() => expect(editor.getSnapshot().selection.nodeIds.length).toBeGreaterThan(1));
         expect(text(section(host, "Editor status"))).toContain("nodes");
+        const selectionBeforeLocale = editor.getSnapshot();
+        const historyBeforeLocale = editor.getHistoryState();
+        const runtime = editor.getRuntime();
+        if (framework === "react") await clickByText(host, "Project menu");
+        await userEvent.selectOptions(section(host, "Language") as HTMLSelectElement, "zh-CN");
+        if (framework === "react") await userEvent.keyboard("{Escape}");
+        expect(text(section(host, "编辑器状态"))).toContain("个节点");
+        expect(editor.getSnapshot()).toEqual(selectionBeforeLocale);
+        expect(editor.getHistoryState()).toEqual(historyBeforeLocale);
+        expect(editor.getRuntime()).toBe(runtime);
+        const chineseHierarchy = section(host, "层级");
+        await userEvent.click(chineseHierarchy.querySelector(`[title="${mesh.name}"]`)!);
+        expect(text(section(host, "编辑器状态"))).toContain(mesh.name);
+        const diagnostic = chineseHierarchy.querySelector(".ek-workbench__tree-problem")!;
+        expect(text(diagnostic)).toMatch(/[\u4e00-\u9fff]/);
+        expect(text(diagnostic)).not.toContain("cannot be transformed independently");
+        await userEvent.fill(chineseHierarchy.querySelector('input[type="search"]')!, "absent");
+        expect(text(chineseHierarchy)).toContain("没有匹配的节点");
+        await clickByText(host, "清除");
+        await userEvent.click(canvas, { position: { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 } });
+        await waitFor(() => {
+          expect(chineseHierarchy.querySelector('[aria-pressed="true"]')).toBeTruthy();
+          expect(text(section(host, "编辑器状态"))).toContain("选择 Primitive 0");
+        });
+        expect((chineseHierarchy.querySelector('input[type="search"]') as HTMLInputElement).value).toBe("");
+        if (import.meta.env.VITE_CAPTURE_HIERARCHY) {
+          await page.screenshot({ path: `__screenshots__/hierarchy/${framework}-${width}-zh-CN.png` });
+        }
+        if (framework === "react") await clickByText(host, "项目菜单");
+        await userEvent.selectOptions(section(host, "语言") as HTMLSelectElement, "en");
+        if (framework === "react") await userEvent.keyboard("{Escape}");
         if (width === 1440) {
           await userEvent.dblClick(hierarchy.querySelector('button.ek-workbench__tree-row[title="Robot"]')!);
           await editor.getRuntime()!.project();
