@@ -42,3 +42,18 @@ DOM 覆盖焦点、单次撤销、空输入、跨组一致性、错误清理、�
 独立规格审查发现一项真实问题：环境资源下拉的“无”原先静默忽略。已补先失败的 DOM 回归，并将 Lighting asset / Background asset 的空选项分别映射为该来源的 none 命令；两者可独立清除并撤销。cubemap 面资源必须有效，空选项仅作为禁用占位，继续使用来源选择器切换或清除整体来源。
 
 规范轴：0 项硬性问题、1 项接受的维护建议；规格轴：1 项发现，已修正并由主代理验证。审查不代替实际测试和视觉核验。
+
+## 最终检查
+
+| 命令 | 结果 |
+| --- | --- |
+| `pnpm exec vitest run packages/react/test/inspector.test.tsx` | 审查修正后 36/36 通过 |
+| Inspector + Workbench 定向检查 | 审查修正前 87/87 通过 |
+| `pnpm build` | Core / React / Vue 通过 |
+| `pnpm typecheck` | Core / React / Vue 通过 |
+| React / Vue proof-loop `build` | 均通过，保留原有大于 500 kB chunk 提示 |
+| `pnpm test:browser` | 9 个文件实例、54/54 通过，92.06s |
+
+浏览器使用本机运行库路径 `LD_LIBRARY_PATH=/home/slimj/.cache/playwright-system-libs/ubuntu-noble/root/usr/lib/x86_64-linux-gnu`。全量浏览器保留已有 TransformControls 项目恢复期日志；恢复后的实际对象/相机及 snapshot 断言通过。未跳过用例或提高 timeout。
+
+全量单测使用 `pnpm run test --maxWorkers=2`：113 文件、906/906 通过，194.36s。保留既有 JSDOM canvas 提示；没有新增 Core 测试或 UI snapshot 字段。任务 06 五项验收全部完成。
