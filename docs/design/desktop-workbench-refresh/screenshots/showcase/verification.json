@@ -1,0 +1,252 @@
+{
+  "url": "http://127.0.0.1:5180/",
+  "failures": [],
+  "records": [
+    {
+      "width": 1440,
+      "state": "default",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase/1440-default.png",
+      "overflow": false,
+      "statusBottom": 900,
+      "canvas": {
+        "width": 772,
+        "height": 782
+      },
+      "viewportHeight": 900
+    },
+    {
+      "width": 1440,
+      "state": "selected",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase/1440-selected.png",
+      "overflow": false,
+      "statusBottom": 900,
+      "canvas": {
+        "width": 772,
+        "height": 782
+      },
+      "viewportHeight": 900
+    },
+    {
+      "width": 1440,
+      "state": "collapsed",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase/1440-collapsed.png",
+      "overflow": false,
+      "statusBottom": 900,
+      "canvas": {
+        "width": 1376,
+        "height": 782
+      },
+      "viewportHeight": 900
+    },
+    {
+      "width": 1440,
+      "state": "problems",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase/1440-problems.png",
+      "overflow": false,
+      "statusBottom": 900,
+      "canvas": {
+        "width": 772,
+        "height": 512
+      },
+      "viewportHeight": 900
+    },
+    {
+      "width": 1440,
+      "state": "environment",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase/1440-environment.png",
+      "overflow": false,
+      "statusBottom": 900,
+      "canvas": {
+        "width": 772,
+        "height": 782
+      },
+      "viewportHeight": 900
+    },
+    {
+      "width": 1440,
+      "state": "deep-light",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase/1440-deep-light.png",
+      "overflow": false,
+      "statusBottom": 900,
+      "canvas": {
+        "width": 772,
+        "height": 782
+      },
+      "viewportHeight": 900
+    },
+    {
+      "width": 1440,
+      "state": "resize",
+      "initial": 236,
+      "resized": 260
+    },
+    {
+      "width": 1920,
+      "state": "default",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase/1920-default.png",
+      "overflow": false,
+      "statusBottom": 1080,
+      "canvas": {
+        "width": 1252,
+        "height": 988
+      },
+      "viewportHeight": 1080
+    },
+    {
+      "width": 1920,
+      "state": "selected",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase/1920-selected.png",
+      "overflow": false,
+      "statusBottom": 1080,
+      "canvas": {
+        "width": 1252,
+        "height": 988
+      },
+      "viewportHeight": 1080
+    },
+    {
+      "width": 1920,
+      "state": "collapsed",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase/1920-collapsed.png",
+      "overflow": false,
+      "statusBottom": 1080,
+      "canvas": {
+        "width": 1856,
+        "height": 988
+      },
+      "viewportHeight": 1080
+    },
+    {
+      "width": 1920,
+      "state": "problems",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase/1920-problems.png",
+      "overflow": false,
+      "statusBottom": 1080,
+      "canvas": {
+        "width": 1252,
+        "height": 664
+      },
+      "viewportHeight": 1080
+    },
+    {
+      "width": 1920,
+      "state": "environment",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase/1920-environment.png",
+      "overflow": false,
+      "statusBottom": 1080,
+      "canvas": {
+        "width": 1252,
+        "height": 988
+      },
+      "viewportHeight": 1080
+    },
+    {
+      "width": 1920,
+      "state": "deep-light",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase/1920-deep-light.png",
+      "overflow": false,
+      "statusBottom": 1080,
+      "canvas": {
+        "width": 1252,
+        "height": 988
+      },
+      "viewportHeight": 1080
+    },
+    {
+      "width": 1920,
+      "state": "resize",
+      "initial": 236,
+      "resized": 260
+    },
+    {
+      "width": 1100,
+      "state": "default",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase/1100-default.png",
+      "overflow": false,
+      "statusBottom": 800,
+      "canvas": {
+        "width": 432,
+        "height": 682
+      },
+      "viewportHeight": 800
+    },
+    {
+      "width": 1100,
+      "state": "selected",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase/1100-selected.png",
+      "overflow": false,
+      "statusBottom": 800,
+      "canvas": {
+        "width": 432,
+        "height": 682
+      },
+      "viewportHeight": 800
+    },
+    {
+      "width": 1100,
+      "state": "collapsed",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase/1100-collapsed.png",
+      "overflow": false,
+      "statusBottom": 800,
+      "canvas": {
+        "width": 1036,
+        "height": 682
+      },
+      "viewportHeight": 800
+    },
+    {
+      "width": 1100,
+      "state": "problems",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase/1100-problems.png",
+      "overflow": false,
+      "statusBottom": 800,
+      "canvas": {
+        "width": 432,
+        "height": 442
+      },
+      "viewportHeight": 800
+    },
+    {
+      "width": 1100,
+      "state": "environment",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase/1100-environment.png",
+      "overflow": false,
+      "statusBottom": 800,
+      "canvas": {
+        "width": 432,
+        "height": 682
+      },
+      "viewportHeight": 800
+    },
+    {
+      "width": 1100,
+      "state": "deep-light",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase/1100-deep-light.png",
+      "overflow": false,
+      "statusBottom": 800,
+      "canvas": {
+        "width": 432,
+        "height": 682
+      },
+      "viewportHeight": 800
+    },
+    {
+      "width": 1100,
+      "state": "resize",
+      "initial": 236,
+      "resized": 260
+    },
+    {
+      "width": 1440,
+      "state": "zh-CN",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase/1440-zh-CN.png",
+      "overflow": false,
+      "statusBottom": 900,
+      "canvas": {
+        "width": 772,
+        "height": 808
+      },
+      "viewportHeight": 900
+    }
+  ]
+}

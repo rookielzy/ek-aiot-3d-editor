@@ -8,7 +8,7 @@ import { BoxGeometry, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial } fro
 import { AssetResolverBridge, createEditor, ThreeGltfLoaderAdapter, type GltfLoaderAdapter, type RendererLike } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
 import { decodeArchiveJson, defaultArchiveAdapter } from "../../core/src/project/archive-adapter";
-import { App as ReactProofLoopApp } from "../../../examples/react-proof-loop/src/App";
+import { EmptyHost } from "./support/EmptyHost";
 import ReactDemoStyles from "../../../examples/react-proof-loop/src/styles.css?raw";
 import VueProofLoopApp from "../../../examples/vue-proof-loop/src/App.vue";
 import VueDemoStyles from "../../../examples/vue-proof-loop/src/styles.css?raw";
@@ -194,8 +194,8 @@ describe("proof-loop starter demo browser verification", () => {
     } finally { await page.viewport(originalSize.width, originalSize.height); }
   }, 20000);
 
-  it("drives the React starter through the package default workbench", async () => {
-    const root = mountReactDemo();
+  it("drives an empty React host through the package default workbench", async () => {
+    const root = mountReactEmptyHost();
     cleanup = root.cleanup;
 
     await verifyStarterFlow(root.host, { assertProfessionalUi: true });
@@ -203,7 +203,7 @@ describe("proof-loop starter demo browser verification", () => {
 
   it("resizes and restores React panels across desktop sizes without replacing the canvas", async () => {
     const originalSize = { width: window.innerWidth, height: window.innerHeight };
-    const root = mountReactDemo();
+    const root = mountReactEmptyHost();
     cleanup = root.cleanup;
     const { host } = root;
     try {
@@ -449,7 +449,7 @@ describe("proof-loop starter demo browser verification", () => {
   }, 30000);
 
   it("imports a real GLB and keeps canvas picking and undo working after React panel resize", async () => {
-    const root = mountReactDemo({ nativeRuntime: true });
+    const root = mountReactEmptyHost({ nativeRuntime: true });
     cleanup = root.cleanup;
     await waitFor(() => expect(text(root.host)).toContain("Runtime ready"));
     const geometry = new BoxGeometry(1, 1, 1);
@@ -793,8 +793,8 @@ describe("proof-loop starter demo browser verification", () => {
     await verifyStarterFlow(root.host, { assertProfessionalUi: true });
   }, 15000);
 
-  it("keeps the React starter workbench usable in Simplified Chinese", async () => {
-    const root = mountReactDemo({ locale: "zh-CN" });
+  it("keeps the empty React host workbench usable in Simplified Chinese", async () => {
+    const root = mountReactEmptyHost({ locale: "zh-CN" });
     cleanup = root.cleanup;
 
     await verifyChineseWorkbenchLayout(root.host, { assertProfessionalUi: true });
@@ -971,11 +971,11 @@ async function verifyChineseWorkbenchLayout(host: HTMLElement, options: { assert
   await assertLocalizedWorkbenchLayout(host);
 }
 
-function mountReactDemo(options: { locale?: "en" | "zh-CN"; nativeRuntime?: boolean } = {}): { host: HTMLElement; cleanup(): void } {
+function mountReactEmptyHost(options: { locale?: "en" | "zh-CN"; nativeRuntime?: boolean } = {}): { host: HTMLElement; cleanup(): void } {
   installStyles("react-demo-styles", [ReactWorkbenchStyles, ReactInspectorStyles, ReactDemoStyles]);
   const host = createHost();
   const root = createRoot(host);
-  root.render(<ReactProofLoopApp loader={options.nativeRuntime ? undefined : proofLoopLoader}
+  root.render(<EmptyHost loader={options.nativeRuntime ? undefined : proofLoopLoader}
     rendererFactory={options.nativeRuntime ? undefined : paintedRenderer} locale={options.locale} />);
   return {
     host,

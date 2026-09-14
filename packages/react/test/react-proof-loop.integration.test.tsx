@@ -7,7 +7,7 @@ import { Group } from "three";
 import { describe, expect, it } from "vitest";
 import { AssetResolverBridge, createEditor, resolveDefaultPresentationView, type RendererLike } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
-import { App as ReactProofLoopApp } from "../../../examples/react-proof-loop/src/App";
+import { EmptyHost } from "./support/EmptyHost";
 
 describe("React proof-loop parity", () => {
   it("renders a restored core snapshot without React-local editor behavior", async () => {
@@ -79,10 +79,10 @@ describe("React proof-loop parity", () => {
     expect(JSON.stringify(restored.serialize())).not.toContain("environment-asset-unresolved");
   });
 
-  it("uses the package default workbench as the local starter proof", async () => {
+  it("keeps the package default workbench empty until its host imports a model", async () => {
     const restoreDownloadCapture = installDownloadCapture();
     try {
-      render(<ReactProofLoopApp rendererFactory={fakeRenderer} loader={fakeLoader} />);
+      render(<EmptyHost rendererFactory={fakeRenderer} loader={fakeLoader} />);
       await act(async () => undefined);
 
       const toolbar = screen.getByLabelText("Editor controls");

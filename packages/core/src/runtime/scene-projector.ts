@@ -663,11 +663,15 @@ export class SceneProjector {
         continue;
       }
 
-      const baseTransform = this.#baseTransformForMatch(match);
-      if (match.transformable && match.node.transform) {
-        applyTransform(match.object, match.node.transform);
-      } else {
-        applyTransform(match.object, baseTransform);
+      // Scene targets can alias the owner root. Its transform belongs to the
+      // authored object, not to an imported descendant's cached GLB base pose.
+      if (match.object !== ownerRoot) {
+        const baseTransform = this.#baseTransformForMatch(match);
+        if (match.transformable && match.node.transform) {
+          applyTransform(match.object, match.node.transform);
+        } else {
+          applyTransform(match.object, baseTransform);
+        }
       }
       if (!match.transformable) {
         this.#addProblem(createImportedTargetNonTransformableProblem(match));
@@ -728,7 +732,10 @@ export class SceneProjector {
   #releaseImportedTarget(nodeId: string): void {
     const target = this.objects.getTarget(nodeId);
     if (target?.kind === "imported") {
-      restoreImportedTargetBaseTransform(target.object);
+      const ownerRoot = target.ownerObjectId ? this.objects.getObject(target.ownerObjectId) : undefined;
+      if (target.object !== ownerRoot) {
+        restoreImportedTargetBaseTransform(target.object);
+      }
     }
     this.objects.delete(nodeId);
   }

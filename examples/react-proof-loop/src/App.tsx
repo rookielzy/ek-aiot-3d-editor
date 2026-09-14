@@ -1,12 +1,8 @@
-import { useState } from "react";
-import {
-  createEditor,
-  type EditorRuntimeOptions,
-  type Problem,
-  type WorkbenchModel
-} from "@ek-aiot/3d-editor-core";
-import { EditorWorkbench, type WorkbenchContext, type WorkbenchLocale } from "@ek-aiot/3d-editor-react";
+import { useEffect, useState } from "react";
+import { resolveDefaultPresentationView, type EditorRuntimeOptions, type EditorWithGlbImport } from "@ek-aiot/3d-editor-core";
+import { EditorWorkbench, type WorkbenchLocale } from "@ek-aiot/3d-editor-react";
 import { createDemoGltfLoader } from "./demo-gltf-loader";
+import { createShowcaseEditor, showcaseInteractions } from "./showcase";
 
 const demoLoader = createDemoGltfLoader();
 
@@ -17,43 +13,43 @@ export interface AppProps {
 }
 
 export function App({ locale, loader = demoLoader, rendererFactory }: AppProps = {}) {
-  const [editor] = useState(() => createEditor());
-  const [runtimeReady, setRuntimeReady] = useState(false);
+  const [editor, setEditor] = useState<EditorWithGlbImport | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    let ownedEditor: EditorWithGlbImport | null = null;
+    setEditor(null);
+    setFailed(false);
+    void createShowcaseEditor(loader, controller.signal).then((created) => {
+      if (controller.signal.aborted) { created.dispose(); return; }
+      ownedEditor = created;
+      setEditor(created);
+    }).catch(() => {
+      if (!controller.signal.aborted) setFailed(true);
+    });
+    return () => {
+      controller.abort();
+      ownedEditor?.dispose();
+    };
+  }, [loader, attempt]);
 
-  return (
-    <EditorWorkbench
-      editor={editor}
-      loader={loader}
-      rendererFactory={rendererFactory}
-      locale={locale}
-      viewportClassName="starter-viewport"
-      onRuntimeReady={(runtime) => setRuntimeReady(Boolean(runtime))}
-      viewportOverlay={(context) => (
-        <StarterOverlay
-          context={context}
-          runtimeReady={runtimeReady}
-        />
-      )}
-    />
-  );
-}
-
-function StarterOverlay({ context, runtimeReady }: { context: WorkbenchContext; runtimeReady: boolean }) {
-  return (
-    <aside className="starter-overlay" data-testid="starter-overlay" aria-label="Starter host status">
-      <span>Host starter</span>
-      <strong>{context.model.project.sceneName}</strong>
-      <small>
-        {context.model.project.objectCount} objects · {context.model.project.assetCount} assets · {formatProblems(context.runtimeProblems, context.model)}
-      </small>
-      <small>Runtime {runtimeReady ? "ready" : "mounting"} · Selection {context.model.selection.label}</small>
-    </aside>
-  );
-}
-
-function formatProblems(runtimeProblems: readonly Problem[], model: WorkbenchModel): string {
-  if (model.problems.totalCount === 0) {
-    return "no problems";
+  if (!editor) {
+    return <main className="showcase-loading" role="status">
+      {failed ? (locale === "zh-CN" ? "无法打开展示场景。" : "Unable to open the showcase.") : (locale === "zh-CN" ? "正在打开工作室…" : "Opening the studio…")}
+      {failed && <button type="button" onClick={() => setAttempt((value) => value + 1)}>{locale === "zh-CN" ? "重试" : "Retry"}</button>}
+    </main>;
   }
-  return `${model.problems.totalCount} problems, ${runtimeProblems.length} runtime`;
+
+  return <EditorWorkbench
+    editor={editor}
+    loader={loader}
+    rendererFactory={rendererFactory}
+    locale={locale}
+    interactions={showcaseInteractions}
+    onRuntimeReady={(runtime) => {
+      const view = resolveDefaultPresentationView(editor.getSnapshot());
+      if (runtime && view.status === "resolved") runtime.applyCameraView(view.view);
+    }}
+  />;
 }
