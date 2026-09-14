@@ -443,9 +443,7 @@ function buildWorkbenchToolbar(
   }
 ): WorkbenchToolbarModel {
   const selectionCount = inspector.selection.count;
-  const selectedNodes = inspector.selection.nodeIds
-    .map((nodeId) => snapshot.nodes[nodeId])
-    .filter((node): node is SceneNode => Boolean(node));
+  const primaryNode = snapshot.selection.nodeId ? snapshot.nodes[snapshot.selection.nodeId] : undefined;
   const selectionIncludesCamera = inspector.selection.nodeIds.some((nodeId) => nodeSubtreeIncludesKind(snapshot, nodeId, "camera"));
 
   return {
@@ -456,7 +454,7 @@ function buildWorkbenchToolbar(
     canDuplicate: selectionCount > 0 && !selectionIncludesCamera,
     canDelete: selectionCount > 0,
     canGroup: selectionCount > 1 && !selectionIncludesCamera,
-    canUngroup: selectedNodes.some((node) => node.kind === "group"),
+    canUngroup: primaryNode?.kind === "group" || (primaryNode?.kind === "object" && snapshot.objects[primaryNode.objectId].children.length > 0),
     canSelectAll: Object.keys(snapshot.nodes).length > 0,
     canClearSelection: selectionCount > 0,
     canFrameSelected: options.runtimeReady && selectionCount > 0,

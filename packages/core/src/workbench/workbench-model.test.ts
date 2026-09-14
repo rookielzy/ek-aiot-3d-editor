@@ -11,6 +11,26 @@ import type { Problem } from "../problems/types";
 import { buildWorkbenchModel } from "./workbench-model";
 
 describe("workbench model", () => {
+  it("matches ungroup availability to the primary node handled by operations", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "create-group", nodeId: "assembly" });
+    editor.dispatch({ type: "import-glb", objectId: "parent", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "import-glb", objectId: "child", parentId: "parent", asset: { id: "asset-b" } });
+    const canUngroup = (nodeIds: string[], primaryNodeId: string) => {
+      editor.dispatch({ type: "select-nodes", mode: "replace", nodeIds, primaryNodeId });
+      return buildWorkbenchModel(editor.getSnapshot()).toolbar.canUngroup;
+    };
+    expect(canUngroup(["assembly"], "assembly")).toBe(true);
+    expect(canUngroup(["parent"], "parent")).toBe(true);
+    expect(canUngroup(["child"], "child")).toBe(false);
+    expect(canUngroup(["assembly", "child"], "child")).toBe(false);
+    expect(canUngroup(["child", "assembly"], "assembly")).toBe(true);
+    canUngroup(["parent"], "parent");
+    expect(editor.operations.ungroup().ok).toBe(true);
+    expect(editor.getSnapshot().objects.child.parentId).toBeNull();
+    expect(canUngroup(["parent"], "parent")).toBe(false);
+  });
+
   it("derives ordered hierarchy rows with selection, kind, and problem metadata", () => {
     const editor = createEditor();
     editor.dispatch({ type: "create-group", nodeId: "group-a", name: "Assembly" });

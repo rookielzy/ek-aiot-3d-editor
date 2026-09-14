@@ -22,6 +22,56 @@ import { expectAuthoredValuesPresent, expectNoI18nDurableLeakage, expectNoRuntim
 import { decodeProjectPackageText, resolveProjectPackageBytes, seedI18nDurableEditor } from "../../test/i18n-durable-fixture";
 
 describe("React EditorWorkbench", () => {
+  it("organizes nodes through dismissible viewport tools without losing selection on Escape", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} rightPanel={() => null} />);
+    const viewport = within(screen.getByLabelText("3D viewport"));
+    const trigger = viewport.getByRole("button", { name: "Node operations" });
+    const open = () => fireEvent.click(trigger);
+    const nodeTools = within(document.getElementById(trigger.getAttribute("aria-controls")!)!);
+    const command = (name: string) => fireEvent.click(nodeTools.getByRole("button", { name, exact: true }));
+    open();
+    expect((viewport.getByRole("button", { name: "Group", exact: true }) as HTMLButtonElement).disabled).toBe(true);
+    command("Copy");
+    expect(document.activeElement).toBe(trigger);
+    open();
+    command("Paste");
+    expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(2);
+    open();
+    command("Duplicate");
+    expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(3);
+    open();
+    command("Delete");
+    expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(2);
+    clickToolbarCommand("Undo");
+    expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(3);
+    clickToolbarCommand("Redo");
+    expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(2);
+    open();
+    command("Select all");
+    open();
+    command("Group");
+    expect(editor.getSnapshot().objects[editor.getSnapshot().selection.objectId!].children).toHaveLength(1);
+    open();
+    expect((viewport.getByRole("button", { name: "Ungroup", exact: true }) as HTMLButtonElement).disabled).toBe(false);
+    command("Ungroup");
+    expect(Object.values(editor.getSnapshot().objects).every((object) => object.parentId === null)).toBe(true);
+    const before = editor.getSnapshot();
+    open();
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(trigger);
+    expect(editor.getSnapshot()).toEqual(before);
+    open();
+    command("Clear");
+    open();
+    expect((viewport.getByRole("button", { name: "Delete", exact: true }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.pointerDown(screen.getByLabelText("Inspector panel"));
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("preserves editing and panel drafts while navigating and collapsing either sidebar", () => {
     const editor = createEditor();
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
@@ -49,8 +99,36 @@ describe("React EditorWorkbench", () => {
     fireEvent.change(position, { target: { value: "2" } });
     fireEvent.blur(position);
     expect(editor.getSnapshot().objects["object-a"].transform.position[0]).toBe(2);
-    fireEvent.click(screen.getByTitle("Undo"));
+    clickToolbarCommand("Undo");
     expect(editor.getSnapshot().objects["object-a"].transform.position[0]).toBe(0);
+  });
+
+  it("keeps independent snap channels and ignores editor shortcuts in host input controls", () => {
+    const editor = createEditor();
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} toolbar={() => <>
+      <input aria-label="Host number" type="number" />
+      <textarea aria-label="Host notes" />
+      <select aria-label="Host choice"><option>One</option></select>
+      <div contentEditable suppressContentEditableWarning role="textbox" aria-label="Host rich text">Text</div>
+    </>} />);
+    clickToolbarCommand("Toggle move snap");
+    clickToolbarCommand("Toggle rotate snap");
+    clickToolbarCommand("Toggle scale snap");
+    expect(editor.snap.get()).toEqual({ translate: 0.5, rotate: Math.PI / 12, scale: 0.1 });
+    clickToolbarCommand("Scale mode");
+    expect(editor.transformMode.get()).toBe("scale");
+    const snapshot = editor.getSnapshot();
+    for (const label of ["Host number", "Host notes", "Host choice", "Host rich text"]) {
+      const input = screen.getByLabelText(label);
+      expect(fireEvent.keyDown(input, { key: "w" })).toBe(true);
+      expect(fireEvent.keyDown(input, { key: "z", ctrlKey: true })).toBe(true);
+      expect(fireEvent.keyDown(input, { key: "e", ctrlKey: true, altKey: true })).toBe(true);
+    }
+    expect(editor.transformMode.get()).toBe("scale");
+    expect(editor.snap.get().rotate).toBe(Math.PI / 12);
+    expect(editor.getSnapshot()).toEqual(snapshot);
+    clickToolbarCommand("Toggle move snap");
+    expect(editor.snap.get()).toEqual({ translate: null, rotate: Math.PI / 12, scale: 0.1 });
   });
 
   it("composes viewport, inspector, and render regions around one core editor", () => {
@@ -149,19 +227,19 @@ describe("React EditorWorkbench", () => {
     const applyCameraView = vi.spyOn(runtime!, "applyCameraView");
     const duplicate = vi.spyOn(editor.operations, "duplicate");
 
-    fireEvent.click(screen.getByTitle("Rotate mode"));
+    clickToolbarCommand("Rotate mode");
     expect(editor.transformMode.get()).toBe("rotate");
     expect(screen.getByTitle("Rotate mode").getAttribute("aria-pressed")).toBe("true");
 
-    fireEvent.click(screen.getByTitle("Toggle move snap"));
+    clickToolbarCommand("Toggle move snap");
     expect(editor.snap.get().translate).toBe(0.5);
     expect(screen.getByTitle("Toggle move snap").getAttribute("aria-pressed")).toBe("true");
 
-    fireEvent.click(screen.getByTitle("Toggle viewport grid"));
+    clickToolbarCommand("Toggle viewport grid");
     expect(editor.viewportHelpers.get().visibility.grid).toBe(false);
     expect(screen.getByTitle("Toggle viewport grid").getAttribute("aria-pressed")).toBe("false");
 
-    fireEvent.click(screen.getByTitle("Toggle viewport floor"));
+    clickToolbarCommand("Toggle viewport floor");
     expect(editor.viewportHelpers.get().visibility.floor).toBe(true);
     expect(screen.getByTitle("Toggle viewport floor").getAttribute("aria-pressed")).toBe("true");
 
@@ -172,17 +250,28 @@ describe("React EditorWorkbench", () => {
       "Toggle snap feedback",
       "Toggle viewport floor"
     ]) {
-      fireEvent.click(screen.getByTitle(title));
+      clickToolbarCommand(title);
       expect(screen.getByTitle(title).getAttribute("aria-pressed")).toBe("false");
     }
     expect(Object.values(editor.viewportHelpers.get().visibility)).toEqual([false, false, false, false, false, false, true, true, false]);
 
-    fireEvent.click(screen.getByTitle("Move mode"));
+    for (const [title, key] of [
+      ["Toggle light gizmos", "lightGizmos"],
+      ["Toggle light targets", "lightTargets"],
+      ["Toggle shadow camera helpers", "shadowCameras"]
+    ] as const) {
+      const previous = editor.viewportHelpers.get().visibility[key];
+      clickToolbarCommand(title);
+      expect(editor.viewportHelpers.get().visibility[key]).toBe(!previous);
+      clickToolbarCommand(title);
+    }
+
+    clickToolbarCommand("Move mode");
     expect(Object.values(editor.viewportHelpers.get().visibility)).toEqual([false, false, false, false, false, false, true, true, false]);
     expect(JSON.stringify(editor.serialize())).not.toContain("viewportHelpers");
 
-    fireEvent.click(screen.getByTitle("Reset camera"));
-    fireEvent.click(screen.getByTitle("Frame selected"));
+    clickToolbarCommand("Reset camera");
+    clickToolbarCommand("Frame selected");
     expect(resetCamera).toHaveBeenCalledTimes(1);
     expect(frameSelected).toHaveBeenCalledTimes(1);
 
@@ -198,12 +287,12 @@ describe("React EditorWorkbench", () => {
         far: 1000
       }
     });
-    fireEvent.click(screen.getByTitle("Capture camera view"));
+    clickToolbarCommand("Capture camera view");
     expect(editor.getSnapshot().cameras["view-a"]).toBeDefined();
-    fireEvent.click(screen.getByTitle("Apply camera view"));
+    clickToolbarCommand("Apply camera view");
     expect(applyCameraView).toHaveBeenCalledWith(editor.getSnapshot().cameras["view-a"]);
 
-    fireEvent.click(screen.getByTitle("Duplicate selection"));
+    clickToolbarCommand("Duplicate selection");
     expect(duplicate).toHaveBeenCalledTimes(1);
   });
 
@@ -372,7 +461,7 @@ describe("React EditorWorkbench", () => {
     expect(importProject.mock.calls[0]?.[0]).toBeInstanceOf(Uint8Array);
     expect(screen.getByText("Restored robot")).toBeTruthy();
 
-    fireEvent.click(screen.getByTitle("Export complete project"));
+    clickToolbarCommand("Export complete project");
 
     expect(exportProject).toHaveBeenLastCalledWith({ partial: false });
     expect(await screen.findByText("Exported project")).toBeTruthy();
@@ -411,7 +500,7 @@ describe("React EditorWorkbench", () => {
     expect(within(screen.getByLabelText("Editor status")).getByText(/Undo \d+/)).toBeTruthy();
     expect(within(screen.getByLabelText("Editor status")).getByText(/Redo \d+/)).toBeTruthy();
 
-    fireEvent.click(screen.getByTitle("Select all"));
+    clickToolbarCommand("Select all");
 
     expect(screen.getByText("Selection 2 nodes")).toBeTruthy();
     expect(within(screen.getByLabelText("Scene inspector")).getByText("2")).toBeTruthy();
@@ -516,8 +605,8 @@ describe("React EditorWorkbench", () => {
 
     render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} onLocaleChange={onLocaleChange} />);
 
-    fireEvent.click(screen.getByTitle("Rotate mode"));
-    fireEvent.click(screen.getByTitle("Toggle viewport grid"));
+    clickToolbarCommand("Rotate mode");
+    clickToolbarCommand("Toggle viewport grid");
     const serializedBefore = editor.serialize();
 
     fireEvent.change(screen.getByLabelText("Language"), { target: { value: "zh-CN" } });
@@ -855,7 +944,7 @@ describe("React EditorWorkbench", () => {
     expect(importedButton().getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByText(`Selection ${imported.name}`)).toBeTruthy();
     expect(screen.getByLabelText("Position X")).toBeTruthy();
-    fireEvent.click(screen.getByTitle("Clear selection"));
+    clickToolbarCommand("Clear selection");
     expect(editor.getSnapshot().selection.nodeIds).toEqual([]);
     expect(importedButton().getAttribute("aria-pressed")).toBe("false");
   });
@@ -1563,4 +1652,13 @@ function createReplacementProblem(): ProjectProblem {
       })
     }
   };
+}
+
+function clickToolbarCommand(title: string): void {
+  const button = screen.getByTitle(title);
+  const panel = button.closest<HTMLElement>(".ek-workbench__tool-popover");
+  if (panel?.hidden) {
+    fireEvent.click(document.querySelector(`[aria-controls="${panel.id}"]`)!);
+  }
+  fireEvent.click(button);
 }

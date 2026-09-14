@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { page, userEvent } from "vitest/browser";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { createRoot } from "react-dom/client";
@@ -92,17 +92,73 @@ describe("proof-loop starter demo browser verification", () => {
           expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
           expect(section(host, "Editor status").getBoundingClientRect().bottom).toBeLessThanOrEqual(height);
         });
+        await verifyViewportToolsReachable(host);
       }
       host.style.height = "600px";
       await waitFor(() => {
         expect(host.querySelector(".ek-workbench")!.getBoundingClientRect().height).toBe(600);
         expect(section(host, "Editor status").getBoundingClientRect().bottom).toBeLessThanOrEqual(600);
       });
+      await verifyViewportToolsReachable(host);
       await verifyStarterFlow(host);
     } finally {
       await page.viewport(originalSize.width, originalSize.height);
     }
   }, 30000);
+
+  it("keeps tools reachable when a host status drawer reduces the viewport", async () => {
+    const originalSize = { width: window.innerWidth, height: window.innerHeight };
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+    installStyles("react-tools-drawer", [ReactWorkbenchStyles, ReactInspectorStyles]);
+    const host = createHost();
+    const root = createRoot(host);
+    function HostWorkbench() {
+      const [expanded, setExpanded] = useState(false);
+      const [overlayVisible, setOverlayVisible] = useState(true);
+      return <EditorWorkbench editor={editor} rendererFactory={paintedRenderer}
+        viewportOverlay={() => overlayVisible ? <button type="button"
+          style={{ position: "absolute", inset: "0 0 auto", height: 56, width: "100%", maxWidth: "none" }}
+          onClick={() => setOverlayVisible(false)}>Host overlay action</button> : null}
+        status={() => <div>
+        <button type="button" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>Host details</button>
+        {expanded ? <div style={{ height: 160 }}>Host diagnostic details</div> : null}
+      </div>} />;
+    }
+    root.render(<HostWorkbench />);
+    cleanup = () => {
+      root.unmount();
+      editor.dispose();
+      removeStyles("react-tools-drawer");
+    };
+    try {
+      await page.viewport(1440, 900);
+      await waitFor(() => expect(host.querySelector("canvas")).toBeTruthy());
+      const canvas = host.querySelector("canvas")!;
+      const snapshot = editor.getSnapshot();
+      const rotate = host.querySelector('[title="Rotate mode"]')!.getBoundingClientRect();
+      const overlay = button(host, "Host overlay action")!;
+      expect(overlay.contains(document.elementFromPoint(rotate.left + rotate.width / 2, rotate.top + rotate.height / 2))).toBe(true);
+      await userEvent.click(overlay);
+      await waitFor(() => expect(button(host, "Host overlay action")).toBeNull());
+      expect(editor.transformMode.get()).toBe("translate");
+      for (const [width, height] of [[1440, 900], [1920, 1080], [1100, 800]]) {
+        await page.viewport(width, height);
+        await waitForAnimationFrame();
+        const before = canvas.getBoundingClientRect().height;
+        await userEvent.click(button(host, "Host details")!);
+        await waitFor(() => expect(canvas.getBoundingClientRect().height).toBeLessThan(before));
+        await verifyViewportToolsReachable(host);
+        await userEvent.click(button(host, "Host details")!);
+        await waitFor(() => expect(canvas.getBoundingClientRect().height).toBe(before));
+        expect(editor.getSnapshot()).toEqual(snapshot);
+        expect(host.querySelector("canvas")).toBe(canvas);
+      }
+    } finally {
+      await page.viewport(originalSize.width, originalSize.height);
+    }
+  }, 15000);
 
   it("searches and focuses real imported hierarchy targets at desktop sizes", async () => {
     const originalSize = { width: window.innerWidth, height: window.innerHeight };
@@ -205,14 +261,20 @@ describe("proof-loop starter demo browser verification", () => {
           await waitForAnimationFrame();
           // A point on the visible red X handle, clear of the center plane handles.
           const x = canvas.clientWidth / 2 + canvas.clientHeight * 0.1;
+          const historyBefore = editor.getHistoryState().undoCount;
           await userEvent.dragAndDrop(canvas, canvas, {
             sourcePosition: { x, y: canvas.clientHeight / 2 },
             targetPosition: { x: x + 40, y: canvas.clientHeight / 2 }
           });
           await waitFor(() => expect(editor.getSnapshot().objects.robot.transform.position[0]).not.toBe(0));
+          const committedPosition = editor.getSnapshot().objects.robot.transform.position[0];
+          expect(editor.getHistoryState().undoCount).toBe(historyBefore + 1);
           expect(Number((findFieldInput(host, "Position X", 'input[type="number"]') as HTMLInputElement).value)).not.toBe(0);
           await clickByText(host, "Undo");
           await waitFor(() => expect(editor.getSnapshot().objects.robot.transform.position[0]).toBe(0));
+          await clickByText(host, "Redo");
+          await waitFor(() => expect(editor.getSnapshot().objects.robot.transform.position[0]).toBe(committedPosition));
+          await clickByText(host, "Undo");
         }
       }
     } finally {
@@ -540,8 +602,45 @@ async function findReadyCanvas(viewport: HTMLElement): Promise<HTMLCanvasElement
 async function clickByText(host: HTMLElement, label: string): Promise<void> {
   const target = button(host, label);
   expect(target, `Expected button ${label}`).toBeTruthy();
+  const panel = target!.closest<HTMLElement>(".ek-workbench__tool-popover");
+  if (panel?.hidden) {
+    await userEvent.click(host.querySelector(`[aria-controls="${panel.id}"]`)!);
+  }
+  if (panel || target!.closest(".ek-workbench__viewport-tools")) {
+    await userEvent.click(target!);
+    await waitForAnimationFrame();
+    return;
+  }
   target!.click();
   await waitForAnimationFrame();
+}
+
+async function verifyViewportToolsReachable(host: HTMLElement): Promise<void> {
+  const viewport = section(host, "3D viewport");
+  const rect = viewport.getBoundingClientRect();
+  const strip = host.querySelector(".ek-workbench__viewport-tool-strip")!;
+  for (const control of strip.querySelectorAll<HTMLButtonElement>("button")) {
+    const bounds = control.getBoundingClientRect();
+    expect(bounds.left).toBeGreaterThanOrEqual(rect.left);
+    expect(bounds.right).toBeLessThanOrEqual(rect.right);
+    expect(bounds.bottom).toBeLessThanOrEqual(rect.bottom);
+    expect(control.contains(document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2))).toBe(true);
+  }
+  for (const label of ["Viewport helpers", "Camera", "Node operations"]) {
+    const trigger = strip.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!;
+    await userEvent.click(trigger);
+    const panel = document.getElementById(trigger.getAttribute("aria-controls")!)!;
+    expect(panel.getBoundingClientRect().bottom).toBeLessThanOrEqual(rect.bottom);
+    const lastButton = panel.querySelector<HTMLButtonElement>("button:last-child")!;
+    lastButton.focus();
+    lastButton.scrollIntoView({ block: "nearest" });
+    const bounds = lastButton.getBoundingClientRect();
+    expect(bounds.bottom).toBeLessThanOrEqual(rect.bottom);
+    expect(lastButton.contains(document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2))).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(trigger);
+  }
 }
 
 async function openLeftWorkspaceView(host: HTMLElement, label: string): Promise<void> {
@@ -695,23 +794,33 @@ async function assertProfessionalWorkbenchLayout(
 }
 
 async function assertCameraLayout(host: HTMLElement): Promise<void> {
-  const cameraToolbar = section(host, "Camera");
+  const cameraToolbar = await openCameraTools(host, "Camera");
   const cameraInspector = [...host.querySelectorAll(".ek-inspector-section")]
     .find((candidate) => text(candidate).includes("Camera views")) as HTMLElement | undefined;
   expect(cameraInspector, "Expected Camera views inspector section").toBeTruthy();
   await waitForAnimationFrame();
   assertChildrenInside(cameraToolbar, `Camera toolbar ${currentViewportLabel()}`);
   assertChildrenInside(cameraInspector!, `Camera inspector ${currentViewportLabel()}`);
+  if (cameraToolbar.classList.contains("ek-workbench__tool-popover")) await userEvent.keyboard("{Escape}");
 }
 
 async function assertLocalizedCameraLayout(host: HTMLElement): Promise<void> {
-  const cameraToolbar = section(host, "相机");
+  const cameraToolbar = await openCameraTools(host, "相机");
   const cameraInspector = [...host.querySelectorAll(".ek-inspector-section")]
     .find((candidate) => text(candidate).includes("相机视图")) as HTMLElement | undefined;
   expect(cameraInspector, "Expected localized camera views inspector section").toBeTruthy();
   await waitForAnimationFrame();
   assertChildrenInside(cameraToolbar, `Localized camera toolbar ${currentViewportLabel()}`);
   assertChildrenInside(cameraInspector!, `Localized camera inspector ${currentViewportLabel()}`);
+  if (cameraToolbar.classList.contains("ek-workbench__tool-popover")) await userEvent.keyboard("{Escape}");
+}
+
+async function openCameraTools(host: HTMLElement, label: string): Promise<HTMLElement> {
+  const entry = section(host, label);
+  const panelId = entry.getAttribute("aria-controls");
+  if (!panelId) return entry;
+  if (entry.getAttribute("aria-expanded") !== "true") await userEvent.click(entry);
+  return document.getElementById(panelId)!;
 }
 
 function assertViewportWidthWasExercised(): void {

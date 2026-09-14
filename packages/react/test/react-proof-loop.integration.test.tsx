@@ -86,9 +86,12 @@ describe("React proof-loop parity", () => {
       await act(async () => undefined);
 
       const toolbar = screen.getByLabelText("Editor controls");
+      const viewport = screen.getByLabelText("3D viewport");
       expect(within(toolbar).getByRole("button", { name: "Export" })).toBeTruthy();
-      expect(within(toolbar).getByRole("button", { name: "Move" }).getAttribute("aria-pressed")).toBe("true");
-      expect((within(toolbar).getByRole("button", { name: "Duplicate" }) as HTMLButtonElement).disabled).toBe(true);
+      expect(within(viewport).getByRole("button", { name: "Move", exact: true }).getAttribute("aria-pressed")).toBe("true");
+      fireEvent.click(within(viewport).getByRole("button", { name: "Node operations" }));
+      expect((within(viewport).getByRole("button", { name: "Duplicate" }) as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.keyDown(document.activeElement!, { key: "Escape" });
 
       const projectPanel = screen.getByLabelText("Project panel");
       const hierarchy = within(projectPanel).getByLabelText("Hierarchy");
@@ -126,7 +129,7 @@ describe("React proof-loop parity", () => {
       await act(async () => {
         await clickButton("Snap move");
       });
-      expect(within(toolbar).getByRole("button", { name: "Snap move" }).getAttribute("aria-pressed")).toBe("true");
+      expect(within(viewport).getByRole("button", { name: "Snap move" }).getAttribute("aria-pressed")).toBe("true");
 
       fireEvent.change(screen.getByLabelText("Language"), { target: { value: "zh-CN" } });
       await waitFor(() => expect(screen.getByLabelText("编辑器控件")).toBeTruthy());
@@ -186,6 +189,13 @@ describe("React proof-loop parity", () => {
 });
 
 async function clickButton(name: string): Promise<void> {
+  const command = [...document.querySelectorAll<HTMLButtonElement>("button[aria-label]")]
+    .find((button) => button.getAttribute("aria-label") === name);
+  const panel = command?.closest<HTMLElement>("[hidden][id]");
+  if (panel) {
+    fireEvent.click(document.querySelector(`[aria-controls="${panel.id}"]`)!);
+    await act(async () => undefined);
+  }
   const button = screen.getAllByRole("button", { name }).at(-1);
   expect(button, `Expected button ${name}`).toBeTruthy();
   fireEvent.click(button!);

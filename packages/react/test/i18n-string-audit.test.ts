@@ -5,6 +5,7 @@ import { auditReactComponentStrings } from "../../test/i18n-string-audit";
 const DEFAULT_WORKBENCH_COMPONENTS = [
   "packages/react/src/components/EditorWorkbench.tsx",
   "packages/react/src/components/WorkbenchToolbar.tsx",
+  "packages/react/src/components/WorkbenchViewportTools.tsx",
   "packages/react/src/components/WorkbenchLeftPanel.tsx",
   "packages/react/src/components/WorkbenchStatusBar.tsx",
   "packages/react/src/components/InspectorView.tsx",

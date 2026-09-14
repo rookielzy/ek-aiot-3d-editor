@@ -809,6 +809,7 @@
 
 .ek-workbench__overlay {
   position: absolute;
+  z-index: 4;
   inset: 0;
   display: grid;
   align-content: start;
@@ -819,6 +820,90 @@
 
 .ek-workbench__overlay > * {
   pointer-events: auto;
+}
+
+/* Tools wrap within the effective canvas, independently of host render regions. */
+.ek-workbench__viewport-tools {
+  position: absolute;
+  z-index: 3;
+  inset: 0.75rem 3rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  pointer-events: none;
+}
+
+.ek-workbench__viewport-tool-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.375rem;
+  max-width: 100%;
+  flex: 0 0 auto;
+}
+
+.ek-workbench__viewport-tools .ek-workbench__tool-group {
+  min-height: 2.5rem;
+  padding: 0.1875rem;
+  box-shadow: 0 2px 8px #18223008;
+  pointer-events: auto;
+}
+
+.ek-workbench__viewport-tools .ek-workbench__command-button--icon {
+  position: relative;
+  width: 2rem;
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0;
+}
+
+.ek-workbench__viewport-tools .ek-workbench__snap-mark {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 0.75rem;
+  height: 0.75rem;
+  background: var(--ek-workbench-surface);
+  border-radius: 2px;
+}
+
+.ek-workbench__snap-mark svg { width: 100%; height: 100%; }
+
+.ek-workbench__command-button--icon > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.ek-workbench__tool-popover {
+  display: grid;
+  flex: 0 1 auto;
+  width: 15rem;
+  max-width: 100%;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0.5rem;
+  border: 1px solid var(--ek-workbench-border);
+  border-radius: var(--ek-workbench-radius);
+  background: var(--ek-workbench-surface);
+  box-shadow: 0 4px 16px #18223012;
+  pointer-events: auto;
+}
+
+.ek-workbench__tool-popover[hidden] { display: none; }
+.ek-workbench__tool-popover strong { padding: 0.5rem; font-size: 0.75rem; }
+.ek-workbench__tool-popover .ek-workbench__command-button {
+  justify-content: flex-start;
+  white-space: normal;
+  text-align: left;
+  line-height: 1.4;
+  padding-block: 0.4rem;
 }
 
 .ek-workbench__right-panel {

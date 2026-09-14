@@ -9,6 +9,7 @@ import { WorkbenchPanelResize } from "./WorkbenchPanelResize";
 import { useWorkbenchPanelWidths } from "../hooks/use-workbench-panel-widths";
 import { WorkbenchStatusBar } from "./WorkbenchStatusBar";
 import { WorkbenchToolbar } from "./WorkbenchToolbar";
+import { WorkbenchViewportTools } from "./WorkbenchViewportTools";
 import { createWorkbenchRenderer } from "./workbench-renderer";
 import "./workbench.css";
 
@@ -178,8 +179,6 @@ export function EditorWorkbench({
           {showDefaultToolbar ? (
             <WorkbenchToolbar
               context={workbench}
-              marqueeSelectionEnabled={marqueeSelectionEnabled}
-              onToggleMarqueeSelection={() => setMarqueeSelectionEnabled((enabled) => !enabled)}
               showLocaleSwitcher={showLocaleSwitcher}
               localeSwitcherDisabled={localeSwitcherDisabled}
             />
@@ -224,6 +223,13 @@ export function EditorWorkbench({
           </div>
         ) : null}
         {viewportOverlay ? <div className="ek-workbench__overlay">{viewportOverlay(workbench)}</div> : null}
+        {showDefaultToolbar ? (
+          <WorkbenchViewportTools
+            context={workbench}
+            marqueeSelectionEnabled={marqueeSelectionEnabled}
+            onToggleMarqueeSelection={() => setMarqueeSelectionEnabled((enabled) => !enabled)}
+          />
+        ) : null}
       </section>
       <aside id={`${panelId}-left`} hidden={leftCollapsed} className="ek-workbench__side-panel" aria-label={t("reactWorkbench.shell.projectPanel.label")}>
         {renderLeftPanel ? renderLeftPanel(workbench) : <WorkbenchLeftPanel context={workbench} activeView={activeView} />}
