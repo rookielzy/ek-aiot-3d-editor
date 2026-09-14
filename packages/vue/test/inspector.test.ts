@@ -14,6 +14,44 @@ import ProblemsPanel from "../src/components/ProblemsPanel.vue";
 import { useInspector } from "../src/composables/use-inspector";
 
 describe("Vue InspectorPanel", () => {
+  it("commits degrees once, cancels drafts and reports invalid transforms without losing focus", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
+    const rotation = wrapper.get('[aria-label="Rotation Y"]');
+    (rotation.element as HTMLInputElement).focus();
+    await rotation.setValue("90");
+    expect(editor.getSnapshot().objects["object-a"].transform.rotation[1]).toBe(0);
+    await rotation.trigger("keydown", { key: "Enter" });
+    expect(editor.getSnapshot().objects["object-a"].transform.rotation[1]).toBeCloseTo(Math.PI / 2);
+    expect(document.activeElement).toBe(rotation.element);
+    await rotation.trigger("blur");
+    editor.undo();
+    await nextTick();
+    expect((rotation.element as HTMLInputElement).value).toBe("0");
+    editor.redo();
+    await nextTick();
+    await rotation.setValue("45");
+    await rotation.trigger("keydown", { key: "Escape" });
+    await rotation.trigger("blur");
+    expect((rotation.element as HTMLInputElement).value).toBe("90");
+    expect(editor.getSnapshot().objects["object-a"].transform.rotation[1]).toBeCloseTo(Math.PI / 2);
+    await rotation.setValue("");
+    await rotation.trigger("keydown", { key: "Enter" });
+    expect(wrapper.get('[role="alert"]').text()).toContain("finite number");
+    expect(rotation.attributes("aria-invalid")).toBe("true");
+    await rotation.trigger("keydown", { key: "Escape" });
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    await rotation.setValue("45");
+    editor.dispatch({ type: "import-glb", objectId: "object-b", asset: { id: "asset-b" } });
+    editor.dispatch({ type: "select-object", objectId: "object-b" });
+    await nextTick();
+    const nextRotation = wrapper.get('[aria-label="Rotation Y"]');
+    expect((nextRotation.element as HTMLInputElement).value).toBe("0");
+    wrapper.unmount();
+  });
+
   it("renders disabled node transform sections and available scene sections with no selection", () => {
     const editor = markRaw(createEditor());
     const wrapper = mount(InspectorPanel, { props: { editor } });

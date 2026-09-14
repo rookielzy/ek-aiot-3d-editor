@@ -319,7 +319,7 @@ describe("proof-loop starter demo browser verification", () => {
       expect(overlay.contains(document.elementFromPoint(rotate.left + rotate.width / 2, rotate.top + rotate.height / 2))).toBe(true);
       await userEvent.click(overlay);
       await waitFor(() => expect(button(host, "Host overlay action")).toBeNull());
-      for (const [width, height] of [[1440, 900], [1920, 1080], [1100, 800]]) {
+      for (const [width, height] of [[1440, 900], [1920, 1080], [1100, 800], [1100, 600]]) {
         await page.viewport(width, height);
         await waitForAnimationFrame();
         const before = canvas.getBoundingClientRect().height;
@@ -375,6 +375,34 @@ describe("proof-loop starter demo browser verification", () => {
       expect(editor.getSnapshot().objects[objectId].transform.position[0]).toBe(2);
       await clickByText(host, label("Undo", "撤销"));
       expect(editor.getSnapshot().objects[objectId].transform.position[0]).toBe(0);
+      const rotation = findFieldInput(host, label("Rotation Y", "旋转 Y"), 'input[type="number"]') as HTMLInputElement;
+      await userEvent.fill(rotation, "90");
+      await userEvent.keyboard("{Enter}");
+      expect(editor.getSnapshot().objects[objectId].transform.rotation[1]).toBeCloseTo(Math.PI / 2);
+      expect(document.activeElement).toBe(rotation);
+      await userEvent.fill(rotation, "45");
+      await userEvent.keyboard("{Escape}{Tab}");
+      expect(rotation.value).toBe("90");
+      await clickByText(host, label("Undo", "撤销"));
+      expect(editor.getSnapshot().objects[objectId].transform.rotation[1]).toBe(0);
+      await clickByText(host, label("Redo", "重做"));
+      expect(rotation.value).toBe("90");
+      await clickByText(host, label("Camera", "相机"));
+      await clickByText(host, label("Capture view", "捕获视图"));
+      const captured = Object.values(editor.getSnapshot().cameras)[0];
+      expect(captured.name).toBe(label("Camera view 1", "相机视图 1"));
+      await clickByText(host, label("Camera", "相机"));
+      await clickByText(host, label("Apply view", "应用视图"));
+      const richText = document.createElement("div");
+      richText.contentEditable = "true";
+      richText.textContent = "Host notes";
+      host.querySelector("main")!.appendChild(richText);
+      await userEvent.click(richText);
+      const mode = editor.transformMode.get();
+      await userEvent.keyboard("w");
+      expect(editor.transformMode.get()).toBe(mode);
+      expect(richText.textContent).toContain("w");
+      richText.remove();
       const snapshot = editor.serialize();
       const history = editor.getHistoryState();
       await openLeftWorkspaceView(host, label("Assets", "资源"));
@@ -529,6 +557,11 @@ describe("proof-loop starter demo browser verification", () => {
         if (import.meta.env.VITE_CAPTURE_HIERARCHY) {
           await page.screenshot({ path: `__screenshots__/hierarchy/${framework}-${width}-en.png` });
         }
+        if (framework === "vue" && import.meta.env.VITE_CAPTURE_TOOLS) {
+          await userEvent.click(section(host, "Node operations"));
+          await page.screenshot({ path: `__screenshots__/vue-tools/${width}-nodes-en.png` });
+          await userEvent.keyboard("{Escape}");
+        }
         expect(row.getBoundingClientRect().width).toBeGreaterThan(100);
         const rootRow = hierarchy.querySelector<HTMLElement>('[title="Assembly 0"]')!;
         expect(Math.abs(rootRow.getBoundingClientRect().right - rootRow.parentElement!.getBoundingClientRect().right)).toBeLessThanOrEqual(1);
@@ -586,6 +619,11 @@ describe("proof-loop starter demo browser verification", () => {
         expect((chineseHierarchy.querySelector('input[type="search"]') as HTMLInputElement).value).toBe("");
         if (import.meta.env.VITE_CAPTURE_HIERARCHY) {
           await page.screenshot({ path: `__screenshots__/hierarchy/${framework}-${width}-zh-CN.png` });
+        }
+        if (framework === "vue" && import.meta.env.VITE_CAPTURE_TOOLS) {
+          await userEvent.click(section(host, "视口辅助"));
+          await page.screenshot({ path: `__screenshots__/vue-tools/${width}-helpers-zh-CN.png` });
+          await userEvent.keyboard("{Escape}");
         }
         if (framework === "react") await clickByText(host, "项目菜单");
         await userEvent.selectOptions(section(host, "语言") as HTMLSelectElement, "en");

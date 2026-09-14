@@ -119,6 +119,7 @@ export interface WorkbenchSelectionModel {
 }
 
 export interface WorkbenchToolbarModel {
+  disabledReasons?: Partial<Record<Extract<keyof WorkbenchToolbarModel, `can${string}`>, MessageDescriptor>>;
   canUndo: boolean;
   canRedo: boolean;
   canCopy: boolean;
@@ -446,7 +447,7 @@ function buildWorkbenchToolbar(
   const primaryNode = snapshot.selection.nodeId ? snapshot.nodes[snapshot.selection.nodeId] : undefined;
   const selectionIncludesCamera = inspector.selection.nodeIds.some((nodeId) => nodeSubtreeIncludesKind(snapshot, nodeId, "camera"));
 
-  return {
+  const toolbar: WorkbenchToolbarModel = {
     canUndo: options.history.undoCount > 0,
     canRedo: options.history.redoCount > 0,
     canCopy: selectionCount > 0 && !selectionIncludesCamera,
@@ -479,6 +480,33 @@ function buildWorkbenchToolbar(
       shadowCameras: false
     }
   };
+  const reason = (key: string, fallback: string): MessageDescriptor => createDisplayMessageDescriptor({
+    namespace: "workbench", path: `toolbar.disabled.${key}`, field: "reason", fallback
+  });
+  const selectNode = reason("selectNode", "Select a node first.");
+  const cameraSelection = reason("cameraSelection", "Camera nodes cannot be copied or grouped.");
+  const runtime = reason("runtime", "Wait for the viewport to be ready.");
+  const emptyScene = reason("emptyScene", "Add a scene node first.");
+  const reasons: NonNullable<WorkbenchToolbarModel["disabledReasons"]> = {
+    canUndo: reason("undo", "No edits to undo."),
+    canRedo: reason("redo", "No edits to redo."),
+    canCopy: selectionIncludesCamera ? cameraSelection : selectNode,
+    canDuplicate: selectionIncludesCamera ? cameraSelection : selectNode,
+    canDelete: selectNode,
+    canGroup: selectionIncludesCamera ? cameraSelection : reason("group", "Select at least two nodes to group."),
+    canUngroup: reason("ungroup", "Select a group or an object with children."),
+    canSelectAll: emptyScene,
+    canClearSelection: selectNode,
+    canFrameSelected: options.runtimeReady ? selectNode : runtime,
+    canFrameAll: options.runtimeReady ? emptyScene : runtime,
+    canCaptureCameraView: runtime,
+    canApplyCameraView: options.runtimeReady ? reason("cameraView", "Capture or select a camera view first.") : runtime
+  };
+  toolbar.disabledReasons = {};
+  for (const key of Object.keys(reasons) as (keyof typeof reasons)[]) {
+    if (!toolbar[key]) toolbar.disabledReasons[key] = reasons[key];
+  }
+  return toolbar;
 }
 
 function buildWorkbenchStatus(

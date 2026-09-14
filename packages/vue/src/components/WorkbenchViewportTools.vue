@@ -1,29 +1,29 @@
 <template>
-  <div ref="root" class="ek-workbench__viewport-tools" :aria-label="t('reactWorkbench.toolbar.controls.label')" @keydown.esc.stop.prevent="closeGroup">
+  <div ref="root" class="ek-workbench__viewport-tools" :aria-label="t('reactWorkbench.toolbar.controls.label')" @keydown.esc="dismissWithEscape" @focusout="dismissOnBlur">
     <div class="ek-workbench__viewport-tool-strip">
-      <div v-for="group in directGroups" :key="group.key" class="ek-workbench__tool-group" :aria-label="t(group.label)">
+      <div v-for="group in directGroups" :key="group.key" class="ek-workbench__tool-group" role="group" :aria-label="t(group.label)">
         <button v-for="command in group.commands" :key="command.key"
           class="ek-workbench__command-button ek-workbench__command-button--icon"
-          type="button" :title="t(command.title)" :aria-label="t(command.label)"
+          type="button" :title="command.reason ? t(command.reason) : t(command.title)" :aria-label="t(command.label)"
           :disabled="command.disabled" :aria-pressed="command.pressed" @click="command.onClick">
           <WorkbenchIcon :name="command.icon" />
           <span>{{ t(command.label) }}</span>
-          <small v-if="group.key === 'snap'" class="ek-workbench__snap-mark" aria-hidden="true">{{ command.key === 'snap-move' ? 'W' : command.key === 'snap-rotate' ? 'E' : 'R' }}</small>
+          <small v-if="group.key === 'snap'" class="ek-workbench__snap-mark" aria-hidden="true"><WorkbenchIcon name="snap" /></small>
         </button>
       </div>
       <div class="ek-workbench__tool-group">
         <button v-for="group in secondaryGroups" :key="group.key" class="ek-workbench__command-button ek-workbench__command-button--icon"
           type="button" :title="t(group.label)" :aria-label="t(group.label)"
           :aria-expanded="openGroup === group.key" :aria-controls="`${id}-${group.key}`" @click="toggleGroup(group.key, $event)">
-          <WorkbenchIcon :name="group.commands[0].icon" />
+          <WorkbenchIcon :name="group.key === 'helpers' ? 'grid' : group.key === 'camera' ? 'capture-view' : 'group'" />
         </button>
       </div>
     </div>
     <div v-for="group in secondaryGroups" :id="`${id}-${group.key}`" :key="group.key"
-      class="ek-workbench__tool-popover" :hidden="openGroup !== group.key" :aria-label="t(group.label)">
+      class="ek-workbench__tool-popover" role="group" :hidden="openGroup !== group.key" :aria-label="t(group.label)">
       <strong>{{ t(group.label) }}</strong>
       <button v-for="command in group.commands" :key="command.key" class="ek-workbench__command-button"
-        type="button" :title="t(command.title)" :disabled="command.disabled"
+        type="button" :title="command.reason ? t(command.reason) : t(command.title)" :disabled="command.disabled"
         :aria-pressed="command.pressed" @click="runCommand(command)">
         <WorkbenchIcon :name="command.icon" /><span>{{ t(command.label) }}</span>
       </button>
@@ -33,7 +33,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId } from "vue";
-import { createAuthoredCameraViewInput } from "@ek-aiot/3d-editor-core";
+import { createAuthoredCameraViewInput, type MessageDescriptor } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext } from "../composables/use-workbench";
 import type { WorkbenchMessageKey, WorkbenchMessageValues } from "../i18n/workbench-i18n";
 import WorkbenchIcon, { type WorkbenchIconName } from "./WorkbenchIcon.vue";
@@ -45,6 +45,7 @@ interface CommandButton {
   title: WorkbenchMessageKey;
   onClick(): void;
   disabled?: boolean;
+  reason?: MessageDescriptor;
   pressed?: boolean;
 }
 
@@ -84,9 +85,20 @@ function closeGroup(): void {
   trigger?.focus();
 }
 
+function dismissWithEscape(event: KeyboardEvent): void {
+  if (!openGroup.value) return;
+  event.preventDefault();
+  event.stopPropagation();
+  closeGroup();
+}
+
 function runCommand(command: CommandButton): void {
   command.onClick();
   if (typeof command.pressed !== "boolean") closeGroup();
+}
+
+function dismissOnBlur(event: FocusEvent): void {
+  if (event.relatedTarget instanceof Node && !root.value?.contains(event.relatedTarget)) openGroup.value = null;
 }
 
 function dismiss(event: PointerEvent): void {
@@ -111,6 +123,7 @@ const commandGroups = computed<CommandGroup[]>(() => [
         label: "reactWorkbench.toolbar.history.undo.label",
         title: "reactWorkbench.toolbar.history.undo.title",
         disabled: !toolbar.value.canUndo,
+        reason: toolbar.value.disabledReasons?.canUndo,
         onClick: () => props.context.runAction("undo")
       },
       {
@@ -119,6 +132,7 @@ const commandGroups = computed<CommandGroup[]>(() => [
         label: "reactWorkbench.toolbar.history.redo.label",
         title: "reactWorkbench.toolbar.history.redo.title",
         disabled: !toolbar.value.canRedo,
+        reason: toolbar.value.disabledReasons?.canRedo,
         onClick: () => props.context.runAction("redo")
       }
     ]
@@ -159,7 +173,7 @@ const commandGroups = computed<CommandGroup[]>(() => [
     commands: [
       {
         key: "snap-move",
-        icon: "snap",
+        icon: "move",
         label: "reactWorkbench.toolbar.snap.move.label",
         title: "reactWorkbench.toolbar.snap.move.title",
         pressed: toolbar.value.snapEnabled.translate,
@@ -167,7 +181,7 @@ const commandGroups = computed<CommandGroup[]>(() => [
       },
       {
         key: "snap-rotate",
-        icon: "snap",
+        icon: "rotate",
         label: "reactWorkbench.toolbar.snap.rotate.label",
         title: "reactWorkbench.toolbar.snap.rotate.title",
         pressed: toolbar.value.snapEnabled.rotate,
@@ -175,7 +189,7 @@ const commandGroups = computed<CommandGroup[]>(() => [
       },
       {
         key: "snap-scale",
-        icon: "snap",
+        icon: "scale",
         label: "reactWorkbench.toolbar.snap.scale.label",
         title: "reactWorkbench.toolbar.snap.scale.title",
         pressed: toolbar.value.snapEnabled.scale,
@@ -285,6 +299,7 @@ const commandGroups = computed<CommandGroup[]>(() => [
         label: "reactWorkbench.toolbar.camera.reset.label",
         title: "reactWorkbench.toolbar.camera.reset.title",
         disabled: !props.context.camera.ready,
+        reason: toolbar.value.disabledReasons?.canCaptureCameraView,
         onClick: props.context.resetCamera
       },
       {
@@ -293,6 +308,7 @@ const commandGroups = computed<CommandGroup[]>(() => [
         label: "reactWorkbench.toolbar.camera.frameSelected.label",
         title: "reactWorkbench.toolbar.camera.frameSelected.title",
         disabled: !toolbar.value.canFrameSelected,
+        reason: toolbar.value.disabledReasons?.canFrameSelected,
         onClick: () => props.context.frameSelected()
       },
       {
@@ -301,6 +317,7 @@ const commandGroups = computed<CommandGroup[]>(() => [
         label: "reactWorkbench.toolbar.camera.frameAll.label",
         title: "reactWorkbench.toolbar.camera.frameAll.title",
         disabled: !toolbar.value.canFrameAll,
+        reason: toolbar.value.disabledReasons?.canFrameAll,
         onClick: () => props.context.frameAll()
       },
       {
@@ -309,6 +326,7 @@ const commandGroups = computed<CommandGroup[]>(() => [
         label: "reactWorkbench.toolbar.camera.capture.label",
         title: "reactWorkbench.toolbar.camera.capture.title",
         disabled: !toolbar.value.canCaptureCameraView,
+        reason: toolbar.value.disabledReasons?.canCaptureCameraView,
         onClick: captureCameraView
       },
       {
@@ -317,6 +335,7 @@ const commandGroups = computed<CommandGroup[]>(() => [
         label: "reactWorkbench.toolbar.camera.apply.label",
         title: "reactWorkbench.toolbar.camera.apply.title",
         disabled: !toolbar.value.canApplyCameraView,
+        reason: toolbar.value.disabledReasons?.canApplyCameraView,
         onClick: applyCameraView
       }
     ]
@@ -331,6 +350,7 @@ const commandGroups = computed<CommandGroup[]>(() => [
         label: "reactWorkbench.toolbar.node.copy.label",
         title: "reactWorkbench.toolbar.node.copy.title",
         disabled: !toolbar.value.canCopy,
+        reason: toolbar.value.disabledReasons?.canCopy,
         onClick: () => props.context.runAction("copy")
       },
       {
@@ -339,6 +359,7 @@ const commandGroups = computed<CommandGroup[]>(() => [
         label: "reactWorkbench.toolbar.node.paste.label",
         title: "reactWorkbench.toolbar.node.paste.title",
         disabled: !toolbar.value.canPaste,
+        reason: toolbar.value.disabledReasons?.canPaste,
         onClick: () => props.context.runAction("paste")
       },
       {
@@ -347,6 +368,7 @@ const commandGroups = computed<CommandGroup[]>(() => [
         label: "reactWorkbench.toolbar.node.duplicate.label",
         title: "reactWorkbench.toolbar.node.duplicate.title",
         disabled: !toolbar.value.canDuplicate,
+        reason: toolbar.value.disabledReasons?.canDuplicate,
         onClick: () => props.context.runAction("duplicate")
       },
       {
@@ -355,6 +377,7 @@ const commandGroups = computed<CommandGroup[]>(() => [
         label: "reactWorkbench.toolbar.node.delete.label",
         title: "reactWorkbench.toolbar.node.delete.title",
         disabled: !toolbar.value.canDelete,
+        reason: toolbar.value.disabledReasons?.canDelete,
         onClick: () => props.context.runAction("delete")
       },
       {
@@ -363,6 +386,7 @@ const commandGroups = computed<CommandGroup[]>(() => [
         label: "reactWorkbench.toolbar.node.group.label",
         title: "reactWorkbench.toolbar.node.group.title",
         disabled: !toolbar.value.canGroup,
+        reason: toolbar.value.disabledReasons?.canGroup,
         onClick: () => props.context.runAction("group")
       },
       {
@@ -371,6 +395,7 @@ const commandGroups = computed<CommandGroup[]>(() => [
         label: "reactWorkbench.toolbar.node.ungroup.label",
         title: "reactWorkbench.toolbar.node.ungroup.title",
         disabled: !toolbar.value.canUngroup,
+        reason: toolbar.value.disabledReasons?.canUngroup,
         onClick: () => props.context.runAction("ungroup")
       },
       {
@@ -379,6 +404,7 @@ const commandGroups = computed<CommandGroup[]>(() => [
         label: "reactWorkbench.toolbar.node.selectAll.label",
         title: "reactWorkbench.toolbar.node.selectAll.title",
         disabled: !toolbar.value.canSelectAll,
+        reason: toolbar.value.disabledReasons?.canSelectAll,
         onClick: () => props.context.runAction("select-all")
       },
       {
@@ -387,6 +413,7 @@ const commandGroups = computed<CommandGroup[]>(() => [
         label: "reactWorkbench.toolbar.node.clear.label",
         title: "reactWorkbench.toolbar.node.clear.title",
         disabled: !toolbar.value.canClearSelection,
+        reason: toolbar.value.disabledReasons?.canClearSelection,
         onClick: () => props.context.runAction("clear-selection")
       }
     ]
@@ -394,7 +421,7 @@ const commandGroups = computed<CommandGroup[]>(() => [
 ]);
 
 function captureCameraView(): void {
-  const captured = props.context.captureCameraView({ name: `Camera view ${props.context.model.project.cameraViewCount + 1}` });
+  const captured = props.context.captureCameraView({ name: t("reactWorkbench.toolbar.camera.defaultName", { count: props.context.model.project.cameraViewCount + 1 }) });
   if (!captured) {
     return;
   }

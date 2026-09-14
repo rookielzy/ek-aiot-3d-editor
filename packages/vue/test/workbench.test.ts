@@ -19,6 +19,92 @@ import { expectAuthoredValuesPresent, expectNoI18nDurableLeakage, expectNoRuntim
 import { decodeProjectPackageText, resolveProjectPackageBytes, seedI18nDurableEditor } from "../../test/i18n-durable-fixture";
 
 describe("Vue EditorWorkbench", () => {
+  it("organizes nodes through real operations and preserves native editing in host controls", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+    const wrapper = mount(EditorWorkbench, {
+      attachTo: document.body,
+      props: { editor, rendererFactory: fakeRenderer },
+      slots: { toolbar: () => [h("input", { type: "number" }), h("textarea"), h("select", [h("option", "One")]), h("div", { contenteditable: "true", role: "textbox" }, "Notes")] }
+    });
+    const trigger = wrapper.get('[aria-label="Node operations"]');
+    const command = async (name: string) => {
+      await trigger.trigger("click");
+      const panel = wrapper.get(`#${trigger.attributes("aria-controls")}`);
+      await panel.findAll("button").find((button) => button.text() === name)!.trigger("click");
+      expect(trigger.attributes("aria-expanded")).toBe("false");
+      expect(document.activeElement).toBe(trigger.element);
+    };
+    await command("Copy");
+    await command("Paste");
+    expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(2);
+    await command("Duplicate");
+    expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(3);
+    await command("Delete");
+    expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(2);
+    await wrapper.get('[aria-label="Undo"]').trigger("click");
+    expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(3);
+    await wrapper.get('[aria-label="Redo"]').trigger("click");
+    expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(2);
+    await command("Select all");
+    await command("Group");
+    expect(editor.getSnapshot().objects[editor.getSnapshot().selection.objectId!].children).toHaveLength(1);
+    await command("Ungroup");
+    expect(Object.values(editor.getSnapshot().objects).every((object) => object.parentId === null)).toBe(true);
+    await command("Clear");
+    expect(editor.getSnapshot().selection.nodeIds).toEqual([]);
+    for (const mode of ["move", "rotate", "scale"]) await wrapper.get(`[title="Toggle ${mode} snap"]`).trigger("click");
+    await wrapper.get('[title="Scale mode"]').trigger("click");
+    const snapshot = editor.getSnapshot();
+    for (const control of wrapper.get(".ek-workbench__toolbar-region").findAll("input, textarea, select, [contenteditable]")) {
+      for (const event of [{ key: "w" }, { key: "z", ctrlKey: true }, { key: "e", ctrlKey: true, altKey: true }]) {
+        const keydown = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...event });
+        expect(control.element.dispatchEvent(keydown)).toBe(true);
+      }
+    }
+    expect(editor.getSnapshot()).toEqual(snapshot);
+    expect(editor.transformMode.get()).toBe("scale");
+    expect(editor.snap.get()).toEqual({ translate: 0.5, rotate: Math.PI / 12, scale: 0.1 });
+    await wrapper.get('[title="Toggle move snap"]').trigger("click");
+    expect(editor.snap.get()).toEqual({ translate: null, rotate: Math.PI / 12, scale: 0.1 });
+    await trigger.trigger("click");
+    await wrapper.get("textarea").trigger("pointerdown");
+    expect(trigger.attributes("aria-expanded")).toBe("false");
+    wrapper.unmount();
+  });
+
+  it.each(["en", "zh-CN"] as const)("explains unavailable node operations from Core in %s", async (locale) => {
+    const editor = markRaw(createEditor());
+    const wrapper = mount(EditorWorkbench, { props: { editor, defaultLocale: locale, rendererFactory: fakeRenderer } });
+    const label = (en: string, zh: string) => locale === "en" ? en : zh;
+    await wrapper.get(`[aria-label="${label("Node operations", "节点操作")}"]`).trigger("click");
+    const copy = wrapper.findAll("button").find((button) => button.text() === label("Copy", "复制"))!;
+    expect(copy.attributes("disabled")).toBeDefined();
+    expect(copy.attributes("title")).toBe(label("Select a node first.", "请先选择节点。"));
+    editor.dispatch({ type: "create-camera-view", view: { id: "view-a" } });
+    const camera = Object.values(editor.getSnapshot().nodes).find((node) => node.kind === "camera")!;
+    editor.dispatch({ type: "select-node", nodeId: camera.id });
+    await nextTick();
+    expect(copy.attributes("title")).toBe(label("Camera nodes cannot be copied or grouped.", "相机节点不能复制或组合。"));
+    wrapper.unmount();
+  });
+
+  it("lets Escape clear selection from direct tools but only dismisses an open group", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+    const wrapper = mount(EditorWorkbench, { attachTo: document.body, props: { editor, rendererFactory: fakeRenderer } });
+    const trigger = wrapper.get('[aria-label="Node operations"]');
+    await trigger.trigger("click");
+    await trigger.trigger("keydown", { key: "Escape" });
+    expect(editor.getSnapshot().selection.objectId).toBe("object-a");
+    expect(document.activeElement).toBe(trigger.element);
+    await wrapper.get('[title="Move mode"]').trigger("keydown", { key: "Escape" });
+    expect(editor.getSnapshot().selection.nodeIds).toEqual([]);
+    wrapper.unmount();
+  });
+
   it("keeps light and camera selection and search drafts across locale and panel changes", async () => {
     const editor = markRaw(createEditor());
     editor.dispatch({ type: "add-light", light: { id: "light-a", name: "Key light", kind: "point" } });
