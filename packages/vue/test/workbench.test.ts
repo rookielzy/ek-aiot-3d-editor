@@ -19,6 +19,25 @@ import { expectAuthoredValuesPresent, expectNoI18nDurableLeakage, expectNoRuntim
 import { decodeProjectPackageText, resolveProjectPackageBytes, seedI18nDurableEditor } from "../../test/i18n-durable-fixture";
 
 describe("Vue EditorWorkbench", () => {
+  it("disables empty clipboard paste and refreshes it after scoped-slot copy", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer },
+      slots: { toolbar: ({ operations }) => h("button", { "data-host-copy": "", onClick: () => operations.copy() }, "Host copy") }
+    });
+    const paste = () => wrapper.findAll("button").find((button) => button.text() === "Paste")!;
+    expect(paste().attributes("disabled")).toBeDefined();
+    expect(paste().attributes("title")).toBe("Copy a node before pasting.");
+    await wrapper.get('[data-host-copy]').trigger("click");
+    expect(paste().attributes("disabled")).toBeUndefined();
+    await wrapper.get('[aria-label="Node operations"]').trigger("click");
+    await paste().trigger("click");
+    expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(2);
+    wrapper.unmount();
+  });
+
   it("organizes nodes through real operations and preserves native editing in host controls", async () => {
     const editor = markRaw(createEditor());
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
@@ -346,7 +365,7 @@ describe("Vue EditorWorkbench", () => {
     const captureCameraView = vi.spyOn(runtime!, "captureCameraView");
     const applyCameraView = vi.spyOn(runtime!, "applyCameraView");
     const operationResult = { ok: true as const, snapshot: editor.getSnapshot() };
-    const copy = vi.spyOn(editor.operations, "copy").mockReturnValue(null);
+    const copy = vi.spyOn(editor.operations, "copy");
     const paste = vi.spyOn(editor.operations, "paste").mockReturnValue(operationResult);
     const duplicate = vi.spyOn(editor.operations, "duplicate").mockReturnValue(operationResult);
     const remove = vi.spyOn(editor.operations, "delete").mockReturnValue(operationResult);

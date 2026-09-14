@@ -227,6 +227,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   const runtimeProblems = shallowRef<Problem[]>(currentEditor.value.getRuntime()?.getProblems() ?? []);
   const requestedActiveCameraViewId = ref<string | null>(null);
   const assetWorkspaceVersion = shallowRef(getAssetWorkspaceVersion(currentEditor.value));
+  const clipboardVersion = ref(0);
   let unsubscribeSnapshot: (() => void) | null = null;
   let unsubscribeRuntime: (() => void) | null = null;
   let unsubscribeProblems: (() => void) | null = null;
@@ -349,7 +350,9 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   }
 
   function runAction(action: EditorAction): ReturnType<typeof executeEditorAction> {
-    return executeEditorAction(currentEditor.value, action);
+    const result = executeEditorAction(currentEditor.value, action);
+    if (action === "copy") clipboardVersion.value++;
+    return result;
   }
 
   function resetCamera(): void {
@@ -440,7 +443,9 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   );
   const model = computed(() => {
     assetWorkspaceVersion.value;
+    clipboardVersion.value;
     return buildWorkbenchModel(snapshot.value, {
+      canPaste: currentEditor.value.operations.canPaste(),
       inspector: inspector.value,
       runtimeProblems: runtimeProblems.value,
       assetPayloads: getAssetWorkspacePayloads(currentEditor.value),
@@ -541,7 +546,14 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     activeLightId: activeLightId.value,
     activeLightNodeId: inspector.value.lights.activeLightNodeId,
     activeCameraViewId: activeCameraViewId.value,
-    operations: currentEditor.value.operations,
+    operations: {
+      ...currentEditor.value.operations,
+      copy(...args) {
+        const payload = currentEditor.value.operations.copy(...args);
+        clipboardVersion.value++;
+        return payload;
+      }
+    },
     historyState: currentEditor.value.getHistoryState(),
     selectionCount: model.value.selection.count,
     selectedNodeId: model.value.selection.nodeId,

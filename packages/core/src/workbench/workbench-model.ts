@@ -17,6 +17,7 @@ import type { MessageDescriptor } from "../i18n/messages";
 import { createDisplayMessageDescriptor } from "../i18n/display-messages";
 
 export interface BuildWorkbenchModelOptions {
+  canPaste?: boolean;
   inspector?: InspectorModel;
   history?: HistoryState;
   snap?: SnapSettings;
@@ -213,6 +214,7 @@ export function buildWorkbenchModel(snapshot: SceneSnapshot, options: BuildWorkb
   const projectCompleteness = options.projectCompleteness ?? assetWorkspace.readiness.completeness;
   const assets = buildWorkbenchAssets(snapshot, assetWorkspace);
   const toolbar = buildWorkbenchToolbar(snapshot, inspector, {
+    canPaste: options.canPaste,
     history,
     snap,
     viewportHelpers,
@@ -436,6 +438,7 @@ function buildWorkbenchToolbar(
   snapshot: SceneSnapshot,
   inspector: InspectorModel,
   options: {
+    canPaste?: boolean;
     history: HistoryState;
     snap: SnapSettings;
     viewportHelpers?: ViewportHelperStateSnapshot;
@@ -451,7 +454,7 @@ function buildWorkbenchToolbar(
     canUndo: options.history.undoCount > 0,
     canRedo: options.history.redoCount > 0,
     canCopy: selectionCount > 0 && !selectionIncludesCamera,
-    canPaste: true,
+    canPaste: options.canPaste ?? true,
     canDuplicate: selectionCount > 0 && !selectionIncludesCamera,
     canDelete: selectionCount > 0,
     canGroup: selectionCount > 1 && !selectionIncludesCamera,
@@ -491,6 +494,7 @@ function buildWorkbenchToolbar(
     canUndo: reason("undo", "No edits to undo."),
     canRedo: reason("redo", "No edits to redo."),
     canCopy: selectionIncludesCamera ? cameraSelection : selectNode,
+    canPaste: reason("clipboard", "Copy a node before pasting."),
     canDuplicate: selectionIncludesCamera ? cameraSelection : selectNode,
     canDelete: selectNode,
     canGroup: selectionIncludesCamera ? cameraSelection : reason("group", "Select at least two nodes to group."),

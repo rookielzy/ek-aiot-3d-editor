@@ -1011,7 +1011,7 @@ describe("proof-loop starter demo browser verification", () => {
     const root = mountVueDemo({ locale: "zh-CN" });
     cleanup = root.cleanup;
 
-    await verifyChineseWorkbenchLayout(root.host, { assertProfessionalUi: true });
+    await verifyChineseWorkbenchLayout(root.host, { assertProfessionalUi: true, capturedName: "相机视图 1" });
   }, 15000);
 });
 
@@ -1124,7 +1124,7 @@ async function verifyStarterFlow(host: HTMLElement, options: { assertProfessiona
   }
 }
 
-async function verifyChineseWorkbenchLayout(host: HTMLElement, options: { assertProfessionalUi?: boolean } = {}): Promise<void> {
+async function verifyChineseWorkbenchLayout(host: HTMLElement, options: { assertProfessionalUi?: boolean; capturedName?: string } = {}): Promise<void> {
   await waitFor(() => {
     expect(text(section(host, "层级"))).toContain("没有场景节点");
     expect(text(testId(host, "starter-overlay"))).toContain("0 objects");
@@ -1168,7 +1168,7 @@ async function verifyChineseWorkbenchLayout(host: HTMLElement, options: { assert
   await clickByText(host, "捕获视图");
   await waitFor(() => {
     expect(text(host)).toContain("相机视图");
-    expect(text(host)).toContain("Camera view 1");
+    expect(text(host)).toContain(options.capturedName ?? "Camera view 1");
   });
   await openInspectorGroup(host, "场景");
   await clickByText(host, "设为默认");
