@@ -8,8 +8,9 @@ import {
   type SceneSnapshot
 } from "@ek-aiot/3d-editor-core";
 import { useState } from "react";
+import { SceneInspectorFields } from "./SceneInspectorFields";
 import type { InspectorI18n } from "./inspector-i18n";
-import { DEFAULT_INSPECTOR_I18N, renderFieldLabel, renderOptionLabel, renderProblemMessage, renderSectionTitle } from "./inspector-i18n";
+import { DEFAULT_INSPECTOR_I18N, renderProblemMessage, renderSectionTitle } from "./inspector-i18n";
 
 export interface EnvironmentInspectorProps {
   editor: Editor;
@@ -23,18 +24,20 @@ export function EnvironmentInspector({ editor, snapshot, section, i18n = DEFAULT
 
   function commit(fieldId: EnvironmentFieldId, value: string) {
     if (value === "" && fieldId.endsWith("assetId")) {
-      return;
+      return false;
     }
     setFieldProblem(null);
-    const result = buildSetEnvironmentCommand(snapshot, fieldId, value);
+    const result = buildSetEnvironmentCommand(editor.getSnapshot(), fieldId, value);
     if (result.ok) {
       const dispatch = editor.dispatch(result.command);
       if (!dispatch.ok) {
         setFieldProblem({ code: "inspector-environment-dispatch-failed", fieldId, ...environmentProblemMessage(i18n, "reactWorkbench.inspector.environment.editFailed.message", dispatch.error), severity: "warning" });
       }
+      return dispatch.ok;
     } else {
       setFieldProblem(result.problem);
     }
+    return false;
   }
 
   function runAction(actionId: string) {
@@ -73,64 +76,15 @@ export function EnvironmentInspector({ editor, snapshot, section, i18n = DEFAULT
       {fieldProblem && !fieldProblem.fieldId ? (
         <p className="ek-inspector-warning" role="alert">{renderProblemMessage(i18n, fieldProblem)}</p>
       ) : null}
-      <div className="ek-inspector-grid">
-        {section.fields.map((field) => {
-          const activeProblem = fieldProblem?.fieldId === field.id ? fieldProblem : field.problem;
-          const descriptionId = activeProblem ? problemId(field.id) : undefined;
-          return (
-            <label key={field.id} className="ek-inspector-field">
-              <span>{renderFieldLabel(i18n, field)}</span>
-              {field.kind === "number" ? (
-                <input
-                  key={`${field.id}:${String(field.value)}`}
-                  defaultValue={String(field.value)}
-                  disabled={field.disabled}
-                  type="number"
-                  min={field.min}
-                  max={field.max}
-                  step={field.step ?? 0.01}
-                  aria-invalid={fieldProblem?.fieldId === field.id ? true : undefined}
-                  aria-describedby={descriptionId}
-                  onBlur={(event) => commit(field.id as EnvironmentFieldId, event.currentTarget.value)}
-                />
-              ) : field.kind === "color" ? (
-                <input
-                  key={`${field.id}:${String(field.value)}`}
-                  defaultValue={String(field.value)}
-                  disabled={field.disabled}
-                  type="color"
-                  aria-invalid={fieldProblem?.fieldId === field.id ? true : undefined}
-                  aria-describedby={descriptionId}
-                  onChange={(event) => commit(field.id as EnvironmentFieldId, event.currentTarget.value)}
-                />
-              ) : (
-                <select
-                  key={`${field.id}:${String(field.value)}`}
-                  defaultValue={String(field.value)}
-                  disabled={field.disabled}
-                  aria-invalid={fieldProblem?.fieldId === field.id ? true : undefined}
-                  aria-describedby={descriptionId}
-                  onChange={(event) => commit(field.id as EnvironmentFieldId, event.currentTarget.value)}
-                >
-                  {field.kind === "asset" ? <option value="">{i18n.t("reactWorkbench.inspector.field.asset.none")}</option> : null}
-                  {(field.options ?? []).map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {renderOptionLabel(i18n, option)}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {activeProblem ? <small id={descriptionId} className="ek-inspector-field-problem" role={fieldProblem?.fieldId === field.id ? "alert" : undefined}>{renderProblemMessage(i18n, activeProblem)}</small> : null}
-            </label>
-          );
-        })}
-      </div>
+      {(["lighting", "background"] as const).map((group) => (
+        <details key={group} className="ek-inspector-fold" open>
+          <summary>{i18n.t(`reactWorkbench.inspector.sceneFields.${group}`)}</summary>
+          <SceneInspectorFields fields={section.fields.filter((field) => group === "lighting" ? !field.id.startsWith("background.") : field.id.startsWith("background."))}
+            problem={fieldProblem} i18n={i18n} onCommit={(fieldId, value) => commit(fieldId as EnvironmentFieldId, value)} />
+        </details>
+      ))}
     </section>
   );
-}
-
-function problemId(fieldId: string): string {
-  return `ek-environment-${fieldId.replace(/[^a-z0-9_-]/gi, "-")}-problem`;
 }
 
 type EnvironmentProblemMessageKey =

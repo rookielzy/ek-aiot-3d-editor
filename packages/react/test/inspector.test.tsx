@@ -387,6 +387,111 @@ describe("React InspectorPanel", () => {
     expect(screen.getByText(/Review remap/)).toBeTruthy();
   });
 
+  it("commits scene number drafts on Enter without losing focus or duplicating undo", () => {
+    const editor = createEditor();
+    render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Environment" }));
+    const input = screen.getByLabelText("Lighting intensity");
+    input.focus();
+    fireEvent.change(input, { target: { value: "2.5" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(editor.getSnapshot().environment.lighting.intensity).toBe(2.5);
+    expect(document.activeElement).toBe(input);
+    fireEvent.blur(input);
+    act(() => { editor.undo(); });
+    expect(editor.getSnapshot().environment.lighting.intensity).toBe(1);
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(editor.getSnapshot().environment.lighting.intensity).toBe(1);
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("shares light and camera edits across groups and clears errors when changing targets", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "add-light", light: { id: "sun", kind: "directional", name: "Sun" } });
+    editor.dispatch({ type: "select-node", nodeId: "sun" });
+    editor.dispatch({ type: "create-camera-view", view: { id: "hero", name: "Hero" } });
+    editor.dispatch({ type: "create-camera-view", view: { id: "detail", name: "Detail" } });
+    render(<InspectorPanel editor={editor} />);
+    const intensity = screen.getByLabelText("Intensity");
+    intensity.focus();
+    fireEvent.change(intensity, { target: { value: "3" } });
+    fireEvent.keyDown(intensity, { key: "Enter" });
+    expect(editor.getSnapshot().lights.sun.intensity).toBe(3);
+    expect(document.activeElement).toBe(intensity);
+    fireEvent.blur(intensity);
+    act(() => { editor.undo(); });
+    expect(editor.getSnapshot().lights.sun.intensity).toBe(1);
+    fireEvent.click(screen.getByRole("tab", { name: "Scene" }));
+    expect((screen.getByLabelText("Intensity") as HTMLInputElement).value).toBe("1");
+    const fov = screen.getByLabelText("FOV");
+    fov.focus();
+    fireEvent.change(fov, { target: { value: "40" } });
+    fireEvent.keyDown(fov, { key: "Enter" });
+    expect(editor.getSnapshot().cameras.hero.projection.fov).toBe(40);
+    expect(document.activeElement).toBe(fov);
+    fireEvent.change(fov, { target: { value: "" } });
+    fireEvent.blur(fov);
+    expect(fov.getAttribute("aria-invalid")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: /Detail/ }));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect((screen.getByLabelText("FOV") as HTMLInputElement).value).toBe("50");
+  });
+
+  it("selects camera nodes from scene management even when another camera is selected", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "create-camera-view", view: { id: "hero", name: "Hero" } });
+    editor.dispatch({ type: "create-camera-view", view: { id: "detail", name: "Detail", projection: { kind: "perspective", fov: 35 } } });
+    editor.dispatch({ type: "select-node", nodeId: "hero" });
+    render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Scene" }));
+    fireEvent.click(screen.getByRole("button", { name: /Detail/ }));
+    expect(editor.getSnapshot().selection.nodeId).toBe("detail");
+    expect((screen.getByLabelText("FOV") as HTMLInputElement).value).toBe("35");
+    fireEvent.click(screen.getByRole("tab", { name: "Properties" }));
+    expect((screen.getByLabelText("FOV") as HTMLInputElement).value).toBe("35");
+    expect(screen.getAllByLabelText("Position X")).toHaveLength(1);
+  });
+
+  it.each(["ambient", "hemisphere", "directional", "point", "spot"])("adds, selects, edits and removes a %s light", (kind) => {
+    const editor = createEditor();
+    render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Scene" }));
+    fireEvent.change(screen.getByLabelText("Add light"), { target: { value: kind } });
+    const light = Object.values(editor.getSnapshot().lights)[0]!;
+    expect(light.kind).toBe(kind);
+    expect(editor.getSnapshot().nodes[editor.getSnapshot().selection.nodeId!].kind).toBe("light");
+    fireEvent.change(screen.getByLabelText("Intensity"), { target: { value: "2" } });
+    fireEvent.keyDown(screen.getByLabelText("Intensity"), { key: "Enter" });
+    expect(editor.getSnapshot().lights[light.id].intensity).toBe(2);
+    fireEvent.click(screen.getByRole("button", { name: "Remove light" }));
+    expect(Object.keys(editor.getSnapshot().lights)).toHaveLength(0);
+  });
+
+  it("retains independent environment sources, cubemap faces and flat-image diagnostics", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "register-asset", asset: { id: "image", kind: "image", label: "Backdrop" } });
+    render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Environment" }));
+    expect([...(screen.getByLabelText("Lighting source") as HTMLSelectElement).options].map((option) => option.value)).toEqual(["none", "equirectangular", "hdr", "cubemap"]);
+    expect([...(screen.getByLabelText("Background source") as HTMLSelectElement).options].map((option) => option.value)).toEqual(["none", "solid", "flat-image", "equirectangular", "hdr", "cubemap"]);
+    act(() => {
+      for (const id of ["px", "nx", "py", "ny", "pz", "nz"]) editor.dispatch({ type: "register-asset", asset: { id, kind: "image", label: id } });
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Use six textures for both" }));
+    fireEvent.change(screen.getByLabelText("Background asset"), { target: { value: "image" } });
+    fireEvent.change(screen.getByLabelText("Background source"), { target: { value: "flat-image" } });
+    expect(editor.getSnapshot().environment.lighting.source.kind).toBe("cubemap");
+    const faces = screen.getAllByRole("combobox").filter((select) => select.getAttribute("aria-label")?.startsWith("Lighting ") && !["Lighting source", "Lighting asset"].includes(select.getAttribute("aria-label")!));
+    expect(faces).toHaveLength(6);
+    for (const face of faces) fireEvent.change(face, { target: { value: "image" } });
+    expect(editor.getSnapshot().environment.lighting.source.kind).toBe("cubemap");
+    expect(editor.getSnapshot().environment.background.source).toEqual({ kind: "flat-image", assetId: "image" });
+    fireEvent.change(screen.getByLabelText("Background blur"), { target: { value: "0.4" } });
+    fireEvent.keyDown(screen.getByLabelText("Background blur"), { key: "Enter" });
+    expect(screen.getByLabelText("Background blur").getAttribute("aria-describedby")).toBeTruthy();
+  });
+
   it("selects an HDR environment asset from the default scene state", () => {
     const editor = createEditor();
     editor.dispatch({ type: "register-asset", asset: { id: "studio-hdr", kind: "hdr", label: "Studio HDR" } });
@@ -559,6 +664,16 @@ describe("React InspectorPanel", () => {
 
     expect(editor.getSnapshot().cameras["view-a"]).toBeDefined();
     expect(applyCameraView).toHaveBeenCalledWith(editor.getSnapshot().cameras["view-a"]);
+    fireEvent.click(screen.getByRole("button", { name: "Set default" }));
+    expect(editor.getSnapshot().presentation.defaultCameraId).toBe("view-a");
+    fireEvent.click(screen.getByRole("button", { name: "Clear default" }));
+    expect(editor.getSnapshot().presentation.defaultCameraId).toBeNull();
+    captureCameraView.mockReturnValueOnce({ ok: true, view: { ...editor.getSnapshot().cameras["view-a"], position: [3, 4, 5] } });
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    expect(editor.getSnapshot().cameras["view-a"].position).toEqual([3, 4, 5]);
+    fireEvent.click(screen.getByRole("button", { name: "Delete view" }));
+    expect(Object.keys(editor.getSnapshot().cameras)).toHaveLength(0);
+    expect(screen.getByText("Capture a camera view to author presentation state.")).toBeTruthy();
   });
 });
 

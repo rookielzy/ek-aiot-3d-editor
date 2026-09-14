@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   buildAddLightCommand,
   buildRemoveLightCommand,
@@ -11,8 +11,9 @@ import {
   type LightKind,
   type SceneSnapshot
 } from "@ek-aiot/3d-editor-core";
+import { SceneInspectorFields } from "./SceneInspectorFields";
 import type { InspectorI18n } from "./inspector-i18n";
-import { DEFAULT_INSPECTOR_I18N, renderFieldLabel, renderOptionLabel, renderProblemMessage, renderSectionReason, renderSectionTitle } from "./inspector-i18n";
+import { DEFAULT_INSPECTOR_I18N, renderOptionLabel, renderProblemMessage, renderSectionReason, renderSectionTitle } from "./inspector-i18n";
 
 export interface LightInspectorProps {
   editor: Editor;
@@ -27,6 +28,8 @@ export function LightInspector({ editor, snapshot, section, i18n = DEFAULT_INSPE
   const [addKind, setAddKind] = useState<LightKind | "">("");
   const [fieldProblem, setFieldProblem] = useState<InspectorCommandProblem | null>(null);
 
+  useEffect(() => { setFieldProblem(null); }, [targetKey]);
+
   function addLight(kind: LightKind | "") {
     if (!kind) {
       return;
@@ -34,6 +37,10 @@ export function LightInspector({ editor, snapshot, section, i18n = DEFAULT_INSPE
     const result = buildAddLightCommand(kind);
     if (result.ok) {
       const dispatch = editor.dispatch(result.command);
+      if (!dispatch.ok) {
+        setFieldProblem({ code: "inspector-light-dispatch-failed", ...lightProblemMessage(i18n, "reactWorkbench.inspector.lights.editFailed.message", dispatch.error), severity: "warning" });
+        return;
+      }
       const nextLightId = Object.keys(dispatch.snapshot.lights).at(-1) ?? null;
       onActiveLightIdChange(nextLightId);
       setAddKind("");
@@ -54,16 +61,15 @@ export function LightInspector({ editor, snapshot, section, i18n = DEFAULT_INSPE
   }
 
   function commit(fieldId: LightFieldId, value: string) {
-    if (!section.activeLightId) {
-      return;
-    }
-    const result = buildUpdateLightCommand(snapshot, section.activeLightId, fieldId, value);
-    if (result.ok) {
-      setFieldProblem(null);
-      editor.dispatch(result.command);
-    } else {
+    if (!section.activeLightId) return false;
+    const result = buildUpdateLightCommand(editor.getSnapshot(), section.activeLightId, fieldId, value);
+    if (!result.ok) {
       setFieldProblem(result.problem);
+      return false;
     }
+    const dispatch = editor.dispatch(result.command);
+    setFieldProblem(dispatch.ok ? null : { code: "inspector-light-dispatch-failed", fieldId, ...lightProblemMessage(i18n, "reactWorkbench.inspector.lights.editFailed.message", dispatch.error), severity: "warning" });
+    return dispatch.ok;
   }
 
   function removeActive() {
@@ -72,7 +78,8 @@ export function LightInspector({ editor, snapshot, section, i18n = DEFAULT_INSPE
     }
     const result = buildRemoveLightCommand(snapshot, section.activeLightId);
     if (result.ok) {
-      editor.dispatch(result.command);
+      const dispatch = editor.dispatch(result.command);
+      setFieldProblem(dispatch.ok ? null : { code: "inspector-light-dispatch-failed", ...lightProblemMessage(i18n, "reactWorkbench.inspector.lights.editFailed.message", dispatch.error), severity: "warning" });
     }
   }
 
@@ -104,6 +111,7 @@ export function LightInspector({ editor, snapshot, section, i18n = DEFAULT_INSPE
             <button
               key={light.id}
               type="button"
+              aria-pressed={light.active}
               className={light.active ? "is-active" : ""}
               data-node-id={light.nodeId ?? undefined}
               data-selected={light.selected ? "true" : "false"}
@@ -148,43 +156,15 @@ export function LightInspector({ editor, snapshot, section, i18n = DEFAULT_INSPE
       ) : null}
       {section.activeLightId ? (
         <div className="ek-inspector-grid">
-          {section.fields.map((field) => (
-            <label key={field.id} className={field.kind === "checkbox" ? "ek-inspector-field ek-inspector-field--checkbox" : "ek-inspector-field"}>
-              <span>{renderFieldLabel(i18n, field)}</span>
-              {field.kind === "number" ? (
-                <input
-                  key={`${targetKey}:${field.id}:${String(field.value)}`}
-                  defaultValue={String(field.value)}
-                  type="number"
-                  min={field.min}
-                  max={field.max}
-                  step={field.step ?? 0.01}
-                  aria-invalid={fieldProblem?.fieldId === field.id ? true : undefined}
-                  aria-describedby={fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined}
-                  onBlur={(event) => commit(field.id as LightFieldId, event.currentTarget.value)}
-                />
-              ) : field.kind === "color" ? (
-                <input key={`${targetKey}:${field.id}:${String(field.value)}`} defaultValue={String(field.value)} type="color" onChange={(event) => commit(field.id as LightFieldId, event.currentTarget.value)} />
-              ) : field.kind === "checkbox" ? (
-                <input
-                  key={`${targetKey}:${field.id}:${String(field.value)}`}
-                  defaultChecked={Boolean(field.value)}
-                  type="checkbox"
-                  onChange={(event) => commit(field.id as LightFieldId, String(event.currentTarget.checked))}
-                />
-              ) : (
-                <input
-                  key={`${targetKey}:${field.id}:${String(field.value)}`}
-                  defaultValue={String(field.value)}
-                  type="text"
-                  aria-invalid={fieldProblem?.fieldId === field.id ? true : undefined}
-                  aria-describedby={fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined}
-                  onBlur={(event) => commit(field.id as LightFieldId, event.currentTarget.value)}
-                />
-              )}
-              {fieldProblem?.fieldId === field.id ? <small id={problemId(field.id)} className="ek-inspector-field-problem" role="alert">{renderProblemMessage(i18n, fieldProblem)}</small> : null}
-            </label>
-          ))}
+          <SceneInspectorFields fields={section.fields.filter((field) => !field.id.startsWith("shadow."))}
+            targetKey={targetKey} problem={fieldProblem} i18n={i18n} onCommit={(fieldId, value) => commit(fieldId as LightFieldId, value)} />
+          {section.fields.some((field) => field.id.startsWith("shadow.")) ? (
+            <details className="ek-inspector-fold" open>
+              <summary>{i18n.t("reactWorkbench.inspector.sceneFields.shadows")}</summary>
+              <SceneInspectorFields fields={section.fields.filter((field) => field.id.startsWith("shadow."))}
+                targetKey={targetKey} problem={fieldProblem} i18n={i18n} onCommit={(fieldId, value) => commit(fieldId as LightFieldId, value)} />
+            </details>
+          ) : null}
           <button className="ek-inspector-danger" type="button" onClick={removeActive}>
             {i18n.t("reactWorkbench.inspector.lights.remove.label")}
           </button>
@@ -194,11 +174,9 @@ export function LightInspector({ editor, snapshot, section, i18n = DEFAULT_INSPE
   );
 }
 
-function problemId(fieldId: string): string {
-  return `ek-light-${fieldId.replace(/[^a-z0-9_-]/gi, "-")}-problem`;
-}
-
 type LightProblemMessageKey =
+  | "reactWorkbench.inspector.lights.editFailed.message"
+  | "reactWorkbench.inspector.lights.editFailedDetail.message"
   | "reactWorkbench.inspector.lights.presetUnavailable.message"
   | "reactWorkbench.inspector.lights.presetUnavailableDetail.message"
   | "reactWorkbench.inspector.lights.presetFailed.message"
@@ -218,6 +196,9 @@ function lightProblemMessage(i18n: InspectorI18n, key: LightProblemMessageKey, d
 }
 
 function detailKey(key: LightProblemMessageKey): LightProblemMessageKey {
+  if (key === "reactWorkbench.inspector.lights.editFailed.message") {
+    return "reactWorkbench.inspector.lights.editFailedDetail.message";
+  }
   if (key === "reactWorkbench.inspector.lights.presetUnavailable.message") {
     return "reactWorkbench.inspector.lights.presetUnavailableDetail.message";
   }

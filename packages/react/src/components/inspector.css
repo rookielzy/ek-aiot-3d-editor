@@ -537,3 +537,48 @@
 }
 
 .ek-material-fields .ek-inspector-field-problem { grid-column: 1 / -1; }
+
+.ek-scene-fields > .ek-inspector-field:not(.ek-inspector-field--checkbox) {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  align-items: center;
+  column-gap: 0.75rem;
+}
+
+.ek-scene-fields .ek-inspector-field-problem {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+}
+
+.ek-scene-fields .ek-inspector-axis > span {
+  top: calc(var(--ek-panel-control-height) / 2);
+}
+
+.ek-inspector-fold {
+  min-width: 0;
+  border-top: 1px solid var(--ek-panel-border);
+}
+
+.ek-inspector-fold > summary {
+  padding: 0.75rem 0;
+  cursor: pointer;
+  font-weight: 650;
+  color: var(--ek-panel-text);
+}
+
+.ek-inspector-fold > summary:focus-visible {
+  outline: 2px solid var(--ek-panel-accent);
+  outline-offset: 2px;
+}
+
+.ek-inspector-light-list,
+.ek-inspector-camera-list {
+  grid-auto-rows: max-content;
+  max-block-size: 12rem;
+  overflow: auto;
+}
+
+.ek-inspector-camera-list button {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 0.1rem;
+}

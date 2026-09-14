@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   buildCreateCameraViewCommand,
   buildCreateCameraViewInput,
@@ -9,11 +9,13 @@ import {
   type CameraInspectorSection,
   type CameraViewFieldId,
   type Editor,
+  type InspectorCommandProblem,
   type SceneSnapshot
 } from "@ek-aiot/3d-editor-core";
 import type { WorkbenchCameraContext } from "../hooks/use-workbench";
+import { SceneInspectorFields } from "./SceneInspectorFields";
 import type { InspectorI18n } from "./inspector-i18n";
-import { DEFAULT_INSPECTOR_I18N, renderFieldLabel, renderProblemMessage, renderSectionReason, renderSectionTitle } from "./inspector-i18n";
+import { DEFAULT_INSPECTOR_I18N, renderProblemMessage, renderSectionReason, renderSectionTitle } from "./inspector-i18n";
 
 export interface CameraInspectorProps {
   editor: Editor;
@@ -29,6 +31,15 @@ export function CameraInspector({ editor, snapshot, section, camera, i18n = DEFA
   const activeView = section.activeCameraViewId ? snapshot.cameras[section.activeCameraViewId] : null;
   const [problem, setProblem] = useState<string | null>(null);
 
+  const [fieldProblem, setFieldProblem] = useState<InspectorCommandProblem | null>(null);
+  useEffect(() => { setProblem(null); setFieldProblem(null); }, [targetKey]);
+
+  function selectCameraView(viewId: string | null) {
+    onActiveCameraViewIdChange(viewId);
+    const target = Object.values(editor.getSnapshot().nodes).find((node) => node.kind === "camera" && node.cameraId === viewId);
+    if (target) editor.dispatch({ type: "select-node", nodeId: target.id });
+  }
+
   function captureNewView() {
     const captured = camera?.capture({ name: nextCameraViewName(snapshot) });
     if (!captured) {
@@ -40,7 +51,7 @@ export function CameraInspector({ editor, snapshot, section, camera, i18n = DEFA
     if (result.ok) {
       const dispatch = editor.dispatch(result.command);
       if (dispatch.ok) {
-        onActiveCameraViewIdChange(view?.id ?? null);
+        selectCameraView(view?.id ?? null);
         setProblem(null);
       } else {
         setProblem(dispatch.error ?? i18n.t("reactWorkbench.inspector.camera.createFailed.message"));
@@ -79,24 +90,24 @@ export function CameraInspector({ editor, snapshot, section, camera, i18n = DEFA
   function setDefault(viewId: string | null) {
     const result = buildSetDefaultCameraViewCommand(snapshot, viewId);
     if (result.ok) {
-      editor.dispatch(result.command);
-      setProblem(null);
+      const dispatch = editor.dispatch(result.command);
+      setProblem(dispatch.ok ? null : dispatch.error ?? i18n.t("reactWorkbench.inspector.camera.updateFailed.message"));
     } else {
       setProblem(renderProblemMessage(i18n, result.problem));
     }
   }
 
   function commit(fieldId: CameraViewFieldId, value: string) {
-    if (!section.activeCameraViewId) {
-      return;
+    if (!section.activeCameraViewId) return false;
+    const result = buildUpdateCameraViewCommand(editor.getSnapshot(), section.activeCameraViewId, fieldId, value);
+    if (!result.ok) {
+      setFieldProblem(result.problem);
+      return false;
     }
-    const result = buildUpdateCameraViewCommand(snapshot, section.activeCameraViewId, fieldId, value);
-    if (result.ok) {
-      editor.dispatch(result.command);
-      setProblem(null);
-    } else {
-      setProblem(renderProblemMessage(i18n, result.problem));
-    }
+    const dispatch = editor.dispatch(result.command);
+    setFieldProblem(dispatch.ok ? null : { code: "inspector-camera-dispatch-failed", fieldId, message: dispatch.error ?? i18n.t("reactWorkbench.inspector.camera.updateFailed.message"), severity: "warning" });
+    setProblem(null);
+    return dispatch.ok;
   }
 
   function removeActive() {
@@ -106,9 +117,13 @@ export function CameraInspector({ editor, snapshot, section, camera, i18n = DEFA
     const nextActiveViewId = getNextActiveCameraViewId(snapshot, section.activeCameraViewId);
     const result = buildDeleteCameraViewCommand(snapshot, section.activeCameraViewId);
     if (result.ok) {
-      editor.dispatch(result.command);
-      onActiveCameraViewIdChange(nextActiveViewId);
-      setProblem(null);
+      const dispatch = editor.dispatch(result.command);
+      if (dispatch.ok) {
+        selectCameraView(nextActiveViewId);
+        setProblem(null);
+      } else {
+        setProblem(dispatch.error ?? i18n.t("reactWorkbench.inspector.camera.updateFailed.message"));
+      }
     } else {
       setProblem(renderProblemMessage(i18n, result.problem));
     }
@@ -128,9 +143,10 @@ export function CameraInspector({ editor, snapshot, section, camera, i18n = DEFA
             <button
               key={view.id}
               type="button"
+              aria-pressed={view.active}
               className={view.active ? "is-active" : ""}
               data-default={view.default ? "true" : "false"}
-              onClick={() => onActiveCameraViewIdChange(view.id)}
+              onClick={() => selectCameraView(view.id)}
             >
               <span>{view.label}</span>
               <small>{view.default ? `${i18n.t("reactWorkbench.inspector.camera.default.label")} · ${view.summary}` : view.summary}</small>
@@ -140,7 +156,7 @@ export function CameraInspector({ editor, snapshot, section, camera, i18n = DEFA
       ) : (
         <p className="ek-inspector-empty">{renderSectionReason(i18n, section)}</p>
       )}
-      {problem ? <p className="ek-inspector-warning">{problem}</p> : null}
+      {problem ? <p className="ek-inspector-warning" role="alert">{problem}</p> : null}
       {section.activeCameraViewId ? (
         <div className="ek-inspector-grid">
           <div className="ek-inspector-button-row">
@@ -160,20 +176,8 @@ export function CameraInspector({ editor, snapshot, section, camera, i18n = DEFA
               </button>
             )}
           </div>
-          {section.fields.map((field) => (
-            <label key={field.id} className="ek-inspector-field">
-              <span>{renderFieldLabel(i18n, field)}</span>
-              <input
-                key={`${targetKey}:${field.id}:${String(field.value)}`}
-                defaultValue={String(field.value)}
-                type={field.kind === "number" ? "number" : "text"}
-                min={field.min}
-                max={field.max}
-                step={field.step ?? 0.01}
-                onBlur={(event) => commit(field.id as CameraViewFieldId, event.currentTarget.value)}
-              />
-            </label>
-          ))}
+          <SceneInspectorFields fields={section.fields} targetKey={targetKey} problem={fieldProblem} i18n={i18n}
+            onCommit={(fieldId, value) => commit(fieldId as CameraViewFieldId, value)} />
           <button className="ek-inspector-danger" type="button" onClick={removeActive}>
             {i18n.t("reactWorkbench.inspector.camera.delete.label")}
           </button>

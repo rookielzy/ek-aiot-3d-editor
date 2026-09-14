@@ -445,6 +445,97 @@ describe("proof-loop starter demo browser verification", () => {
     }
   }, 20000);
 
+  it("saves and restores React environment, lights and default camera through the host", async () => {
+    const originalSize = { width: window.innerWidth, height: window.innerHeight };
+    const editor = createEditor();
+    const inheritedStyles = [...document.querySelectorAll<HTMLStyleElement>("style[data-vite-dev-id]")].map((style) => ({ style, disabled: style.disabled }));
+    inheritedStyles.forEach(({ style }) => { style.disabled = true; });
+    installStyles("react-scene-styles", [ReactWorkbenchStyles, ReactInspectorStyles]);
+    const host = createHost();
+    const root = createRoot(host);
+    root.render(<EditorWorkbench editor={editor} />);
+    const restoreDownloads = installDownloadCapture();
+    cleanup = () => { root.unmount(); editor.dispose(); removeStyles("react-scene-styles"); inheritedStyles.forEach(({ style, disabled }) => { style.disabled = disabled; }); restoreDownloads(); };
+    try {
+      await page.viewport(1440, 900);
+      await waitFor(() => expect(editor.getRuntime()).toBeTruthy());
+      const inspector = section(host, "Scene inspector");
+      const input = (label: string) => findFieldInput(inspector, label, 'input[type="number"]') as HTMLInputElement;
+      await openInspectorGroup(host, "Environment");
+      await userEvent.selectOptions(findFieldInput(inspector, "Background source", "select") as HTMLSelectElement, "solid");
+      await userEvent.fill(input("Lighting intensity"), "1.7");
+      await userEvent.keyboard("{Enter}{Tab}");
+      await userEvent.fill(input("Background intensity"), "0.8");
+      await userEvent.keyboard("{Enter}{Tab}");
+      await userEvent.fill(input("Lighting rotation Y"), "0.7");
+      await userEvent.keyboard("{Enter}{Tab}");
+      const lightingFold = [...inspector.querySelectorAll("summary")].find((summary) => summary.textContent === "Lighting")!;
+      await userEvent.click(lightingFold);
+      expect(input("Lighting intensity").checkVisibility()).toBe(false);
+      lightingFold.focus();
+      await userEvent.keyboard("{Enter}");
+      expect(input("Lighting intensity").checkVisibility()).toBe(true);
+      for (const [width, height] of [[1440, 900], [1920, 1080], [1100, 800]]) {
+        await page.viewport(width, height);
+        inspector.scrollTop = 0;
+        await waitForAnimationFrame();
+        assertChildrenInside(inspector, "Environment fields");
+        expect(input("Lighting rotation X").getBoundingClientRect().top).toBe(input("Lighting rotation Z").getBoundingClientRect().top);
+        expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+        expect(inspector.getBoundingClientRect().bottom).toBeLessThanOrEqual(height);
+      }
+      await openInspectorGroup(host, "Scene");
+      await userEvent.selectOptions(inspector.querySelector('[aria-label="Add light"]') as HTMLSelectElement, "directional");
+      const lightId = Object.keys(editor.getSnapshot().lights)[0]!;
+      await userEvent.fill(input("Intensity"), "3");
+      await userEvent.keyboard("{Enter}{Tab}");
+      await userEvent.click(findFieldInput(inspector, "Cast shadows", 'input[type="checkbox"]') as HTMLInputElement);
+      await userEvent.fill(input("Shadow map width"), "1024");
+      await userEvent.keyboard("{Enter}{Tab}");
+      await userEvent.click([...inspector.querySelectorAll("button")].find((button) => button.textContent === "Capture")!);
+      await userEvent.fill(input("FOV"), "38");
+      await userEvent.keyboard("{Enter}{Tab}");
+      await userEvent.click([...inspector.querySelectorAll("button")].find((button) => button.textContent === "Set default")!);
+      await userEvent.click([...inspector.querySelectorAll("button")].find((button) => button.textContent === "Apply")!);
+      for (const [width, height] of [[1440, 900], [1920, 1080], [1100, 800]]) {
+        await page.viewport(width, height);
+        inspector.scrollTop = 0;
+        await waitForAnimationFrame();
+        assertChildrenInside(inspector, "Scene fields");
+        expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+        if (width === 1100) expect(inspector.scrollHeight).toBeGreaterThan(inspector.clientHeight);
+        input("FOV").scrollIntoView({ block: "center" });
+        await waitForAnimationFrame();
+        expect(input("Position X").getBoundingClientRect().top).toBe(input("Position Z").getBoundingClientRect().top);
+      }
+      const saved = editor.getSnapshot();
+      expect(saved.lights[lightId].intensity).toBe(3);
+      expect(saved.lights[lightId].shadow).toMatchObject({ enabled: true, mapSize: { width: 1024 } });
+      const view = saved.cameras[saved.presentation.defaultCameraId!]!;
+      expect(view.projection.fov).toBe(38);
+      await openInspectorGroup(host, "Properties");
+      expect(input("FOV").value).toBe("38");
+      await clickByText(host, "Export");
+      await waitForDownloadedProject();
+      await userEvent.fill(input("FOV"), "60");
+      await userEvent.keyboard("{Enter}{Tab}");
+      const open = section(host, "Project actions").querySelector<HTMLInputElement>('input[type="file"]')!;
+      await uploadFile(open, new File([copyBytes(window.__lastDownloadedProject!)], "scene.ek3d"));
+      await waitFor(() => expect(editor.getSnapshot().cameras).toEqual(saved.cameras));
+      expect(editor.getSnapshot().environment).toEqual(saved.environment);
+      expect(editor.getSnapshot().lights).toEqual(saved.lights);
+      expect(editor.getSnapshot().presentation).toEqual(saved.presentation);
+      await editor.getRuntime()!.project();
+      const captured = editor.getRuntime()!.captureCameraView();
+      expect(captured.ok).toBe(true);
+      if (captured.ok) {
+        expect(captured.view.projection).toEqual(view.projection);
+        expect(captured.view.position).toEqual(view.position);
+        expect(captured.view.target).toEqual(view.target);
+      }
+    } finally { await page.viewport(originalSize.width, originalSize.height); }
+  }, 20000);
+
   it("drives the Vue starter through the package default workbench", async () => {
     const root = mountVueDemo();
     cleanup = root.cleanup;
