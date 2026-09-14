@@ -492,6 +492,21 @@ describe("React InspectorPanel", () => {
     expect(screen.getByLabelText("Background blur").getAttribute("aria-describedby")).toBeTruthy();
   });
 
+  it("clears environment asset sources independently from the None option", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "register-asset", asset: { id: "hdr", kind: "hdr" } });
+    render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Environment" }));
+    fireEvent.click(screen.getByRole("button", { name: "Shared lighting/background" }));
+    fireEvent.change(screen.getByLabelText("Lighting asset"), { target: { value: "" } });
+    expect(editor.getSnapshot().environment.lighting.source).toEqual({ kind: "none" });
+    expect(editor.getSnapshot().environment.background.source).toEqual({ kind: "hdr", assetId: "hdr" });
+    fireEvent.change(screen.getByLabelText("Background asset"), { target: { value: "" } });
+    expect(editor.getSnapshot().environment.background.source).toEqual({ kind: "none" });
+    act(() => { editor.undo(); });
+    expect(editor.getSnapshot().environment.background.source).toEqual({ kind: "hdr", assetId: "hdr" });
+  });
+
   it("selects an HDR environment asset from the default scene state", () => {
     const editor = createEditor();
     editor.dispatch({ type: "register-asset", asset: { id: "studio-hdr", kind: "hdr", label: "Studio HDR" } });

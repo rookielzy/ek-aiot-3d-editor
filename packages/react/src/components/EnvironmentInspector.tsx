@@ -23,11 +23,10 @@ export function EnvironmentInspector({ editor, snapshot, section, i18n = DEFAULT
   const [fieldProblem, setFieldProblem] = useState<InspectorCommandProblem | null>(null);
 
   function commit(fieldId: EnvironmentFieldId, value: string) {
-    if (value === "" && fieldId.endsWith("assetId")) {
-      return false;
-    }
+    const clearSource = value === "" && (fieldId === "lighting.source.assetId" || fieldId === "background.source.assetId");
+    const commandField = clearSource ? fieldId === "lighting.source.assetId" ? "lighting.source.kind" : "background.source.kind" : fieldId;
     setFieldProblem(null);
-    const result = buildSetEnvironmentCommand(editor.getSnapshot(), fieldId, value);
+    const result = buildSetEnvironmentCommand(editor.getSnapshot(), commandField, clearSource ? "none" : value);
     if (result.ok) {
       const dispatch = editor.dispatch(result.command);
       if (!dispatch.ok) {

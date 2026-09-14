@@ -32,7 +32,7 @@ export function SceneInspectorFields({ fields, targetKey = "environment", proble
             onCommit={(value) => onCommit(field.id, value.trim() === "" ? "NaN" : value)} />
         ) : field.kind === "select" || field.kind === "asset" ? (
           <select {...props} value={String(field.value)} onChange={(event) => onCommit(field.id, event.currentTarget.value)}>
-            {field.kind === "asset" ? <option value="">{i18n.t("reactWorkbench.inspector.field.asset.none")}</option> : null}
+            {field.kind === "asset" ? <option value="" disabled={field.id.includes(".faces.")}>{i18n.t("reactWorkbench.inspector.field.asset.none")}</option> : null}
             {field.options?.map((option) => <option key={option.value} value={option.value}>{renderOptionLabel(i18n, option)}</option>)}
           </select>
         ) : field.kind === "checkbox" ? (
