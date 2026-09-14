@@ -29,7 +29,7 @@ python3 examples/react-proof-loop/src/showcase/prepare-model.py /path/to/upstrea
 
 ## 往返与 Core 缺口
 
-新增真实 App 浏览器闭环以 en / zh-CN 冷启动，整体模型位置编辑→撤销/重做→材质颜色→环境来源 none/HDR、强度/旋转→灯光强度→完整导出→卸载旧宿主→新 editor、新 runtime 打开。核验载荷可导出、变换/材质/环境/灯光/defaultCameraId，并捕获实际相机和前后 WebGL canvas 像素；像素每通道平均绝对差阈值为 0.5（0–255）。测试使用同一视口、显式真实 GLTF loader、相同会话辅助显示配置；不向 snapshot 添加辅助显示字段。
+新增真实 App 浏览器闭环以 en / zh-CN 冷启动，整体模型位置编辑→撤销/重做→材质颜色→导入不同内容的 cool-studio.hdr 并切换环境来源、强度/旋转→灯光强度→完整导出→卸载旧宿主→新 editor、新 runtime 打开。核验新来源确实不同于初始 showcase-studio、全部载荷可导出、变换/材质/环境/灯光/defaultCameraId，并捕获实际相机和前后 WebGL canvas 像素；像素每通道平均绝对差阈值为 0.5（0–255）。测试使用同一视口、显式真实 GLTF loader、相同会话辅助显示配置；不向 snapshot 添加辅助显示字段。
 
 像素检查发现此前未被数据回归捕获的 Core 缺陷：scene imported target 与 owner 共用 runtime 根对象，重复投影时 imported base transform 把 owner 最新变换覆盖为首次值。新 runtime 的首次 base 来自最新 snapshot，于是恢复画面偏移。修复仅在投影和释放 imported target 时排除 owner 根对象的基准变换回写，不改 resolver/remap/schema。公开 editor/runtime 回归覆盖位移、旋转、缩放、撤销、重做、新 runtime 和删除 scene target；原子回归先红后绿，既有 descendant/base 恢复测试继续通过。
 
@@ -70,6 +70,8 @@ node scripts/verify-react-showcase.mjs http://127.0.0.1:5180/
 
 [中文环境页](screenshots/showcase/1440-zh-CN.png) · [机器验收记录](screenshots/showcase/verification.json)。
 
+2026-09-14 人工对照结论：已并列查看原型 `reference-1440.png` 与正式 1440 默认画面，并查看正式 1100 默认/问题/深层灯光、1920 选中及中文环境页。白色主面板、细分隔线、蓝色激活、左右栏与中央视口的区域关系保持；1100 下工具自然换行且模型未被裁切，问题抽屉缩小 canvas 后仍可操作，深层阴影字段在右栏内部滚动。明确差异为车体替代头盔、正式项目菜单和全量层级/诊断比原型更密集；不把它宣称为原型逐像素复制。默认只显示轻网格，灯光辅助可由现有控件打开；照明来自可导出的 HDR 和场景灯光。这些截图可作为 Vue 同步依据。
+
 Vue 后续同步使用本目录 React 截图和同一 CC0 资产、场景/相机契约作为正式基线。相较原型，模型替换为许可明确的车体，保留全量导入层级和真实诊断；白色连续面板、64px 导航、左右内容区、浅灰视口、蓝色激活、顶部工具和底部状态沿用已交付壳。深层表单在右栏内部滚动，不以原型简化表单替代。
 
 ## 验证与审查
@@ -82,6 +84,21 @@ Vue 后续同步使用本目录 React 截图和同一 CC0 资产、场景/相机
 | Core owner transform + scene projector 定向回归 | 34/34 |
 | 原生 Chromium 展示场景定向回归 | 中英像素往返 + 默认下载失败修复，3/3 |
 | `pnpm test` | 114 文件，916/916；59.80s |
+| `pnpm test:browser` | 三个 Chromium 配置，12 文件，75/75；380.90s |
+| 空宿主 DOM 定向复验 | 1 文件，2/2 |
 | 截图脚本 | 22 项状态/布局检查，19 张截图，0 page exception |
 
-全量浏览器回归与双轴审查完成后补记。
+浏览器调度同时使用 `fileParallelism: false` 和各 instance 的 `sequence.groupOrder`，避免真实 GLB/PMREM 在无头软件 GPU 上争用资源；没有放宽既有用例超时或跳过配置。Vitest 将 [browser instances](https://vitest.dev/config/browser/instances) 转换为项目，跨项目串行还需要 [groupOrder](https://vitest.dev/config/sequence)。展示闭环固定在规格要求的桌面视口，既有宿主用例继续覆盖桌面边界和移动配置。测试把 shader 编译失败直接判为失败。
+
+
+## Standards
+
+对 `b0988f8...90fc7b9` 的规范轴未发现文档硬违规：初始化留在 demo，载荷与 runtime-only 资源不进入 snapshot，公开 API 与测试布局符合 AGENTS.md。
+
+提出 1 项判断性维护建议：投影和释放路径分别检查 `target.object !== ownerRoot`，未来变更需同步，可能存在 Duplicated Code 风险。本次保留两个紧邻生命周期操作的简单身份检查，避免为一个比较新增抽象；两处共同表达 owner 变换由 authored object 拥有，已有投影和删除目标回归验证。
+
+## Spec
+
+初审提出 2 项证据缺口：人工原型对照结论未写明；环境来源测试切换后回到原资产，不能证明不同来源的往返。已补上方明确人工结论，并将测试改为从 UI 导入不同内容的 `cool-studio.hdr`、切换来源后完整导出，以新资产 ID 和实际像素恢复验证。
+
+未发现有证据的越界或错误实现。Core 小修属于规格 Testing Decisions 7 的真实契约缺口修复。

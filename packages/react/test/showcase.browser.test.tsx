@@ -19,6 +19,7 @@ it.each(["en", "zh-CN"] as const)("edits the local showcase and restores its com
   let renderer: WebGLRenderer;
   const rendererFactory: EditorRuntimeOptions["rendererFactory"] = () => {
     renderer = new WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.debug.onShaderError = () => { throw new Error("Showcase shader failed to compile."); };
     return renderer;
   };
   const restored = createEditor();
@@ -63,10 +64,24 @@ it.each(["en", "zh-CN"] as const)("edits the local showcase and restores its com
     setValue.call(color, "#a8c9b6");
     color.dispatchEvent(new Event("input", { bubbles: true }));
     color.dispatchEvent(new Event("change", { bubbles: true }));
+    const assetsTab = [...host.querySelectorAll<HTMLButtonElement>(".ek-workbench__nav-button")]
+      .find((button) => button.getAttribute("aria-label")?.startsWith(`${label("Assets", "资源")} `))!;
+    await userEvent.click(assetsTab);
+    const importInput = field("Import assets", "导入资源");
+    const files = new DataTransfer();
+    const radiance = Uint8Array.from({ length: 256 * 128 * 4 }, (_, index) => [128, 160, 200, 130][index % 4]);
+    files.items.add(new File(["#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 128 +X 256\n", radiance], "cool-studio.hdr"));
+    importInput.files = files.files;
+    importInput.dispatchEvent(new Event("change", { bubbles: true }));
+    await expect.poll(() => host.textContent).toContain("cool-studio.hdr");
     await click("Environment", "环境");
     await userEvent.selectOptions(field("Lighting source", "灯光源") as unknown as HTMLSelectElement, "none");
     await userEvent.selectOptions(field("Lighting source", "灯光源") as unknown as HTMLSelectElement, "hdr");
-    await userEvent.selectOptions(field("Lighting asset", "灯光资源") as unknown as HTMLSelectElement, "showcase-studio");
+    const lightingAsset = field("Lighting asset", "灯光资源") as unknown as HTMLSelectElement;
+    await expect.poll(() => [...lightingAsset.options].some((option) => option.text.includes("cool-studio.hdr"))).toBe(true);
+    const alternateAssetId = [...lightingAsset.options].find((option) => option.text.includes("cool-studio.hdr"))!.value;
+    expect(alternateAssetId).not.toBe("showcase-studio");
+    await userEvent.selectOptions(lightingAsset, alternateAssetId);
     await edit("Lighting intensity", "灯光强度", "1.4");
     await edit("Lighting rotation Y", "灯光旋转 Y", "0.6");
     await click("Scene", "场景");
@@ -86,14 +101,15 @@ it.each(["en", "zh-CN"] as const)("edits the local showcase and restores its com
     expect(imported.ok).toBe(true);
     const snapshot = restored.getSnapshot();
     expect(snapshot.objects["showcase-model"].transform.position).toEqual([0.2, 0, 0]);
-    expect(snapshot.environment.lighting).toEqual({ source: { kind: "hdr", assetId: "showcase-studio" }, intensity: 1.4, rotation: { x: 0, y: 0.6, z: 0 } });
+    expect(snapshot.environment.lighting).toEqual({ source: { kind: "hdr", assetId: alternateAssetId }, intensity: 1.4, rotation: { x: 0, y: 0.6, z: 0 } });
     expect(snapshot.lights["showcase-key"].intensity).toBe(2.5);
     expect(snapshot.presentation.defaultCameraId).toBe("showcase-view");
     expect(snapshot.selection.nodeIds).toEqual(["showcase-key"]);
     expect(Object.values(snapshot.materials.definitions).some((material) => material.override.color === "#a8c9b6")).toBe(true);
     expect(restored.getAssetWorkspacePayloads?.()).toEqual(expect.arrayContaining([
       expect.objectContaining({ assetId: "showcase-car", available: true, exportable: true }),
-      expect.objectContaining({ assetId: "showcase-studio", available: true, exportable: true })
+      expect.objectContaining({ assetId: "showcase-studio", available: true, exportable: true }),
+      expect.objectContaining({ assetId: alternateAssetId, available: true, exportable: true })
     ]));
     expect(JSON.stringify(snapshot)).not.toMatch(/blob:|Object3D|PMREM|zh-CN|panelWidth/);
     root.unmount();
@@ -127,6 +143,8 @@ it.each(["en", "zh-CN"] as const)("edits the local showcase and restores its com
 }, 90000);
 
 it("recovers a failed default model download through the real problem drawer", async () => {
+  const originalSize = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(1440, 900);
   const bytes = await (await fetch(modelUrl)).arrayBuffer();
   const fetchAsset = window.fetch.bind(window);
   const fetchMock = vi.spyOn(window, "fetch").mockImplementation((input, init) =>
@@ -163,6 +181,7 @@ it("recovers a failed default model download through the real problem drawer", a
     root.unmount();
     downloads.restore();
     host.remove();
+    await page.viewport(originalSize.width, originalSize.height);
   }
 }, 25000);
 

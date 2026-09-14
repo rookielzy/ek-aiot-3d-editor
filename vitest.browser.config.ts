@@ -7,6 +7,9 @@ export default defineConfig({
   plugins: [react(), vue()],
   test: {
     globals: true,
+    // Real GLB/PMREM suites share the software GPU in headless environments.
+    // Serialize files instead of starving interaction tests and raising timeouts.
+    fileParallelism: false,
     include: ["packages/**/*.browser.test.{ts,tsx}"],
     exclude: ["**/node_modules/**", "**/dist/**"],
     browser: {
@@ -16,16 +19,19 @@ export default defineConfig({
       instances: [
         {
           browser: "chromium",
+          sequence: { groupOrder: 0 },
           viewport: { width: 1280, height: 900 }
         },
         {
           browser: "chromium",
           name: "chromium-desktop-boundary",
+          sequence: { groupOrder: 1 },
           viewport: { width: 1024, height: 900 }
         },
         {
           browser: "chromium",
           name: "chromium-mobile",
+          sequence: { groupOrder: 2 },
           viewport: { width: 390, height: 900 }
         }
       ]
