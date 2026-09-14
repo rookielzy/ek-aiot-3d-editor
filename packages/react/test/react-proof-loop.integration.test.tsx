@@ -118,6 +118,7 @@ describe("React proof-loop parity", () => {
         await clickButton("Capture view");
       });
       await waitFor(() => expect(screen.getAllByText("Camera view 1").length).toBeGreaterThan(0));
+      fireEvent.click(screen.getByRole("tab", { name: "Scene" }));
       await act(async () => {
         await clickButton("Set default");
       });
@@ -134,8 +135,9 @@ describe("React proof-loop parity", () => {
       fireEvent.change(screen.getByLabelText("Language"), { target: { value: "zh-CN" } });
       await waitFor(() => expect(screen.getByLabelText("编辑器控件")).toBeTruthy());
       expect(screen.getByText("选择 simple-box")).toBeTruthy();
+      fireEvent.click(screen.getByRole("tab", { name: "属性" }));
 
-      const positionX = getFieldInput("位置 X") as HTMLInputElement;
+      const positionX = screen.getByRole("spinbutton", { name: "位置 X" }) as HTMLInputElement;
       fireEvent.change(positionX, { target: { value: "2" } });
       fireEvent.blur(positionX);
       await act(async () => undefined);
@@ -149,7 +151,7 @@ describe("React proof-loop parity", () => {
         await clickButton("重做");
       });
 
-      const baseColorInput = getFieldInput("基础色") as HTMLInputElement;
+      const baseColorInput = screen.getByLabelText("基础色") as HTMLInputElement;
       fireEvent.change(baseColorInput, { target: { value: "#00aa88" } });
       await act(async () => undefined);
       await waitFor(() => expect(screen.getByText("未保存")).toBeTruthy());
@@ -200,12 +202,6 @@ async function clickButton(name: string): Promise<void> {
   expect(button, `Expected button ${name}`).toBeTruthy();
   fireEvent.click(button!);
   await act(async () => undefined);
-}
-
-function getFieldInput(label: string): HTMLInputElement {
-  const field = screen.getAllByText(label).at(-1)?.closest("label")?.querySelector("input");
-  expect(field, `Expected input for ${label}`).toBeTruthy();
-  return field as HTMLInputElement;
 }
 
 function fakeRenderer(container: HTMLElement): RendererLike {

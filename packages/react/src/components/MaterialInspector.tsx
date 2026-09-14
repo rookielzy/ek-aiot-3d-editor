@@ -109,7 +109,9 @@ export function MaterialInspector({ editor, snapshot, section, i18n = DEFAULT_IN
                         {describeTarget(i18n, target)}
                       </span>
                       {target.disabledReason ? (
-                        <span className="ek-material-target-option__reason">{target.disabledReason === "Slot is unresolved and cannot create a new assignment." ? i18n.t("reactWorkbench.inspector.material.target.cannotCreate") : target.disabledReason}</span>
+                        <span className="ek-material-target-option__reason">{target.kind === "material-slot" && target.unresolved && !target.canCreateAssignment && !target.canEditExistingAssignment
+                          ? i18n.t("reactWorkbench.inspector.material.target.cannotCreate")
+                          : target.disabledReason}</span>
                       ) : null}
                     </span>
                   </label>

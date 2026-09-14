@@ -7,7 +7,7 @@
   --ek-panel-danger: var(--ek-workbench-error, #b42318);
   --ek-panel-radius: var(--ek-workbench-radius, 0.5rem);
   --ek-panel-radius-sm: var(--ek-workbench-radius-sm, 0.375rem);
-  --ek-panel-control-height: 2rem;
+  --ek-panel-control-height: calc(var(--ek-workbench-control-height, 2.25rem) - 0.25rem);
   display: flex;
   flex-direction: column;
   gap: 0;

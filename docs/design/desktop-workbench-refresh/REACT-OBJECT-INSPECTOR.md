@@ -35,10 +35,40 @@ DOM 覆盖键盘分组、空选择场景编辑、角度换算、空输入、焦�
 
 React 状态生命周期参考 [Preserving and Resetting State](https://react.dev/learn/preserving-and-resetting-state)。Context7 无 API key，已使用官方文档作为替代。
 
-## 验证进度
+## 定向检查
 
 已通过 `pnpm build`、`pnpm typecheck`、两个 proof-loop 示例 build；保留既有 500 kB chunk 提示。Inspector 定向 26 项通过，Workbench、字典及 package-root 定向 65 项通过。真实宿主单文件初轮 9 项通过，数值焦点修正后项目恢复用例复跑通过。
 
 浏览器沿用本机环境变量 `LD_LIBRARY_PATH=/home/slimj/.cache/playwright-system-libs/ubuntu-noble/root/usr/lib/x86_64-linux-gnu`。项目恢复期间有 Three.js TransformControls 临时脱离 scene graph 的日志，恢复后的 runtime object 与编辑状态断言通过；未为此改动 Core。
 
-最终全量检查与双轴审查结果在完成后追加于本文件。
+## Standards
+
+规范轴未发现硬性违规，提出两项维护建议：
+
+1. `MaterialInspector` 用英文原文匹配禁用原因，Core 改措辞可能使中文回退到英文。已改为读取既有 `kind`、`unresolved`、`canCreateAssignment`、`canEditExistingAssignment` 状态，消除跨层原文匹配；不为此扩大 Core 接口。
+2. React/Vue 字典增量重复，需要跨文件同步。保留仓库已有双份字典及 parity 测试；本切片不引入共享包或生成系统。这是与父规格最小必要重构范围一致的维护权衡。
+
+## Spec
+
+规格轴未发现任务 05 的遗漏、错误实现或越界。独立审查核验分组/空选择、数字草稿/焦点/单次提交、角度换算、材质目标与 unresolved、项目恢复测试。该审查未运行测试或逐像素比较截图；测试实际执行和逐张视觉核验由主代理完成，证据见上文。
+
+合计 Standards 2 项判断建议（1 项修正、1 项接受的维护权衡），没有硬性违规；Spec 0 项发现。
+
+
+## 最终验证
+
+全量检查暴露并修正了两处回归：旧 React starter 集成测试未进入场景分组且依赖字段内部文本查找；紧凑控件没有继续读取宿主控件高度 token。测试已改为切换可见页签并通过可访问名称操作，样式在保持默认 32px 的同时继续随宿主 token 调整。两份定向回归文件 8/8 通过。
+
+第一次默认并发 `pnpm test` 为 892/896，包含上述两项及两个 timeout；修正后独立复跑为 895/896，剩余一个旧节点工具用例超时（该用例关闭 Inspector）。最后以两个 worker 完整执行全部测试，113 文件、896/896 通过。没有改动 runner 配置、提高 timeout 或跳过任何用例。
+
+| 命令 | 结果 |
+| --- | --- |
+| `pnpm build` | Core / React / Vue 通过；审查修正后 React 包构建再次通过 |
+| `pnpm typecheck` | 三个包通过；审查修正后 React 类型检查通过 |
+| `pnpm --filter @ek-aiot/react-proof-loop build` | 通过 |
+| `pnpm --filter @ek-aiot/vue-proof-loop build` | 通过 |
+| `pnpm test:browser`（上述本机环境变量） | 9 个文件实例、51/51 通过，44.76s |
+| 审查后真实宿主项目恢复定向复跑（Chromium） | 1/1 通过；内部覆盖 1440、1920、1100 三种桌面尺寸，9.63s |
+| `pnpm run test --maxWorkers=2` | 113 文件、896/896 通过，121.21s |
+
+保留原有 JSDOM canvas 提示、示例 chunk 提示及上文记录的 Three.js 项目恢复期日志。任务 05 的五项验收要求已完成。
