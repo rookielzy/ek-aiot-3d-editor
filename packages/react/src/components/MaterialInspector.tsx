@@ -8,7 +8,8 @@ import {
   type MaterialInspectorTarget,
   type SceneSnapshot
 } from "@ek-aiot/3d-editor-core";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { InspectorNumberInput } from "./InspectorNumberInput";
 import type { InspectorI18n } from "./inspector-i18n";
 import { DEFAULT_INSPECTOR_I18N, renderFieldLabel, renderOptionLabel, renderProblemMessage, renderSectionReason, renderSectionTitle } from "./inspector-i18n";
 
@@ -20,6 +21,7 @@ export interface MaterialInspectorProps {
 }
 
 export function MaterialInspector({ editor, snapshot, section, i18n = DEFAULT_INSPECTOR_I18N }: MaterialInspectorProps) {
+  const id = useId();
   const selectableTargets = useMemo(() => section.targets.filter((target) => target.canSelect), [section.targets]);
   const defaultTargetKey = section.activeTargetKey ?? selectableTargets[0]?.key ?? null;
   const targetsSignature = targetSignature(section);
@@ -60,15 +62,16 @@ export function MaterialInspector({ editor, snapshot, section, i18n = DEFAULT_IN
 
   function commit(fieldId: MaterialFieldId, value: unknown) {
     if (value === "" && !fieldId.startsWith("textures.")) {
-      return;
+      return false;
     }
     setFieldProblem(null);
-    const result = buildSetMaterialCommand(snapshot, fieldId, value, activeTarget);
+    const result = buildSetMaterialCommand(editor.getSnapshot(), fieldId, value, activeTarget);
     if (result.ok) {
       editor.dispatch(result.command);
     } else {
       setFieldProblem(result.problem);
     }
+    return result.ok;
   }
 
   return (
@@ -87,7 +90,7 @@ export function MaterialInspector({ editor, snapshot, section, i18n = DEFAULT_IN
                   <label key={target.key} className="ek-material-target-option" data-unresolved={target.unresolved ? "true" : undefined}>
                     <input
                       type="radio"
-                      name="ek-material-target"
+                      name={`${id}-material-target`}
                       value={target.key}
                       checked={activeTarget?.key === target.key}
                       disabled={!target.canSelect}
@@ -97,12 +100,16 @@ export function MaterialInspector({ editor, snapshot, section, i18n = DEFAULT_IN
                       }}
                     />
                     <span className="ek-material-target-option__body">
-                      <span className="ek-material-target-option__label">{target.label}</span>
+                      <span className="ek-material-target-option__label">{target.kind === "object"
+                        ? i18n.t("reactWorkbench.inspector.material.target.objectLabel")
+                        : target.unresolved && !target.importedNodeId
+                          ? i18n.t("reactWorkbench.inspector.material.target.staleLabel", { slot: target.slotId ?? "" })
+                          : target.label}</span>
                       <span className="ek-material-target-option__meta">
                         {describeTarget(i18n, target)}
                       </span>
                       {target.disabledReason ? (
-                        <span className="ek-material-target-option__reason">{target.disabledReason}</span>
+                        <span className="ek-material-target-option__reason">{target.disabledReason === "Slot is unresolved and cannot create a new assignment." ? i18n.t("reactWorkbench.inspector.material.target.cannotCreate") : target.disabledReason}</span>
                       ) : null}
                     </span>
                   </label>
@@ -113,22 +120,21 @@ export function MaterialInspector({ editor, snapshot, section, i18n = DEFAULT_IN
           {activeTarget?.unresolved ? (
             <p className="ek-inspector-warning" role="status">{i18n.t("reactWorkbench.inspector.material.target.unresolvedWarning")}</p>
           ) : null}
-          <div className="ek-inspector-grid">
+          <div className="ek-inspector-grid ek-material-fields">
             {fields.map((field) => (
-              <label key={field.id} className="ek-inspector-field">
+              <label key={field.id} className={field.kind === "checkbox" ? "ek-inspector-field ek-inspector-field--checkbox" : "ek-inspector-field"}>
                 <span>{renderFieldLabel(i18n, field)}</span>
                 {field.kind === "number" ? (
-                  <input
-                    key={`${effectiveTargetKey}:${field.id}:${String(field.value)}`}
-                    defaultValue={String(field.value)}
+                  <InspectorNumberInput
+                    key={`${effectiveTargetKey}:${field.id}`}
+                    value={String(field.value)}
                     disabled={field.disabled}
-                    type="number"
                     min={field.min}
                     max={field.max}
                     step={field.step ?? 0.01}
                     aria-invalid={fieldProblem?.fieldId === field.id ? true : undefined}
-                    aria-describedby={fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined}
-                    onBlur={(event) => commit(field.id as MaterialFieldId, event.currentTarget.value)}
+                    aria-describedby={fieldProblem?.fieldId === field.id ? `${id}-${problemId(field.id)}` : undefined}
+                    onCommit={(value) => commit(field.id as MaterialFieldId, value)}
                   />
                 ) : field.kind === "color" ? (
                   <input
@@ -137,7 +143,7 @@ export function MaterialInspector({ editor, snapshot, section, i18n = DEFAULT_IN
                     disabled={field.disabled}
                     type="color"
                     aria-invalid={fieldProblem?.fieldId === field.id ? true : undefined}
-                    aria-describedby={fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined}
+                    aria-describedby={fieldProblem?.fieldId === field.id ? `${id}-${problemId(field.id)}` : undefined}
                     onChange={(event) => commit(field.id as MaterialFieldId, event.currentTarget.value)}
                   />
                 ) : field.kind === "checkbox" ? (
@@ -147,7 +153,7 @@ export function MaterialInspector({ editor, snapshot, section, i18n = DEFAULT_IN
                     disabled={field.disabled}
                     type="checkbox"
                     aria-invalid={fieldProblem?.fieldId === field.id ? true : undefined}
-                    aria-describedby={fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined}
+                    aria-describedby={fieldProblem?.fieldId === field.id ? `${id}-${problemId(field.id)}` : undefined}
                     onChange={(event) => commit(field.id as MaterialFieldId, event.currentTarget.checked)}
                   />
                 ) : (
@@ -156,7 +162,7 @@ export function MaterialInspector({ editor, snapshot, section, i18n = DEFAULT_IN
                     defaultValue={String(field.value)}
                     disabled={field.disabled}
                     aria-invalid={fieldProblem?.fieldId === field.id ? true : undefined}
-                    aria-describedby={fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined}
+                    aria-describedby={fieldProblem?.fieldId === field.id ? `${id}-${problemId(field.id)}` : undefined}
                     onChange={(event) => commit(field.id as MaterialFieldId, event.currentTarget.value)}
                   >
                     {field.kind === "asset" ? <option value="">{i18n.t("reactWorkbench.inspector.field.asset.none")}</option> : null}
@@ -168,7 +174,7 @@ export function MaterialInspector({ editor, snapshot, section, i18n = DEFAULT_IN
                   </select>
                 )}
                 {fieldProblem?.fieldId === field.id ? (
-                  <small id={problemId(field.id)} className="ek-inspector-field-problem" role="alert">{renderProblemMessage(i18n, fieldProblem)}</small>
+                  <small id={`${id}-${problemId(field.id)}`} className="ek-inspector-field-problem" role="alert">{renderProblemMessage(i18n, fieldProblem)}</small>
                 ) : null}
               </label>
             ))}

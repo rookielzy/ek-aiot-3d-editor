@@ -1,12 +1,15 @@
+import { useId, useState } from "react";
 import {
   buildSetTransformCommand,
   type Editor,
+  type InspectorCommandProblem,
   type InspectorSection,
   type SceneSnapshot,
   type TransformFieldId
 } from "@ek-aiot/3d-editor-core";
+import { InspectorNumberInput } from "./InspectorNumberInput";
 import type { InspectorI18n } from "./inspector-i18n";
-import { DEFAULT_INSPECTOR_I18N, renderFieldLabel, renderSectionReason, renderSectionTitle } from "./inspector-i18n";
+import { DEFAULT_INSPECTOR_I18N, renderFieldLabel, renderProblemMessage, renderSectionReason, renderSectionTitle } from "./inspector-i18n";
 
 export interface TransformInspectorProps {
   editor: Editor;
@@ -17,12 +20,26 @@ export interface TransformInspectorProps {
 
 export function TransformInspector({ editor, snapshot, section, i18n = DEFAULT_INSPECTOR_I18N }: TransformInspectorProps) {
   const targetKey = snapshot.selection.nodeId ?? "none";
+  const [problem, setProblem] = useState<InspectorCommandProblem | null>(null);
+  const problemId = useId();
+
+  function displayValue(fieldId: string, value: unknown): number {
+    return fieldId.startsWith("rotation.") ? Number(value) * 180 / Math.PI : Number(value);
+  }
 
   function commit(fieldId: TransformFieldId, value: string) {
-    const result = buildSetTransformCommand(snapshot, fieldId, value);
+    const number = value.trim() === "" ? NaN : Number(value);
+    const field = section.fields.find((candidate) => candidate.id === fieldId);
+    setProblem(null);
+    // Avoid round-trip degree conversion changing an otherwise untouched rotation.
+    if (field && number === displayValue(fieldId, field.value)) return true;
+    const result = buildSetTransformCommand(editor.getSnapshot(), fieldId, fieldId.startsWith("rotation.") ? number * Math.PI / 180 : number);
     if (result.ok) {
       editor.dispatch(result.command);
+    } else {
+      setProblem(result.problem);
     }
+    return result.ok;
   }
 
   return (
@@ -31,28 +48,33 @@ export function TransformInspector({ editor, snapshot, section, i18n = DEFAULT_I
         <h2>{renderSectionTitle(i18n, section)}</h2>
       </header>
       {section.empty ? <p className="ek-inspector-empty">{renderSectionReason(i18n, section)}</p> : null}
-      {!section.empty ? (
-        <div className="ek-inspector-grid ek-inspector-grid--vectors">
-          {section.fields.map((field) => (
-            <label key={field.id} className="ek-inspector-field">
-              <span>{renderFieldLabel(i18n, field)}</span>
-              <input
-                key={`${targetKey}:${field.id}:${String(field.value)}`}
-                defaultValue={String(field.value)}
-                disabled={field.disabled}
-                type="number"
-                step={field.step ?? 0.01}
-                onBlur={(event) => commit(field.id as TransformFieldId, event.currentTarget.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    commit(field.id as TransformFieldId, event.currentTarget.value);
-                  }
-                }}
-              />
-            </label>
-          ))}
-        </div>
-      ) : null}
+      {!section.empty ? (["position", "rotation", "scale"] as const).map((vector) => {
+        const fields = section.fields.filter((field) => field.id.startsWith(`${vector}.`));
+        if (!fields.length) return null;
+        return (
+          <fieldset key={vector} className="ek-inspector-vector">
+            <legend>{i18n.t(`reactWorkbench.inspector.transform.${vector}`)}</legend>
+            <div className="ek-inspector-grid ek-inspector-grid--vectors">
+              {fields.map((field) => (
+                <label key={field.id} className="ek-inspector-axis" data-axis={field.id.split(".")[1]}>
+                  <span aria-hidden="true">{field.id.split(".")[1]?.toUpperCase()}</span>
+                  <InspectorNumberInput
+                    key={`${targetKey}:${field.id}`}
+                    aria-label={renderFieldLabel(i18n, field)}
+                    value={displayValue(field.id, field.value)}
+                    disabled={field.disabled}
+                    step={vector === "rotation" ? 1 : field.step ?? 0.01}
+                    aria-invalid={problem?.fieldId === field.id ? true : undefined}
+                    aria-describedby={problem?.fieldId === field.id ? problemId : undefined}
+                    onCommit={(value) => commit(field.id as TransformFieldId, value)}
+                  />
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        );
+      }) : null}
+      {problem ? <p id={problemId} className="ek-inspector-field-problem" role="alert">{renderProblemMessage(i18n, problem)}</p> : null}
     </section>
   );
 }

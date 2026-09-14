@@ -4,7 +4,7 @@ import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { createRoot } from "react-dom/client";
 import { createApp, type App as VueApp } from "vue";
 import { afterEach, describe, expect, it } from "vitest";
-import { BoxGeometry, Group, Mesh, MeshBasicMaterial } from "three";
+import { BoxGeometry, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial } from "three";
 import { AssetResolverBridge, createEditor, ThreeGltfLoaderAdapter, type GltfLoaderAdapter, type RendererLike } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
 import { decodeArchiveJson, defaultArchiveAdapter } from "../../core/src/project/archive-adapter";
@@ -314,6 +314,137 @@ describe("proof-loop starter demo browser verification", () => {
     expect(root.host.querySelector("canvas")).toBe(canvas);
   }, 15000);
 
+  it("restores React object transforms and material slots from a real project package", async () => {
+    const originalSize = { width: window.innerWidth, height: window.innerHeight };
+    const editor = createEditor();
+    const geometry = new BoxGeometry(1, 1, 1);
+    const bodyMaterial = new MeshStandardMaterial({ color: 0x6fa8dc, emissive: 0x28405c });
+    bodyMaterial.name = "Body finish";
+    const screenMaterial = new MeshStandardMaterial({ color: 0x222222, emissive: 0x101010 });
+    screenMaterial.name = "Screen finish";
+    const model = new Group();
+    const body = new Mesh(geometry, bodyMaterial);
+    body.name = "Body node";
+    const screenMesh = new Mesh(geometry, screenMaterial);
+    screenMesh.name = "Screen node";
+    screenMesh.position.x = 1.5;
+    model.add(body, screenMesh);
+    const bytes = await new GLTFExporter().parseAsync(model, { binary: true }) as ArrayBuffer;
+    geometry.dispose();
+    bodyMaterial.dispose();
+    screenMaterial.dispose();
+    expect((await editor.importGlbAsset({ asset: { id: "panel-asset", source: new File([bytes], "panel.glb") }, objectId: "panel", name: "Panel", expandImportedTargets: true })).ok).toBe(true);
+    expect((await editor.replaceAsset({ assetId: "panel-asset", source: new Uint8Array(bytes), kind: "glb" })).ok).toBe(true);
+    const textureCanvas = document.createElement("canvas");
+    textureCanvas.width = textureCanvas.height = 1;
+    const context = textureCanvas.getContext("2d")!;
+    context.fillStyle = "#aabbcc";
+    context.fillRect(0, 0, 1, 1);
+    const textureBlob = await new Promise<Blob>((resolve) => textureCanvas.toBlob((blob) => resolve(blob!)));
+    const textureResults = await editor.importWorkbenchAssets({ files: [{ id: "paint", source: new File([textureBlob], "paint.png"), kind: "texture" }] });
+    expect(textureResults[0]?.committed).toBe(true);
+    const inheritedStyles = [...document.querySelectorAll<HTMLStyleElement>("style[data-vite-dev-id]")].map((style) => ({ style, disabled: style.disabled }));
+    inheritedStyles.forEach(({ style }) => { style.disabled = true; });
+    installStyles("react-inspector-styles", [ReactWorkbenchStyles, ReactInspectorStyles]);
+    const host = createHost();
+    const root = createRoot(host);
+    root.render(<EditorWorkbench editor={editor} loader={new ThreeGltfLoaderAdapter()} />);
+    const restoreDownloads = installDownloadCapture();
+    cleanup = () => {
+      root.unmount();
+      editor.dispose();
+      removeStyles("react-inspector-styles");
+      inheritedStyles.forEach(({ style, disabled }) => { style.disabled = disabled; });
+      restoreDownloads();
+    };
+    try {
+      await page.viewport(1440, 900);
+      await waitFor(() => expect(editor.getRuntime()).toBeTruthy());
+      await editor.getRuntime()!.project();
+      await clickHierarchyRow(host, "Panel");
+      await clickByText(host, "Frame all");
+      const inspector = section(host, "Scene inspector");
+      const field = (label: string) => findFieldInput(inspector, label, 'input[type="number"]') as HTMLInputElement;
+      await userEvent.fill(field("Position X"), "2");
+      await userEvent.keyboard("{Enter}{Tab}");
+      await userEvent.fill(field("Rotation Y"), "90");
+      await userEvent.keyboard("{Enter}{Tab}");
+      expect(editor.getSnapshot().objects.panel.transform).toMatchObject({ position: [2, 0, 0], rotation: [0, Math.PI / 2, 0] });
+      await clickByText(host, "Undo");
+      expect(field("Rotation Y").value).toBe("0");
+      await clickByText(host, "Redo");
+      expect(field("Rotation Y").value).toBe("90");
+      await userEvent.fill(field("Position X"), "");
+      await userEvent.keyboard("{Tab}");
+      expect(editor.getSnapshot().objects.panel.transform.position[0]).toBe(2);
+      expect(inspector.querySelector('[role="alert"]')).toBeTruthy();
+      await userEvent.fill(field("Position X"), "2");
+      await userEvent.keyboard("{Tab}");
+
+      const radios = () => [...inspector.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+      expect(radios()).toHaveLength(3);
+      const slot = () => radios().find((radio) => text(radio.closest("label")!).includes("Body finish"))!;
+      expect(slot().disabled).toBe(false);
+      await userEvent.click(slot());
+      expect(slot().checked).toBe(true);
+      await userEvent.fill(field("Opacity"), "0.6");
+      await userEvent.keyboard("{Enter}{Tab}");
+      expect(field("Opacity").value).toBe("0.6");
+      expect(Object.values(editor.getSnapshot().materials.definitions).some((material) => material.override.opacity === 0.6)).toBe(true);
+      await clickByText(host, "Undo");
+      expect(field("Opacity").value).toBe("1");
+      await clickByText(host, "Redo");
+      expect(field("Opacity").value).toBe("0.6");
+      const textureSelect = findFieldInput(inspector, "map", "select") as HTMLSelectElement;
+      await userEvent.selectOptions(textureSelect, "paint");
+      expect(Object.values(editor.getSnapshot().materials.definitions).some((material) => material.override.textures?.map?.assetId === "paint")).toBe(true);
+      await clickHierarchyRow(host, "Primitive 0");
+      expect(slot().checked).toBe(true);
+      await clickHierarchyRow(host, "Panel");
+      expect(radios()[0]!.checked).toBe(true);
+      expect(field("Opacity").value).toBe("1");
+      await userEvent.click(slot());
+      for (const [width, height] of [[1440, 900], [1920, 1080], [1100, 800]]) {
+        await page.viewport(width, height);
+        inspector.scrollTop = 0;
+        await waitForAnimationFrame();
+        assertChildrenInside(inspector, "Material inspector");
+        const x = field("Position X").getBoundingClientRect();
+        const y = field("Position Y").getBoundingClientRect();
+        const z = field("Position Z").getBoundingClientRect();
+        expect(x.top).toBe(y.top);
+        expect(y.top).toBe(z.top);
+        expect(x.right).toBeLessThanOrEqual(y.left);
+        expect(y.right).toBeLessThanOrEqual(z.left);
+        expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+      }
+      await openInspectorGroup(host, "Environment");
+      expect(findFieldInput(inspector, "Lighting asset", "select")!.getClientRects().length).toBeGreaterThan(0);
+      await openInspectorGroup(host, "Scene");
+      expect(inspector.querySelector('[aria-label="Add light"]')!.getClientRects().length).toBeGreaterThan(0);
+      await openInspectorGroup(host, "Properties");
+      expect(slot().checked).toBe(true);
+      const saved = editor.getSnapshot();
+      await clickByText(host, "Export");
+      await waitForDownloadedProject();
+      await userEvent.fill(field("Opacity"), "0.2");
+      await userEvent.keyboard("{Tab}");
+      const open = section(host, "Project actions").querySelector<HTMLInputElement>('input[type="file"]')!;
+      await uploadFile(open, new File([copyBytes(window.__lastDownloadedProject!)], "inspector.ek3d"));
+      await waitFor(() => expect(editor.getSnapshot().materials).toEqual(saved.materials));
+      expect(editor.getSnapshot().objects.panel.transform).toEqual(saved.objects.panel.transform);
+      expect(editor.getSnapshot().selection).toEqual(saved.selection);
+      await userEvent.click(slot());
+      expect(field("Opacity").value).toBe("0.6");
+      expect(field("Rotation Y").value).toBe("90");
+      expect((findFieldInput(inspector, "map", "select") as HTMLSelectElement).value).toBe("paint");
+      await editor.getRuntime()!.project();
+      expect(editor.getRuntime()!.getObject("panel")).toBeTruthy();
+    } finally {
+      await page.viewport(originalSize.width, originalSize.height);
+    }
+  }, 20000);
+
   it("drives the Vue starter through the package default workbench", async () => {
     const root = mountVueDemo();
     cleanup = root.cleanup;
@@ -393,11 +524,13 @@ async function verifyStarterFlow(host: HTMLElement, options: { assertProfessiona
 
     await clickByText(host, "Capture view");
     await waitFor(() => expect(text(host)).toContain("Camera view 1"));
+    await openInspectorGroup(host, "Scene");
     await clickByText(host, "Set default");
     expect(text(host)).toContain("Default");
     await clickByText(host, "Apply view");
     await assertCameraLayout(host);
 
+    await openInspectorGroup(host, "Properties");
     const positionX = findFieldInput(host, "Position X", 'input[type="number"]') as HTMLInputElement | null;
     expect(positionX, "Expected transform Position X input").toBeTruthy();
     positionX!.focus();
@@ -489,6 +622,7 @@ async function verifyChineseWorkbenchLayout(host: HTMLElement, options: { assert
     expect(text(host)).toContain("相机视图");
     expect(text(host)).toContain("Camera view 1");
   });
+  await openInspectorGroup(host, "场景");
   await clickByText(host, "设为默认");
   expect(text(host)).toContain("默认");
   await clickByText(host, "应用视图");
@@ -597,6 +731,11 @@ async function findReadyCanvas(viewport: HTMLElement): Promise<HTMLCanvasElement
     expect(hasNonBlankCanvasPixel(canvas!)).toBe(true);
   });
   return canvas!;
+}
+
+async function openInspectorGroup(host: HTMLElement, label: string): Promise<void> {
+  const tab = [...host.querySelectorAll<HTMLButtonElement>(".ek-inspector [role=tab]")].find((candidate) => text(candidate) === label);
+  if (tab) await userEvent.click(tab);
 }
 
 async function clickByText(host: HTMLElement, label: string): Promise<void> {
@@ -849,6 +988,8 @@ function assertChildrenInside(container: HTMLElement, label: string): void {
 }
 
 function findFieldInput(host: HTMLElement, label: string, selector: string): Element | null {
+  const namedInput = host.querySelector(`${selector}[aria-label="${label}"]`);
+  if (namedInput) return namedInput;
   const field = [...host.querySelectorAll("label")].find((candidate) => text(candidate).includes(label));
   return field?.querySelector(selector) ?? null;
 }
@@ -909,14 +1050,14 @@ function installDownloadCapture(): () => void {
   const originalRevokeObjectURL = URL.revokeObjectURL;
   const originalAnchorClick = HTMLAnchorElement.prototype.click;
   const blobsByUrl = new Map<string, Blob>();
-  let nextObjectUrlId = 0;
   URL.createObjectURL = ((blob: Blob) => {
-    const objectUrl = `blob:starter-project-${nextObjectUrlId++}`;
+    const objectUrl = originalCreateObjectURL.call(URL, blob);
     blobsByUrl.set(objectUrl, blob);
     return objectUrl;
   }) as typeof URL.createObjectURL;
   URL.revokeObjectURL = ((url: string) => {
     blobsByUrl.delete(url);
+    originalRevokeObjectURL.call(URL, url);
   }) as typeof URL.revokeObjectURL;
   HTMLAnchorElement.prototype.click = function clickAnchor() {
     if (!this.download) {

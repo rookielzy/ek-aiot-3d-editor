@@ -1,5 +1,5 @@
 import React from "react";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import {
   attachGlbImportManifestMetadata,
@@ -18,8 +18,12 @@ describe("React InspectorPanel", () => {
     render(<InspectorPanel editor={editor} />);
 
     expect(screen.getByText("Select a transformable node to edit transform.")).toBeTruthy();
-    expect(screen.getByText("Environment")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Environment" }));
+    expect(screen.getByLabelText("Lighting asset")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Scene" }));
     expect(screen.getByText("Lights")).toBeTruthy();
+    expect(screen.getByLabelText("Add light")).toBeTruthy();
+    expect(editor.getSnapshot().selection.nodeId).toBeNull();
   });
 
   it("commits transform edits through one core command", () => {
@@ -37,7 +41,34 @@ describe("React InspectorPanel", () => {
     expect(editor.getSnapshot().objects["object-a"].transform.position).toEqual([4, 0, 0]);
   });
 
-  it("refreshes uncontrolled transform drafts when core history changes snapshot values", () => {
+  it("edits rotation in degrees, rejects empty drafts and creates one undo step for Enter and blur", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+    editor.dispatch({ type: "set-node-transform", nodeId: "object-a", transform: { rotation: [0, Math.PI / 2, 0], position: [2, 0, 0] } });
+    render(<InspectorPanel editor={editor} />);
+
+    expect((screen.getByLabelText("Rotation Y") as HTMLInputElement).value).toBe("90");
+    const position = screen.getByLabelText("Position X");
+    fireEvent.change(position, { target: { value: "" } });
+    fireEvent.blur(position);
+    expect(editor.getSnapshot().objects["object-a"].transform.position).toEqual([2, 0, 0]);
+    expect(screen.getByRole("alert")).toBeTruthy();
+
+    const rotation = screen.getByLabelText("Rotation Y");
+    rotation.focus();
+    fireEvent.change(rotation, { target: { value: "180" } });
+    fireEvent.keyDown(rotation, { key: "Enter" });
+    expect(document.activeElement).toBe(screen.getByLabelText("Rotation Y"));
+    fireEvent.blur(screen.getByLabelText("Rotation Y"));
+    expect(editor.getSnapshot().objects["object-a"].transform.rotation).toEqual([0, Math.PI, 0]);
+    act(() => { editor.undo(); });
+    expect((screen.getByLabelText("Rotation Y") as HTMLInputElement).value).toBe("90");
+    act(() => { editor.redo(); });
+    expect((screen.getByLabelText("Rotation Y") as HTMLInputElement).value).toBe("180");
+  });
+
+  it("refreshes transform drafts when core history changes snapshot values", () => {
     const editor = createEditor();
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
     editor.dispatch({ type: "select-object", objectId: "object-a" });
@@ -88,6 +119,111 @@ describe("React InspectorPanel", () => {
     expect(override.opacity).toBe(0.5);
     expect(override.side).toBe("double");
     expect(JSON.stringify(editor.getSnapshot())).not.toContain("Texture");
+  });
+
+  it("keeps material edits scoped to their target and preserves them across group navigation and history", () => {
+    const editor = createSlotEditor();
+    render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("radio", { name: /Body/ }));
+    const roughness = screen.getByLabelText("Roughness");
+    roughness.focus();
+    fireEvent.change(roughness, { target: { value: "0.25" } });
+    fireEvent.keyDown(roughness, { key: "Enter" });
+    expect(document.activeElement).toBe(screen.getByLabelText("Roughness"));
+    fireEvent.blur(screen.getByLabelText("Roughness"));
+    const changed = editor.getSnapshot();
+
+    const properties = screen.getByRole("tab", { name: "Properties" });
+    fireEvent.keyDown(properties, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "Environment" }));
+    expect(within(screen.getByRole("tabpanel")).getByLabelText("Lighting asset")).toBeTruthy();
+    fireEvent.keyDown(document.activeElement!, { key: "End" });
+    expect(within(screen.getByRole("tabpanel")).getByLabelText("Add light")).toBeTruthy();
+    fireEvent.keyDown(document.activeElement!, { key: "Home" });
+    expect(editor.getSnapshot()).toBe(changed);
+    expect((screen.getByRole("radio", { name: /Body/ }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("Roughness") as HTMLInputElement).value).toBe("0.25");
+    act(() => { editor.undo(); });
+    expect((screen.getByLabelText("Roughness") as HTMLInputElement).value).toBe("1");
+    act(() => { editor.redo(); });
+    expect((screen.getByLabelText("Roughness") as HTMLInputElement).value).toBe("0.25");
+
+    fireEvent.change(screen.getByLabelText("Opacity"), { target: { value: "2" } });
+    fireEvent.blur(screen.getByLabelText("Opacity"));
+    expect(screen.getByRole("alert")).toBeTruthy();
+    fireEvent.click(screen.getByRole("radio", { name: /Screen/ }));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect((screen.getByLabelText("Opacity") as HTMLInputElement).value).toBe("1");
+    fireEvent.change(screen.getByLabelText("Roughness"), { target: { value: "0.6" } });
+    act(() => { editor.dispatch({ type: "select-node", nodeId: getImportedNodeIds(editor)[0]! }); });
+    expect((screen.getByLabelText("Roughness") as HTMLInputElement).value).toBe("0.25");
+    act(() => { editor.dispatch({ type: "select-node", nodeId: "object-a" }); });
+    expect((screen.getByRole("radio", { name: /Object override/ }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("Roughness") as HTMLInputElement).value).toBe("1");
+  });
+
+  it("creates explicitly edited default-valued overrides but does not commit untouched inputs twice", () => {
+    const editor = createSlotEditor();
+    render(<InspectorPanel editor={editor} />);
+    const before = editor.getHistoryState().undoCount;
+    const roughness = screen.getByLabelText("Roughness");
+    fireEvent.blur(roughness);
+    expect(editor.getHistoryState().undoCount).toBe(before);
+    fireEvent.change(roughness, { target: { value: "0.5" } });
+    fireEvent.change(roughness, { target: { value: "1" } });
+    fireEvent.keyDown(roughness, { key: "Enter" });
+    fireEvent.blur(roughness);
+    expect(editor.getSnapshot().materials.definitions["material:object:object-a"]?.override.roughness).toBe(1);
+    expect(editor.getHistoryState().undoCount).toBe(before + 1);
+    fireEvent.change(screen.getByLabelText("Base color"), { target: { value: "#ff0000" } });
+    fireEvent.change(screen.getByLabelText("Base color"), { target: { value: "#ffffff" } });
+    expect(editor.getSnapshot().materials.definitions["material:object:object-a"].override.color).toBe("#ffffff");
+  });
+
+  it("keeps stale material assignments editable with an unresolved warning", () => {
+    const editor = createSlotEditor();
+    const slotId = getSlotIds(editor)[0]!;
+    editor.dispatch({ type: "set-material", target: { kind: "material-slot", objectId: "object-a", slotId }, material: { opacity: 0.5 } });
+    const snapshot = editor.getSnapshot();
+    editor.restore({ ...snapshot, nodes: Object.fromEntries(Object.entries(snapshot.nodes).map(([id, node]) => [id, node.kind === "imported" ? { ...node, materialSlots: [] } : node])) });
+    render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("radio", { name: /Unresolved slot/ }));
+    expect(screen.getByText(/Existing override values remain editable/)).toBeTruthy();
+    expect((screen.getByLabelText("Opacity") as HTMLInputElement).value).toBe("0.5");
+    fireEvent.change(screen.getByLabelText("Opacity"), { target: { value: "0.75" } });
+    fireEvent.blur(screen.getByLabelText("Opacity"));
+    expect((screen.getByLabelText("Opacity") as HTMLInputElement).value).toBe("0.75");
+    act(() => { editor.undo(); });
+    expect((screen.getByLabelText("Opacity") as HTMLInputElement).value).toBe("0.5");
+  });
+
+  it("disables unresolved slots without assignments and keeps all texture controls available for the owner", () => {
+    const editor = createSlotEditor();
+    const slotId = getSlotIds(editor)[0]!;
+    vi.spyOn(editor, "subscribeRuntime").mockImplementation((subscriber) => {
+      subscriber({
+        getProblems: () => [{
+          id: "unresolved-slot",
+          severity: "warning",
+          code: "imported-material-slot-unresolved",
+          source: "runtime",
+          target: { kind: "object", objectId: "object-a" },
+          metadata: { slotId },
+          recoverability: "user-action",
+          message: "Imported material slot could not be resolved."
+        }],
+        subscribeProblems: () => () => {}
+      } as never);
+      return () => {};
+    });
+    render(<InspectorPanel editor={editor} />);
+    expect((screen.getByRole("radio", { name: /Body/ }) as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText("Slot is unresolved and cannot create a new assignment.")).toBeTruthy();
+    for (const label of ["map", "normal map", "roughness map", "metalness map", "emissive map", "alpha map"]) {
+      expect((screen.getByLabelText(label) as HTMLSelectElement).disabled).toBe(false);
+    }
+    act(() => { editor.dispatch({ type: "select-node", nodeId: getImportedNodeIds(editor)[0]! }); });
+    expect((screen.getByRole("radio", { name: /Object override/ }) as HTMLInputElement).checked).toBe(true);
   });
 
   it("renders material slot targets and dispatches slot-aware material commands", () => {
@@ -256,6 +392,7 @@ describe("React InspectorPanel", () => {
     editor.dispatch({ type: "register-asset", asset: { id: "studio-hdr", kind: "hdr", label: "Studio HDR" } });
 
     render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Environment" }));
     fireEvent.change(screen.getByLabelText("Lighting asset"), { target: { value: "studio-hdr" } });
 
     expect(editor.getSnapshot().environment.lighting.source).toEqual({ kind: "hdr", assetId: "studio-hdr" });
@@ -266,6 +403,7 @@ describe("React InspectorPanel", () => {
     editor.dispatch({ type: "register-asset", asset: { id: "studio-hdr", kind: "hdr", label: "Studio HDR" } });
 
     render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Environment" }));
     fireEvent.click(screen.getByRole("button", { name: "Shared lighting/background" }));
 
     expect(editor.getSnapshot().environment.lighting.source).toEqual({ kind: "hdr", assetId: "studio-hdr" });
@@ -276,6 +414,7 @@ describe("React InspectorPanel", () => {
     const editor = createEditor();
 
     render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Scene" }));
     const addLight = screen.getByLabelText("Add light") as HTMLSelectElement;
     fireEvent.change(addLight, { target: { value: "point" } });
     expect(addLight.value).toBe("");
@@ -365,6 +504,7 @@ describe("React InspectorPanel", () => {
     const dispatchSpy = vi.spyOn(editor, "dispatch");
 
     render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Scene" }));
     fireEvent.change(screen.getByLabelText("FOV"), { target: { value: "35" } });
     fireEvent.blur(screen.getByLabelText("FOV"));
     fireEvent.click(screen.getByText("Set default"));
@@ -383,6 +523,7 @@ describe("React InspectorPanel", () => {
     const dispatchSpy = vi.spyOn(editor, "dispatch");
 
     render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Scene" }));
     fireEvent.change(screen.getByLabelText("FOV"), { target: { value: "180" } });
     fireEvent.blur(screen.getByLabelText("FOV"));
 
@@ -412,6 +553,7 @@ describe("React InspectorPanel", () => {
     });
 
     render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Scene" }));
     fireEvent.click(screen.getByText("Capture"));
     fireEvent.click(screen.getByText("Apply"));
 

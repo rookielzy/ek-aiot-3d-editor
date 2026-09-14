@@ -12,6 +12,13 @@ export const WORKBENCH_LOCALE_LABELS: Readonly<Record<WorkbenchLocale, string>> 
 });
 
 const EN_WORKBENCH_MESSAGES = {
+  "reactWorkbench.inspector.groups.label": "Inspector groups",
+  "reactWorkbench.inspector.groups.object": "Properties",
+  "reactWorkbench.inspector.groups.environment": "Environment",
+  "reactWorkbench.inspector.groups.scene": "Scene",
+  "reactWorkbench.inspector.transform.position": "Position",
+  "reactWorkbench.inspector.transform.rotation": "Rotation (°)",
+  "reactWorkbench.inspector.transform.scale": "Scale",
   "reactWorkbench.shell.main.label": "3D editor workbench",
   "reactWorkbench.shell.viewport.label": "3D viewport",
   "reactWorkbench.shell.projectPanel.label": "Project panel",
@@ -256,6 +263,9 @@ const EN_WORKBENCH_MESSAGES = {
   "reactWorkbench.inspector.lights.pointShadowCost.message": "Point light shadows render six map faces.",
   "reactWorkbench.inspector.material.target.label": "Material target",
   "reactWorkbench.inspector.material.target.legend": "Target",
+  "reactWorkbench.inspector.material.target.objectLabel": "Object override",
+  "reactWorkbench.inspector.material.target.staleLabel": "Unresolved slot {slot}",
+  "reactWorkbench.inspector.material.target.cannotCreate": "Slot is unresolved and cannot create a new assignment.",
   "reactWorkbench.inspector.material.target.objectOverride": "Broad override",
   "reactWorkbench.inspector.material.target.slotOverride": "Slot override",
   "reactWorkbench.inspector.material.target.noOverride": "No override",
@@ -541,6 +551,13 @@ export interface WorkbenchI18n {
 type WorkbenchDictionary = Readonly<Record<WorkbenchMessageKey, string>>;
 
 const ZH_CN_WORKBENCH_MESSAGES = {
+  "reactWorkbench.inspector.groups.label": "属性分组",
+  "reactWorkbench.inspector.groups.object": "属性",
+  "reactWorkbench.inspector.groups.environment": "环境",
+  "reactWorkbench.inspector.groups.scene": "场景",
+  "reactWorkbench.inspector.transform.position": "位置",
+  "reactWorkbench.inspector.transform.rotation": "旋转 (°)",
+  "reactWorkbench.inspector.transform.scale": "缩放",
   "reactWorkbench.shell.main.label": "3D 编辑工作台",
   "reactWorkbench.shell.viewport.label": "3D 视口",
   "reactWorkbench.shell.projectPanel.label": "项目面板",
@@ -785,6 +802,9 @@ const ZH_CN_WORKBENCH_MESSAGES = {
   "reactWorkbench.inspector.lights.pointShadowCost.message": "点光阴影会渲染六张贴图面。",
   "reactWorkbench.inspector.material.target.label": "材质目标",
   "reactWorkbench.inspector.material.target.legend": "目标",
+  "reactWorkbench.inspector.material.target.objectLabel": "对象覆盖",
+  "reactWorkbench.inspector.material.target.staleLabel": "未解析材质槽 {slot}",
+  "reactWorkbench.inspector.material.target.cannotCreate": "材质槽未解析，无法创建新的覆盖。",
   "reactWorkbench.inspector.material.target.objectOverride": "整体覆盖",
   "reactWorkbench.inspector.material.target.slotOverride": "槽位覆盖",
   "reactWorkbench.inspector.material.target.noOverride": "无覆盖",

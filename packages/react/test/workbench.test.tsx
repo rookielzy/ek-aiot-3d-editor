@@ -558,7 +558,9 @@ describe("React EditorWorkbench", () => {
     expect(screen.getByRole("heading", { name: "项目" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "变换" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "材质" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "环境" }));
     expect(screen.getByRole("heading", { name: "环境" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "场景" }));
     expect(screen.getByRole("heading", { name: "灯光" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "相机视图" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "问题" })).toBeTruthy();
@@ -569,7 +571,9 @@ describe("React EditorWorkbench", () => {
     expect(screen.getByText("没有运行时问题。")).toBeTruthy();
     expect(screen.getByLabelText("灯光源")).toBeTruthy();
     expect(screen.getByLabelText("添加灯光")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "环境" }));
     expect(screen.getByRole("button", { name: "纯色背景" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "属性" }));
     expect(screen.getByTitle("旋转模式")).toBeTruthy();
     expect(screen.getByPlaceholderText("标签、ID、状态、诊断")).toBeTruthy();
     expect(screen.getByText("Robot arm")).toBeTruthy();
