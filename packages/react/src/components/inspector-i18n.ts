@@ -6,6 +6,7 @@ import {
   resolveWorkbenchMessage,
   type WorkbenchI18n,
   type WorkbenchMessageInput,
+  type WorkbenchMessageKey,
   type WorkbenchMessageValues
 } from "../i18n/workbench-i18n";
 
@@ -60,7 +61,7 @@ export function renderProblemSource(i18n: InspectorI18n, source: ProblemSource):
   return i18n.t(`reactWorkbench.inspector.problems.source.${source === "asset-resolver" ? "assetResolver" : source}`);
 }
 
-function knownSectionReasonKey(sectionId: InspectorSection["id"], reason: string): WorkbenchMessageInput | null {
+function knownSectionReasonKey(sectionId: InspectorSection["id"], reason: string): WorkbenchMessageKey | null {
   if (sectionId === "transform") {
     if (reason === "Select a transformable node to edit transform.") {
       return "inspector.section.transform.reason.selectTransformableNode";

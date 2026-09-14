@@ -403,7 +403,7 @@ describe("React EditorWorkbench", () => {
     const importArea = screen.getByLabelText("Import assets").closest(".ek-workbench__asset-import")!;
     fireEvent.drop(importArea, { dataTransfer: { files: [new File([new Uint8Array([1])], "backdrop.png", { type: "image/png" })] } });
     await waitFor(() => expect(Object.values(editor.getSnapshot().assets)).toContainEqual(expect.objectContaining({ kind: "image", label: "backdrop.png" })));
-    expect(within(screen.getByLabelText("Asset import queue")).getByText(/succeeded · Image/)).toBeTruthy();
+    expect(await within(screen.getByLabelText("Asset import queue")).findByText(/succeeded · Image/)).toBeTruthy();
   });
 
   it("filters asset rows using core workspace search semantics", () => {
@@ -433,7 +433,7 @@ describe("React EditorWorkbench", () => {
     expect(labels.map((label) => label.textContent)).toEqual(["Manual label", "Panel paint"]);
   });
 
-  it("keeps the latest GLB reimport feedback when an older analysis fails", async () => {
+  it.each([false, true])("serializes GLB maintenance and preserves the latest payload/remap (older fails: %s)", async (olderFails) => {
     const editor = createEditor();
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: {
       id: "asset-a", label: "robot.glb", source: new Uint8Array([1]),
@@ -449,18 +449,27 @@ describe("React EditorWorkbench", () => {
     render(<EditorWorkbench editor={editor} loader={loader} rendererFactory={fakeRenderer} />);
     openLeftPanelView("Assets 1");
     await act(async () => { await editor.getRuntime()!.project(); });
-    vi.mocked(loader.analyze!).mockClear().mockImplementationOnce(() => first.promise).mockImplementationOnce(() => second.promise);
+    vi.mocked(loader.analyze!).mockClear().mockImplementation(async (resolved) => {
+      if (resolved.metadata?.byteSize === 3) return first.promise;
+      if (resolved.metadata?.byteSize === 4) return second.promise;
+      return { scene: new Group(), manifest: createWorkbenchManifest() };
+    });
     const input = screen.getByLabelText("Reimport robot.glb");
     fireEvent.change(input, { target: { files: [new File([new Uint8Array([1, 2, 3])], "older.glb", { type: "model/gltf-binary" })] } });
     await waitFor(() => expect(loader.analyze).toHaveBeenCalledTimes(1));
-    fireEvent.change(input, { target: { files: [new File([new Uint8Array([4, 5, 6])], "newer.glb", { type: "model/gltf-binary" })] } });
-    await waitFor(() => expect(loader.analyze).toHaveBeenCalledTimes(2));
-    await act(async () => second.resolve({ scene: new Group(), manifest: createWorkbenchManifest() }));
-    const latest = await screen.findByText(/exact · .*remapped/);
-    const summary = latest.textContent;
-    await act(async () => first.reject(new Error("Older analysis failed")));
-    expect(screen.getByText(summary!)).toBeTruthy();
+    fireEvent.change(input, { target: { files: [new File([new Uint8Array([4, 5, 6, 7])], "newer.glb", { type: "model/gltf-binary" })] } });
+    await act(async () => {});
+    expect(loader.analyze).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      if (olderFails) first.reject(new Error("Older analysis failed"));
+      else first.resolve({ scene: new Group(), manifest: withPrimitivePath(createWorkbenchManifest(), "meshes/older/primitives/0") });
+    });
+    await waitFor(() => expect(loader.analyze).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ byteSize: 4 }) })));
+    await act(async () => second.resolve({ scene: new Group(), manifest: withPrimitivePath(createWorkbenchManifest(), "meshes/newer/primitives/0") }));
+    expect(await screen.findByText(/exact · .*remapped/)).toBeTruthy();
     expect(editor.getSnapshot().objects["object-a"].asset.id).toBe("asset-a");
+    expect(editor.getAssetWorkspacePayloads().find((item) => item.assetId === "asset-a")?.byteSize).toBe(4);
+    expect(Object.values(editor.getSnapshot().nodes).some((node) => node.kind === "imported" && node.importKey === "glb:object-a/primitive:meshes/newer/primitives/0")).toBe(true);
     urls.restore();
   });
 
@@ -1395,10 +1404,8 @@ describe("React EditorWorkbench", () => {
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a", label: "Missing box" } });
     const replaceAssetOriginal = editor.replaceAsset.bind(editor);
     const first = createDeferred<Awaited<ReturnType<typeof editor.replaceAsset>>>();
-    const second = createDeferred<Awaited<ReturnType<typeof editor.replaceAsset>>>();
     const replaceAsset = vi.spyOn(editor, "replaceAsset")
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise);
+      .mockReturnValueOnce(first.promise);
 
     render(
       <EditorWorkbench
@@ -1416,28 +1423,13 @@ describe("React EditorWorkbench", () => {
     const recoveryPanel = await screen.findByLabelText("Missing asset recovery");
     const input = recoveryPanel.querySelector("input") as HTMLInputElement;
     const firstFile = new File([new Uint8Array([1])], "first.glb", { type: "model/gltf-binary" });
-    const secondFile = new File([new Uint8Array([2])], "second.glb", { type: "model/gltf-binary" });
+    const secondFile = new File([new Uint8Array([2, 3])], "second.glb", { type: "model/gltf-binary" });
 
     fireEvent.change(input, { target: { files: [firstFile] } });
     fireEvent.change(input, { target: { files: [secondFile] } });
 
     expect(replaceAsset).toHaveBeenNthCalledWith(1, expect.objectContaining({ label: "first.glb" }));
-    expect(replaceAsset).toHaveBeenNthCalledWith(2, expect.objectContaining({ label: "second.glb" }));
-
-    await act(async () => {
-      second.resolve(await replaceAssetOriginal({
-        assetId: "asset-a",
-        source: secondFile,
-        label: "second.glb",
-        mimeType: "model/gltf-binary"
-      }));
-      await second.promise;
-    });
-
-    await waitFor(() => {
-      expect(screen.queryByLabelText("Missing asset recovery")).toBeNull();
-    });
-    expect(within(screen.getByLabelText("Asset recovery status")).getByText("Replaced with second.glb")).toBeTruthy();
+    expect(replaceAsset).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       first.resolve(await replaceAssetOriginal({
@@ -1449,7 +1441,9 @@ describe("React EditorWorkbench", () => {
       await first.promise;
     });
 
-    expect(within(screen.getByLabelText("Asset recovery status")).getByText("Replaced with second.glb")).toBeTruthy();
+    await waitFor(() => expect(within(screen.getByLabelText("Asset recovery status")).getByText("Replaced with second.glb")).toBeTruthy());
+    expect(replaceAsset).toHaveBeenNthCalledWith(2, expect.objectContaining({ label: "second.glb" }));
+    expect(editor.getAssetWorkspacePayloads().find((item) => item.assetId === "asset-a")?.byteSize).toBe(2);
     expect(screen.queryByText("Replaced with first.glb")).toBeNull();
   });
 

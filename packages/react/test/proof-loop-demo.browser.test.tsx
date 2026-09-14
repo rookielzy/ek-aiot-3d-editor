@@ -586,7 +586,12 @@ describe("proof-loop starter demo browser verification", () => {
         new File(["unsupported"], "notes.txt", { type: "text/plain" })
       ]);
       await waitFor(() => {
-        expect(text(section(host, "Asset import queue"))).toContain("Unsupported asset type");
+        const queue = section(host, "Asset import queue");
+        const importedRow = [...queue.querySelectorAll("li")].find((row) => row.textContent?.includes("reference.png"));
+        const failedRow = [...queue.querySelectorAll("li")].find((row) => row.textContent?.includes("notes.txt"));
+        expect(importedRow?.textContent).toContain("succeeded · Image");
+        expect(failedRow?.textContent).toContain("failed");
+        expect(failedRow?.textContent).toContain("Unsupported asset type");
         expect(Object.values(editor.getSnapshot().assets).some((asset) => asset.kind === "image" && asset.label === "reference.png")).toBe(true);
       });
       await page.getByLabelText("Replace reference.png", { exact: true }).upload(new File([new Uint8Array([4, 5])], "replaced.png", { type: "image/png" }));

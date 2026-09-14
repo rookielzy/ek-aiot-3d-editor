@@ -60,6 +60,7 @@ export function WorkbenchLeftPanel({ context, activeView }: WorkbenchLeftPanelPr
   const [recoveryState, setRecoveryState] = useState<AssetRecoveryState>({});
   const [recoverySuccessState, setRecoverySuccessState] = useState<AssetRecoveryState>({});
   const maintenanceTokens = useRef<Record<string, symbol>>({});
+  const pendingMaintenance = useRef<Record<string, Promise<void>>>({});
   const [assetQuery, setAssetQuery] = useState("");
   const [assetKind, setAssetKind] = useState<AssetKindFilter>("all");
   const [assetStatus, setAssetStatus] = useState<AssetStatusFilter>("all");
@@ -211,34 +212,47 @@ export function WorkbenchLeftPanel({ context, activeView }: WorkbenchLeftPanelPr
         : localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.progress", "Replacing...")
     }));
 
-    let message: LocalizedStatusMessage;
-    let replaced = false;
+    // Core reimport commits after asynchronous analysis. Serialize per asset so an
+    // older analysis cannot commit after the latest file, across all entry points.
+    const previous = pendingMaintenance.current[assetId];
+    let finish!: () => void;
+    const pending = new Promise<void>((resolve) => { finish = resolve; });
+    pendingMaintenance.current[assetId] = pending;
     try {
-      if (mode === "reimport") {
-        const result = await context.assets.reimportGlbAsset({ assetId, source: file });
-        message = result.ok
-          ? reimportSummaryStatusMessage(file.name, result.remap?.summary)
-          : glbDiagnosticStatusMessage(result.diagnostics[0]) ??
-            (result.commandResult?.error ? rawStatusMessage(result.commandResult.error) : localizedStatusMessage("reactWorkbench.leftPanel.assets.reimport.failed", "Reimport failed"));
-      } else {
-        const result = await context.assets.replaceAsset({ assetId, source: file, label: file.name, mimeType: file.type });
-        if (result.ok) {
-          await context.runtime?.project();
-          replaced = true;
+      if (previous) await previous;
+      if (maintenanceTokens.current[assetId] !== token) return;
+      let message: LocalizedStatusMessage;
+      let replaced = false;
+      try {
+        if (mode === "reimport") {
+          const result = await context.assets.reimportGlbAsset({ assetId, source: file });
+          message = result.ok
+            ? reimportSummaryStatusMessage(file.name, result.remap?.summary)
+            : glbDiagnosticStatusMessage(result.diagnostics[0]) ??
+              (result.commandResult?.error ? rawStatusMessage(result.commandResult.error) : localizedStatusMessage("reactWorkbench.leftPanel.assets.reimport.failed", "Reimport failed"));
+        } else {
+          const result = await context.assets.replaceAsset({ assetId, source: file, label: file.name, mimeType: file.type });
+          if (result.ok) {
+            await context.runtime?.project();
+            replaced = true;
+          }
+          message = result.ok
+            ? localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.success", "Replaced with {fileName}", { fileName: file.name })
+            : projectProblemStatusMessage(result.problems[0]) ?? localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.failed", "Replacement failed");
         }
-        message = result.ok
-          ? localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.success", "Replaced with {fileName}", { fileName: file.name })
-          : projectProblemStatusMessage(result.problems[0]) ?? localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.failed", "Replacement failed");
+        context.refreshProblems();
+      } catch (error) {
+        message = rawStatusMessage(error instanceof Error ? error.message : String(error));
       }
-      context.refreshProblems();
-    } catch (error) {
-      message = rawStatusMessage(error instanceof Error ? error.message : String(error));
-    }
-    if (maintenanceTokens.current[assetId] !== token) return;
-    delete maintenanceTokens.current[assetId];
-    setRecoveryState((current) => ({ ...current, [assetId]: message }));
-    if (replaced && recoveringMissing) {
-      setRecoverySuccessState((current) => ({ ...current, [assetId]: message }));
+      if (maintenanceTokens.current[assetId] !== token) return;
+      delete maintenanceTokens.current[assetId];
+      setRecoveryState((current) => ({ ...current, [assetId]: message }));
+      if (replaced && recoveringMissing) {
+        setRecoverySuccessState((current) => ({ ...current, [assetId]: message }));
+      }
+    } finally {
+      finish();
+      if (pendingMaintenance.current[assetId] === pending) delete pendingMaintenance.current[assetId];
     }
   }
 
