@@ -1,10 +1,11 @@
 import { useState } from "react";
 import {
+  createEditor,
   type EditorRuntimeOptions,
   type Problem,
   type WorkbenchModel
 } from "@ek-aiot/3d-editor-core";
-import { EditorWorkbench, useEditor, type WorkbenchContext, type WorkbenchLocale } from "@ek-aiot/3d-editor-react";
+import { EditorWorkbench, type WorkbenchContext, type WorkbenchLocale } from "@ek-aiot/3d-editor-react";
 import { createDemoGltfLoader } from "./demo-gltf-loader";
 
 const demoLoader = createDemoGltfLoader();
@@ -16,7 +17,7 @@ export interface AppProps {
 }
 
 export function App({ locale, loader = demoLoader, rendererFactory }: AppProps = {}) {
-  const editor = useEditor();
+  const [editor] = useState(() => createEditor());
   const [runtimeReady, setRuntimeReady] = useState(false);
 
   return (

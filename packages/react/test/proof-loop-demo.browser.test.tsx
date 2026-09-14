@@ -165,13 +165,12 @@ async function verifyChineseWorkbenchLayout(host: HTMLElement, options: { assert
   await waitFor(() => {
     expect(text(section(host, "层级"))).toContain("没有场景节点");
     expect(text(testId(host, "starter-overlay"))).toContain("0 objects");
-    expect(text(host)).toContain("选择 none");
+    expect(text(section(host, "编辑器状态"))).toContain("选择 无");
   });
 
   await openLeftWorkspaceView(host, "资源");
   await waitFor(() => expect(text(visibleSection(host, "资源"))).toContain("没有已注册资源"));
-  const importInput = visibleSection(host, "资源").querySelector('[aria-label="导入资源"]') as HTMLInputElement | null
-    ?? visibleSection(host, "资源").querySelector('[aria-label="Import assets"]') as HTMLInputElement | null;
+  const importInput = visibleSection(host, "资源").querySelector('[aria-label="导入资源"]') as HTMLInputElement | null;
   expect(importInput, "Expected localized Import assets input").toBeTruthy();
   await uploadFile(importInput!, await glbFixtureFile("simple-box.glb"));
 
