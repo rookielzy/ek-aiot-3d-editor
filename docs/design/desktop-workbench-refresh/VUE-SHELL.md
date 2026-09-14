@@ -64,4 +64,24 @@ node scripts/verify-vue-shell.mjs http://127.0.0.1:5181/
 | Vue Workbench / proof-loop / public-api / i18n 定向单测 | 4 文件，51/51 |
 | `pnpm test` | 114 文件，918/918 |
 | 三个 Chromium 配置的 Vue 定向浏览器用例 | 18/18，修复后无 ResizeObserver 报错 |
+| `pnpm test:browser` | 12 文件，87/87；最终全量日志无 ResizeObserver 报错 |
 | 原生截图脚本 | 15 个状态、15 张截图、0 page exception |
+
+最终全量单测仍输出 jsdom 未实现 canvas getContext 的环境提示；浏览器全量日志仍有 `TransformControls: The attached 3D object must be a part of the scene graph.` 提示。测试退出码均为 0；Vue 定向浏览器及原生截图没有这些浏览器错误。本次未定位全量 TransformControls 提示的具体来源，不将全量测试通过表述为控制台完全无错误。
+
+审查使用用户确认的 `git diff 8ee1303...HEAD`，实现提交为 `13d3662`。两个独立子代理分别审查 Standards 与 Spec。
+
+## Standards
+
+审查报告提出两项意见：
+
+1. **文档规范违反（审查者判断）**：Vue 浏览器行为测试放在 `packages/react/test/proof-loop-demo.browser.test.tsx`，与 AGENTS.md 将适配器行为测试归属各包 test 目录的规则有冲突。建议移到 Vue 或中立目录。
+2. **Duplicated Code（判断性建议）**：Vue `WorkbenchViewportTools.vue` 的命令类型与映射、`use-workbench-panel-widths.ts` 的宽度算法及 `WorkbenchPanelResize.vue` 的指针/键盘逻辑与 React 对应实现重复；建议提取框架无关逻辑。
+
+主代理处理：第一项不认定为本次违规。父规格 Testing Decisions 第 78 行明确要求复用现有真实宿主浏览器边界作为唯一跨框架端到端入口；基点文件已包含 Vue 示例用例。本次沿用这一已确认入口，Vue DOM 与 public-api 测试仍归 Vue 包。第二项保留为维护建议：命令行为从旧 Vue toolbar 迁移，框架各自保留生命周期与交互适配；父规格 Implementation Decisions 第 2–3 项要求优先复用现有模块、最小必要重构。本切片不追加跨框架抽象，后续修改这些规则时需对称核验两份实现。
+
+## Spec
+
+未发现 Spec 轴问题。审查核对了导航/面板/浮动工具/状态、六个 scoped slots 与优先级、locale 与 snapshot 边界、三个桌面尺寸、真实 GLB 导入选择变换撤销，以及视觉对照和 15 张截图。后续 Vue 层级、深层属性、项目和展示迁移不计为本切片缺漏。
+
+审查计数：Standards 报告 2 项，复核后无确认的规范违反、保留 1 项代码重复维护建议；Spec 0 项。
