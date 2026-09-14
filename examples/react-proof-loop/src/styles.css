@@ -23,6 +23,7 @@ body {
 
 .starter-overlay {
   display: grid;
+  margin-top: 36px;
   gap: 0.25rem;
   min-width: min(18rem, calc(100vw - 2rem));
   max-width: min(22rem, calc(100vw - 2rem));

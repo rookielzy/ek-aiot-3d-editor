@@ -11,7 +11,7 @@ export default defineConfig({
       cssFileName: "index"
     },
     rollupOptions: {
-      external: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime", "@ek-aiot/3d-editor-core"]
+      external: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime", "three", "@ek-aiot/3d-editor-core"]
     }
   }
 });

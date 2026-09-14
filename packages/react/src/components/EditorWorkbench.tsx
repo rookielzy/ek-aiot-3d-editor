@@ -1,11 +1,15 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { resolveEditorShortcut, type AssetResolverBridge, type EditorRuntime, type EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
 import { useWorkbench, type ResolvedWorkbenchContext, type UseWorkbenchOptions } from "../hooks/use-workbench";
 import { EditorViewport } from "./EditorViewport";
 import { InspectorView } from "./InspectorView";
-import { WorkbenchLeftPanel } from "./WorkbenchLeftPanel";
+import { WorkbenchLeftPanel, type WorkbenchPanelView } from "./WorkbenchLeftPanel";
+import { WorkbenchNavigation } from "./WorkbenchNavigation";
+import { WorkbenchPanelResize } from "./WorkbenchPanelResize";
+import { useWorkbenchPanelWidths } from "../hooks/use-workbench-panel-widths";
 import { WorkbenchStatusBar } from "./WorkbenchStatusBar";
 import { WorkbenchToolbar } from "./WorkbenchToolbar";
+import { createWorkbenchRenderer } from "./workbench-renderer";
 import "./workbench.css";
 
 export type WorkbenchRenderRegion = (context: ResolvedWorkbenchContext) => ReactNode;
@@ -54,7 +58,7 @@ export function EditorWorkbench({
   translate,
   resolver,
   loader,
-  rendererFactory,
+  rendererFactory = createWorkbenchRenderer,
   interactions = DEFAULT_WORKBENCH_INTERACTIONS,
   showDefaultToolbar = true,
   showLocaleSwitcher = true,
@@ -82,6 +86,11 @@ export function EditorWorkbench({
   });
   const pendingDisposeRef = useRef<{ dispose(): void; timer: ReturnType<typeof setTimeout> } | null>(null);
   const rootRef = useRef<HTMLElement | null>(null);
+  const panelId = useId();
+  const [activeView, setActiveView] = useState<WorkbenchPanelView>("scene");
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const panels = useWorkbenchPanelWidths(rootRef);
   const [marqueeSelectionEnabled, setMarqueeSelectionEnabled] = useState(false);
   const resolvedInteractions = useMemo(() => {
     if (interactions !== DEFAULT_WORKBENCH_INTERACTIONS) {
@@ -147,7 +156,23 @@ export function EditorWorkbench({
   const renderLeftPanel = leftPanel ?? sidePanel;
 
   return (
-    <main ref={rootRef} className={rootClassName} style={style} tabIndex={0} aria-label={t("reactWorkbench.shell.main.label")}>
+    <main ref={rootRef} className={rootClassName} style={{
+      ...style,
+      "--ek-workbench-left-width": leftCollapsed ? "0px" : `${panels.leftWidth}px`,
+      "--ek-workbench-right-width": rightCollapsed ? "0px" : `${panels.rightWidth}px`,
+      "--ek-workbench-left-handle": leftCollapsed ? "0px" : "6px",
+      "--ek-workbench-right-handle": rightCollapsed ? "0px" : "6px"
+    } as CSSProperties} data-desktop={panels.desktop} tabIndex={0} aria-label={t("reactWorkbench.shell.main.label")}>
+      <WorkbenchNavigation
+        context={workbench}
+        activeView={activeView}
+        collapsed={leftCollapsed}
+        panelId={`${panelId}-left`}
+        onSelect={(view) => {
+          setActiveView(view);
+          setLeftCollapsed(view === activeView ? !leftCollapsed : false);
+        }}
+      />
       {hasToolbar ? (
         <div className="ek-workbench__toolbar">
           {showDefaultToolbar ? (
@@ -163,6 +188,22 @@ export function EditorWorkbench({
         </div>
       ) : null}
       <section className="ek-workbench__viewport-shell" aria-label={t("reactWorkbench.shell.viewport.label")}>
+        <div className="ek-workbench__panel-toggles">
+          <button
+            type="button"
+            aria-controls={`${panelId}-left`}
+            aria-expanded={!leftCollapsed}
+            aria-label={t(leftCollapsed ? "reactWorkbench.shell.left.expand" : "reactWorkbench.shell.left.collapse")}
+            onClick={() => setLeftCollapsed(!leftCollapsed)}
+          >{leftCollapsed ? "»" : "«"}</button>
+          <button
+            type="button"
+            aria-controls={`${panelId}-right`}
+            aria-expanded={!rightCollapsed}
+            aria-label={t(rightCollapsed ? "reactWorkbench.shell.right.expand" : "reactWorkbench.shell.right.collapse")}
+            onClick={() => setRightCollapsed(!rightCollapsed)}
+          >{rightCollapsed ? "«" : "»"}</button>
+        </div>
         <EditorViewport
           editor={workbench.editor}
           resolver={resolver}
@@ -172,12 +213,33 @@ export function EditorWorkbench({
           onRuntimeReady={onRuntimeReady}
           className={viewportClassName ? `ek-workbench__viewport ${viewportClassName}` : "ek-workbench__viewport"}
         />
+        {workbench.model.hierarchy.empty ? (
+          <div className="ek-workbench__empty-viewport">
+            <strong>{t("reactWorkbench.shell.empty.title")}</strong>
+            <p>{t("reactWorkbench.shell.empty.description")}</p>
+            {!renderLeftPanel ? <button type="button" onClick={() => {
+              setActiveView("assets");
+              setLeftCollapsed(false);
+            }}>{t("reactWorkbench.shell.empty.action")}</button> : null}
+          </div>
+        ) : null}
         {viewportOverlay ? <div className="ek-workbench__overlay">{viewportOverlay(workbench)}</div> : null}
       </section>
-      <aside className="ek-workbench__side-panel" aria-label={t("reactWorkbench.shell.projectPanel.label")}>
-        {renderLeftPanel ? renderLeftPanel(workbench) : <WorkbenchLeftPanel context={workbench} />}
+      <aside id={`${panelId}-left`} hidden={leftCollapsed} className="ek-workbench__side-panel" aria-label={t("reactWorkbench.shell.projectPanel.label")}>
+        {renderLeftPanel ? renderLeftPanel(workbench) : <WorkbenchLeftPanel context={workbench} activeView={activeView} />}
       </aside>
-      <aside className="ek-workbench__right-panel" aria-label={t("reactWorkbench.shell.inspectorPanel.label")}>
+      {panels.desktop && !leftCollapsed ? (
+        <WorkbenchPanelResize
+          side="left"
+          label={t("reactWorkbench.shell.left.resize")}
+          panelId={`${panelId}-left`}
+          width={panels.leftWidth}
+          minimum={220}
+          maximum={panels.maximum}
+          onResize={panels.setLeftWidth}
+        />
+      ) : null}
+      <aside id={`${panelId}-right`} hidden={rightCollapsed} className="ek-workbench__right-panel" aria-label={t("reactWorkbench.shell.inspectorPanel.label")}>
         {rightPanel ? rightPanel(workbench) : (
           <InspectorView
             editor={workbench.editor}
@@ -194,6 +256,17 @@ export function EditorWorkbench({
           />
         )}
       </aside>
+      {panels.desktop && !rightCollapsed ? (
+        <WorkbenchPanelResize
+          side="right"
+          label={t("reactWorkbench.shell.right.resize")}
+          panelId={`${panelId}-right`}
+          width={panels.rightWidth}
+          minimum={260}
+          maximum={panels.maximum}
+          onResize={panels.setRightWidth}
+        />
+      ) : null}
       <footer className="ek-workbench__status" aria-label={t("reactWorkbench.shell.status.label")}>
         {status ? status(workbench) : <WorkbenchStatusBar context={workbench} />}
       </footer>

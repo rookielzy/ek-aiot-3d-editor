@@ -23,6 +23,7 @@ import { problemToneFromCounts } from "./workbench-model-helpers";
 
 export interface WorkbenchLeftPanelProps {
   context: ResolvedWorkbenchContext;
+  activeView: WorkbenchPanelView;
 }
 
 type LocalizedStatusMessage =
@@ -45,7 +46,7 @@ type AssetRecoveryState = Record<string, LocalizedStatusMessage>;
 type AssetQueueStatus = "queued" | "importing" | "succeeded" | "failed";
 type AssetStatusFilter = "all" | AssetWorkspaceStatus;
 type AssetKindFilter = "all" | AssetKind;
-type WorkbenchPanelView = "scene" | "assets" | "project";
+export type WorkbenchPanelView = "scene" | "assets" | "project";
 
 interface AssetQueueItem {
   id: string;
@@ -56,11 +57,10 @@ interface AssetQueueItem {
   diagnostics: WorkbenchAssetImportDiagnostic[];
 }
 
-export function WorkbenchLeftPanel({ context }: WorkbenchLeftPanelProps) {
+export function WorkbenchLeftPanel({ context, activeView }: WorkbenchLeftPanelProps) {
   const [recoveryState, setRecoveryState] = useState<AssetRecoveryState>({});
   const [recoverySuccessState, setRecoverySuccessState] = useState<AssetRecoveryState>({});
   const missingReplacementTokens = useRef<Record<string, symbol>>({});
-  const [activeView, setActiveView] = useState<WorkbenchPanelView>("scene");
   const [assetQuery, setAssetQuery] = useState("");
   const [assetKind, setAssetKind] = useState<AssetKindFilter>("all");
   const [assetStatus, setAssetStatus] = useState<AssetStatusFilter>("all");
@@ -89,26 +89,6 @@ export function WorkbenchLeftPanel({ context }: WorkbenchLeftPanelProps) {
     return sortAssetWorkspaceItems(filtered, { key: assetSort });
   }, [assetKind, assetQuery, assetSort, assetStatus, workspace]);
   const problemTone = problemToneFromCounts(model.problems.bySeverity, model.problems.totalCount);
-  const panelViews = [
-    {
-      id: "scene",
-      label: t("reactWorkbench.leftPanel.nav.scene"),
-      count: model.hierarchy.totalCount,
-      tone: model.hierarchy.selectedCount > 0 ? "active" : "neutral"
-    },
-    {
-      id: "assets",
-      label: t("reactWorkbench.leftPanel.nav.assets"),
-      count: workspace?.totalCount ?? model.assets.totalCount,
-      tone: model.assets.missingCount > 0 ? "warning" : "neutral"
-    },
-    {
-      id: "project",
-      label: t("reactWorkbench.leftPanel.nav.project"),
-      count: model.problems.totalCount,
-      tone: problemTone
-    }
-  ] satisfies Array<{ id: WorkbenchPanelView; label: string; count: number; tone: string }>;
 
   useEffect(() => {
     setRecoveryState((current) => {
@@ -270,23 +250,6 @@ export function WorkbenchLeftPanel({ context }: WorkbenchLeftPanelProps) {
 
   return (
     <div className="ek-workbench__default-left-panel">
-      <nav className="ek-workbench__panel-nav" aria-label={t("reactWorkbench.leftPanel.nav.label")}>
-        {panelViews.map((view) => (
-          <button
-            key={view.id}
-            type="button"
-            className="ek-workbench__panel-tab"
-            aria-label={`${view.label} ${view.count}`}
-            aria-pressed={activeView === view.id}
-            data-tone={view.tone}
-            onClick={() => setActiveView(view.id)}
-          >
-            <span>{view.label}</span>
-            <strong>{view.count}</strong>
-          </button>
-        ))}
-      </nav>
-
       <section
         className="ek-workbench__panel-section"
         aria-label={t("reactWorkbench.leftPanel.hierarchy.label")}

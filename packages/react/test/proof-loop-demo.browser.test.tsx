@@ -1,4 +1,6 @@
 import React from "react";
+import { page, userEvent } from "vitest/browser";
+import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { createRoot } from "react-dom/client";
 import { createApp, type App as VueApp } from "vue";
 import { afterEach, describe, expect, it } from "vitest";
@@ -30,6 +32,107 @@ describe("proof-loop starter demo browser verification", () => {
     cleanup = root.cleanup;
 
     await verifyStarterFlow(root.host, { assertProfessionalUi: true });
+  }, 15000);
+
+  it("resizes and restores React panels across desktop sizes without replacing the canvas", async () => {
+    const originalSize = { width: window.innerWidth, height: window.innerHeight };
+    const root = mountReactDemo();
+    cleanup = root.cleanup;
+    const { host } = root;
+    try {
+      await page.viewport(1440, 900);
+      await waitFor(() => expect(host.querySelector('[role="separator"]')).toBeTruthy());
+      const canvas = await findReadyCanvas(host.querySelector<HTMLElement>(".starter-viewport")!);
+      for (const [width, height] of [[1440, 900], [1920, 1080], [1100, 800]]) {
+        await page.viewport(width, height);
+        for (const side of ["left", "right"]) {
+          const separator = host.querySelector(`[aria-label="Resize ${side} panel"]`) as HTMLElement;
+          const panel = section(host, side === "left" ? "Project panel" : "Inspector panel");
+          separator.focus();
+          separator.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
+          await waitFor(() => expect(panel.getBoundingClientRect().width).toBe(Number(separator.getAttribute("aria-valuemin"))));
+          separator.dispatchEvent(new KeyboardEvent("keydown", { key: side === "left" ? "ArrowRight" : "ArrowLeft", bubbles: true }));
+          await waitFor(() => {
+            expect(Number(separator.getAttribute("aria-valuenow"))).toBe(Number(separator.getAttribute("aria-valuemin")) + 16);
+            expect(panel.getBoundingClientRect().width).toBe(Number(separator.getAttribute("aria-valuenow")));
+          });
+          const previous = panel.getBoundingClientRect().width;
+          const rect = separator.getBoundingClientRect();
+          await userEvent.dragAndDrop(separator, host, {
+            sourcePosition: { x: 1, y: 100 },
+            targetPosition: { x: rect.left + 2 + (side === "left" ? 24 : -24), y: rect.top + 100 }
+          });
+          await waitFor(() => expect(panel.getBoundingClientRect().width).toBe(previous + 24));
+          expect(document.activeElement).toBe(separator);
+          expect(Number(separator.getAttribute("aria-valuenow"))).toBe(panel.getBoundingClientRect().width);
+          const expandedCanvasWidth = canvas.width;
+          await userEvent.click(host.querySelector(`[aria-label="Collapse ${side} panel"]`)!);
+          await waitFor(() => {
+            expect(panel.hidden).toBe(true);
+            expect(canvas.width).toBeGreaterThan(expandedCanvasWidth);
+          });
+          const restore = host.querySelector(`[aria-label="Expand ${side} panel"]`) as HTMLButtonElement;
+          expect(document.activeElement).toBe(restore);
+          expect(restore.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+          await userEvent.click(restore);
+          await waitFor(() => expect(panel.getBoundingClientRect().width).toBe(previous + 24));
+          expect(document.activeElement).toBe(restore);
+          expect(host.querySelector("canvas")).toBe(canvas);
+          const restoredSeparator = host.querySelector(`[aria-label="Resize ${side} panel"]`) as HTMLElement;
+          restoredSeparator.focus();
+          restoredSeparator.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }));
+          await waitFor(() => expect(panel.getBoundingClientRect().width).toBe(Number(restoredSeparator.getAttribute("aria-valuemax"))));
+          expect(document.activeElement).toBe(restoredSeparator);
+        }
+        await waitFor(() => {
+          const viewport = host.querySelector(".starter-viewport")!.getBoundingClientRect();
+          expect(canvas.width).toBe(Math.floor(viewport.width));
+          expect(canvas.height).toBe(Math.floor(viewport.height));
+          expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+          expect(section(host, "Editor status").getBoundingClientRect().bottom).toBeLessThanOrEqual(height);
+        });
+      }
+      host.style.height = "600px";
+      await waitFor(() => {
+        expect(host.querySelector(".ek-workbench")!.getBoundingClientRect().height).toBe(600);
+        expect(section(host, "Editor status").getBoundingClientRect().bottom).toBeLessThanOrEqual(600);
+      });
+      await verifyStarterFlow(host);
+    } finally {
+      await page.viewport(originalSize.width, originalSize.height);
+    }
+  }, 30000);
+
+  it("imports a real GLB and keeps canvas picking and undo working after React panel resize", async () => {
+    const root = mountReactDemo({ nativeRuntime: true });
+    cleanup = root.cleanup;
+    await waitFor(() => expect(text(root.host)).toContain("Runtime ready"));
+    const geometry = new BoxGeometry(1, 1, 1);
+    const material = new MeshBasicMaterial({ color: 0x6fa8dc });
+    const bytes = await new GLTFExporter().parseAsync(new Mesh(geometry, material), { binary: true }) as ArrayBuffer;
+    geometry.dispose();
+    material.dispose();
+    await openLeftWorkspaceView(root.host, "Assets");
+    await uploadFile(root.host.querySelector<HTMLInputElement>('[aria-label="Import assets"]')!, new File([bytes], "actual-box.glb"));
+    await openLeftWorkspaceView(root.host, "Scene");
+    await waitFor(() => expect(text(section(root.host, "Hierarchy"))).toContain("actual-box"));
+    await clickHierarchyRow(root.host, "actual-box");
+    await clickByText(root.host, "Frame all");
+    const canvas = root.host.querySelector("canvas")!;
+    await userEvent.click(root.host.querySelector('[aria-label="Collapse left panel"]')!);
+    await userEvent.click(root.host.querySelector('[aria-label="Collapse right panel"]')!);
+    await clickByText(root.host, "Clear");
+    await waitFor(() => expect(text(section(root.host, "Editor status"))).toContain("Selection none"));
+    await userEvent.click(canvas, { position: { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 } });
+    await waitFor(() => expect(text(section(root.host, "Editor status"))).toContain("Selection actual-box"));
+    await userEvent.click(root.host.querySelector('[aria-label="Expand right panel"]')!);
+    const position = findFieldInput(root.host, "Position X", 'input[type="number"]') as HTMLInputElement;
+    await userEvent.fill(position, "2");
+    position.blur();
+    await waitFor(() => expect((findFieldInput(root.host, "Position X", 'input[type="number"]') as HTMLInputElement).value).toBe("2"));
+    await clickByText(root.host, "Undo");
+    await waitFor(() => expect((findFieldInput(root.host, "Position X", 'input[type="number"]') as HTMLInputElement).value).toBe("0"));
+    expect(root.host.querySelector("canvas")).toBe(canvas);
   }, 15000);
 
   it("drives the Vue starter through the package default workbench", async () => {
@@ -214,11 +317,12 @@ async function verifyChineseWorkbenchLayout(host: HTMLElement, options: { assert
   await assertLocalizedWorkbenchLayout(host);
 }
 
-function mountReactDemo(options: { locale?: "en" | "zh-CN" } = {}): { host: HTMLElement; cleanup(): void } {
+function mountReactDemo(options: { locale?: "en" | "zh-CN"; nativeRuntime?: boolean } = {}): { host: HTMLElement; cleanup(): void } {
   installStyles("react-demo-styles", [ReactWorkbenchStyles, ReactInspectorStyles, ReactDemoStyles]);
   const host = createHost();
   const root = createRoot(host);
-  root.render(<ReactProofLoopApp loader={proofLoopLoader} rendererFactory={paintedRenderer} locale={options.locale} />);
+  root.render(<ReactProofLoopApp loader={options.nativeRuntime ? undefined : proofLoopLoader}
+    rendererFactory={options.nativeRuntime ? undefined : paintedRenderer} locale={options.locale} />);
   return {
     host,
     cleanup() {
@@ -324,7 +428,7 @@ async function clickByText(host: HTMLElement, label: string): Promise<void> {
 }
 
 async function openLeftWorkspaceView(host: HTMLElement, label: string): Promise<void> {
-  const tabs = [...host.querySelectorAll<HTMLButtonElement>(".ek-workbench__panel-tab")];
+  const tabs = [...host.querySelectorAll<HTMLButtonElement>(".ek-workbench__panel-tab, .ek-workbench__nav-button")];
   if (tabs.length === 0) {
     return;
   }
@@ -333,7 +437,9 @@ async function openLeftWorkspaceView(host: HTMLElement, label: string): Promise<
     .find((candidate) => (candidate.getAttribute("aria-label") ?? "").startsWith(`${label} `));
   expect(target, `Expected workspace tab ${label}`).toBeTruthy();
 
-  target!.click();
+  if (target!.getAttribute("aria-pressed") !== "true" || target!.getAttribute("aria-expanded") === "false") {
+    target!.click();
+  }
   await waitForAnimationFrame();
   await waitFor(() => {
     expect(target!.getAttribute("aria-pressed")).toBe("true");
@@ -341,7 +447,7 @@ async function openLeftWorkspaceView(host: HTMLElement, label: string): Promise<
 }
 
 function hasLeftWorkspaceTabs(host: HTMLElement): boolean {
-  return host.querySelector(".ek-workbench__panel-tab") !== null;
+  return host.querySelector(".ek-workbench__panel-tab, .ek-workbench__nav-button") !== null;
 }
 
 function expectExportedPresentation(bytes: Uint8Array): void {
@@ -464,7 +570,7 @@ async function assertProfessionalWorkbenchLayout(
   assertChildrenInside(projectPanel, `Project panel ${currentViewportLabel()}`);
   assertChildrenInside(inspector, `Inspector ${currentViewportLabel()}`);
   assertChildrenInside(status, `Status ${currentViewportLabel()}`);
-  expect(projectPanel.querySelector(".ek-workbench__panel-nav"), `Workspace nav ${currentViewportLabel()}`).toBeTruthy();
+  expect(host.querySelector(".ek-workbench__panel-nav, .ek-workbench__navigation"), `Workspace nav ${currentViewportLabel()}`).toBeTruthy();
   expect(commandBar.querySelector(".ek-workbench__command-button svg"), `Command icon ${currentViewportLabel()}`).toBeTruthy();
   expect(inspector.querySelector(".ek-inspector-summary"), `Inspector summary ${currentViewportLabel()}`).toBeTruthy();
   expect(status.querySelector(".ek-workbench__status-chip"), `Status chip ${currentViewportLabel()}`).toBeTruthy();

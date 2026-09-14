@@ -22,6 +22,37 @@ import { expectAuthoredValuesPresent, expectNoI18nDurableLeakage, expectNoRuntim
 import { decodeProjectPackageText, resolveProjectPackageBytes, seedI18nDurableEditor } from "../../test/i18n-durable-fixture";
 
 describe("React EditorWorkbench", () => {
+  it("preserves editing and panel drafts while navigating and collapsing either sidebar", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    const runtime = editor.getRuntime();
+    const before = editor.getSnapshot();
+    const navigation = within(screen.getByLabelText("Workspace views"));
+    fireEvent.click(navigation.getByRole("button", { name: /^Assets \d/ }));
+    const search = screen.getByLabelText("Search assets");
+    fireEvent.change(search, { target: { value: "keep this filter" } });
+    fireEvent.click(navigation.getByRole("button", { name: /^Assets \d/ }));
+    expect(screen.getByLabelText("Project panel").hidden).toBe(true);
+    fireEvent.click(screen.getByLabelText("Expand left panel"));
+    expect((screen.getByLabelText("Search assets") as HTMLInputElement).value).toBe("keep this filter");
+    fireEvent.click(navigation.getByRole("button", { name: /^Project \d/ }));
+    fireEvent.click(navigation.getByRole("button", { name: /^Scene \d/ }));
+    const position = screen.getByLabelText("Position X");
+    fireEvent.click(screen.getByLabelText("Collapse right panel"));
+    expect(screen.getByLabelText("Inspector panel").hidden).toBe(true);
+    fireEvent.click(screen.getByLabelText("Expand right panel"));
+    expect(screen.getByLabelText("Position X")).toBe(position);
+    expect(editor.getRuntime()).toBe(runtime);
+    expect(editor.getSnapshot()).toEqual(before);
+    fireEvent.change(position, { target: { value: "2" } });
+    fireEvent.blur(position);
+    expect(editor.getSnapshot().objects["object-a"].transform.position[0]).toBe(2);
+    fireEvent.click(screen.getByTitle("Undo"));
+    expect(editor.getSnapshot().objects["object-a"].transform.position[0]).toBe(0);
+  });
+
   it("composes viewport, inspector, and render regions around one core editor", () => {
     const editor = createEditor();
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
@@ -833,11 +864,13 @@ describe("React EditorWorkbench", () => {
           </span>
         )}
         rightPanel={({ inspector }) => <span>Right {inspector.selection.count}</span>}
+        sidePanel={() => <span>Legacy side content</span>}
       />
     );
 
     expect(screen.getByText("Left 1:blocked:function")).toBeTruthy();
     expect(screen.getByText("Right 0")).toBeTruthy();
+    expect(screen.queryByText("Legacy side content")).toBeNull();
     expect(screen.queryByText("Hierarchy")).toBeNull();
     expect(screen.queryByText("Transform")).toBeNull();
 
