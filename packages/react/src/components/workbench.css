@@ -406,6 +406,57 @@
   padding-left: 0;
 }
 
+.ek-workbench__tree li {
+  min-width: 0;
+}
+
+.ek-workbench__hierarchy-search {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  color: var(--ek-workbench-muted);
+  font-size: 0.75rem;
+}
+
+.ek-workbench__hierarchy-search input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--ek-workbench-control-height);
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--ek-workbench-border);
+  border-radius: var(--ek-workbench-radius-sm);
+  background: var(--ek-workbench-surface);
+  color: var(--ek-workbench-text);
+  font: inherit;
+}
+
+.ek-workbench__tree-entry {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding-left: min(calc(var(--ek-workbench-tree-depth, 0) * 0.65rem), calc(30% * var(--ek-workbench-tree-depth, 0) / var(--ek-workbench-tree-max-depth, 1)));
+}
+
+.ek-workbench__tree-toggle,
+.ek-workbench__tree-toggle-space {
+  flex: 0 0 1.25rem;
+  width: 1.25rem;
+}
+
+.ek-workbench__tree-toggle {
+  padding: 0;
+  min-height: var(--ek-workbench-control-height);
+  border: 0;
+  background: transparent;
+  color: var(--ek-workbench-muted);
+  cursor: pointer;
+}
+
+.ek-workbench__tree-toggle:disabled {
+  cursor: default;
+}
+
 .ek-workbench__tree-row {
   display: flex;
   align-items: center;
@@ -416,7 +467,7 @@
   max-width: none;
   min-height: var(--ek-workbench-control-height);
   padding: 0.35rem 0.5rem;
-  padding-left: calc(0.5rem + var(--ek-workbench-tree-depth, 0) * 0.8rem);
+  flex: 1;
   border: 1px solid transparent;
   border-radius: var(--ek-workbench-radius-sm);
   background: transparent;
@@ -450,7 +501,22 @@
 }
 
 .ek-workbench__tree-row span {
-  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.ek-workbench__tree-row small {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+}
+
+.ek-workbench__tree-problem {
+  margin: 0.25rem 0.5rem 0.5rem 1.25rem;
+  color: var(--ek-workbench-muted);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
 }
 
 .ek-workbench__asset-list > li,

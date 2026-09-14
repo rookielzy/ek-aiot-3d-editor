@@ -5,7 +5,8 @@ import { createRoot } from "react-dom/client";
 import { createApp, type App as VueApp } from "vue";
 import { afterEach, describe, expect, it } from "vitest";
 import { BoxGeometry, Group, Mesh, MeshBasicMaterial } from "three";
-import type { GltfLoaderAdapter, RendererLike } from "@ek-aiot/3d-editor-core";
+import { AssetResolverBridge, createEditor, ThreeGltfLoaderAdapter, type GltfLoaderAdapter, type RendererLike } from "@ek-aiot/3d-editor-core";
+import { EditorWorkbench } from "../src/components/EditorWorkbench";
 import { decodeArchiveJson, defaultArchiveAdapter } from "../../core/src/project/archive-adapter";
 import { App as ReactProofLoopApp } from "../../../examples/react-proof-loop/src/App";
 import ReactDemoStyles from "../../../examples/react-proof-loop/src/styles.css?raw";
@@ -98,6 +99,122 @@ describe("proof-loop starter demo browser verification", () => {
         expect(section(host, "Editor status").getBoundingClientRect().bottom).toBeLessThanOrEqual(600);
       });
       await verifyStarterFlow(host);
+    } finally {
+      await page.viewport(originalSize.width, originalSize.height);
+    }
+  }, 30000);
+
+  it("searches and focuses real imported hierarchy targets at desktop sizes", async () => {
+    const originalSize = { width: window.innerWidth, height: window.innerHeight };
+    const editor = createEditor();
+    const geometry = new BoxGeometry(1, 1, 1);
+    const material = new MeshBasicMaterial({ color: 0x6fa8dc });
+    const mesh = new Mesh(geometry, material);
+    mesh.name = "ImportedPanelWithAVeryLongNameAndReadableFullText";
+    const scene = new Group();
+    scene.add(mesh);
+    const bytes = await new GLTFExporter().parseAsync(scene, { binary: true }) as ArrayBuffer;
+    geometry.dispose();
+    material.dispose();
+    for (let depth = 0; depth < 10; depth++) {
+      editor.dispatch({ type: "create-group", nodeId: `group-${depth}`, name: `Assembly ${depth}`, parentId: depth ? `group-${depth - 1}` : null });
+    }
+    const imported = await editor.importGlbAsset({ asset: { id: "real-asset", source: new File([bytes], "hierarchy.glb") }, objectId: "robot", name: "Robot", parentId: "group-9", expandImportedTargets: true });
+    expect(imported.ok).toBe(true);
+    const inheritedStyles = [...document.querySelectorAll<HTMLStyleElement>("style[data-vite-dev-id]")].map((style) => ({ style, disabled: style.disabled }));
+    inheritedStyles.forEach(({ style }) => { style.disabled = true; });
+    installStyles("react-hierarchy-styles", [ReactWorkbenchStyles, ReactInspectorStyles]);
+    const host = createHost();
+    const root = createRoot(host);
+    const uri = URL.createObjectURL(new Blob([bytes], { type: "model/gltf-binary" }));
+    root.render(<EditorWorkbench editor={editor} loader={new ThreeGltfLoaderAdapter()} resolver={new AssetResolverBridge(() => ({ uri }))}
+      interactions={{ camera: true, pointerSelection: true, marqueeSelection: true, transform: true, resize: true, selectionVisuals: true }} />);
+    cleanup = () => {
+      root.unmount();
+      removeStyles("react-hierarchy-styles");
+      editor.dispose();
+      URL.revokeObjectURL(uri);
+      inheritedStyles.forEach(({ style, disabled }) => { style.disabled = disabled; });
+    };
+    try {
+      await waitFor(() => expect(editor.getRuntime()).toBeTruthy());
+      await editor.getRuntime()!.project();
+      const hierarchy = section(host, "Hierarchy");
+      const canvas = host.querySelector("canvas")!;
+      for (const [width, height] of [[1440, 900], [1920, 1080], [1100, 800]]) {
+        await page.viewport(width, height);
+        const before = editor.getSnapshot();
+        await userEvent.click(hierarchy.querySelector('[aria-label="Collapse Assembly 0"]')!);
+        expect(text(hierarchy)).not.toContain(mesh.name);
+        const search = hierarchy.querySelector('input[type="search"]')!;
+        await userEvent.fill(search, "readablefulltext");
+        await waitFor(() => expect(text(hierarchy)).toContain(mesh.name));
+        expect(text(hierarchy)).toContain("Assembly 0");
+        await userEvent.fill(search, "no matching thing");
+        await waitFor(() => expect(text(hierarchy)).toContain("No matching nodes"));
+        await userEvent.clear(search);
+        expect(text(hierarchy)).not.toContain(mesh.name);
+        expect(editor.getSnapshot()).toEqual(before);
+        const expand = hierarchy.querySelector<HTMLButtonElement>('[aria-label="Expand Assembly 0"]')!;
+        expand.focus();
+        await userEvent.keyboard("{Enter}");
+        expect(document.activeElement).toBe(expand);
+        const row = hierarchy.querySelector<HTMLButtonElement>(`button.ek-workbench__tree-row[title="${mesh.name}"]`)!;
+        editor.getRuntime()!.resetCamera();
+        const cameraBefore = editor.getRuntime()!.captureCameraView();
+        await userEvent.dblClick(row);
+        await waitFor(() => {
+          expect(editor.getSnapshot().nodes[editor.getSnapshot().selection.nodeId!]?.kind).toBe("imported");
+          expect(row.getAttribute("aria-pressed")).toBe("true");
+          expect(text(section(host, "Editor status"))).toContain(mesh.name);
+        });
+        expect(editor.getRuntime()!.captureCameraView()).not.toEqual(cameraBefore);
+        expect(findFieldInput(host, "Position X", 'input[type="number"]')).toBeTruthy();
+        expect(text(hierarchy)).toContain("cannot be transformed independently");
+        expect(row.getBoundingClientRect().width).toBeGreaterThan(100);
+        const panel = section(host, "Project panel");
+        expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
+        expect(panel.scrollLeft).toBe(0);
+        const parentRow = hierarchy.querySelector('[title="Assembly 8"]')!;
+        const childRow = hierarchy.querySelector('[title="Assembly 9"]')!;
+        expect(childRow.getBoundingClientRect().left).toBeGreaterThan(parentRow.getBoundingClientRect().left);
+        expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+        expect(section(host, "Editor status").getBoundingClientRect().bottom).toBeLessThanOrEqual(height);
+        expect(host.querySelector("canvas")).toBe(canvas);
+        await clickByText(host, "Clear");
+        await userEvent.click(canvas, { position: { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 } });
+        await waitFor(() => expect(editor.getSnapshot().nodes[editor.getSnapshot().selection.nodeId!]?.kind).toBe("imported"));
+        await clickByText(host, "Clear");
+        await userEvent.dragAndDrop(canvas, canvas, {
+          sourcePosition: { x: 20, y: 70 },
+          targetPosition: { x: canvas.clientWidth - 20, y: canvas.clientHeight - 20 }
+        });
+        await waitFor(() => {
+          const snapshot = editor.getSnapshot();
+          expect(snapshot.selection.nodeIds.some((id) => snapshot.nodes[id].kind === "imported")).toBe(true);
+          expect(hierarchy.querySelector('[aria-pressed="true"]')).toBeTruthy();
+        });
+        await userEvent.keyboard("{Control>}");
+        await userEvent.click(hierarchy.querySelector('button.ek-workbench__tree-row[title="Robot"]')!);
+        await userEvent.keyboard("{/Control}");
+        await waitFor(() => expect(editor.getSnapshot().selection.nodeIds.length).toBeGreaterThan(1));
+        expect(text(section(host, "Editor status"))).toContain("nodes");
+        if (width === 1440) {
+          await userEvent.dblClick(hierarchy.querySelector('button.ek-workbench__tree-row[title="Robot"]')!);
+          await editor.getRuntime()!.project();
+          await waitForAnimationFrame();
+          // A point on the visible red X handle, clear of the center plane handles.
+          const x = canvas.clientWidth / 2 + canvas.clientHeight * 0.1;
+          await userEvent.dragAndDrop(canvas, canvas, {
+            sourcePosition: { x, y: canvas.clientHeight / 2 },
+            targetPosition: { x: x + 40, y: canvas.clientHeight / 2 }
+          });
+          await waitFor(() => expect(editor.getSnapshot().objects.robot.transform.position[0]).not.toBe(0));
+          expect(Number((findFieldInput(host, "Position X", 'input[type="number"]') as HTMLInputElement).value)).not.toBe(0);
+          await clickByText(host, "Undo");
+          await waitFor(() => expect(editor.getSnapshot().objects.robot.transform.position[0]).toBe(0));
+        }
+      }
     } finally {
       await page.viewport(originalSize.width, originalSize.height);
     }

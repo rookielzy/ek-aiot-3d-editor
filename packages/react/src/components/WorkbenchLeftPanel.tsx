@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type Dispatch, type DragEvent, type MutableRefObject, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type Dispatch, type DragEvent, type MutableRefObject, type SetStateAction } from "react";
 import {
   filterAssetWorkspaceItems,
   sortAssetWorkspaceItems,
@@ -13,12 +13,12 @@ import {
   type MessageDescriptor,
   type ProjectProblem,
   type WorkbenchAssetImportDiagnostic,
-  type WorkbenchHierarchyRow,
   type WorkbenchMissingAssetItem,
   type WorkbenchRasterImportKind
 } from "@ek-aiot/3d-editor-core";
 import type { WorkbenchI18n, WorkbenchMessageKey, WorkbenchMessageValues } from "../i18n/workbench-i18n";
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
+import { WorkbenchHierarchy } from "./WorkbenchHierarchy";
 import { problemToneFromCounts } from "./workbench-model-helpers";
 
 export interface WorkbenchLeftPanelProps {
@@ -262,15 +262,7 @@ export function WorkbenchLeftPanel({ context, activeView }: WorkbenchLeftPanelPr
             totalCount: model.hierarchy.totalCount
           })}</span>
         </div>
-        {model.hierarchy.empty ? (
-          <p className="ek-workbench__empty">{t("reactWorkbench.leftPanel.hierarchy.empty")}</p>
-        ) : (
-          <ul className="ek-workbench__tree">
-            {model.hierarchy.roots.map((row) => (
-              <WorkbenchNodeRow key={row.id} context={context} row={row} />
-            ))}
-          </ul>
-        )}
+        <WorkbenchHierarchy context={context} />
       </section>
 
       <section
@@ -608,38 +600,6 @@ function AssetWorkspaceRow({
           <small>{recoveryState[recoveryId] ? renderStatusMessage(context.i18n, recoveryState[recoveryId]) : t("reactWorkbench.leftPanel.assets.replace.hint")}</small>
           <input type="file" aria-label={t("reactWorkbench.leftPanel.assets.replace.aria", { assetLabel: asset.label })} onChange={(event) => void replaceAsset(event)} />
         </label>
-      ) : null}
-    </li>
-  );
-}
-
-function WorkbenchNodeRow({ context, row }: { context: ResolvedWorkbenchContext; row: WorkbenchHierarchyRow }) {
-  const children = row.childIds
-    .map((childId) => context.model.hierarchy.rows.find((candidate) => candidate.id === childId))
-    .filter((child): child is WorkbenchHierarchyRow => Boolean(child));
-
-  return (
-    <li>
-      <button
-        type="button"
-        className="ek-workbench__tree-row"
-        data-selected={row.selected ? "true" : undefined}
-        data-severity={row.highestProblemSeverity ?? undefined}
-        onClick={() => context.dispatch({ type: "select-node", nodeId: row.id })}
-        style={{ "--ek-workbench-tree-depth": row.depth } as CSSProperties}
-      >
-        <span>{row.label}</span>
-        <small>
-          {row.kind}
-          {row.problemCount ? ` · ${row.problemCount}` : ""}
-        </small>
-      </button>
-      {children.length > 0 ? (
-        <ul>
-          {children.map((child) => (
-            <WorkbenchNodeRow key={child.id} context={context} row={child} />
-          ))}
-        </ul>
       ) : null}
     </li>
   );

@@ -809,6 +809,91 @@ describe("React EditorWorkbench", () => {
     unmount();
   });
 
+  it("searches descendants and restores collapsed branches without changing the scene", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "create-group", nodeId: "group-a", name: "Assembly" });
+    editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Robot arm", asset: { id: "asset-a" }, parentId: "group-a" });
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    const hierarchy = within(screen.getByLabelText("Hierarchy"));
+    const before = editor.getSnapshot();
+    fireEvent.click(hierarchy.getByLabelText("Collapse Assembly"));
+    expect(hierarchy.queryByText("Robot arm")).toBeNull();
+    fireEvent.change(hierarchy.getByLabelText("Search hierarchy"), { target: { value: "  ROBOT  " } });
+    expect(hierarchy.getByText("Assembly")).toBeTruthy();
+    expect(hierarchy.getByText("Robot arm")).toBeTruthy();
+    fireEvent.change(hierarchy.getByLabelText("Search hierarchy"), { target: { value: "absent" } });
+    expect(hierarchy.getByText("No matching nodes")).toBeTruthy();
+    fireEvent.change(hierarchy.getByLabelText("Search hierarchy"), { target: { value: "" } });
+    expect(hierarchy.queryByText("Robot arm")).toBeNull();
+    fireEvent.click(hierarchy.getByLabelText("Expand Assembly"));
+    expect(hierarchy.getByText("Robot arm")).toBeTruthy();
+    expect(editor.getSnapshot()).toEqual(before);
+  });
+
+  it("synchronizes modifier selection and reveals a selected imported descendant", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Robot", asset: {
+      id: "asset-a", metadata: attachGlbImportManifestMetadata(undefined, createWorkbenchManifest({ twoSlots: true }))
+    }, expandImportedTargets: true });
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    const hierarchy = within(screen.getByLabelText("Hierarchy"));
+    const imported = Object.values(editor.getSnapshot().nodes).find((node) => node.kind === "imported")!;
+    const importedButton = () => hierarchy.getByRole("button", { name: new RegExp(`^${imported.name}\\s*imported`) });
+    fireEvent.click(hierarchy.getByText("Robot"));
+    fireEvent.click(importedButton(), { ctrlKey: true });
+    expect(editor.getSnapshot().selection.nodeIds).toEqual(["object-a", imported.id]);
+    expect(screen.getByText("Selection 2 nodes")).toBeTruthy();
+    expect(importedButton().getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(importedButton(), { metaKey: true });
+    expect(editor.getSnapshot().selection.nodeIds).toEqual(["object-a"]);
+    fireEvent.click(importedButton(), { shiftKey: true });
+    expect(editor.getSnapshot().selection.nodeIds).toEqual(["object-a", imported.id]);
+    fireEvent.click(importedButton(), { altKey: true });
+    expect(editor.getSnapshot().selection.nodeIds).toEqual(["object-a"]);
+    fireEvent.click(hierarchy.getByLabelText("Collapse Robot"));
+    act(() => { editor.dispatch({ type: "select-node", nodeId: imported.id }); });
+    expect(importedButton().getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText(`Selection ${imported.name}`)).toBeTruthy();
+    expect(screen.getByLabelText("Position X")).toBeTruthy();
+    fireEvent.click(screen.getByTitle("Clear selection"));
+    expect(editor.getSnapshot().selection.nodeIds).toEqual([]);
+    expect(importedButton().getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("focuses a double-clicked row through the existing runtime camera", async () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Robot", asset: { id: "asset-a" } });
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    const frame = vi.spyOn(editor.getRuntime()!, "frameSelected");
+    fireEvent.doubleClick(within(screen.getByLabelText("Hierarchy")).getByText("Robot"));
+    expect(editor.getSnapshot().selection.nodeId).toBe("object-a");
+    expect(frame).toHaveBeenCalledOnce();
+  });
+
+  it("keeps light and camera hierarchy selection and search drafts across locale changes", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "add-light", light: { id: "light-a", name: "Key light", kind: "point" } });
+    editor.dispatch({ type: "create-camera-view", view: { id: "camera-a", name: "Front view" } });
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    const hierarchy = within(screen.getByLabelText("Hierarchy"));
+    fireEvent.click(hierarchy.getByText("Key light"));
+    expect(editor.getSnapshot().nodes[editor.getSnapshot().selection.nodeId!].kind).toBe("light");
+    expect(screen.getByText("Selection Key light")).toBeTruthy();
+    fireEvent.click(hierarchy.getByText("Front view"));
+    expect(editor.getSnapshot().nodes[editor.getSnapshot().selection.nodeId!].kind).toBe("camera");
+    expect(screen.getByText("Selection Front view")).toBeTruthy();
+    fireEvent.change(hierarchy.getByLabelText("Search hierarchy"), { target: { value: "Front" } });
+    const before = editor.getSnapshot();
+    const runtime = editor.getRuntime();
+    fireEvent.change(screen.getByLabelText("Language"), { target: { value: "zh-CN" } });
+    expect((screen.getByLabelText("搜索层级") as HTMLInputElement).value).toBe("Front");
+    expect(screen.getByText("选择 Front view")).toBeTruthy();
+    expect(editor.getSnapshot()).toEqual(before);
+    expect(editor.getRuntime()).toBe(runtime);
+    fireEvent.change(screen.getByLabelText("搜索层级"), { target: { value: "absent" } });
+    expect(screen.getByText("没有匹配的节点")).toBeTruthy();
+  });
+
   it("selects hierarchy rows through core node selection and updates inspector and status", () => {
     const editor = createEditor();
     editor.dispatch({ type: "create-group", nodeId: "group-a", name: "Assembly" });
