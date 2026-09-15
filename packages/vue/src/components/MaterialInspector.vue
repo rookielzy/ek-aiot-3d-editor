@@ -17,36 +17,36 @@
             <input
               v-model="activeTargetKey"
               type="radio"
-              name="ek-material-target"
+              :name="`${id}-material-target`"
               :value="target.key"
               :disabled="!target.canSelect"
               @change="fieldProblem = null"
             />
             <span class="ek-material-target-option__body">
-              <span class="ek-material-target-option__label">{{ target.label }}</span>
+              <span class="ek-material-target-option__label">{{ target.kind === 'object' ? resolvedI18n.t('reactWorkbench.inspector.material.target.objectLabel')
+                : target.unresolved && !target.importedNodeId ? resolvedI18n.t('reactWorkbench.inspector.material.target.staleLabel', { slot: target.slotId ?? '' }) : target.label }}</span>
               <span class="ek-material-target-option__meta">{{ describeTarget(target) }}</span>
-              <span v-if="target.disabledReason" class="ek-material-target-option__reason">{{ target.disabledReason }}</span>
+              <span v-if="target.disabledReason" class="ek-material-target-option__reason">{{ target.kind === 'material-slot' && target.unresolved && !target.canCreateAssignment && !target.canEditExistingAssignment
+                ? resolvedI18n.t('reactWorkbench.inspector.material.target.cannotCreate') : target.disabledReason }}</span>
             </span>
           </label>
         </div>
       </fieldset>
       <p v-if="activeTarget?.unresolved" class="ek-inspector-warning" role="status">{{ resolvedI18n.t("reactWorkbench.inspector.material.target.unresolvedWarning") }}</p>
-      <div class="ek-inspector-grid">
-        <label v-for="field in fields" :key="field.id" class="ek-inspector-field">
+      <div class="ek-inspector-grid ek-material-fields">
+        <label v-for="field in fields" :key="field.id" class="ek-inspector-field" :class="{ 'ek-inspector-field--checkbox': field.kind === 'checkbox' }">
           <span>{{ renderFieldLabel(resolvedI18n, field) }}</span>
-          <input
+          <InspectorNumberInput
             v-if="field.kind === 'number'"
-            :key="`${effectiveTargetKey}:${field.id}:${String(field.value)}`"
-            :value="field.value"
+            :key="`${effectiveTargetKey}:${field.id}`"
+            :value="Number(field.value)"
             :disabled="field.disabled"
-            type="number"
             :min="field.min"
             :max="field.max"
             :step="field.step ?? 0.01"
             :aria-invalid="fieldProblem?.fieldId === field.id ? true : undefined"
             :aria-describedby="fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined"
-            @blur="commit(field.id as MaterialFieldId, ($event.target as HTMLInputElement).value)"
-            @keydown.enter.prevent="blurOnEnter"
+            :on-commit="(value) => commit(field.id as MaterialFieldId, value.trim() === '' ? 'NaN' : value)"
           />
           <input
             v-else-if="field.kind === 'color'"
@@ -88,7 +88,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, useId, watch } from "vue";
 import {
   buildMaterialFieldsForTarget,
   buildSetMaterialCommand,
@@ -109,6 +109,8 @@ import {
   type InspectorI18n
 } from "./inspector-i18n";
 
+import InspectorNumberInput from "./InspectorNumberInput.vue";
+
 const props = defineProps<{
   editor: Editor;
   snapshot: SceneSnapshot;
@@ -117,6 +119,7 @@ const props = defineProps<{
 }>();
 
 const resolvedI18n = computed(() => props.i18n ?? DEFAULT_INSPECTOR_I18N);
+const id = useId();
 const activeTargetKey = ref<string | null>(props.section.activeTargetKey);
 const fieldProblem = ref<InspectorCommandProblem | null>(null);
 
@@ -160,21 +163,18 @@ watch([defaultTargetKey, targetsSignature, targetContextSignature], () => {
   fieldProblem.value = null;
 });
 
-function commit(fieldId: MaterialFieldId, value: unknown) {
+function commit(fieldId: MaterialFieldId, value: unknown): boolean {
   if (value === "" && !fieldId.startsWith("textures.")) {
-    return;
+    return false;
   }
   fieldProblem.value = null;
-  const result = buildSetMaterialCommand(props.snapshot, fieldId, value, activeTarget.value);
+  const result = buildSetMaterialCommand(props.editor.getSnapshot(), fieldId, value, activeTarget.value);
   if (result.ok) {
     props.editor.dispatch(result.command);
   } else {
     fieldProblem.value = result.problem;
   }
-}
-
-function blurOnEnter(event: KeyboardEvent) {
-  (event.currentTarget as HTMLInputElement).blur();
+  return result.ok;
 }
 
 function describeTarget(target: MaterialInspectorTarget): string {
@@ -189,6 +189,6 @@ function describeTarget(target: MaterialInspectorTarget): string {
 }
 
 function problemId(fieldId: string): string {
-  return `ek-material-${fieldId.replace(/[^a-z0-9_-]/gi, "-")}-problem`;
+  return `${id}-material-${fieldId.replace(/[^a-z0-9_-]/gi, "-")}-problem`;
 }
 </script>

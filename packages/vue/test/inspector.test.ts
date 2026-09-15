@@ -14,6 +14,80 @@ import ProblemsPanel from "../src/components/ProblemsPanel.vue";
 import { useInspector } from "../src/composables/use-inspector";
 
 describe("Vue InspectorPanel", () => {
+  it("disables unresolved slots without assignments while keeping the owner editable", async () => {
+    const editor = markRaw(createSlotEditor());
+    const slotId = getSlotIds(editor)[0]!;
+    const runtime = {
+        getProblems: () => [{
+          id: "unresolved-slot", severity: "warning", code: "imported-material-slot-unresolved", source: "runtime",
+          target: { kind: "object", objectId: "object-a" }, metadata: { slotId }, recoverability: "user-action",
+          message: "Imported material slot could not be resolved."
+        }],
+        subscribeProblems: () => () => {}
+    };
+    vi.spyOn(editor, "getRuntime").mockReturnValue(runtime as never);
+    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const body = wrapper.findAll(".ek-material-target-option").find((target) => target.text().includes("Body"))!;
+    expect(body.get("input").attributes("disabled")).toBeDefined();
+    expect(body.text()).toContain("Slot is unresolved and cannot create a new assignment.");
+    editor.dispatch({ type: "select-node", nodeId: getImportedNodeIds(editor)[0]! });
+    await nextTick();
+    const owner = wrapper.findAll(".ek-material-target-option").find((target) => target.text().includes("Object override"))!;
+    expect((owner.get("input").element as HTMLInputElement).checked).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("preserves a manual material slot across groups and discards drafts when targets change", async () => {
+    const editor = markRaw(createSlotEditor());
+    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const target = (name: string) => wrapper.findAll(".ek-material-target-option").find((item) => item.text().includes(name))!.get('input[type="radio"]');
+    const field = (name: string) => wrapper.findAll("label").find((label) => label.text().startsWith(name))!.get("input");
+    await target("Body").setValue(true);
+    await field("Roughness").setValue("0.25");
+    await field("Roughness").trigger("keydown", { key: "Enter" });
+    for (const name of ["Environment", "Scene", "Properties"]) {
+      await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === name)!.trigger("click");
+    }
+    expect((target("Body").element as HTMLInputElement).checked).toBe(true);
+    expect((field("Roughness").element as HTMLInputElement).value).toBe("0.25");
+    await field("Opacity").setValue("2");
+    await field("Opacity").trigger("blur");
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true);
+    await target("Screen").setValue(true);
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    await field("Roughness").setValue("0.6");
+    editor.dispatch({ type: "select-node", nodeId: getImportedNodeIds(editor)[0]! });
+    await nextTick();
+    expect((field("Roughness").element as HTMLInputElement).value).toBe("0.25");
+    editor.dispatch({ type: "select-node", nodeId: "object-a" });
+    await nextTick();
+    expect((target("Object override").element as HTMLInputElement).checked).toBe(true);
+    expect((field("Roughness").element as HTMLInputElement).value).toBe("1");
+    wrapper.unmount();
+  });
+
+  it("keeps stale assignments editable and all six texture fields reachable", async () => {
+    const editor = markRaw(createSlotEditor());
+    const slotId = getSlotIds(editor)[0]!;
+    editor.dispatch({ type: "set-material", target: { kind: "material-slot", objectId: "object-a", slotId }, material: { opacity: 0.5 } });
+    const snapshot = editor.getSnapshot();
+    editor.restore({ ...snapshot, nodes: Object.fromEntries(Object.entries(snapshot.nodes).map(([id, node]) => [id, node.kind === "imported" ? { ...node, materialSlots: [] } : node])) });
+    const wrapper = mount(InspectorPanel, { props: { editor } });
+    await wrapper.findAll(".ek-material-target-option").find((item) => item.text().includes("Unresolved slot"))!.get("input").setValue(true);
+    expect(wrapper.text()).toContain("Existing override values remain editable");
+    const opacity = wrapper.findAll("label").find((label) => label.text() === "Opacity")!.get("input");
+    await opacity.setValue("0.75");
+    await opacity.trigger("keydown", { key: "Enter" });
+    expect((opacity.element as HTMLInputElement).value).toBe("0.75");
+    editor.undo();
+    await nextTick();
+    expect((opacity.element as HTMLInputElement).value).toBe("0.5");
+    for (const name of ["map", "normal map", "roughness map", "metalness map", "emissive map", "alpha map"]) {
+      expect(wrapper.findAll("label").find((label) => label.text().startsWith(name))!.get("select").attributes("disabled")).toBeUndefined();
+    }
+    wrapper.unmount();
+  });
+
   it("commits degrees once, cancels drafts and reports invalid transforms without losing focus", async () => {
     const editor = markRaw(createEditor());
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
@@ -320,6 +394,7 @@ describe("Vue InspectorPanel", () => {
     const editor = markRaw(createEditor());
     editor.dispatch({ type: "register-asset", asset: { id: "studio-hdr", kind: "hdr", label: "Studio HDR" } });
     const wrapper = mount(InspectorPanel, { props: { editor } });
+    await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Environment")!.trigger("click");
 
     const lightingAsset = wrapper.findAll("label").find((label) => label.text().includes("Lighting asset"))?.find("select");
     if (!lightingAsset) {
@@ -335,6 +410,7 @@ describe("Vue InspectorPanel", () => {
     const editor = markRaw(createEditor());
     editor.dispatch({ type: "register-asset", asset: { id: "studio-hdr", kind: "hdr", label: "Studio HDR" } });
     const wrapper = mount(InspectorPanel, { props: { editor } });
+    await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Environment")!.trigger("click");
 
     const preset = wrapper.findAll("button").find((button) => button.text() === "Shared lighting/background");
     expect(preset).toBeTruthy();
@@ -441,6 +517,7 @@ describe("Vue InspectorPanel", () => {
     editor.dispatch({ type: "create-camera-view", view: { id: "view-a", name: "Hero", projection: { kind: "perspective", fov: 60 } } });
     const dispatchSpy = vi.spyOn(editor, "dispatch");
     const wrapper = mount(InspectorPanel, { props: { editor } });
+    await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Scene")!.trigger("click");
 
     const fov = wrapper.findAll("label").find((label) => label.text().includes("FOV"))?.find('input[type="number"]');
     if (!fov) {
@@ -464,6 +541,7 @@ describe("Vue InspectorPanel", () => {
     editor.dispatch({ type: "create-camera-view", view: { id: "view-a" } });
     const dispatchSpy = vi.spyOn(editor, "dispatch");
     const wrapper = mount(InspectorPanel, { props: { editor } });
+    await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Scene")!.trigger("click");
 
     const fov = wrapper.findAll("label").find((label) => label.text().includes("FOV"))?.find('input[type="number"]');
     if (!fov) {
@@ -498,6 +576,7 @@ describe("Vue InspectorPanel", () => {
       }
     });
     const wrapper = mount(InspectorPanel, { props: { editor } });
+    await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Scene")!.trigger("click");
 
     await wrapper.findAll("button").find((button) => button.text() === "Capture")?.trigger("click");
     await nextTick();
@@ -505,6 +584,19 @@ describe("Vue InspectorPanel", () => {
 
     expect(editor.getSnapshot().cameras["view-a"]).toBeDefined();
     expect(applyCameraView).toHaveBeenCalledWith(editor.getSnapshot().cameras["view-a"]);
+    const click = async (name: string) => {
+      await wrapper.findAll("button").find((button) => button.text() === name)!.trigger("click");
+    };
+    await click("Set default");
+    expect(editor.getSnapshot().presentation.defaultCameraId).toBe("view-a");
+    await click("Clear default");
+    expect(editor.getSnapshot().presentation.defaultCameraId).toBeNull();
+    captureCameraView.mockReturnValueOnce({ ok: true, view: { ...editor.getSnapshot().cameras["view-a"], position: [3, 4, 5] } });
+    await click("Update");
+    expect(editor.getSnapshot().cameras["view-a"].position).toEqual([3, 4, 5]);
+    await click("Delete view");
+    expect(Object.keys(editor.getSnapshot().cameras)).toHaveLength(0);
+    expect(wrapper.text()).toContain("Capture a camera view to author presentation state.");
     wrapper.unmount();
   });
 });

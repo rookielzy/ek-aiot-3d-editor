@@ -126,6 +126,7 @@ describe("Vue proof-loop parity", () => {
 
       await clickButton(wrapper, "Capture view");
       await waitForVue(() => expect(wrapper.text()).toContain("Camera view 1"));
+      await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Scene")!.trigger("click");
       await clickButton(wrapper, "Set default");
       expect(wrapper.text()).toContain("Default");
       await clickButton(wrapper, "Apply view");
@@ -133,6 +134,7 @@ describe("Vue proof-loop parity", () => {
       await clickButton(wrapper, "Snap move");
       expect(buttonByText(wrapper, "Snap move").attributes("aria-pressed")).toBe("true");
 
+      await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Properties")!.trigger("click");
       const positionX = fieldInput(wrapper, "Position X");
       await positionX.setValue("2");
       await positionX.trigger("blur");
@@ -198,7 +200,8 @@ function buttonByText(wrapper: ReturnType<typeof mount> | ReturnType<ReturnType<
 }
 
 function fieldInput(wrapper: ReturnType<typeof mount>, label: string) {
-  const input = wrapper.findAll("label").find((candidate) => candidate.text().includes(label))?.find("input");
+  const named = wrapper.find(`input[aria-label="${label}"]`);
+  const input = named.exists() ? named : wrapper.findAll("label").find((candidate) => candidate.text().includes(label))?.find("input");
   expect(input, `Expected input for ${label}`).toBeTruthy();
   return input!;
 }

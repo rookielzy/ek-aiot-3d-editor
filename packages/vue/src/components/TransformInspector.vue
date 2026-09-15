@@ -4,22 +4,27 @@
       <h2>{{ renderSectionTitle(resolvedI18n, section) }}</h2>
     </header>
     <p v-if="section.empty" class="ek-inspector-empty">{{ renderSectionReason(resolvedI18n, section) }}</p>
-    <div v-else class="ek-inspector-grid ek-inspector-grid--vectors">
-      <label v-for="field in section.fields" :key="field.id" class="ek-inspector-field">
-        <span>{{ renderFieldLabel(resolvedI18n, field) }}{{ field.id.startsWith('rotation.') ? ' (°)' : '' }}</span>
-        <InspectorNumberInput
-          :key="`${snapshot.selection.nodeId}:${field.id}`"
-          :value="displayValue(field.id, field.value)"
-          :aria-label="renderFieldLabel(resolvedI18n, field)"
-          :disabled="field.disabled"
-          :step="field.id.startsWith('rotation.') ? 1 : field.step ?? 0.01"
-          :aria-invalid="problem?.fieldId === field.id ? true : undefined"
-          :aria-describedby="problem?.fieldId === field.id ? problemId : undefined"
-          :on-commit="(value) => commit(field.id as TransformFieldId, value)"
-          @cancel="problem = null"
-        />
-      </label>
-    </div>
+    <template v-else>
+      <fieldset v-for="vector in ['position', 'rotation', 'scale'] as const" :key="vector" class="ek-inspector-vector">
+        <legend>{{ resolvedI18n.t(`reactWorkbench.inspector.transform.${vector}`) }}</legend>
+        <div class="ek-inspector-grid ek-inspector-grid--vectors">
+          <label v-for="field in section.fields.filter((field) => field.id.startsWith(`${vector}.`))" :key="field.id" class="ek-inspector-axis" :data-axis="field.id.split('.')[1]">
+            <span aria-hidden="true">{{ field.id.split('.')[1]?.toUpperCase() }}</span>
+            <InspectorNumberInput
+              :key="`${snapshot.selection.nodeId}:${field.id}`"
+              :value="displayValue(field.id, field.value)"
+              :aria-label="renderFieldLabel(resolvedI18n, field)"
+              :disabled="field.disabled"
+              :step="vector === 'rotation' ? 1 : field.step ?? 0.01"
+              :aria-invalid="problem?.fieldId === field.id ? true : undefined"
+              :aria-describedby="problem?.fieldId === field.id ? problemId : undefined"
+              :on-commit="(value) => commit(field.id as TransformFieldId, value)"
+              @cancel="problem = null"
+            />
+          </label>
+        </div>
+      </fieldset>
+    </template>
     <p v-if="problem" :id="problemId" class="ek-inspector-field-problem" role="alert">{{ renderProblemMessage(resolvedI18n, problem) }}</p>
   </section>
 </template>

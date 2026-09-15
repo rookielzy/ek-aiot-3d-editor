@@ -687,7 +687,7 @@ describe("proof-loop starter demo browser verification", () => {
     expect(root.host.querySelector("canvas")).toBe(canvas);
   }, 15000);
 
-  it("restores React object transforms and material slots from a real project package", async () => {
+  it.each(["React", "Vue"] as const)("restores %s object transforms and material slots from a real project package", async (framework) => {
     const originalSize = { width: window.innerWidth, height: window.innerHeight };
     const editor = createEditor();
     const geometry = new BoxGeometry(1, 1, 1);
@@ -718,13 +718,12 @@ describe("proof-loop starter demo browser verification", () => {
     expect(textureResults[0]?.committed).toBe(true);
     const inheritedStyles = [...document.querySelectorAll<HTMLStyleElement>("style[data-vite-dev-id]")].map((style) => ({ style, disabled: style.disabled }));
     inheritedStyles.forEach(({ style }) => { style.disabled = true; });
-    installStyles("react-inspector-styles", [ReactWorkbenchStyles, ReactInspectorStyles]);
+    installStyles("react-inspector-styles", framework === "React" ? [ReactWorkbenchStyles, ReactInspectorStyles] : [VueWorkbenchStyles, VueInspectorStyles]);
     const host = createHost();
-    const root = createRoot(host);
-    root.render(<EditorWorkbench editor={editor} loader={new ThreeGltfLoaderAdapter()} />);
+    const unmount = mountInspectorHost(host, editor, framework, new ThreeGltfLoaderAdapter());
     const restoreDownloads = installDownloadCapture();
     cleanup = () => {
-      root.unmount();
+      unmount();
       editor.dispose();
       removeStyles("react-inspector-styles");
       inheritedStyles.forEach(({ style, disabled }) => { style.disabled = disabled; });
@@ -790,12 +789,15 @@ describe("proof-loop starter demo browser verification", () => {
         expect(x.right).toBeLessThanOrEqual(y.left);
         expect(y.right).toBeLessThanOrEqual(z.left);
         expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+        if (framework === "Vue" && import.meta.env.VITE_CAPTURE_INSPECTOR) await page.screenshot({ path: `__screenshots__/vue-inspector/object-${width}.png` });
       }
       await openInspectorGroup(host, "Environment");
       expect(findFieldInput(inspector, "Lighting asset", "select")!.getClientRects().length).toBeGreaterThan(0);
       await openInspectorGroup(host, "Scene");
       expect(inspector.querySelector('[aria-label="Add light"]')!.getClientRects().length).toBeGreaterThan(0);
       await openInspectorGroup(host, "Properties");
+      expect(slot().checked).toBe(true);
+      await verifyInspectorLocale(host, editor, "不透明度", "0.6");
       expect(slot().checked).toBe(true);
       const saved = editor.getSnapshot();
       await clickByText(host, "Export");
@@ -818,17 +820,16 @@ describe("proof-loop starter demo browser verification", () => {
     }
   }, 20000);
 
-  it("saves and restores React environment, lights and default camera through the host", async () => {
+  it.each(["React", "Vue"] as const)("saves and restores %s environment, lights and default camera through the host", async (framework) => {
     const originalSize = { width: window.innerWidth, height: window.innerHeight };
     const editor = createEditor();
     const inheritedStyles = [...document.querySelectorAll<HTMLStyleElement>("style[data-vite-dev-id]")].map((style) => ({ style, disabled: style.disabled }));
     inheritedStyles.forEach(({ style }) => { style.disabled = true; });
-    installStyles("react-scene-styles", [ReactWorkbenchStyles, ReactInspectorStyles]);
+    installStyles("react-scene-styles", framework === "React" ? [ReactWorkbenchStyles, ReactInspectorStyles] : [VueWorkbenchStyles, VueInspectorStyles]);
     const host = createHost();
-    const root = createRoot(host);
-    root.render(<EditorWorkbench editor={editor} />);
+    const unmount = mountInspectorHost(host, editor, framework);
     const restoreDownloads = installDownloadCapture();
-    cleanup = () => { root.unmount(); editor.dispose(); removeStyles("react-scene-styles"); inheritedStyles.forEach(({ style, disabled }) => { style.disabled = disabled; }); restoreDownloads(); };
+    cleanup = () => { unmount(); editor.dispose(); removeStyles("react-scene-styles"); inheritedStyles.forEach(({ style, disabled }) => { style.disabled = disabled; }); restoreDownloads(); };
     try {
       await page.viewport(1440, 900);
       await waitFor(() => expect(editor.getRuntime()).toBeTruthy());
@@ -856,6 +857,7 @@ describe("proof-loop starter demo browser verification", () => {
         expect(input("Lighting rotation X").getBoundingClientRect().top).toBe(input("Lighting rotation Z").getBoundingClientRect().top);
         expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
         expect(inspector.getBoundingClientRect().bottom).toBeLessThanOrEqual(height);
+        if (framework === "Vue" && import.meta.env.VITE_CAPTURE_INSPECTOR) await page.screenshot({ path: `__screenshots__/vue-inspector/environment-${width}.png` });
       }
       await openInspectorGroup(host, "Scene");
       await userEvent.selectOptions(inspector.querySelector('[aria-label="Add light"]') as HTMLSelectElement, "directional");
@@ -880,6 +882,7 @@ describe("proof-loop starter demo browser verification", () => {
         input("FOV").scrollIntoView({ block: "center" });
         await waitForAnimationFrame();
         expect(input("Position X").getBoundingClientRect().top).toBe(input("Position Z").getBoundingClientRect().top);
+        if (framework === "Vue" && import.meta.env.VITE_CAPTURE_INSPECTOR) await page.screenshot({ path: `__screenshots__/vue-inspector/scene-${width}.png` });
       }
       const saved = editor.getSnapshot();
       expect(saved.lights[lightId].intensity).toBe(3);
@@ -888,6 +891,7 @@ describe("proof-loop starter demo browser verification", () => {
       expect(view.projection.fov).toBe(38);
       await openInspectorGroup(host, "Properties");
       expect(input("FOV").value).toBe("38");
+      await verifyInspectorLocale(host, editor, "视场角", "38");
       await clickByText(host, "Export");
       await waitForDownloadedProject();
       await userEvent.fill(input("FOV"), "60");
@@ -1281,9 +1285,47 @@ async function findReadyCanvas(viewport: HTMLElement): Promise<HTMLCanvasElement
   return canvas!;
 }
 
+async function verifyInspectorLocale(host: HTMLElement, editor: ReturnType<typeof createEditor>, label: string, value: string): Promise<void> {
+  const snapshot = editor.getSnapshot();
+  const history = editor.getHistoryState();
+  const runtime = editor.getRuntime();
+  const canvas = host.querySelector("canvas");
+  const menu = host.querySelector(".ek-workbench__project-menu");
+  if (menu) await clickByText(host, "Project menu");
+  await userEvent.selectOptions(section(host, "Language") as HTMLSelectElement, "zh-CN");
+  if (menu) await userEvent.keyboard("{Escape}");
+  const field = findFieldInput(host, label, "input") as HTMLInputElement;
+  expect(field.value).toBe(value);
+  expect(field.checkVisibility()).toBe(true);
+  field.scrollIntoView({ block: "center" });
+  if (import.meta.env.VITE_CAPTURE_INSPECTOR && !menu) await page.screenshot({ path: `__screenshots__/vue-inspector/${label === "视场角" ? "camera" : "material"}-zh-CN.png` });
+  await userEvent.fill(field, value === "38" ? "42" : "0.4");
+  await userEvent.keyboard("{Enter}{Tab}");
+  await clickByText(host, "撤销");
+  expect(editor.getSnapshot()).toEqual(snapshot);
+  expect(editor.getHistoryState().undoCount).toBe(history.undoCount);
+  expect(editor.getRuntime()).toBe(runtime);
+  expect(host.querySelector("canvas")).toBe(canvas);
+  if (menu) await clickByText(host, "项目菜单");
+  await userEvent.selectOptions(section(host, "语言") as HTMLSelectElement, "en");
+  if (menu) await userEvent.keyboard("{Escape}");
+}
+
+function mountInspectorHost(host: HTMLElement, editor: ReturnType<typeof createEditor>, framework: "React" | "Vue", loader?: ThreeGltfLoaderAdapter): () => void {
+  if (framework === "Vue") {
+    const app = createApp(VueEditorWorkbench, { editor: markRaw(editor), loader });
+    app.mount(host);
+    return () => app.unmount();
+  }
+  const root = createRoot(host);
+  root.render(<EditorWorkbench editor={editor} loader={loader} />);
+  return () => root.unmount();
+}
+
 async function openInspectorGroup(host: HTMLElement, label: string): Promise<void> {
   const tab = [...host.querySelectorAll<HTMLButtonElement>(".ek-inspector [role=tab]")].find((candidate) => text(candidate) === label);
-  if (tab) await userEvent.click(tab);
+  expect(tab, `Expected Inspector group ${label}`).toBeTruthy();
+  await userEvent.click(tab!);
 }
 
 async function clickByText(host: HTMLElement, label: string): Promise<void> {

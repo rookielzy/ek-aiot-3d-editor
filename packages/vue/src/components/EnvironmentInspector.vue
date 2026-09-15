@@ -16,52 +16,11 @@
       </button>
     </div>
     <p v-if="fieldProblem && !fieldProblem.fieldId" class="ek-inspector-warning" role="alert">{{ renderProblemMessage(resolvedI18n, fieldProblem) }}</p>
-    <div class="ek-inspector-grid">
-      <label v-for="field in section.fields" :key="field.id" class="ek-inspector-field">
-        <span>{{ renderFieldLabel(resolvedI18n, field) }}</span>
-        <input
-          v-if="field.kind === 'number'"
-          :value="field.value"
-          :disabled="field.disabled"
-          type="number"
-          :min="field.min"
-          :max="field.max"
-          :step="field.step ?? 0.01"
-          :aria-invalid="fieldProblem?.fieldId === field.id ? true : undefined"
-          :aria-describedby="activeProblem(field)?.message ? problemId(field.id) : undefined"
-          @blur="commit(field.id as EnvironmentFieldId, ($event.target as HTMLInputElement).value)"
-          @keydown.enter.prevent="blurOnEnter"
-        />
-        <input
-          v-else-if="field.kind === 'color'"
-          :value="field.value"
-          :disabled="field.disabled"
-          type="color"
-          :aria-invalid="fieldProblem?.fieldId === field.id ? true : undefined"
-          :aria-describedby="activeProblem(field)?.message ? problemId(field.id) : undefined"
-          @change="commit(field.id as EnvironmentFieldId, ($event.target as HTMLInputElement).value)"
-        />
-        <select
-          v-else
-          :value="String(field.value)"
-          :disabled="field.disabled"
-          :aria-invalid="fieldProblem?.fieldId === field.id ? true : undefined"
-          :aria-describedby="activeProblem(field)?.message ? problemId(field.id) : undefined"
-          @change="commit(field.id as EnvironmentFieldId, ($event.target as HTMLSelectElement).value)"
-        >
-          <option v-if="field.kind === 'asset'" value="">{{ resolvedI18n.t("reactWorkbench.inspector.field.asset.none") }}</option>
-          <option v-for="option in field.options ?? []" :key="option.value" :value="option.value">{{ renderOptionLabel(resolvedI18n, option) }}</option>
-        </select>
-        <small
-          v-if="activeProblem(field)"
-          :id="problemId(field.id)"
-          class="ek-inspector-field-problem"
-          :role="fieldProblem?.fieldId === field.id ? 'alert' : undefined"
-        >
-          {{ renderActiveProblem(field) }}
-        </small>
-      </label>
-    </div>
+    <details v-for="group in ['lighting', 'background'] as const" :key="group" class="ek-inspector-fold" open>
+      <summary>{{ resolvedI18n.t(`reactWorkbench.inspector.sceneFields.${group}`) }}</summary>
+      <SceneInspectorFields :fields="section.fields.filter((field) => group === 'lighting' ? !field.id.startsWith('background.') : field.id.startsWith('background.'))"
+        :problem="fieldProblem" :i18n="resolvedI18n" :on-commit="(fieldId, value) => commit(fieldId as EnvironmentFieldId, value)" />
+    </details>
   </section>
 </template>
 
@@ -73,18 +32,17 @@ import {
   type Editor,
   type EnvironmentFieldId,
   type InspectorCommandProblem,
-  type InspectorFieldDescriptor,
   type InspectorSection,
   type SceneSnapshot
 } from "@ek-aiot/3d-editor-core";
 import {
   DEFAULT_INSPECTOR_I18N,
-  renderFieldLabel,
-  renderOptionLabel,
   renderProblemMessage,
   renderSectionTitle,
   type InspectorI18n
 } from "./inspector-i18n";
+
+import SceneInspectorFields from "./SceneInspectorFields.vue";
 
 const props = defineProps<{
   editor: Editor;
@@ -96,20 +54,21 @@ const props = defineProps<{
 const resolvedI18n = computed(() => props.i18n ?? DEFAULT_INSPECTOR_I18N);
 const fieldProblem = ref<InspectorCommandProblem | null>(null);
 
-function commit(fieldId: EnvironmentFieldId, value: string) {
-  if (value === "" && fieldId.endsWith("assetId")) {
-    return;
-  }
+function commit(fieldId: EnvironmentFieldId, value: string): boolean {
+  const clearSource = value === "" && (fieldId === "lighting.source.assetId" || fieldId === "background.source.assetId");
+  const commandField = clearSource ? fieldId === "lighting.source.assetId" ? "lighting.source.kind" : "background.source.kind" : fieldId;
   fieldProblem.value = null;
-  const result = buildSetEnvironmentCommand(props.snapshot, fieldId, value);
+  const result = buildSetEnvironmentCommand(props.editor.getSnapshot(), commandField, clearSource ? "none" : value);
   if (result.ok) {
     const dispatch = props.editor.dispatch(result.command);
     if (!dispatch.ok) {
       fieldProblem.value = { code: "inspector-environment-dispatch-failed", fieldId, ...environmentProblemMessage("reactWorkbench.inspector.environment.editFailed.message", dispatch.error), severity: "warning" };
     }
+    return dispatch.ok;
   } else {
     fieldProblem.value = result.problem;
   }
+  return false;
 }
 
 function runAction(actionId: string) {
@@ -123,23 +82,6 @@ function runAction(actionId: string) {
   if (!dispatch.ok) {
     fieldProblem.value = { code: "inspector-environment-dispatch-failed", ...environmentProblemMessage("reactWorkbench.inspector.environment.presetFailed.message", dispatch.error), severity: "warning" };
   }
-}
-
-function activeProblem(field: InspectorFieldDescriptor): InspectorCommandProblem | undefined {
-  return fieldProblem.value?.fieldId === field.id ? fieldProblem.value : field.problem;
-}
-
-function renderActiveProblem(field: InspectorFieldDescriptor): string {
-  const problem = activeProblem(field);
-  return problem ? renderProblemMessage(resolvedI18n.value, problem) : "";
-}
-
-function blurOnEnter(event: KeyboardEvent) {
-  (event.currentTarget as HTMLInputElement).blur();
-}
-
-function problemId(fieldId: string): string {
-  return `ek-environment-${fieldId.replace(/[^a-z0-9_-]/gi, "-")}-problem`;
 }
 
 type EnvironmentProblemMessageKey =

@@ -195,7 +195,7 @@ describe("Vue EditorWorkbench", () => {
     expect((hierarchy.get('input[type="search"]').element as HTMLInputElement).value).toBe("");
     expect(importedButton().attributes("aria-pressed")).toBe("true");
     expect(wrapper.text()).toContain(`Selection ${imported.name}`);
-    expect(wrapper.findAll(".ek-inspector-section").find((section) => section.text().includes("Transform"))?.text()).toContain("Position X");
+    expect(wrapper.get('[aria-label="Position X"]').exists()).toBe(true);
     await wrapper.get('[title="Clear selection"]').trigger("click");
     expect(editor.getSnapshot().selection.nodeIds).toEqual([]);
     expect(importedButton().attributes("aria-pressed")).toBe("false");
@@ -819,12 +819,12 @@ describe("Vue EditorWorkbench", () => {
 
     await wrapper.findAll(".ek-workbench__tree-row").find((button) => button.text().includes("Robot arm"))!.trigger("click");
     await nextTick();
-    const positionLabel = wrapper.findAll("label").find((label) => label.text().includes("位置 X"));
+    const positionInput = wrapper.get('[aria-label="位置 X"]');
     const opacityLabel = wrapper.findAll("label").find((label) => label.text().includes("不透明度"));
-    if (!positionLabel || !opacityLabel) {
+    if (!positionInput.exists() || !opacityLabel) {
       throw new Error("Localized transform/material fields were not rendered");
     }
-    expect((positionLabel.find("input").element as HTMLInputElement).value).toBe("0");
+    expect((positionInput.element as HTMLInputElement).value).toBe("0");
     await opacityLabel.find("input").setValue("2");
     await opacityLabel.find("input").trigger("blur");
     await nextTick();
@@ -1002,7 +1002,7 @@ describe("Vue EditorWorkbench", () => {
     expect(editor.getSnapshot().selection.nodeId).toBe("object-a");
     expect(wrapper.text()).toContain("Selection Robot arm");
     const transformSection = wrapper.findAll(".ek-inspector-section").find((section) => section.text().includes("Transform"));
-    expect(transformSection?.text()).toContain("Position X");
+    expect(transformSection?.find('[aria-label="Position X"]').exists()).toBe(true);
     wrapper.unmount();
   });
 
@@ -1022,7 +1022,11 @@ describe("Vue EditorWorkbench", () => {
     editor.dispatch({ type: "select-node", nodeId: "object-a" });
     const slotId = getWorkbenchSlotIds(editor)[1]!;
     const wrapper = mount(EditorWorkbench, {
-      props: { editor, rendererFactory: fakeRenderer }
+      props: { editor, rendererFactory: fakeRenderer, locale: "en" },
+      slots: { toolbar: ({ editor: contextEditor, snapshot, dispatch }) => h("button", {
+        "data-inspector-host": snapshot.selection.nodeId,
+        onClick: () => dispatch({ type: "select-node", nodeId: "object-a" })
+      }, String(contextEditor === editor)) }
     });
 
     const screenTarget = wrapper.findAll(".ek-material-target-option").find((option) => option.text().includes("Screen"));
@@ -1035,6 +1039,26 @@ describe("Vue EditorWorkbench", () => {
     });
     expect(editor.getSnapshot().materials.assignments["object:object-a"]).toBeUndefined();
     expect(JSON.stringify(editor.getSnapshot())).not.toContain("ek-material-target");
+    const runtime = editor.getRuntime();
+    const snapshot = editor.getSnapshot();
+    const history = editor.getHistoryState();
+    await wrapper.get('.ek-workbench__locale-switcher select').setValue("zh-CN");
+    expect(wrapper.emitted("update:locale")?.at(-1)).toEqual(["zh-CN"]);
+    await wrapper.setProps({ locale: "zh-CN" });
+    expect(wrapper.findAll('[role="tab"]').map((tab) => tab.text())).toEqual(["属性", "环境", "场景"]);
+    expect((wrapper.findAll(".ek-material-target-option").find((option) => option.text().includes("Screen"))!.get("input").element as HTMLInputElement).checked).toBe(true);
+    expect(editor.getSnapshot()).toEqual(snapshot);
+    expect(editor.getHistoryState()).toEqual(history);
+    expect(editor.getRuntime()).toBe(runtime);
+    expect(wrapper.get('[data-inspector-host]').attributes("data-inspector-host")).toBe("object-a");
+    expect(wrapper.get('[data-inspector-host]').text()).toBe("true");
+    await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "环境")!.trigger("click");
+    expect(wrapper.get('[aria-label="灯光强度"]').exists()).toBe(true);
+    await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "属性")!.trigger("click");
+    await wrapper.setProps({ locale: "en" });
+    editor.undo();
+    await nextTick();
+    expect(editor.getSnapshot().materials.assignments[`material-slot:object-a:${slotId}`]).toBeUndefined();
     wrapper.unmount();
   });
 
@@ -1366,10 +1390,10 @@ describe("Vue EditorWorkbench", () => {
     await wrapper.setProps({ locale: "zh-CN", localeSwitcherDisabled: true, showLocaleSwitcher: true });
     await nextTick();
     await wrapper.findAll(".ek-workbench__tree-row").find((button) => button.text().includes("Pump A"))!.trigger("click");
-    const positionLabel = wrapper.findAll("label").find((label) => label.text().includes("位置 X"));
-    expect(positionLabel).toBeTruthy();
-    await positionLabel!.find("input").setValue("2");
-    await positionLabel!.find("input").trigger("blur");
+    const positionInput = wrapper.get('[aria-label="位置 X"]');
+    expect(positionInput.exists()).toBe(true);
+    await positionInput.setValue("2");
+    await positionInput.trigger("blur");
     const replacementFile = new File([new Uint8Array([10, 11, 12, 13])], "motor-control-panel.glb", { type: "model/gltf-binary" });
     await editor.replaceAsset({
       assetId: "asset-a",

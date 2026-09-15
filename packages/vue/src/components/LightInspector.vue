@@ -2,7 +2,7 @@
   <section class="ek-inspector-section">
     <header class="ek-inspector-section__header">
       <h2>{{ renderSectionTitle(resolvedI18n, section) }}</h2>
-      <select :aria-label="resolvedI18n.t('reactWorkbench.inspector.lights.add.label')" class="ek-inspector-inline-select" :value="addKind" @change="addLight(($event.target as HTMLSelectElement).value as LightKind)">
+      <select :aria-label="resolvedI18n.t('reactWorkbench.inspector.lights.add.label')" class="ek-inspector-inline-select" :value="addKind" @change="addKind = ($event.target as HTMLSelectElement).value; addLight(addKind as LightKind)">
         <option value="">{{ resolvedI18n.t("reactWorkbench.inspector.lights.add.option") }}</option>
         <option v-for="option in section.addOptions" :key="option.value" :value="option.value">{{ renderOptionLabel(resolvedI18n, option) }}</option>
       </select>
@@ -13,6 +13,7 @@
         :key="light.id"
         type="button"
         :class="{ 'is-active': light.active }"
+        :aria-pressed="light.active"
         :data-node-id="light.nodeId ?? undefined"
         :data-selected="light.selected ? 'true' : 'false'"
         @click="$emit('update:activeLightId', light.id)"
@@ -43,44 +44,20 @@
       </p>
     </div>
     <div v-if="section.activeLightId" class="ek-inspector-grid">
-      <label v-for="field in section.fields" :key="field.id" class="ek-inspector-field">
-        <span>{{ renderFieldLabel(resolvedI18n, field) }}</span>
-        <input
-          v-if="field.kind === 'number'"
-          :value="field.value"
-          type="number"
-          :min="field.min"
-          :max="field.max"
-          :step="field.step ?? 0.01"
-          :aria-invalid="fieldProblem?.fieldId === field.id ? true : undefined"
-          :aria-describedby="fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined"
-          @blur="commit(field.id as LightFieldId, ($event.target as HTMLInputElement).value)"
-          @keydown.enter.prevent="blurOnEnter"
-        />
-        <input v-else-if="field.kind === 'color'" :value="field.value" type="color" @change="commit(field.id as LightFieldId, ($event.target as HTMLInputElement).value)" />
-        <input
-          v-else-if="field.kind === 'checkbox'"
-          :checked="Boolean(field.value)"
-          type="checkbox"
-          @change="commit(field.id as LightFieldId, String(($event.target as HTMLInputElement).checked))"
-        />
-        <input
-          v-else
-          :value="field.value"
-          type="text"
-          :aria-invalid="fieldProblem?.fieldId === field.id ? true : undefined"
-          :aria-describedby="fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined"
-          @blur="commit(field.id as LightFieldId, ($event.target as HTMLInputElement).value)"
-        />
-        <small v-if="fieldProblem?.fieldId === field.id" :id="problemId(field.id)" class="ek-inspector-field-problem" role="alert">{{ renderProblemMessage(resolvedI18n, fieldProblem) }}</small>
-      </label>
+      <SceneInspectorFields :fields="section.fields.filter((field) => !field.id.startsWith('shadow.'))"
+        :target-key="section.activeLightId" :problem="fieldProblem" :i18n="resolvedI18n" :on-commit="(fieldId, value) => commit(fieldId as LightFieldId, value)" />
+      <details v-if="section.fields.some((field) => field.id.startsWith('shadow.'))" class="ek-inspector-fold" open>
+        <summary>{{ resolvedI18n.t('reactWorkbench.inspector.sceneFields.shadows') }}</summary>
+        <SceneInspectorFields :fields="section.fields.filter((field) => field.id.startsWith('shadow.'))"
+          :target-key="section.activeLightId" :problem="fieldProblem" :i18n="resolvedI18n" :on-commit="(fieldId, value) => commit(fieldId as LightFieldId, value)" />
+      </details>
       <button class="ek-inspector-danger" type="button" @click="removeActive">{{ resolvedI18n.t("reactWorkbench.inspector.lights.remove.label") }}</button>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import {
   buildAddLightCommand,
   buildRemoveLightCommand,
@@ -95,13 +72,14 @@ import {
 } from "@ek-aiot/3d-editor-core";
 import {
   DEFAULT_INSPECTOR_I18N,
-  renderFieldLabel,
   renderOptionLabel,
   renderProblemMessage,
   renderSectionReason,
   renderSectionTitle,
   type InspectorI18n
 } from "./inspector-i18n";
+
+import SceneInspectorFields from "./SceneInspectorFields.vue";
 
 const props = defineProps<{
   editor: Editor;
@@ -118,6 +96,8 @@ const addKind = ref("");
 const fieldProblem = ref<InspectorCommandProblem | null>(null);
 const resolvedI18n = computed(() => props.i18n ?? DEFAULT_INSPECTOR_I18N);
 
+watch(() => props.section.activeLightId, () => { fieldProblem.value = null; });
+
 function addLight(kind: LightKind | "") {
   if (!kind) {
     return;
@@ -125,6 +105,10 @@ function addLight(kind: LightKind | "") {
   const result = buildAddLightCommand(kind);
   if (result.ok) {
     const dispatch = props.editor.dispatch(result.command);
+    if (!dispatch.ok) {
+      fieldProblem.value = { code: "inspector-light-dispatch-failed", ...lightProblemMessage("reactWorkbench.inspector.lights.editFailed.message", dispatch.error), severity: "warning" };
+      return;
+    }
     emit("update:activeLightId", Object.keys(dispatch.snapshot.lights).at(-1) ?? null);
   }
   addKind.value = "";
@@ -143,21 +127,16 @@ function runAction(actionId: string) {
   }
 }
 
-function commit(fieldId: LightFieldId, value: string) {
-  if (!props.section.activeLightId) {
-    return;
-  }
-  const result = buildUpdateLightCommand(props.snapshot, props.section.activeLightId, fieldId, value);
-  if (result.ok) {
-    fieldProblem.value = null;
-    props.editor.dispatch(result.command);
-  } else {
+function commit(fieldId: LightFieldId, value: string): boolean {
+  if (!props.section.activeLightId) return false;
+  const result = buildUpdateLightCommand(props.editor.getSnapshot(), props.section.activeLightId, fieldId, value);
+  if (!result.ok) {
     fieldProblem.value = result.problem;
+    return false;
   }
-}
-
-function blurOnEnter(event: KeyboardEvent) {
-  (event.currentTarget as HTMLInputElement).blur();
+  const dispatch = props.editor.dispatch(result.command);
+  fieldProblem.value = dispatch.ok ? null : { code: "inspector-light-dispatch-failed", fieldId, ...lightProblemMessage("reactWorkbench.inspector.lights.editFailed.message", dispatch.error), severity: "warning" };
+  return dispatch.ok;
 }
 
 function removeActive() {
@@ -166,15 +145,14 @@ function removeActive() {
   }
   const result = buildRemoveLightCommand(props.snapshot, props.section.activeLightId);
   if (result.ok) {
-    props.editor.dispatch(result.command);
+    const dispatch = props.editor.dispatch(result.command);
+    fieldProblem.value = dispatch.ok ? null : { code: "inspector-light-dispatch-failed", ...lightProblemMessage("reactWorkbench.inspector.lights.editFailed.message", dispatch.error), severity: "warning" };
   }
 }
 
-function problemId(fieldId: string): string {
-  return `ek-light-${fieldId.replace(/[^a-z0-9_-]/gi, "-")}-problem`;
-}
-
 type LightProblemMessageKey =
+  | "reactWorkbench.inspector.lights.editFailed.message"
+  | "reactWorkbench.inspector.lights.editFailedDetail.message"
   | "reactWorkbench.inspector.lights.presetUnavailable.message"
   | "reactWorkbench.inspector.lights.presetUnavailableDetail.message"
   | "reactWorkbench.inspector.lights.presetFailed.message"
@@ -194,6 +172,9 @@ function lightProblemMessage(key: LightProblemMessageKey, detail?: string) {
 }
 
 function detailKey(key: LightProblemMessageKey): LightProblemMessageKey {
+  if (key === "reactWorkbench.inspector.lights.editFailed.message") {
+    return "reactWorkbench.inspector.lights.editFailedDetail.message";
+  }
   if (key === "reactWorkbench.inspector.lights.presetUnavailable.message") {
     return "reactWorkbench.inspector.lights.presetUnavailableDetail.message";
   }

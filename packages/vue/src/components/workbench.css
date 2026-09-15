@@ -839,7 +839,7 @@
   border-left: 0;
 }
 
-.ek-workbench button:not(.ek-workbench__command-button, .ek-workbench__nav-button, .ek-workbench__tree-row, .ek-workbench__tree-toggle, .ek-workbench__panel-toggles button) {
+.ek-workbench button:not(.ek-workbench__command-button, .ek-workbench__nav-button, .ek-workbench__tree-row, .ek-workbench__tree-toggle, .ek-workbench__panel-toggles button, .ek-inspector button) {
   min-width: 2.75rem;
   min-height: 2.75rem;
   max-width: 8.5rem;
@@ -854,13 +854,13 @@
   cursor: pointer;
 }
 
-.ek-workbench button:not(.ek-workbench__command-button, .ek-workbench__nav-button, .ek-workbench__tree-row, .ek-workbench__tree-toggle, .ek-workbench__panel-toggles button):disabled {
+.ek-workbench button:not(.ek-workbench__command-button, .ek-workbench__nav-button, .ek-workbench__tree-row, .ek-workbench__tree-toggle, .ek-workbench__panel-toggles button, .ek-inspector button):disabled {
   color: #8793a5;
   cursor: not-allowed;
   background: var(--ek-workbench-surface-inset);
 }
 
-.ek-workbench button:not(.ek-workbench__command-button, .ek-workbench__nav-button, .ek-workbench__tree-row, .ek-workbench__tree-toggle, .ek-workbench__panel-toggles button)[aria-pressed="true"] {
+.ek-workbench button:not(.ek-workbench__command-button, .ek-workbench__nav-button, .ek-workbench__tree-row, .ek-workbench__tree-toggle, .ek-workbench__panel-toggles button, .ek-inspector button)[aria-pressed="true"] {
   border-color: var(--ek-workbench-accent);
   background: var(--ek-workbench-accent-soft);
   color: var(--ek-workbench-accent-strong);
