@@ -92,6 +92,7 @@ import { computed, ref, useId, watch } from "vue";
 import {
   buildMaterialFieldsForTarget,
   buildSetMaterialCommand,
+  createMessageDescriptor,
   type Editor,
   type InspectorCommandProblem,
   type MaterialFieldId,
@@ -170,7 +171,15 @@ function commit(fieldId: MaterialFieldId, value: unknown): boolean {
   fieldProblem.value = null;
   const result = buildSetMaterialCommand(props.editor.getSnapshot(), fieldId, value, activeTarget.value);
   if (result.ok) {
-    props.editor.dispatch(result.command);
+    const dispatch = props.editor.dispatch(result.command);
+    if (!dispatch.ok) {
+      const messageDescriptor = createMessageDescriptor(dispatch.error ? {
+        key: "reactWorkbench.inspector.material.editFailedDetail.message",
+        fallback: "Material edit failed: {detail}", values: { detail: dispatch.error }
+      } : { key: "reactWorkbench.inspector.material.editFailed.message", fallback: "Material edit failed." });
+      fieldProblem.value = { code: "inspector-material-dispatch-failed", fieldId, message: resolvedI18n.value.t(messageDescriptor), messageDescriptor, severity: "warning" };
+    }
+    return dispatch.ok;
   } else {
     fieldProblem.value = result.problem;
   }

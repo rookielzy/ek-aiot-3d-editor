@@ -19,6 +19,34 @@ import { expectAuthoredValuesPresent, expectNoI18nDurableLeakage, expectNoRuntim
 import { decodeProjectPackageText, resolveProjectPackageBytes, seedI18nDurableEditor } from "../../test/i18n-durable-fixture";
 
 describe("Vue EditorWorkbench", () => {
+  it.each(["material", "camera"] as const)("reports a rejected %s edit, translates it and retries the same draft", async (kind) => {
+    const editor = markRaw(createEditor());
+    if (kind === "material") {
+      editor.dispatch({ type: "import-glb", objectId: "target", asset: { id: "asset" } });
+    } else {
+      editor.dispatch({ type: "create-camera-view", view: { id: "target" } });
+    }
+    editor.dispatch({ type: "select-node", nodeId: "target" });
+    const wrapper = mount(EditorWorkbench, { props: { editor, rendererFactory: fakeRenderer, locale: "en" } });
+    const field = kind === "camera" ? wrapper.get('[aria-label="FOV"]')
+      : wrapper.findAll("label").find((label) => label.text() === "Opacity")!.get("input");
+    const before = editor.getSnapshot();
+    // The host-supplied Editor command boundary can reject an otherwise valid draft.
+    vi.spyOn(editor, "dispatch").mockReturnValueOnce({ ok: false, snapshot: before, error: "Host rejected edit" });
+    await field.setValue(kind === "camera" ? "35" : "0.5");
+    await field.trigger("keydown", { key: "Enter" });
+    expect(editor.getSnapshot()).toEqual(before);
+    expect(field.attributes("aria-invalid")).toBe("true");
+    expect(wrapper.get('[role="alert"]').text()).toContain("Host rejected edit");
+    await wrapper.setProps({ locale: "zh-CN" });
+    expect(wrapper.get('[role="alert"]').text()).toContain(kind === "camera" ? "更新相机视图失败" : "材质编辑失败");
+    await field.trigger("keydown", { key: "Enter" });
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    if (kind === "camera") expect(editor.getSnapshot().cameras.target.projection.fov).toBe(35);
+    else expect(editor.getSnapshot().materials.definitions["material:object:target"].override.opacity).toBe(0.5);
+    wrapper.unmount();
+  });
+
   it("disables empty clipboard paste and refreshes it after scoped-slot copy", async () => {
     const editor = markRaw(createEditor());
     // Host implementations may inherit their operations instead of using own properties.

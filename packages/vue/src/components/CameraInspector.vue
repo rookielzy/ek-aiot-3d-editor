@@ -21,7 +21,7 @@
       </button>
     </div>
     <p v-else class="ek-inspector-empty">{{ renderSectionReason(resolvedI18n, section) }}</p>
-    <p v-if="problem" class="ek-inspector-warning" role="alert">{{ problem }}</p>
+    <p v-if="problem" class="ek-inspector-warning" role="alert">{{ renderProblemMessage(resolvedI18n, problem) }}</p>
     <div v-if="section.activeCameraViewId" class="ek-inspector-grid">
       <div class="ek-inspector-button-row">
         <button type="button" :disabled="!section.canApply" @click="applyActive">{{ resolvedI18n.t("reactWorkbench.inspector.camera.apply.label") }}</button>
@@ -45,6 +45,7 @@ import {
   buildSetDefaultCameraViewCommand,
   buildUpdateCameraViewCommand,
   getNextActiveCameraViewId,
+  createMessageDescriptor,
   type CameraInspectorSection,
   type CameraViewFieldId,
   type Editor,
@@ -75,7 +76,7 @@ const emit = defineEmits<{
 }>();
 
 const fieldProblem = ref<InspectorCommandProblem | null>(null);
-const problem = ref<string | null>(null);
+const problem = ref<Pick<InspectorCommandProblem, "message" | "messageDescriptor"> | null>(null);
 const activeView = computed(() => props.section.activeCameraViewId ? props.snapshot.cameras[props.section.activeCameraViewId] : null);
 const resolvedI18n = computed(() => props.i18n ?? DEFAULT_INSPECTOR_I18N);
 
@@ -90,7 +91,7 @@ function selectCameraView(viewId: string | null): void {
 function captureNewView(): void {
   const captured = props.camera?.capture({ name: nextCameraViewName(props.snapshot) });
   if (!captured) {
-    problem.value = resolvedI18n.value.t("reactWorkbench.inspector.camera.captureUnavailable.message");
+    problem.value = cameraProblemMessage("reactWorkbench.inspector.camera.captureUnavailable.message");
     return;
   }
   const view = buildCreateCameraViewInput(props.snapshot, captured);
@@ -101,10 +102,10 @@ function captureNewView(): void {
       selectCameraView(view?.id ?? null);
       problem.value = null;
     } else {
-      problem.value = dispatch.error ?? resolvedI18n.value.t("reactWorkbench.inspector.camera.createFailed.message");
+      problem.value = cameraProblemMessage("reactWorkbench.inspector.camera.createFailed.message", dispatch.error);
     }
   } else {
-    problem.value = renderProblemMessage(resolvedI18n.value, result.problem);
+    problem.value = result.problem;
   }
 }
 
@@ -114,7 +115,7 @@ function updateFromRuntime(): void {
   }
   const captured = props.camera?.capture({ name: activeView.value?.name });
   if (!captured) {
-    problem.value = resolvedI18n.value.t("reactWorkbench.inspector.camera.captureUnavailable.message");
+    problem.value = cameraProblemMessage("reactWorkbench.inspector.camera.captureUnavailable.message");
     return;
   }
   const { id: _id, name: _name, metadata: _metadata, ...patch } = captured;
@@ -123,12 +124,12 @@ function updateFromRuntime(): void {
     viewId: props.section.activeCameraViewId,
     patch
   });
-  problem.value = result.ok ? null : result.error ?? resolvedI18n.value.t("reactWorkbench.inspector.camera.updateFailed.message");
+  problem.value = result.ok ? null : cameraProblemMessage("reactWorkbench.inspector.camera.updateFailed.message", result.error);
 }
 
 function applyActive(): void {
   if (!activeView.value || !props.camera?.apply(activeView.value)) {
-    problem.value = resolvedI18n.value.t("reactWorkbench.inspector.camera.applyUnavailable.message");
+    problem.value = cameraProblemMessage("reactWorkbench.inspector.camera.applyUnavailable.message");
     return;
   }
   problem.value = null;
@@ -138,9 +139,9 @@ function setDefault(viewId: string | null): void {
   const result = buildSetDefaultCameraViewCommand(props.snapshot, viewId);
   if (result.ok) {
     const dispatch = props.editor.dispatch(result.command);
-    problem.value = dispatch.ok ? null : dispatch.error ?? resolvedI18n.value.t("reactWorkbench.inspector.camera.updateFailed.message");
+    problem.value = dispatch.ok ? null : cameraProblemMessage("reactWorkbench.inspector.camera.updateFailed.message", dispatch.error);
   } else {
-    problem.value = renderProblemMessage(resolvedI18n.value, result.problem);
+    problem.value = result.problem;
   }
 }
 
@@ -152,7 +153,7 @@ function commit(fieldId: CameraViewFieldId, value: string): boolean {
     return false;
   }
   const dispatch = props.editor.dispatch(result.command);
-  fieldProblem.value = dispatch.ok ? null : { code: "inspector-camera-dispatch-failed", fieldId, message: dispatch.error ?? resolvedI18n.value.t("reactWorkbench.inspector.camera.updateFailed.message"), severity: "warning" };
+  fieldProblem.value = dispatch.ok ? null : { code: "inspector-camera-dispatch-failed", fieldId, ...cameraProblemMessage("reactWorkbench.inspector.camera.updateFailed.message", dispatch.error), severity: "warning" };
   problem.value = null;
   return dispatch.ok;
 }
@@ -169,11 +170,29 @@ function removeActive(): void {
       selectCameraView(nextActiveViewId);
       problem.value = null;
     } else {
-      problem.value = dispatch.error ?? resolvedI18n.value.t("reactWorkbench.inspector.camera.updateFailed.message");
+      problem.value = cameraProblemMessage("reactWorkbench.inspector.camera.updateFailed.message", dispatch.error);
     }
   } else {
-    problem.value = renderProblemMessage(resolvedI18n.value, result.problem);
+    problem.value = result.problem;
   }
+}
+
+type CameraProblemMessageKey =
+  | "reactWorkbench.inspector.camera.captureUnavailable.message"
+  | "reactWorkbench.inspector.camera.applyUnavailable.message"
+  | "reactWorkbench.inspector.camera.createFailed.message"
+  | "reactWorkbench.inspector.camera.updateFailed.message";
+
+function cameraProblemMessage(key: CameraProblemMessageKey, detail?: string) {
+  const messageKey = detail && key === "reactWorkbench.inspector.camera.createFailed.message"
+    ? "reactWorkbench.inspector.camera.createFailedDetail.message"
+    : detail && key === "reactWorkbench.inspector.camera.updateFailed.message"
+      ? "reactWorkbench.inspector.camera.updateFailedDetail.message" : key;
+  const messageDescriptor = createMessageDescriptor({
+    key: messageKey, fallback: resolvedI18n.value.t(key) + (detail ? " {detail}" : ""),
+    ...(detail ? { values: { detail } } : {})
+  });
+  return { message: resolvedI18n.value.t(messageDescriptor), messageDescriptor };
 }
 
 function nextCameraViewName(snapshot: SceneSnapshot): string {
