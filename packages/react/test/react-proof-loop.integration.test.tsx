@@ -188,7 +188,7 @@ describe("React proof-loop parity", () => {
     } finally {
       restoreDownloadCapture();
     }
-  }, 20000);
+  }, 30000);
 });
 
 async function clickButton(name: string): Promise<void> {

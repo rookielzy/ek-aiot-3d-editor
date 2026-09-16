@@ -54,7 +54,7 @@ Snapshot 和 runtime 已有 HDR environment/background intent、资产解析和 
 
 ## 如何处理缺失资产？
 
-缺失资产不会删除对象或清空 asset reference。Runtime 会暴露 recoverable problem，React/Vue problem panel 可以让用户选择文件并调用 `editor.replaceAsset()`。
+缺失资产不会删除对象或清空 asset reference。Runtime 会暴露 recoverable problem；React/Vue 底部状态摘要可打开问题抽屉，抽屉显示来源和严重性，并允许用户选择文件调用 `editor.replaceAsset()`。关闭抽屉不会删除问题。
 
 ## 为什么有 `serialize()` 还需要 `exportProject()`？
 

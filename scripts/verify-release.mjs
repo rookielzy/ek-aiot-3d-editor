@@ -430,6 +430,21 @@ const reactProps: ReactEditorWorkbenchProps = {
   onLocaleChange(locale) {
     void locale;
   },
+  toolbar(context: ReactResolvedWorkbenchContext) {
+    return context.i18n.t(statusMessage);
+  },
+  leftPanel(context: ReactResolvedWorkbenchContext) {
+    return context.i18n.t(statusMessage);
+  },
+  sidePanel(context: ReactResolvedWorkbenchContext) {
+    return context.i18n.t(statusMessage);
+  },
+  viewportOverlay(context: ReactResolvedWorkbenchContext) {
+    return context.i18n.t(statusMessage);
+  },
+  rightPanel(context: ReactResolvedWorkbenchContext) {
+    return context.i18n.t(statusMessage);
+  },
   status(context: ReactResolvedWorkbenchContext) {
     return context.i18n.t(statusMessage);
   }
@@ -447,6 +462,21 @@ const vueEmits: EditorWorkbenchEmits = {
   "update:locale": [vueLocale]
 };
 const vueSlots: EditorWorkbenchSlots = {
+  toolbar(context) {
+    return context.i18n.t(statusMessage);
+  },
+  leftPanel(context) {
+    return context.i18n.t(statusMessage);
+  },
+  sidePanel(context) {
+    return context.i18n.t(statusMessage);
+  },
+  viewportOverlay(context) {
+    return context.i18n.t(statusMessage);
+  },
+  rightPanel(context) {
+    return context.i18n.t(statusMessage);
+  },
   status(context) {
     return context.i18n.t(statusMessage);
   }

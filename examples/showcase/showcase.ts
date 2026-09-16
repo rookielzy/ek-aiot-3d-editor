@@ -4,8 +4,8 @@ import {
   type AssetInput,
   type EditorRuntimeOptions
 } from "@ek-aiot/3d-editor-core";
-import modelUrl from "./showcase/ToyCar.glb?url";
-import environmentUrl from "./showcase/studio.hdr?url";
+import modelUrl from "./assets/ToyCar.glb?url";
+import environmentUrl from "./assets/studio.hdr?url";
 
 /** Demo-owned assets and authored state; the packages never call this bootstrap. */
 export async function createShowcaseEditor(loader: EditorRuntimeOptions["loader"], signal: AbortSignal) {

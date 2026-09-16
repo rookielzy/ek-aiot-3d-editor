@@ -1,49 +1,84 @@
 <template>
+  <main v-if="!editor" class="showcase-loading" role="status">
+    {{ loadingMessage }}
+    <button v-if="failed" type="button" @click="attempt += 1">{{ locale === "zh-CN" ? "重试" : "Retry" }}</button>
+  </main>
   <EditorWorkbench
+    v-else
     :editor="editor"
-    :loader="loader ?? demoLoader"
+    :loader="resolvedLoader"
     :renderer-factory="rendererFactory"
     :locale="locale"
+    :interactions="showcaseInteractions"
     viewport-class-name="starter-viewport"
-    @runtime-ready="runtimeReady = Boolean($event)"
-  >
-    <template #viewportOverlay="context">
-      <aside class="starter-overlay" data-testid="starter-overlay" aria-label="Starter host status">
-        <span>Host starter</span>
-        <strong>{{ context.model.project.sceneName }}</strong>
-        <small>
-          {{ context.model.project.objectCount }} objects · {{ context.model.project.assetCount }} assets · {{ formatProblems(context.runtimeProblems, context.model) }}
-        </small>
-        <small>Runtime {{ runtimeReady ? "ready" : "mounting" }} · Selection {{ context.model.selection.label }}</small>
-      </aside>
-    </template>
-  </EditorWorkbench>
+    @runtime-ready="handleRuntimeReady"
+  />
 </template>
 
 <script setup lang="ts">
 import {
+  resolveDefaultPresentationView,
+  type EditorRuntime,
   type EditorRuntimeOptions,
-  type Problem,
-  type WorkbenchModel
+  type EditorWithGlbImport
 } from "@ek-aiot/3d-editor-core";
-import { EditorWorkbench, useEditor, type WorkbenchLocale } from "@ek-aiot/3d-editor-vue";
-import { ref } from "vue";
+import { EditorWorkbench, type WorkbenchLocale } from "@ek-aiot/3d-editor-vue";
+import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
+import { createShowcaseEditor, showcaseInteractions } from "../../showcase/showcase";
 import { createDemoGltfLoader } from "./demo-gltf-loader";
 
-defineProps<{
+const props = defineProps<{
   locale?: WorkbenchLocale;
   loader?: EditorRuntimeOptions["loader"];
   rendererFactory?: EditorRuntimeOptions["rendererFactory"];
 }>();
 
-const { editor } = useEditor();
-const runtimeReady = ref(false);
+const editor = shallowRef<EditorWithGlbImport | null>(null);
+const failed = ref(false);
+const attempt = ref(0);
 const demoLoader = createDemoGltfLoader();
-
-function formatProblems(runtimeProblems: readonly Problem[], model: WorkbenchModel): string {
-  if (model.problems.totalCount === 0) {
-    return "no problems";
+const resolvedLoader = computed(() => props.loader ?? demoLoader);
+const loadingMessage = computed(() => {
+  if (failed.value) {
+    return props.locale === "zh-CN" ? "无法打开展示场景。" : "Unable to open the showcase.";
   }
-  return `${model.problems.totalCount} problems, ${runtimeProblems.length} runtime`;
+  return props.locale === "zh-CN" ? "正在打开工作室…" : "Opening the studio…";
+});
+let controller: AbortController | null = null;
+
+watch([resolvedLoader, attempt], async ([loader]) => {
+  controller?.abort();
+  controller = new AbortController();
+  const current = controller;
+  editor.value?.dispose();
+  editor.value = null;
+  failed.value = false;
+  try {
+    const created = await createShowcaseEditor(loader, current.signal);
+    if (current.signal.aborted) {
+      created.dispose();
+      return;
+    }
+    editor.value = created;
+  } catch {
+    if (!current.signal.aborted) {
+      failed.value = true;
+    }
+  }
+}, { immediate: true });
+
+onBeforeUnmount(() => {
+  controller?.abort();
+  editor.value?.dispose();
+});
+
+function handleRuntimeReady(runtime: EditorRuntime | null): void {
+  if (!runtime || !editor.value) {
+    return;
+  }
+  const view = resolveDefaultPresentationView(editor.value.getSnapshot());
+  if (view.status === "resolved") {
+    runtime.applyCameraView(view.view);
+  }
 }
 </script>

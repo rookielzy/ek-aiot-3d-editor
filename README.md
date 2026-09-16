@@ -12,7 +12,7 @@ The core contract now stores a versioned scene snapshot. Version 4 introduced a 
 - authored perspective camera views and the default presentation view pointer
 - richer framework-neutral problem metadata for validation, resolver, and runtime diagnostics
 
-The proof loop remains intentionally narrow, but the local React and Vue demos now expose it as an interactive workbench:
+The proof loop remains intentionally narrow, but the local React and Vue demos now expose the same authored Toy Car/HDR/light/default-camera showcase as an interactive workbench. The showcase belongs to the demo hosts; package-created editors remain empty:
 
 - import a GLB through a stable asset reference
 - select object, group, or light nodes through the shared hierarchy
@@ -52,9 +52,12 @@ The React and Vue package READMEs document the built-in `en` and `zh-CN` Workben
 
 - `pnpm dev:demo:react`: run the React proof-loop workbench locally.
 - `pnpm dev:demo:vue`: run the Vue proof-loop workbench locally.
+- `pnpm --filter @ek-aiot/react-proof-loop build` / `pnpm --filter @ek-aiot/vue-proof-loop build`: type/build the two showcase hosts.
 - `pnpm test:browser`: run headless Chromium browser tests for picking, transform controls, canvas smoke checks, and React/Vue demo checklist parity.
 
 Run `pnpm exec playwright install chromium` once before `pnpm test:browser` on a fresh machine. Linux CI images may also need Playwright's Chromium system dependencies installed.
+
+Demo-specific operation maps and asset notices are in [the React example](examples/react-proof-loop/README.md) and [the Vue example](examples/vue-proof-loop/README.md). Project/locale actions are in Project menu, viewport commands are grouped over the canvas, Scene/Assets/Project use the left navigation, Object/Environment/Scene use the right inspector, and the bottom problem summary opens a recoverable detail drawer.
 
 In each framework demo, the visible validation path is camera helper use, hierarchy or viewport node selection, transform/history, material inspector edit, node hierarchy operation, project export/reopen, and missing-asset replacement. The checklist is derived UI state; it is not written into snapshots or `.ek3d` packages.
 

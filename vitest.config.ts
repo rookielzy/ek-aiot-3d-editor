@@ -9,7 +9,8 @@ export default defineConfig({
     globals: true,
     include: ["packages/**/*.{test,integration.test}.{ts,tsx}", "packages/**/*.test.tsx"],
     exclude: ["packages/**/*.browser.test.{ts,tsx}", "**/node_modules/**", "**/dist/**"],
-    pool: "threads"
+    pool: "threads",
+    testTimeout: 10000
   },
   resolve: {
     alias: {

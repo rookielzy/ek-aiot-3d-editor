@@ -8,7 +8,7 @@ This package is experimental `0.x`. It tracks the current core package contract 
 
 `useInspector()` and `InspectorPanel` render the shared core inspector model for selected node transform availability, object/material fields, scene lighting/background/skybox source fields, selected light nodes, and runtime problems. Edits dispatch core commands on commit boundaries, so undo/redo remains owned by core history.
 
-`useWorkbench()` and `EditorWorkbench` compose the primitive pieces into a package-owned professional editor workbench: command bar, task-oriented left workspace, viewport, selection-first inspector, grouped status bar, and project/problem recovery surfaces. Pass an existing editor when the host owns editor lifetime; the workbench will not dispose it on unmount. If no editor is passed, the shell creates one and disposes it with the workbench.
+`useWorkbench()` and `EditorWorkbench` compose the primitive pieces into a package-owned professional editor workbench: narrow Scene/Assets/Project navigation and left workspace, central viewport tools, Object/Environment/Scene inspector groups, grouped status bar, and a problem drawer. Project open/export and locale controls live in Project menu; transform, snap, camera, helper, and node commands remain directly reachable over the viewport. Both side panels can be collapsed or resized by pointer or keyboard. Pass an existing editor when the host owns editor lifetime; the workbench will not dispose it on unmount. If no editor is passed, the shell creates one and disposes it with the workbench.
 
 ```tsx
 import { AssetResolverBridge } from "@ek-aiot/3d-editor-core";
@@ -35,7 +35,7 @@ function Workbench() {
 }
 ```
 
-Render-prop regions receive the core editor, current snapshot, inspector model, runtime problems, active light state, selected node/object/light IDs, advanced operation helpers, selection count, project import/export helpers, asset replacement, and a dispatch helper. Runtime options such as `resolver`, loader, and renderer factory are passed through to core runtime mounting; React shell code does not resolve assets or serialize runtime problems.
+Render-prop regions receive the core editor, current snapshot, inspector model, runtime problems, active light state, selected node/object/light IDs, advanced operation helpers, selection count, project import/export helpers, asset replacement, and a dispatch helper. The regions are `toolbar`, `leftPanel`, compatibility `sidePanel`, `viewportOverlay`, `rightPanel`, and `status`; `leftPanel` wins over `sidePanel`, and `showDefaultToolbar={false}` hides package tools without hiding a supplied host toolbar. Runtime options such as `resolver`, loader, and renderer factory are passed through to core runtime mounting; React shell code does not resolve assets or serialize runtime problems.
 
 ## Default Workbench Styling
 
@@ -78,12 +78,12 @@ function BilingualWorkbench() {
 }
 ```
 
-Use `locale` and `onLocaleChange` when the host owns the language setting. Use `defaultLocale="zh-CN"` for uncontrolled Workbench state that starts in Simplified Chinese. `showLocaleSwitcher={false}` hides the built-in switch, and `localeSwitcherDisabled={isSaving}` keeps it visible but disabled while host UI is busy.
+Use `locale` and `onLocaleChange` when the host owns the language setting. The built-in switch is in Project menu. Use `defaultLocale="zh-CN"` for uncontrolled Workbench state that starts in Simplified Chinese. `showLocaleSwitcher={false}` hides the built-in switch, and `localeSwitcherDisabled={isSaving}` keeps it visible but disabled while host UI is busy. Switching locale does not replace the editor/runtime or clear selection, history, or viewport state.
 
 Locale, switch visibility, switch disabled state, dictionaries, translated copy, and host `translate` callbacks are session or host UI state. Do not store them in `SceneSnapshot`, `.ek3d`, command history, asset records, or runtime metadata. Authored file names, asset labels, object names, and project metadata remain authored values; they are interpolated into messages and are not translated by default.
 
 `EditorWorkbench` installs shared shortcut handling on the workbench root and ignores editable controls. Copy, paste, duplicate, delete, group, ungroup, select all, and clear selection route through core `editor.operations`, so React does not duplicate node hierarchy, payload cleanup, or clipboard semantics.
 
-Problem panels expose file replacement for recoverable asset problems and pass the selected `File` to `editor.replaceAsset()` for the same asset ID. The React layer does not store files in snapshots and does not implement its own asset resolver, package validator, or runtime cleanup.
+The bottom status bar summarizes problems; Problem details opens the full drawer with severity, source, and file replacement for recoverable assets. Closing and reopening the drawer preserves the diagnostics. Replacement passes the selected `File` to `editor.replaceAsset()` for the same asset ID. The React layer does not store files in snapshots and does not implement its own asset resolver, package validator, or runtime cleanup.
 
 The workbench and inspector do not implement box selection, full asset libraries, texture upload queues, persisted layouts, schema-driven inspector plugins, GLB internal hierarchy editing, per-submesh material discovery, or hosted runtime publishing.

@@ -3,6 +3,8 @@
 任务：`.scratch/desktop-workbench-refresh/issues/10-vue-shell.md`。
 审查基点：用户确认的 `8ee1303`。前置任务 09 的交付与视觉依据见 [React 展示场景](REACT-SHOWCASE.md)，原型依据为 `a9ebc22` 的 reference 布局。
 
+> 本文记录任务 10 当时的空壳验收。任务 16 已将正式 Vue demo 切换为与 React 共用的可恢复展示场景；最新启动、截图和差异结论见 [双框架最终交付](PARITY-DELIVERY.md)。包级空 editor 契约保持不变。
+
 ## 交付范围
 
 Vue EditorWorkbench 默认壳采用相同的白色面板、浅灰视口、细分隔线和蓝色激活态。64px 导航独立于左面板，初始左右宽度为 272/320px，分别允许收放和鼠标调宽。分隔线支持 Home、End、左右箭头（每次 16px），ARIA 数值和 CSS 列宽使用同一约束结果。ResizeObserver 按宿主实际宽度保留中央视口预算，卸载时释放；宿主降低高度时状态栏和工具组仍可达。
@@ -21,7 +23,7 @@ Vue EditorWorkbench 默认壳采用相同的白色面板、浅灰视口、细分
 - overlay 保留宿主交互优先级。Vue 示例的纯信息卡移至视口底部且不拦截指针，宿主可点击 overlay 的行为另有浏览器回归。
 - locale/defaultLocale/translate/update:locale、隐藏和禁用语言切换器继续使用原有合约。新增壳层文案复用已同步的 en/zh-CN 字典键，无英文 fallback 补漏。
 - 导航、宽度、收放、菜单与 locale 是 UI/session 状态。切换后 editor、runtime、canvas、选中对象和 history 保持；不向 snapshot 添加字段，不改 Core schema。
-- 包与 Vue demo 仍可从空场景开始，不自动注入展示对象。截图中的 ToyCar、ambient light 和放大尺度都由验证脚本通过真实 UI 创建，不进入默认初始化。
+- 任务 10 当时的包与 Vue demo 均从空场景开始，截图中的 ToyCar、ambient light 和放大尺度由旧验证脚本通过真实 UI 创建。任务 16 后只有包默认仍为空；正式 demo 的共享展示初始化见最终交付文档。
 
 ## 验证入口
 
@@ -52,7 +54,7 @@ node scripts/verify-vue-shell.mjs http://127.0.0.1:5181/
 
 已查看原型 reference-1440 与 Vue 1440/1920 选中、1100 空态/中文/收起画面：主要区域、左右栏比例、白色面板、浅灰视口和蓝色激活保持；1100 下工具换行和恢复入口可达，页面无横向溢出。树行与深层表单仍是旧内容，项目工具暂留顶部，符合本切片保留旧能力的边界；不宣称已完成后续 Vue 全能力视觉迁移。
 
-截图使用已有 CC0 ToyCar，来源见 React [资产许可](../../../examples/react-proof-loop/public/SHOWCASE-LICENSES.md)。其 mesh 自带 0.0001 缩放，而通用 framing 保留最小距离，因此脚本通过 Scale XYZ 输入设置 70（与 React 展示宿主一致）再聚焦。本次未改变通用导入或相机算法。截图只添加普通 ambient light，未预置 React 展示场景的 HDR/镜头，因此材质照明并非任务 09 的最终展示效果；Vue 默认展示场景由后续任务交付。
+任务 10 的旧截图使用已有 CC0 ToyCar，来源见 React [资产许可](../../../examples/react-proof-loop/public/SHOWCASE-LICENSES.md)。其 mesh 自带 0.0001 缩放，而通用 framing 保留最小距离，因此旧脚本通过 Scale XYZ 输入设置 70 再聚焦，并只添加普通 ambient light，未预置 React 展示场景的 HDR/镜头。任务 16 已用共享 bootstrap、HDR、灯光和 authored camera 替代这条临时截图路径。
 
 ## 命令记录
 

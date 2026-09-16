@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { resolveDefaultPresentationView, type EditorRuntimeOptions, type EditorWithGlbImport } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench, type WorkbenchLocale } from "@ek-aiot/3d-editor-react";
 import { createDemoGltfLoader } from "./demo-gltf-loader";
-import { createShowcaseEditor, showcaseInteractions } from "./showcase";
+import { createShowcaseEditor, showcaseInteractions } from "../../showcase/showcase";
 
 const demoLoader = createDemoGltfLoader();
 

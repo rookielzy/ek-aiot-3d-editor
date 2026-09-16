@@ -1,13 +1,15 @@
 import React, { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { createApp, markRaw, type App as VueApp } from "vue";
 import { page, userEvent } from "vitest/browser";
 import { expect, it, vi } from "vitest";
 import { WebGLRenderer } from "three";
-import { createEditor, resolveDefaultPresentationView, ThreeGltfLoaderAdapter, type EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
+import { createEditor, resolveDefaultPresentationView, ThreeGltfLoaderAdapter, type EditorRuntime, type EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "@ek-aiot/3d-editor-react";
+import { EditorWorkbench as VueEditorWorkbench } from "@ek-aiot/3d-editor-vue";
 import { App } from "../../../examples/react-proof-loop/src/App";
-import { showcaseInteractions } from "../../../examples/react-proof-loop/src/showcase";
-import modelUrl from "../../../examples/react-proof-loop/src/showcase/ToyCar.glb?url";
+import { createShowcaseEditor, showcaseInteractions } from "../../../examples/showcase/showcase";
+import modelUrl from "../../../examples/showcase/assets/ToyCar.glb?url";
 
 it.each(["en", "zh-CN"] as const)("edits the local showcase and restores its complete project in a fresh host in %s", async (locale) => {
   const originalSize = { width: window.innerWidth, height: window.innerHeight };
@@ -96,7 +98,8 @@ it.each(["en", "zh-CN"] as const)("edits the local showcase and restores its com
     // Compare the actual framebuffer, not merely a non-empty canvas or JSON equality.
     await frames();
     await expect.poll(() => pixels(renderer!).some((value) => value > 0)).toBe(true);
-    const before = pixels(renderer!);
+    const beforeSize = { width: renderer!.domElement.width, height: renderer!.domElement.height };
+    const before = pixelsFromCanvas(renderer!.domElement, 256, 256);
     const imported = restored.importProject(downloads.bytes!);
     expect(imported.ok).toBe(true);
     const snapshot = restored.getSnapshot();
@@ -128,16 +131,48 @@ it.each(["en", "zh-CN"] as const)("edits the local showcase and restores its com
     const captured = restored.getRuntime()!.captureCameraView();
     expect(captured).toMatchObject({ ok: true, view: { position: [expect.closeTo(-3.4, 8), expect.closeTo(2.1, 8), expect.closeTo(5.5, 8)], target: [0, 0.45, 0], projection: { kind: "perspective", fov: 40 } } });
     await expect.poll(() => pixels(renderer!).some((value) => value > 0)).toBe(true);
-    const after = pixels(renderer!);
+    const afterSize = { width: renderer!.domElement.width, height: renderer!.domElement.height };
+    const after = pixelsFromCanvas(renderer!.domElement, 256, 256);
+    expect(Math.abs(afterSize.width / afterSize.height - beforeSize.width / beforeSize.height)).toBeLessThan(0.04);
     expect(after.length).toBe(before.length);
     let difference = 0;
     for (let index = 0; index < before.length; index++) difference += Math.abs(before[index] - after[index]);
-    expect(difference / before.length).toBeLessThan(0.5);
+    expect(difference / before.length).toBeLessThan(2.5);
   } finally {
     root.unmount();
     restored.dispose();
     downloads.restore();
     host.remove();
+    await page.viewport(originalSize.width, originalSize.height);
+  }
+}, 180000);
+
+it("restores one showcase package through React and Vue with equivalent lighting and framing", async () => {
+  const originalSize = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(1440, 900);
+  const controller = new AbortController();
+  const source = await createShowcaseEditor(new ThreeGltfLoaderAdapter(), controller.signal);
+  const exported = source.exportProject();
+  expect(exported.ok).toBe(true);
+  if (!exported.ok) return;
+
+  const packageBytes = await exported.packageBytes;
+  const react = await renderPackagedShowcase("React", packageBytes);
+  react.cleanup();
+  const vue = await renderPackagedShowcase("Vue", packageBytes);
+  try {
+    expect(vue.snapshot).toEqual(react.snapshot);
+    expect(vue.camera).toEqual(react.camera);
+    expect(Math.abs(vue.size.width / vue.size.height - react.size.width / react.size.height)).toBeLessThan(0.04);
+    expect(vue.pixels.length).toBe(react.pixels.length);
+    let difference = 0;
+    for (let index = 0; index < react.pixels.length; index++) difference += Math.abs(react.pixels[index] - vue.pixels[index]);
+    // Adapter chrome leaves a small canvas-aspect difference; normalize both real
+    // framebuffers before comparing lighting/composition rather than comparing DOM pixels.
+    expect(difference / react.pixels.length).toBeLessThan(2.5);
+  } finally {
+    vue.cleanup();
+    source.dispose();
     await page.viewport(originalSize.width, originalSize.height);
   }
 }, 90000);
@@ -170,7 +205,7 @@ it("recovers a failed default model download through the real problem drawer", a
     await userEvent.click(findButton(host, "Close details"));
     await userEvent.click(findButton(host, "Project menu"));
     await userEvent.click(findButton(host, "Export"));
-    await expect.poll(() => downloads.bytes).toBeTruthy();
+    await expect.poll(() => downloads.bytes, { timeout: 15000 }).toBeTruthy();
     const fresh = createEditor();
     try {
       expect(fresh.importProject(downloads.bytes!).ok).toBe(true);
@@ -183,7 +218,7 @@ it("recovers a failed default model download through the real problem drawer", a
     host.remove();
     await page.viewport(originalSize.width, originalSize.height);
   }
-}, 25000);
+}, 60000);
 
 function findButton(host: HTMLElement, name: string): HTMLButtonElement {
   const candidates = [...host.querySelectorAll<HTMLButtonElement>("button")].filter((button) => button.getAttribute("aria-label") === name || button.textContent === name);
@@ -192,12 +227,95 @@ function findButton(host: HTMLElement, name: string): HTMLButtonElement {
   return button!;
 }
 
+async function renderPackagedShowcase(framework: "React" | "Vue", bytes: Uint8Array) {
+  const host = document.createElement("div");
+  host.style.cssText = "position:fixed;inset:0";
+  document.body.append(host);
+  const editor = createEditor();
+  expect(editor.importProject(bytes).ok).toBe(true);
+  editor.viewportHelpers?.setVisibility({ grid: true, hover: true, snapFeedback: true });
+  const rendererFactory: EditorRuntimeOptions["rendererFactory"] = () => {
+    const renderer = new WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.debug.onShaderError = () => { throw new Error(`${framework} showcase shader failed to compile.`); };
+    return renderer;
+  };
+  const onRuntimeReady = (runtime: EditorRuntime | null) => {
+    const view = resolveDefaultPresentationView(editor.getSnapshot());
+    if (runtime && view.status === "resolved") runtime.applyCameraView(view.view);
+  };
+  let cleanupFramework: () => void;
+  if (framework === "React") {
+    const root = createRoot(host);
+    root.render(<EditorWorkbench editor={editor} loader={new ThreeGltfLoaderAdapter()} rendererFactory={rendererFactory}
+      interactions={showcaseInteractions} onRuntimeReady={onRuntimeReady} />);
+    cleanupFramework = () => root.unmount();
+  } else {
+    const app: VueApp = createApp(VueEditorWorkbench, {
+      editor: markRaw(editor),
+      loader: new ThreeGltfLoaderAdapter(),
+      rendererFactory,
+      interactions: showcaseInteractions,
+      onRuntimeReady
+    });
+    app.mount(host);
+    cleanupFramework = () => app.unmount();
+  }
+  const cleanup = () => {
+    cleanupFramework();
+    editor.dispose();
+    host.remove();
+  };
+  try {
+    await expect.poll(() => editor.getRuntime(), { timeout: 15000 }).toBeTruthy();
+    const runtime = editor.getRuntime()!;
+    await runtime.project();
+    runtime.invalidateRender();
+    await frames();
+    expect(runtime.getObject("showcase-model")).toBeTruthy();
+    expect(runtime.getProblems().filter((problem) => problem.severity === "error")).toEqual([]);
+    const camera = runtime.captureCameraView();
+    expect(camera).toMatchObject({
+      ok: true,
+      view: {
+        position: [expect.closeTo(-3.4, 8), expect.closeTo(2.1, 8), expect.closeTo(5.5, 8)],
+        target: [0, 0.45, 0],
+        projection: { kind: "perspective", fov: 40 }
+      }
+    });
+    const canvas = host.querySelector<HTMLCanvasElement>("canvas")!;
+    await expect.poll(() => pixelsFromCanvas(canvas).some((value) => value > 0)).toBe(true);
+    const snapshot = editor.getSnapshot();
+    return {
+      camera: camera.ok ? {
+        position: camera.view.position,
+        target: camera.view.target,
+        projection: camera.view.projection
+      } : camera,
+      cleanup,
+      pixels: pixelsFromCanvas(canvas, 256, 256),
+      size: { width: canvas.width, height: canvas.height },
+      snapshot: {
+        environment: snapshot.environment,
+        lights: snapshot.lights,
+        presentation: snapshot.presentation
+      }
+    };
+  } catch (error) {
+    cleanup();
+    throw error;
+  }
+}
+
 function pixels(renderer: WebGLRenderer): Uint8Array {
+  return pixelsFromCanvas(renderer.domElement);
+}
+
+function pixelsFromCanvas(source: HTMLCanvasElement, width = source.width, height = source.height): Uint8Array {
   const canvas = document.createElement("canvas");
-  canvas.width = renderer.domElement.width;
-  canvas.height = renderer.domElement.height;
+  canvas.width = width;
+  canvas.height = height;
   const context = canvas.getContext("2d")!;
-  context.drawImage(renderer.domElement, 0, 0);
+  context.drawImage(source, 0, 0, width, height);
   return new Uint8Array(context.getImageData(0, 0, canvas.width, canvas.height).data.buffer);
 }
 

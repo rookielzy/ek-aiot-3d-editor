@@ -11,7 +11,6 @@ import { EditorWorkbench } from "../src/components/EditorWorkbench";
 import { decodeArchiveJson, defaultArchiveAdapter } from "../../core/src/project/archive-adapter";
 import { EmptyHost } from "./support/EmptyHost";
 import ReactDemoStyles from "../../../examples/react-proof-loop/src/styles.css?raw";
-import VueProofLoopApp from "../../../examples/vue-proof-loop/src/App.vue";
 import VueDemoStyles from "../../../examples/vue-proof-loop/src/styles.css?raw";
 import ReactWorkbenchStyles from "../src/components/workbench.css?raw";
 import ReactInspectorStyles from "../src/components/inspector.css?raw";
@@ -204,7 +203,7 @@ describe("proof-loop starter demo browser verification", () => {
 
   it.each([
     { framework: "React", mount: mountReactEmptyHost },
-    { framework: "Vue", mount: mountVueDemo }
+    { framework: "Vue", mount: mountVueEmptyHost }
   ])("resizes and restores $framework panels across desktop sizes without replacing the canvas", async ({ mount }) => {
     const resizeErrors: string[] = [];
     const captureResizeError = (event: ErrorEvent) => {
@@ -1028,7 +1027,7 @@ describe("proof-loop starter demo browser verification", () => {
   }, 20000);
 
   it("drives the Vue starter through the package default workbench", async () => {
-    const root = mountVueDemo();
+    const root = mountVueEmptyHost();
     cleanup = root.cleanup;
 
     await verifyStarterFlow(root.host, { assertProfessionalUi: true });
@@ -1042,7 +1041,7 @@ describe("proof-loop starter demo browser verification", () => {
   }, 15000);
 
   it("keeps the Vue starter workbench usable in Simplified Chinese", async () => {
-    const root = mountVueDemo({ locale: "zh-CN" });
+    const root = mountVueEmptyHost({ locale: "zh-CN" });
     cleanup = root.cleanup;
 
     await verifyChineseWorkbenchLayout(root.host, { assertProfessionalUi: true, capturedName: "相机视图 1" });
@@ -1054,8 +1053,6 @@ async function verifyStarterFlow(host: HTMLElement, options: { assertProfessiona
   try {
     await waitFor(() => {
       expect(text(section(host, "Hierarchy"))).toContain("No scene nodes");
-      expect(text(testId(host, "starter-overlay"))).toContain("0 objects");
-      expect(text(testId(host, "starter-overlay"))).toContain("0 assets");
       expect(text(host)).toContain("Selection none");
     });
 
@@ -1074,8 +1071,6 @@ async function verifyStarterFlow(host: HTMLElement, options: { assertProfessiona
     await openLeftWorkspaceView(host, "Scene");
     await waitFor(() => {
       expect(text(section(host, "Hierarchy"))).toContain("simple-box");
-      expect(text(testId(host, "starter-overlay"))).toContain("1 objects");
-      expect(text(testId(host, "starter-overlay"))).toContain("1 assets");
     });
     await clickHierarchyRow(host, "simple-box");
     await waitFor(() => expect(text(host)).toContain("Selection simple-box"));
@@ -1151,7 +1146,6 @@ async function verifyStarterFlow(host: HTMLElement, options: { assertProfessiona
     await clickByText(host, "Duplicate");
     await openLeftWorkspaceView(host, "Project");
     await waitFor(() => expect(text(visibleSection(host, "Project"))).toContain("Objects2"));
-    expect(text(testId(host, "starter-overlay"))).toContain("2 objects");
     expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("Import assets");
   } finally {
     restoreDownloadCapture();
@@ -1161,7 +1155,6 @@ async function verifyStarterFlow(host: HTMLElement, options: { assertProfessiona
 async function verifyChineseWorkbenchLayout(host: HTMLElement, options: { assertProfessionalUi?: boolean; capturedName?: string } = {}): Promise<void> {
   await waitFor(() => {
     expect(text(section(host, "层级"))).toContain("没有场景节点");
-    expect(text(testId(host, "starter-overlay"))).toContain("0 objects");
     expect(text(section(host, "编辑器状态"))).toContain("选择 无");
   });
 
@@ -1227,15 +1220,23 @@ function mountReactEmptyHost(options: { locale?: "en" | "zh-CN"; nativeRuntime?:
   };
 }
 
-function mountVueDemo(options: { locale?: "en" | "zh-CN" } = {}): { host: HTMLElement; cleanup(): void } {
+function mountVueEmptyHost(options: { locale?: "en" | "zh-CN" } = {}): { host: HTMLElement; cleanup(): void } {
   installStyles("vue-demo-styles", [VueWorkbenchStyles, VueInspectorStyles, VueDemoStyles]);
   const host = createHost();
-  const app: VueApp = createApp(VueProofLoopApp, { loader: proofLoopLoader, rendererFactory: paintedRenderer, locale: options.locale });
+  const editor = markRaw(createEditor());
+  const app: VueApp = createApp(VueEditorWorkbench, {
+    editor,
+    loader: proofLoopLoader,
+    rendererFactory: paintedRenderer,
+    locale: options.locale,
+    viewportClassName: "starter-viewport"
+  });
   app.mount(host);
   return {
     host,
     cleanup() {
       app.unmount();
+      editor.dispose();
       removeStyles("vue-demo-styles");
     }
   };

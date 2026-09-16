@@ -33,6 +33,8 @@ pnpm test
 - Vue proof loop：`pnpm --filter @ek-aiot/vue-proof-loop dev`
 - Vanilla proof loop：`pnpm --filter @ek-aiot/vanilla-proof-loop dev`
 
+React/Vue 示例使用同一套本地 Toy Car、HDR、灯光和默认镜头展示场景；完整项目包可在两框架宿主间恢复。示例初始化不属于包默认值，裸 `useEditor()` / `EditorWorkbench` 仍为空。操作位置、宿主扩展区域、构建命令与资产来源见各自的 [`examples/react-proof-loop/README.md`](../examples/react-proof-loop/README.md) 和 [`examples/vue-proof-loop/README.md`](../examples/vue-proof-loop/README.md)。
+
 浏览器相关 runtime/demo 测试：
 
 ```bash
@@ -65,7 +67,7 @@ pnpm release:verify
 - React：`useEditor()`、`useEditorSnapshot()`、`useInspector()`、`useWorkbench()`、`EditorViewport`、`InspectorPanel`、`EditorWorkbench`。
 - Vue：`useEditor()`、`useInspector()`、`useWorkbench()`、`EditorViewport`、`InspectorPanel`、`EditorWorkbench`。
 - 双语 Workbench：React/Vue package docs 和集成指南覆盖默认 English、内置 `zh-CN`、locale prop / `v-model:locale`、switch 控制、host translate callback、render prop / scoped slot 的 `i18n`。locale/switch/dictionary/translated copy 属于宿主或 session UI state，不进入 Snapshot 或 `.ek3d`。
-- 本地 React/Vue proof-loop demo：提供交互 toolbar、Scene hierarchy、Camera views inspector、asset/problem surface 和派生 proof checklist，用于验证 camera view authoring、selection、transform、material inspector、history、hierarchy、project package 和缺失资产恢复流程。
+- 本地 React/Vue proof-loop demo：提供同一可恢复展示场景，以及 Project menu、视口工具组、Scene/Assets/Project 左栏、Object/Environment/Scene 右栏、状态摘要和问题抽屉，用于验证 camera view authoring、selection、transform、material inspector、history、hierarchy、project package 和缺失资产恢复流程。
 
 ## 当前工作流边界
 

@@ -18,8 +18,8 @@ React demo 冷启动载入本地 Toy Car、工作室 HDR、directional 主光、
 复现资源：
 
 ```sh
-python3 examples/react-proof-loop/src/showcase/generate-studio.py
-python3 examples/react-proof-loop/src/showcase/prepare-model.py /path/to/upstream/ToyCar.glb
+python3 examples/showcase/assets/generate-studio.py
+python3 examples/showcase/assets/prepare-model.py /path/to/upstream/ToyCar.glb
 ```
 
 | 文件 | SHA-256 |
@@ -29,7 +29,7 @@ python3 examples/react-proof-loop/src/showcase/prepare-model.py /path/to/upstrea
 
 ## 往返与 Core 缺口
 
-新增真实 App 浏览器闭环以 en / zh-CN 冷启动，整体模型位置编辑→撤销/重做→材质颜色→导入不同内容的 cool-studio.hdr 并切换环境来源、强度/旋转→灯光强度→完整导出→卸载旧宿主→新 editor、新 runtime 打开。核验新来源确实不同于初始 showcase-studio、全部载荷可导出、变换/材质/环境/灯光/defaultCameraId，并捕获实际相机和前后 WebGL canvas 像素；像素每通道平均绝对差阈值为 0.5（0–255）。测试使用同一视口、显式真实 GLTF loader、相同会话辅助显示配置；不向 snapshot 添加辅助显示字段。
+新增真实 App 浏览器闭环以 en / zh-CN 冷启动，整体模型位置编辑→撤销/重做→材质颜色→导入不同内容的 cool-studio.hdr 并切换环境来源、强度/旋转→灯光强度→完整导出→卸载旧宿主→新 editor、新 runtime 打开。核验新来源确实不同于初始 showcase-studio、全部载荷可导出、变换/材质/环境/灯光/defaultCameraId，并捕获实际相机和前后 WebGL canvas 像素。App 与 fresh host 的状态 chrome 可能令有效 canvas 宽高比有小幅差异，因此测试锁定宽高比差 `< 0.04`，把两张真实 framebuffer 统一缩放到 256×256 后要求每通道平均绝对差 `< 2.5`（0–255）。测试使用同一桌面视口、显式真实 GLTF loader、相同会话辅助显示配置；不向 snapshot 添加辅助显示字段。
 
 像素检查发现此前未被数据回归捕获的 Core 缺陷：scene imported target 与 owner 共用 runtime 根对象，重复投影时 imported base transform 把 owner 最新变换覆盖为首次值。新 runtime 的首次 base 来自最新 snapshot，于是恢复画面偏移。修复仅在投影和释放 imported target 时排除 owner 根对象的基准变换回写，不改 resolver/remap/schema。公开 editor/runtime 回归覆盖位移、旋转、缩放、撤销、重做、新 runtime 和删除 scene target；原子回归先红后绿，既有 descendant/base 恢复测试继续通过。
 
@@ -72,7 +72,7 @@ node scripts/verify-react-showcase.mjs http://127.0.0.1:5180/
 
 2026-09-14 人工对照结论：已并列查看原型 `reference-1440.png` 与正式 1440 默认画面，并查看正式 1100 默认/问题/深层灯光、1920 选中及中文环境页。白色主面板、细分隔线、蓝色激活、左右栏与中央视口的区域关系保持；1100 下工具自然换行且模型未被裁切，问题抽屉缩小 canvas 后仍可操作，深层阴影字段在右栏内部滚动。明确差异为车体替代头盔、正式项目菜单和全量层级/诊断比原型更密集；不把它宣称为原型逐像素复制。默认只显示轻网格，灯光辅助可由现有控件打开；照明来自可导出的 HDR 和场景灯光。这些截图可作为 Vue 同步依据。
 
-Vue 后续同步使用本目录 React 截图和同一 CC0 资产、场景/相机契约作为正式基线。相较原型，模型替换为许可明确的车体，保留全量导入层级和真实诊断；白色连续面板、64px 导航、左右内容区、浅灰视口、蓝色激活、顶部工具和底部状态沿用已交付壳。深层表单在右栏内部滚动，不以原型简化表单替代。
+Vue 最终同步与双框架项目包恢复证据见 [双框架最终交付](PARITY-DELIVERY.md)。两示例现在直接复用 `examples/showcase` 中的同一初始化代码、CC0 资产和场景/相机契约。
 
 ## 验证与审查
 

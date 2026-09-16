@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Group } from "three";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { h, markRaw, nextTick } from "vue";
 import { mount } from "@vue/test-utils";
 import { createEditor, AssetResolverBridge, resolveDefaultPresentationView, type RendererLike } from "@ek-aiot/3d-editor-core";
@@ -86,8 +86,33 @@ describe("Vue proof-loop parity", () => {
     vue.dispose();
   });
 
-  it("uses the package default workbench as the local starter proof", async () => {
+  it("keeps the package default workbench empty before a host supplies authored state", async () => {
+    const vue = useEditor();
+    const wrapper = mount(EditorWorkbench, {
+      props: {
+        editor: vue.editor,
+        rendererFactory: fakeRenderer,
+        loader: fakeLoader
+      }
+    });
+    await nextTick();
+
+    expect(wrapper.get('[aria-label="Hierarchy"]').text()).toContain("No scene nodes");
+    expect(vue.editor.getSnapshot().objects).toEqual({});
+    expect(vue.editor.getSnapshot().assets).toEqual({});
+
+    wrapper.unmount();
+    vue.dispose();
+  });
+
+  it("opens the demo-owned showcase with recoverable assets and presentation", async () => {
     const restoreDownloadCapture = installDownloadCapture();
+    const modelBytes = await readFile(resolve(repoRoot, "examples/showcase/assets/ToyCar.glb"));
+    const environmentBytes = await readFile(resolve(repoRoot, "examples/showcase/assets/studio.hdr"));
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      return new Response(url.includes("studio.hdr") ? environmentBytes : modelBytes);
+    });
     try {
       const wrapper = mount(VueProofLoopApp, {
         props: {
@@ -95,8 +120,8 @@ describe("Vue proof-loop parity", () => {
           loader: fakeLoader
         }
       });
-      await nextTick();
-      await nextTick();
+      await waitForVue(() => expect(wrapper.text()).toContain("Toy Car"));
+      await waitForVue(() => expect(wrapper.text()).toContain("Studio view"));
 
       const toolbar = wrapper.get('[aria-label="Editor controls"]');
       expect(buttonByText(toolbar, "Export").exists()).toBe(true);
@@ -105,9 +130,8 @@ describe("Vue proof-loop parity", () => {
 
       const projectPanel = wrapper.get('[aria-label="Project panel"]');
       const hierarchy = projectPanel.get('[aria-label="Hierarchy"]');
-      expect(hierarchy.text()).toContain("No scene nodes");
-      expect(wrapper.get('[data-testid="starter-overlay"]').text()).toContain("0 objects");
-      expect(wrapper.get('[data-testid="starter-overlay"]').text()).toContain("0 assets");
+      expect(hierarchy.text()).toContain("Toy Car");
+      expect(wrapper.text()).toContain("Assets2");
       expect(wrapper.text()).toContain("Selection none");
 
       await clickPanelTab(wrapper, "Assets");
@@ -115,8 +139,7 @@ describe("Vue proof-loop parity", () => {
       await uploadFile(importInput, await glbFixtureFile("simple-box.glb"));
       await clickPanelTab(wrapper, "Scene");
       await waitForVue(() => expect(hierarchy.text()).toContain("simple-box"));
-      expect(wrapper.get('[data-testid="starter-overlay"]').text()).toContain("1 objects");
-      expect(wrapper.get('[data-testid="starter-overlay"]').text()).toContain("1 assets");
+      expect(wrapper.text()).toContain("Assets3");
 
       const hierarchyRow = hierarchy.findAll("button").find((candidate) => candidate.text().includes("simple-box"));
       expect(hierarchyRow, "Expected hierarchy row for simple-box").toBeTruthy();
@@ -124,10 +147,8 @@ describe("Vue proof-loop parity", () => {
       await nextTick();
       await waitForVue(() => expect(wrapper.text()).toContain("Selection simple-box"));
 
-      await clickButton(wrapper, "Capture view");
-      await waitForVue(() => expect(wrapper.text()).toContain("Camera view 1"));
       await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Scene")!.trigger("click");
-      await clickButton(wrapper, "Set default");
+      await waitForVue(() => expect(wrapper.text()).toContain("Studio view"));
       expect(wrapper.text()).toContain("Default");
       await clickButton(wrapper, "Apply view");
 
@@ -152,8 +173,7 @@ describe("Vue proof-loop parity", () => {
 
       await clickButton(wrapper, "Duplicate");
       await clickPanelTab(wrapper, "Project");
-      await waitForVue(() => expect(projectPanel.text()).toContain("Objects2"));
-      expect(wrapper.get('[data-testid="starter-overlay"]').text()).toContain("2 objects");
+      await waitForVue(() => expect(projectPanel.text()).toContain("Objects3"));
 
       await clickButton(wrapper, "Export partial");
       await waitForVue(() => expect(wrapper.text()).toMatch(/Exported (partial )?project/));
@@ -165,16 +185,17 @@ describe("Vue proof-loop parity", () => {
       const openInput = toolbar.find('input[type="file"]');
       await uploadFile(openInput.element as HTMLInputElement, new File([copyBytes(bytes!)], "starter.ek3d", { type: "application/octet-stream" }));
       await waitForVue(() => expect(wrapper.text()).toContain("Opened starter.ek3d"));
-      await waitForVue(() => expect(wrapper.text()).toContain("Camera view 1"));
+      await waitForVue(() => expect(wrapper.text()).toContain("Studio view"));
       expect(wrapper.text()).toContain("Default");
-      expect(wrapper.get('[data-testid="starter-overlay"]').text()).toContain("2 objects");
+      expect(projectPanel.text()).toContain("Objects3");
       expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("Blob");
 
       wrapper.unmount();
     } finally {
+      fetchMock.mockRestore();
       restoreDownloadCapture();
     }
-  }, 10000);
+  }, 30000);
 });
 
 async function clickButton(wrapper: ReturnType<typeof mount>, text: string): Promise<void> {

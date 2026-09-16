@@ -1,0 +1,196 @@
+{
+  "url": "http://127.0.0.1:5181/",
+  "failures": [],
+  "records": [
+    {
+      "width": 1440,
+      "state": "default",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase-vue/1440-default.png",
+      "overflow": false,
+      "statusBottom": 900,
+      "height": 900,
+      "canvasWidth": 772,
+      "canvasHeight": 760
+    },
+    {
+      "width": 1440,
+      "state": "selected",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase-vue/1440-selected.png",
+      "overflow": false,
+      "statusBottom": 900,
+      "height": 900,
+      "canvasWidth": 772,
+      "canvasHeight": 760
+    },
+    {
+      "width": 1440,
+      "state": "collapsed",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase-vue/1440-collapsed.png",
+      "overflow": false,
+      "statusBottom": 900,
+      "height": 900,
+      "canvasWidth": 1376,
+      "canvasHeight": 760
+    },
+    {
+      "width": 1440,
+      "state": "problems",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase-vue/1440-problems.png",
+      "overflow": false,
+      "statusBottom": 900,
+      "height": 900,
+      "canvasWidth": 772,
+      "canvasHeight": 490
+    },
+    {
+      "width": 1440,
+      "state": "environment",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase-vue/1440-environment.png",
+      "overflow": false,
+      "statusBottom": 900,
+      "height": 900,
+      "canvasWidth": 772,
+      "canvasHeight": 760
+    },
+    {
+      "width": 1440,
+      "state": "deep-light",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase-vue/1440-deep-light.png",
+      "overflow": false,
+      "statusBottom": 900,
+      "height": 900,
+      "canvasWidth": 772,
+      "canvasHeight": 760
+    },
+    {
+      "width": 1920,
+      "state": "default",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase-vue/1920-default.png",
+      "overflow": false,
+      "statusBottom": 1080,
+      "height": 1080,
+      "canvasWidth": 1252,
+      "canvasHeight": 966
+    },
+    {
+      "width": 1920,
+      "state": "selected",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase-vue/1920-selected.png",
+      "overflow": false,
+      "statusBottom": 1080,
+      "height": 1080,
+      "canvasWidth": 1252,
+      "canvasHeight": 966
+    },
+    {
+      "width": 1920,
+      "state": "collapsed",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase-vue/1920-collapsed.png",
+      "overflow": false,
+      "statusBottom": 1080,
+      "height": 1080,
+      "canvasWidth": 1856,
+      "canvasHeight": 966
+    },
+    {
+      "width": 1920,
+      "state": "problems",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase-vue/1920-problems.png",
+      "overflow": false,
+      "statusBottom": 1080,
+      "height": 1080,
+      "canvasWidth": 1252,
+      "canvasHeight": 642
+    },
+    {
+      "width": 1920,
+      "state": "environment",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase-vue/1920-environment.png",
+      "overflow": false,
+      "statusBottom": 1080,
+      "height": 1080,
+      "canvasWidth": 1252,
+      "canvasHeight": 966
+    },
+    {
+      "width": 1920,
+      "state": "deep-light",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase-vue/1920-deep-light.png",
+      "overflow": false,
+      "statusBottom": 1080,
+      "height": 1080,
+      "canvasWidth": 1252,
+      "canvasHeight": 966
+    },
+    {
+      "width": 1100,
+      "state": "default",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase-vue/1100-default.png",
+      "overflow": false,
+      "statusBottom": 800,
+      "height": 800,
+      "canvasWidth": 432,
+      "canvasHeight": 660
+    },
+    {
+      "width": 1100,
+      "state": "selected",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase-vue/1100-selected.png",
+      "overflow": false,
+      "statusBottom": 800,
+      "height": 800,
+      "canvasWidth": 432,
+      "canvasHeight": 660
+    },
+    {
+      "width": 1100,
+      "state": "collapsed",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase-vue/1100-collapsed.png",
+      "overflow": false,
+      "statusBottom": 800,
+      "height": 800,
+      "canvasWidth": 1036,
+      "canvasHeight": 660
+    },
+    {
+      "width": 1100,
+      "state": "problems",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase-vue/1100-problems.png",
+      "overflow": false,
+      "statusBottom": 800,
+      "height": 800,
+      "canvasWidth": 432,
+      "canvasHeight": 420
+    },
+    {
+      "width": 1100,
+      "state": "environment",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase-vue/1100-environment.png",
+      "overflow": false,
+      "statusBottom": 800,
+      "height": 800,
+      "canvasWidth": 432,
+      "canvasHeight": 660
+    },
+    {
+      "width": 1100,
+      "state": "deep-light",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase-vue/1100-deep-light.png",
+      "overflow": false,
+      "statusBottom": 800,
+      "height": 800,
+      "canvasWidth": 432,
+      "canvasHeight": 660
+    },
+    {
+      "width": 1440,
+      "state": "zh-CN",
+      "path": "docs/design/desktop-workbench-refresh/screenshots/showcase-vue/1440-zh-CN.png",
+      "overflow": false,
+      "statusBottom": 900,
+      "height": 900,
+      "canvasWidth": 772,
+      "canvasHeight": 786
+    }
+  ]
+}

@@ -8,7 +8,7 @@ This package is experimental `0.x`. It tracks the current core package contract 
 
 `useInspector()` and `InspectorPanel` render the shared core inspector model for selected node transform availability, object/material fields, scene lighting/background/skybox source fields, selected light nodes, and runtime problems. Edits dispatch core commands on commit boundaries, while Vue only owns draft inputs and rendering lifecycle.
 
-`useWorkbench()` and `EditorWorkbench` compose the primitive pieces into a professional default editor workbench: command bar, task-oriented Scene/Assets/Project workspace, viewport, selection-first inspector, and grouped status chips. Pass a raw host-owned editor when the host owns editor lifetime; the workbench will not dispose it on unmount. If no editor is passed, the shell creates one and disposes it with the workbench. The composable keeps editor/runtime instances out of deep reactivity and exposes shallow snapshot/problem state.
+`useWorkbench()` and `EditorWorkbench` compose the primitive pieces into a professional default editor workbench: narrow Scene/Assets/Project navigation and left workspace, central viewport tools, Object/Environment/Scene inspector groups, grouped status chips, and a problem drawer. Project open/export and locale controls live in Project menu; transform, snap, camera, helper, and node commands remain directly reachable over the viewport. Both side panels can be collapsed or resized by pointer or keyboard. Pass a raw host-owned editor when the host owns editor lifetime; the workbench will not dispose it on unmount. If no editor is passed, the shell creates one and disposes it with the workbench. The composable keeps editor/runtime instances out of deep reactivity and exposes shallow snapshot/problem state.
 
 The default command bar uses a private icon layer backed by `@phosphor-icons/vue`. Consumers do not install icon packages, import icon components, or receive icon types through public props; icon rendering remains an implementation detail behind the Vue package surface.
 
@@ -36,7 +36,7 @@ const resolver = new AssetResolverBridge((asset) => asset.kind === "glb" ? { uri
 </script>
 ```
 
-Scoped slots receive the core editor, current snapshot, inspector model, runtime problems, active light state, selected node/object/light IDs, advanced operation helpers, selection count, project import/export helpers, asset replacement, and a dispatch helper. Runtime options such as `resolver`, loader, and renderer factory are passed through to core runtime mounting; Vue shell code does not resolve assets or serialize runtime problems.
+Scoped slots receive the core editor, current snapshot, inspector model, runtime problems, active light state, selected node/object/light IDs, advanced operation helpers, selection count, project import/export helpers, asset replacement, and a dispatch helper. The slots are `toolbar`, `leftPanel`, compatibility `sidePanel`, `viewportOverlay`, `rightPanel`, and `status`; `leftPanel` wins over `sidePanel`, and `show-default-toolbar="false"` hides package tools without hiding a supplied host toolbar. Runtime options such as `resolver`, loader, and renderer factory are passed through to core runtime mounting; Vue shell code does not resolve assets or serialize runtime problems.
 
 The package CSS exposes semantic `--ek-workbench-*` variables for surfaces, text, borders, accent, focus, spacing, radius, control height, and status tones. Hosts may override those variables after importing `@ek-aiot/3d-editor-vue/styles.css`; Vue does not require a host theme provider or third-party design system.
 
@@ -82,12 +82,12 @@ function onLocaleChange(nextLocale: WorkbenchLocale) {
 </script>
 ```
 
-Use `v-model:locale` or `:locale` plus `@update:locale` when the host owns the language setting. Use `default-locale="zh-CN"` for uncontrolled Workbench state that starts in Simplified Chinese. `:show-locale-switcher="false"` hides the built-in switch, and `:locale-switcher-disabled="isSaving"` keeps it visible but disabled while host UI is busy.
+Use `v-model:locale` or `:locale` plus `@update:locale` when the host owns the language setting. The built-in switch is in Project menu. Use `default-locale="zh-CN"` for uncontrolled Workbench state that starts in Simplified Chinese. `:show-locale-switcher="false"` hides the built-in switch, and `:locale-switcher-disabled="isSaving"` keeps it visible but disabled while host UI is busy. Switching locale does not replace the editor/runtime or clear selection, history, or viewport state.
 
 Locale, switch visibility, switch disabled state, dictionaries, translated copy, and host `translate` callbacks are session or host UI state. Do not store them in `SceneSnapshot`, `.ek3d`, command history, asset records, or runtime metadata. Pinia or another host store may keep language preference outside the editor snapshot. Authored file names, asset labels, object names, and project metadata remain authored values; they are interpolated into messages and are not translated by default.
 
 `EditorWorkbench` installs shared shortcut handling on the workbench root and ignores editable controls. Copy, paste, duplicate, delete, group, ungroup, select all, and clear selection route through core `editor.operations`, so Vue does not duplicate node hierarchy, payload cleanup, or clipboard semantics.
 
-Problem panels expose file replacement for recoverable asset problems and pass the selected `File` to `editor.replaceAsset()` for the same asset ID. The Vue layer does not store files in snapshots and does not implement its own asset resolver, package validator, or runtime cleanup.
+The bottom status bar summarizes problems; Problem details opens the full drawer with severity, source, and file replacement for recoverable assets. Closing and reopening the drawer preserves the diagnostics. Replacement passes the selected `File` to `editor.replaceAsset()` for the same asset ID. The Vue layer does not store files in snapshots and does not implement its own asset resolver, package validator, or runtime cleanup.
 
 The workbench and inspector do not implement box selection, full asset libraries, texture upload queues, persisted layouts, schema-driven inspector plugins, GLB internal hierarchy editing, per-submesh material discovery, or hosted runtime publishing.

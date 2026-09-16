@@ -1,6 +1,6 @@
 # 集成指南：Vue
 
-`@ek-aiot/3d-editor-vue` 是 `@ek-aiot/3d-editor-core` 的 Vue 适配层。默认路径是安装包、导入 CSS、渲染 `EditorWorkbench`，它会直接给出完整专业 editor shell：顶部 command bar、左侧 Scene/Assets/Project 工作区、中心 3D viewport、右侧 selection-first inspector/problems 面板和底部 grouped status chips。
+`@ek-aiot/3d-editor-vue` 是 `@ek-aiot/3d-editor-core` 的 Vue 适配层。默认路径是安装包、导入 CSS、渲染 `EditorWorkbench`，它会直接给出完整专业 editor shell：窄导航与左侧 Scene/Assets/Project 工作区、中心 3D viewport 和浮动工具组、右侧 Object/Environment/Scene inspector，以及底部状态摘要和可展开问题抽屉。
 
 ## 安装
 
@@ -56,7 +56,9 @@ if (!editor.getSnapshot().objects.box) {
 </script>
 ```
 
-不传 `toolbar`、`leftPanel`、`rightPanel` 或 `status` slot 时，Workbench 会使用 package-owned 默认 UI。默认 command bar 已包含 open/export、undo/redo、transform mode、snap、marquee selection 开关、grid/floor/axes/hover/bounds/snap guide helper、camera reset/frame、camera view capture/apply、copy/paste/duplicate/delete/group/ungroup/select controls；默认 viewport 开启 pointer picking，并保留左键拖拽给相机旋转。用户打开 command bar 的 `Marquee` 后才启用 viewport marquee selection。默认右侧 inspector 包含 summary 和 Camera views section，可以编辑 authored camera view、设置 default presentation view、删除 view，或把 view 应用回 transient editor camera。默认左侧工作区用 Scene、Assets、Project 三个视图组织 hierarchy、可批量导入的 asset workspace、project summary、project/runtime problems 和缺失资产恢复入口；active view、导入队列和恢复提示都是 Vue transient UI state。
+不传 `toolbar`、`leftPanel`、`rightPanel` 或 `status` slot 时，Workbench 会使用 package-owned 默认 UI。Open、完整/部分导出和语言切换位于 Project menu；undo/redo、transform、snap 和 marquee 直接位于视口上方，helpers、camera 与 node operations 使用相邻工具组。默认 viewport 开启 pointer picking，并保留左键拖拽给相机旋转。右侧 inspector 通过 Object、Environment、Scene 分组承载 selection、材质、环境、灯光和 camera views。左侧导航切换 Scene、Assets、Project，再次激活当前项会收放左栏；左右栏均可鼠标或键盘调宽。底部只显示摘要，Problem details 打开含 severity/source/恢复动作的抽屉，关闭抽屉不清除问题。
+
+宿主扩展区域为 `toolbar`、`leftPanel`、兼容 `sidePanel`、`viewportOverlay`、`rightPanel` 和 `status`。`leftPanel` 优先于 `sidePanel`；`show-default-toolbar="false"` 同时隐藏默认顶部及视口工具，但不隐藏宿主 `toolbar` slot。切换 locale、导航或抽屉只改变 session UI，不替换 editor/runtime、selection、history 或 canvas。
 
 ## 双语 Workbench UI
 
@@ -231,9 +233,10 @@ await context.assets.importFiles({
 
 ```bash
 pnpm --filter @ek-aiot/vue-proof-loop dev
+pnpm --filter @ek-aiot/vue-proof-loop build
 ```
 
-示例首屏就是可操作 workbench，不是 landing page。初始化时是干净空画布（无默认 seed 对象/资产）。示例代码只保留真实宿主通常需要拥有的部分：创建 editor、配置 loader、选择可选 renderer factory，以及一个很薄的 viewport overlay。toolbar、hierarchy、assets、project status、missing-asset recovery、inspector 和 status 都来自 `@ek-aiot/3d-editor-vue` 默认 Workbench。
+示例首屏就是可操作 workbench，不是 landing page。demo 宿主与 React 使用同一个共享 bootstrap，以本地 CC0 Toy Car、可编辑且可导出的 studio HDR、两盏场景灯和 authored default camera 初始化展示场景；完整 `.ek3d` 会携带 GLB/HDR payload，并可由 Vue 或 React 新宿主恢复相同照明与构图。初始化只存在于 demo，共享 bootstrap 位于 `examples/showcase`；包级 `useEditor()` 和未传 editor 的 `EditorWorkbench` 仍为空。来源、修改和许可证见 `examples/vue-proof-loop/public/SHOWCASE-LICENSES.md`，操作与启动说明见 `examples/vue-proof-loop/README.md`。
 
 默认 UI 可以完成 starter flow：从空场景导入 GLB、选择 hierarchy row、viewport picking 或打开 `Marquee` 后使用 marquee selection，capture/edit/default/apply authored camera view，编辑 Transform/Material inspector、在 expanded GLB 上选择 broad object 或 material slot target、切换 helper/snap/transform、undo/redo、duplicate、搜索/过滤资产、export partial package、通过 Open 重新载入 `.ek3d`、从左栏恢复缺失资产，以及对 registered GLB 执行 reimport。缺失资产恢复使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem；GLB reimport 使用 `context.assets.reimportGlbAsset()`，提交 replacement manifest 和 target remap，并在按钮反馈中显示 exact/remapped/new/unresolved summary。
 
