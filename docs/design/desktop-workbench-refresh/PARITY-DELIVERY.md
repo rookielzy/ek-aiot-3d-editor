@@ -12,10 +12,13 @@ CC0 studio HDR，写入同样的模型变换、HDR 环境、纯色背景、direc
 二进制 payload 仍只保留在项目资产 store。包本身从不调用这个 bootstrap，裸
 `useEditor()` / `EditorWorkbench` 的空态由 React/Vue 独立测试保留。
 
-完整 `.ek3d` 项目携带 GLB/HDR payload。浏览器回归将同一份包分别导入新 React
-和 Vue editor，使用 `resolveDefaultPresentationView()` 应用同一固定镜头，并核验：
+完整 `.ek3d` 项目携带 GLB/HDR payload。浏览器回归先在共享展示项目注册第二个 HDR
+来源，将环境切到该来源并把强度改为 1.4、Y 旋转改为 0.6，同时把 Key light 强度
+改为 2.5；随后只导出一份修改后的包，分别导入新 React 和 Vue editor。两端使用
+`resolveDefaultPresentationView()` 应用同一固定镜头，并核验：
 
-- environment、lights、presentation snapshot 完全相等；
+- 修改后的 environment、lights、presentation snapshot 完全相等，并显式断言新 HDR
+  assetId、环境强度/旋转和 Key light 强度；
 - 捕获相机 position/target/projection 完全相等；
 - 两套 runtime 均真实投影 `showcase-model` 且没有 error problem；
 - adapter chrome 导致原始 canvas 宽高比约有 `0.0336` 差异；统一缩放到

@@ -9,6 +9,7 @@ import { EditorWorkbench } from "@ek-aiot/3d-editor-react";
 import { EditorWorkbench as VueEditorWorkbench } from "@ek-aiot/3d-editor-vue";
 import { App } from "../../../examples/react-proof-loop/src/App";
 import { createShowcaseEditor, showcaseInteractions } from "../../../examples/showcase/showcase";
+import environmentUrl from "../../../examples/showcase/assets/studio.hdr?url";
 import modelUrl from "../../../examples/showcase/assets/ToyCar.glb?url";
 
 it.each(["en", "zh-CN"] as const)("edits the local showcase and restores its complete project in a fresh host in %s", async (locale) => {
@@ -152,6 +153,22 @@ it("restores one showcase package through React and Vue with equivalent lighting
   await page.viewport(1440, 900);
   const controller = new AbortController();
   const source = await createShowcaseEditor(new ThreeGltfLoaderAdapter(), controller.signal);
+  const environmentBytes = new Uint8Array(await (await fetch(environmentUrl)).arrayBuffer());
+  source.dispatch({
+    type: "register-asset",
+    asset: { id: "parity-studio", kind: "hdr", label: "Parity studio", source: environmentBytes }
+  });
+  source.dispatch({
+    type: "set-environment",
+    environment: {
+      lighting: {
+        source: { kind: "hdr", assetId: "parity-studio" },
+        intensity: 1.4,
+        rotation: { x: 0, y: 0.6, z: 0 }
+      }
+    }
+  });
+  source.dispatch({ type: "update-light", lightId: "showcase-key", patch: { intensity: 2.5 } });
   const exported = source.exportProject();
   expect(exported.ok).toBe(true);
   if (!exported.ok) return;
@@ -161,6 +178,12 @@ it("restores one showcase package through React and Vue with equivalent lighting
   react.cleanup();
   const vue = await renderPackagedShowcase("Vue", packageBytes);
   try {
+    expect(react.snapshot.environment.lighting).toEqual({
+      source: { kind: "hdr", assetId: "parity-studio" },
+      intensity: 1.4,
+      rotation: { x: 0, y: 0.6, z: 0 }
+    });
+    expect(react.snapshot.lights["showcase-key"].intensity).toBe(2.5);
     expect(vue.snapshot).toEqual(react.snapshot);
     expect(vue.camera).toEqual(react.camera);
     expect(Math.abs(vue.size.width / vue.size.height - react.size.width / react.size.height)).toBeLessThan(0.04);
