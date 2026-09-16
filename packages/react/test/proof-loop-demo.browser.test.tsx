@@ -913,7 +913,7 @@ describe("proof-loop starter demo browser verification", () => {
     } finally { await page.viewport(originalSize.width, originalSize.height); }
   }, 20000);
 
-  it("maintains React assets through native file inputs at desktop sizes", async () => {
+  it.each(["React", "Vue"] as const)("maintains %s assets through native file inputs at desktop sizes", async (framework) => {
     const originalSize = { width: window.innerWidth, height: window.innerHeight };
     const editor = createEditor();
     editor.dispatch({ type: "import-glb", objectId: "box", name: "Recovery box", asset: { id: "box-asset", label: "Missing box" } });
@@ -928,13 +928,32 @@ describe("proof-loop starter demo browser verification", () => {
     const bytes = await new GLTFExporter().parseAsync(scene, { binary: true }) as ArrayBuffer;
     geometry.dispose(); material.dispose();
     const modelFile = (name: string) => new File([bytes], name, { type: "model/gltf-binary" });
-    installStyles("react-assets-styles", [ReactWorkbenchStyles, ReactInspectorStyles]);
+    const styleId = `${framework.toLowerCase()}-assets-styles`;
+    installStyles(styleId, framework === "Vue"
+      ? [VueWorkbenchStyles, VueInspectorStyles]
+      : [ReactWorkbenchStyles, ReactInspectorStyles]);
     const host = createHost();
-    const root = createRoot(host);
     const loader = new ThreeGltfLoaderAdapter();
-    root.render(<EditorWorkbench editor={editor} loader={loader} />);
+    let setLocale: (locale: "en" | "zh-CN") => void;
+    let unmount: () => void;
+    if (framework === "Vue") {
+      const locale = ref<"en" | "zh-CN">("en");
+      const app = createApp({
+        setup() {
+          return () => h(VueEditorWorkbench, { editor: markRaw(editor), loader, locale: locale.value });
+        }
+      });
+      app.mount(host);
+      setLocale = (nextLocale) => { locale.value = nextLocale; };
+      unmount = () => app.unmount();
+    } else {
+      const root = createRoot(host);
+      root.render(<EditorWorkbench editor={editor} loader={loader} />);
+      setLocale = (locale) => root.render(<EditorWorkbench editor={editor} loader={loader} locale={locale} />);
+      unmount = () => root.unmount();
+    }
     cleanup = () => {
-      root.unmount(); editor.dispose(); removeStyles("react-assets-styles");
+      unmount(); editor.dispose(); removeStyles(styleId);
       inheritedStyles.forEach(({ style, disabled }) => { style.disabled = disabled; });
     };
     try {
@@ -948,6 +967,15 @@ describe("proof-loop starter demo browser verification", () => {
         expect(text(section(host, "Asset recovery status"))).toContain("Replaced with restored.glb");
         expect(editor.getRuntime()!.getObject("box")?.getObjectByName("RecoveryMesh")).toBeTruthy();
       });
+      await openLeftWorkspaceView(host, "Scene");
+      await clickHierarchyRow(host, "Recovery box");
+      await openInspectorGroup(host, "Properties");
+      const positionX = findFieldInput(host, "Position X", 'input[type="number"]') as HTMLInputElement | null;
+      expect(positionX, "Expected referenced object Position X input").toBeTruthy();
+      await userEvent.fill(positionX!, "2");
+      await userEvent.keyboard("{Enter}{Tab}");
+      await waitFor(() => expect(editor.getSnapshot().objects.box.transform.position[0]).toBe(2));
+      await openLeftWorkspaceView(host, "Assets");
       const runtime = editor.getRuntime();
       runtime!.frameAll();
       const canvas = host.querySelector("canvas");
@@ -989,7 +1017,7 @@ describe("proof-loop starter demo browser verification", () => {
           expect(section(host, "Editor status").getBoundingClientRect().bottom).toBeLessThanOrEqual(height);
         });
       }
-      root.render(<EditorWorkbench editor={editor} loader={loader} locale="zh-CN" />);
+      setLocale("zh-CN");
       await waitFor(() => expect(text(host)).toContain("已替换为 replaced.png"));
       expect(editor.getRuntime()).toBe(runtime);
       expect(host.querySelector("canvas")).toBe(canvas);

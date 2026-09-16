@@ -594,7 +594,137 @@ describe("Vue EditorWorkbench", () => {
 
     expect(wrapper.find('[aria-label="Asset import queue"]').text()).toContain("paint.png");
     expect(wrapper.find('[aria-label="Asset import queue"]').text()).toContain("Unsupported asset type");
-    expect(wrapper.find('[aria-label="Asset workspace rows"]').text()).toContain("texture");
+    expect(wrapper.find('[aria-label="Asset workspace rows"]').text()).toContain("Texture");
+    wrapper.unmount();
+  });
+
+  it("keeps every result in a batch larger than eight files", async () => {
+    const editor = markRaw(createEditor());
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer }
+    });
+    await openPanelView(wrapper, "Assets");
+    const input = wrapper.find('[aria-label="Import assets"]').element as HTMLInputElement;
+    const files = Array.from({ length: 10 }, (_, index) => new File(["unsupported"], `notes-${index}.txt`));
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: files
+    });
+
+    await wrapper.find('[aria-label="Import assets"]').trigger("change");
+    await waitForAssertion(() => {
+      expect(wrapper.findAll('[aria-label="Asset import queue"] li')).toHaveLength(10);
+    });
+    for (const file of files) {
+      expect(wrapper.find('[aria-label="Asset import queue"]').text()).toContain(file.name);
+    }
+    wrapper.unmount();
+  });
+
+  it("keeps same-name queue entries independent across imports in the same millisecond", async () => {
+    const editor = markRaw(createEditor());
+    const snapshot = editor.getSnapshot();
+    vi.spyOn(Date, "now").mockReturnValue(42);
+    const importWorkbenchAssets = vi.spyOn(editor, "importWorkbenchAssets")
+      .mockResolvedValueOnce([{
+        label: "same.png",
+        kind: "image",
+        status: "succeeded",
+        assetId: "first-image",
+        committed: true,
+        diagnostics: [],
+        snapshot
+      }])
+      .mockResolvedValueOnce([{
+        label: "same.png",
+        kind: "image",
+        status: "failed",
+        committed: false,
+        diagnostics: [{
+          id: "second-failed",
+          severity: "error",
+          code: "test-failure",
+          title: "Second import failed"
+        }],
+        snapshot
+      }]);
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer }
+    });
+    try {
+      await openPanelView(wrapper, "Assets");
+      const upload = async () => {
+        const input = wrapper.find('[aria-label="Import assets"]');
+        Object.defineProperty(input.element, "files", {
+          configurable: true,
+          value: [new File([new Uint8Array([1])], "same.png", { type: "image/png" })]
+        });
+        await input.trigger("change");
+        await flushPromises();
+      };
+
+      await upload();
+      expect(importWorkbenchAssets).toHaveBeenCalledTimes(1);
+      expect(wrapper.findAll('[aria-label="Asset import queue"] li[data-status="succeeded"]')).toHaveLength(1);
+      await upload();
+      expect(importWorkbenchAssets).toHaveBeenCalledTimes(2);
+      expect(wrapper.findAll('[aria-label="Asset import queue"] li[data-status="succeeded"]')).toHaveLength(1);
+      expect(wrapper.findAll('[aria-label="Asset import queue"] li[data-status="failed"]')).toHaveLength(1);
+    } finally {
+      vi.restoreAllMocks();
+      wrapper.unmount();
+    }
+  });
+
+  it("replaces an available image and retains feedback across filters", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "register-asset", asset: { id: "image-a", kind: "image", label: "Original image", source: new Uint8Array([1]) } });
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer }
+    });
+    await openPanelView(wrapper, "Assets");
+    const input = wrapper.find('[aria-label="Replace Original image"]').element as HTMLInputElement;
+    const file = new File([new Uint8Array([2, 3, 4])], "updated.png", { type: "image/png" });
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [file]
+    });
+
+    await wrapper.find('[aria-label="Replace Original image"]').trigger("change");
+    await waitForAssertion(() => {
+      expect(wrapper.find('[aria-label="Asset workspace rows"]').text()).toContain("Replaced with updated.png");
+    });
+    expect(editor.getAssetWorkspacePayloads().find((payload) => payload.assetId === "image-a")?.byteSize).toBe(3);
+    await wrapper.find('[aria-label="Search assets"]').setValue("no-match");
+    await wrapper.find('[aria-label="Search assets"]').setValue("");
+    expect(wrapper.find('[aria-label="Asset workspace rows"]').text()).toContain("Replaced with updated.png");
+    wrapper.unmount();
+  });
+
+  it("shows every referencing object and imports dropped rasters with the chosen intent", async () => {
+    const editor = markRaw(createEditor());
+    for (const name of ["Arm", "Body", "Wheel", "Cabin"]) {
+      editor.dispatch({ type: "import-glb", objectId: name, name, asset: { id: "shared", label: "Shared model" } });
+    }
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer }
+    });
+    await openPanelView(wrapper, "Assets");
+    const rows = wrapper.find('[aria-label="Asset workspace rows"]');
+    expect(rows.text()).toContain("4 refs");
+    for (const name of ["Arm", "Body", "Wheel", "Cabin"]) {
+      expect(rows.text()).toContain(name);
+    }
+
+    await wrapper.find('[aria-label="Raster intent"]').setValue("image");
+    const file = new File([new Uint8Array([1])], "backdrop.png", { type: "image/png" });
+    await wrapper.find(".ek-workbench__asset-import").trigger("drop", {
+      dataTransfer: { files: [file] }
+    });
+    await waitForAssertion(() => {
+      expect(Object.values(editor.getSnapshot().assets)).toContainEqual(expect.objectContaining({ kind: "image", label: "backdrop.png" }));
+    });
+    expect(wrapper.find('[aria-label="Asset import queue"]').text()).toContain("succeeded · Image");
     wrapper.unmount();
   });
 
@@ -619,6 +749,89 @@ describe("Vue EditorWorkbench", () => {
     expect(expectedIds).toEqual(["image-a"]);
     expect(wrapper.find('[aria-label="Asset workspace rows"]').text()).toContain("Manual label");
     expect(wrapper.find('[aria-label="Asset workspace rows"]').text()).not.toContain("Panel paint");
+    await wrapper.find('[aria-label="Search assets"]').setValue("");
+    await wrapper.find('[aria-label="Kind"]').setValue("texture");
+    expect(wrapper.find('[aria-label="Asset workspace rows"]').text()).toContain("Panel paint");
+    expect(wrapper.find('[aria-label="Asset workspace rows"]').text()).not.toContain("Manual label");
+    await wrapper.find('[aria-label="Status"]').setValue("missing-payload");
+    expect(wrapper.text()).toContain("No matching assets");
+    await wrapper.find('[aria-label="Status"]').setValue("all");
+    await wrapper.find('[aria-label="Kind"]').setValue("all");
+    await wrapper.find('[aria-label="Sort"]').setValue("label");
+    const labels = wrapper.findAll(".ek-workbench__asset-row-main > span").map((label) => label.text());
+    expect(labels).toEqual(["Manual label", "Panel paint"]);
+    wrapper.unmount();
+  });
+
+  it.each([false, true])("serializes GLB maintenance and preserves the latest payload/remap (older fails: %s)", async (olderFails) => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      asset: {
+        id: "asset-a",
+        label: "robot.glb",
+        source: new Uint8Array([1]),
+        metadata: attachGlbImportManifestMetadata(undefined, createWorkbenchManifest())
+      }
+    });
+    const first = createDeferred<{ scene: Group; manifest: ReturnType<typeof createWorkbenchManifest> }>();
+    const second = createDeferred<{ scene: Group; manifest: ReturnType<typeof createWorkbenchManifest> }>();
+    const loader: EditorRuntimeOptions["loader"] = {
+      load: async () => new Group(),
+      analyze: vi.fn(async () => ({ scene: new Group(), manifest: createWorkbenchManifest() }))
+    };
+    const urls = mockObjectUrls();
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, loader, rendererFactory: fakeRenderer }
+    });
+    await openPanelView(wrapper, "Assets");
+    await editor.getRuntime()!.project();
+    vi.mocked(loader.analyze!).mockClear().mockImplementation(async (resolved) => {
+      if (resolved.metadata?.byteSize === 3) {
+        return first.promise;
+      }
+      if (resolved.metadata?.byteSize === 4) {
+        return second.promise;
+      }
+      return { scene: new Group(), manifest: createWorkbenchManifest() };
+    });
+    const input = wrapper.find('[aria-label="Reimport robot.glb"]');
+    const inputElement = input.element as HTMLInputElement;
+    Object.defineProperty(inputElement, "files", {
+      configurable: true,
+      value: [new File([new Uint8Array([1, 2, 3])], "older.glb", { type: "model/gltf-binary" })]
+    });
+    await input.trigger("change");
+    await waitForAssertion(() => expect(loader.analyze).toHaveBeenCalledTimes(1));
+    const newerInput = wrapper.find('[aria-label="Reimport robot.glb"]');
+    Object.defineProperty(newerInput.element, "files", {
+      configurable: true,
+      value: [new File([new Uint8Array([4, 5, 6, 7])], "newer.glb", { type: "model/gltf-binary" })]
+    });
+    await newerInput.trigger("change");
+    await flushPromises();
+    expect(loader.analyze).toHaveBeenCalledTimes(1);
+
+    if (olderFails) {
+      first.reject(new Error("Older analysis failed"));
+    } else {
+      first.resolve({ scene: new Group(), manifest: withPrimitivePath(createWorkbenchManifest(), "meshes/older/primitives/0") });
+    }
+    await waitForAssertion(() => {
+      expect(loader.analyze).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ byteSize: 4 }) }));
+    });
+    second.resolve({ scene: new Group(), manifest: withPrimitivePath(createWorkbenchManifest(), "meshes/newer/primitives/0") });
+    await waitForAssertion(() => {
+      expect(wrapper.text()).toContain("remapped");
+    });
+
+    expect(editor.getSnapshot().objects["object-a"].asset.id).toBe("asset-a");
+    expect(editor.getAssetWorkspacePayloads().find((item) => item.assetId === "asset-a")?.byteSize).toBe(4);
+    expect(Object.values(editor.getSnapshot().nodes).some((node) =>
+      node.kind === "imported" && node.importKey === "glb:object-a/primitive:meshes/newer/primitives/0"
+    )).toBe(true);
+    urls.restore();
     wrapper.unmount();
   });
 
@@ -1503,6 +1716,49 @@ describe("Vue EditorWorkbench", () => {
     wrapper.unmount();
   });
 
+  it("keeps stale overlapping missing-asset replacements from overwriting newer success feedback", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a", label: "Missing box" } });
+    const replaceAssetOriginal = editor.replaceAsset.bind(editor);
+    const first = createDeferred<Awaited<ReturnType<typeof editor.replaceAsset>>>();
+    const replaceAsset = vi.spyOn(editor, "replaceAsset").mockReturnValueOnce(first.promise);
+    const wrapper = mount(EditorWorkbench, {
+      props: {
+        editor,
+        resolver: new AssetResolverBridge(() => null),
+        rendererFactory: fakeRenderer
+      }
+    });
+
+    await editor.getRuntime()?.project();
+    await nextTick();
+    await openPanelView(wrapper, "Assets");
+    const input = wrapper.find('[aria-label="Missing asset recovery"] input');
+    const inputElement = input.element as HTMLInputElement;
+    const firstFile = new File([new Uint8Array([1])], "first.glb", { type: "model/gltf-binary" });
+    const secondFile = new File([new Uint8Array([2, 3])], "second.glb", { type: "model/gltf-binary" });
+    Object.defineProperty(inputElement, "files", { configurable: true, value: [firstFile] });
+    await input.trigger("change");
+    Object.defineProperty(inputElement, "files", { configurable: true, value: [secondFile] });
+    await input.trigger("change");
+
+    expect(replaceAsset).toHaveBeenNthCalledWith(1, expect.objectContaining({ label: "first.glb" }));
+    expect(replaceAsset).toHaveBeenCalledTimes(1);
+    first.resolve(await replaceAssetOriginal({
+      assetId: "asset-a",
+      source: firstFile,
+      label: "first.glb",
+      mimeType: "model/gltf-binary"
+    }));
+    await waitForAssertion(() => {
+      expect(wrapper.find('[aria-label="Asset recovery status"]').text()).toContain("Replaced with second.glb");
+    });
+    expect(replaceAsset).toHaveBeenNthCalledWith(2, expect.objectContaining({ label: "second.glb" }));
+    expect(editor.getAssetWorkspacePayloads().find((item) => item.assetId === "asset-a")?.byteSize).toBe(2);
+    expect(wrapper.text()).not.toContain("Replaced with first.glb");
+    wrapper.unmount();
+  });
+
   it("does not dispose a host-owned editor on unmount", () => {
     const editor = markRaw(createEditor());
     const wrapper = mount(EditorWorkbench, { props: { editor, rendererFactory: fakeRenderer } });
@@ -1657,6 +1913,20 @@ function mockObjectUrls(): {
       URL.revokeObjectURL = originalRevoke;
     }
   };
+}
+
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve(value: T): void;
+  reject(reason?: unknown): void;
+} {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return { promise, resolve, reject };
 }
 
 function createWorkbenchManifest(options: { twoSlots?: boolean } = {}) {
