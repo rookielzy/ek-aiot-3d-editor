@@ -186,7 +186,9 @@ async function exportProject(partial: boolean): Promise<void> {
       return;
     }
     const packageBytes = await resolvePackageBytes(result);
-    downloadPackage(packageBytes, `${props.context.model.project.sceneName || "scene"}.ek3d`);
+    if (!downloadPackage(packageBytes, `${props.context.model.project.sceneName || "scene"}.ek3d`)) {
+      throw new Error("Project download is unavailable");
+    }
     const incomplete = result.manifest?.completeness === "partial";
     projectStatus.value = {
       tone: incomplete || result.problems.length ? "warning" : "success",
@@ -240,14 +242,14 @@ async function resolvePackageBytes(result: ProjectExportResult): Promise<Uint8Ar
   return packageBytes instanceof Uint8Array ? packageBytes : packageBytes;
 }
 
-function downloadPackage(packageBytes: Uint8Array, filename: string): void {
+function downloadPackage(packageBytes: Uint8Array, filename: string): boolean {
   if (
     typeof document === "undefined" ||
     typeof URL === "undefined" ||
     typeof URL.createObjectURL !== "function" ||
     typeof Blob === "undefined"
   ) {
-    return;
+    return false;
   }
 
   const payload = new ArrayBuffer(packageBytes.byteLength);
@@ -264,6 +266,7 @@ function downloadPackage(packageBytes: Uint8Array, filename: string): void {
   if (typeof URL.revokeObjectURL === "function") {
     URL.revokeObjectURL(objectUrl);
   }
+  return true;
 }
 
 function sanitizeFilename(value: string): string {

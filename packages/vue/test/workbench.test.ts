@@ -141,6 +141,27 @@ describe("Vue EditorWorkbench", () => {
     wrapper.unmount();
   });
 
+  it("does not report export success when the host cannot download the package", async () => {
+    const editor = markRaw(createEditor());
+    const originalCreateObjectURL = URL.createObjectURL;
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: undefined });
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer },
+      slots: { rightPanel: () => null }
+    });
+
+    try {
+      await wrapper.get('button[aria-controls^="project-menu"]').trigger("click");
+      await wrapper.get('[title="Export complete project"]').trigger("click");
+      await waitForAssertion(() => expect(wrapper.text()).toContain("Project export failed"));
+      expect(wrapper.text()).toContain("Project download is unavailable");
+      expect(wrapper.text()).not.toContain("Exported project");
+    } finally {
+      Object.defineProperty(URL, "createObjectURL", { configurable: true, value: originalCreateObjectURL });
+      wrapper.unmount();
+    }
+  });
+
   it.each(["material", "camera"] as const)("reports a rejected %s edit, translates it and retries the same draft", async (kind) => {
     const editor = markRaw(createEditor());
     if (kind === "material") {

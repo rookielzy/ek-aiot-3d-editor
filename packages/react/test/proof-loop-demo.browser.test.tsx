@@ -409,7 +409,9 @@ describe("proof-loop starter demo browser verification", () => {
       const resize = section(host, label("Resize right panel", "调整右面板宽度"));
       resize.focus();
       await userEvent.keyboard("{Home}{ArrowLeft}");
+      await clickByText(host, label("Project menu", "项目菜单"));
       await userEvent.selectOptions(section(host, label("Language", "语言")) as HTMLSelectElement, locale === "en" ? "zh-CN" : "en");
+      await userEvent.keyboard("{Escape}");
       expect(editor.serialize()).toEqual(snapshot);
       expect(editor.getHistoryState()).toEqual(history);
       expect(editor.getRuntime()).toBe(runtime);
@@ -595,9 +597,9 @@ describe("proof-loop starter demo browser verification", () => {
         const selectionBeforeLocale = editor.getSnapshot();
         const historyBeforeLocale = editor.getHistoryState();
         const runtime = editor.getRuntime();
-        if (framework === "react") await clickByText(host, "Project menu");
+        await clickByText(host, "Project menu");
         await userEvent.selectOptions(section(host, "Language") as HTMLSelectElement, "zh-CN");
-        if (framework === "react") await userEvent.keyboard("{Escape}");
+        await userEvent.keyboard("{Escape}");
         expect(text(section(host, "编辑器状态"))).toContain("个节点");
         expect(editor.getSnapshot()).toEqual(selectionBeforeLocale);
         expect(editor.getHistoryState()).toEqual(historyBeforeLocale);
@@ -625,9 +627,9 @@ describe("proof-loop starter demo browser verification", () => {
           await page.screenshot({ path: `__screenshots__/vue-tools/${width}-helpers-zh-CN.png` });
           await userEvent.keyboard("{Escape}");
         }
-        if (framework === "react") await clickByText(host, "项目菜单");
+        await clickByText(host, "项目菜单");
         await userEvent.selectOptions(section(host, "语言") as HTMLSelectElement, "en");
-        if (framework === "react") await userEvent.keyboard("{Escape}");
+        await userEvent.keyboard("{Escape}");
         if (width === 1440) {
           await userEvent.dblClick(hierarchy.querySelector('button.ek-workbench__tree-row[title="Robot"]')!);
           await editor.getRuntime()!.project();
