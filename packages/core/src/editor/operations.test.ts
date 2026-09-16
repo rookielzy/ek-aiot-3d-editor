@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { attachGlbImportManifestMetadata, createGlbImportManifest } from "../assets/import-pipeline";
+import { createId } from "../snapshot/defaults";
 import { createEditor } from "./create-editor";
 
 describe("advanced editor operations", () => {
@@ -36,6 +37,23 @@ describe("advanced editor operations", () => {
     editor.restore(editor.serialize());
 
     expect(editor.operations.canPaste()).toBe(false);
+  });
+
+  it("skips generated object ids that already exist when pasting", () => {
+    const editor = createEditor();
+    const probe = createId("probe");
+    const nextSuffix = (Number.parseInt(probe.slice("probe-".length), 36) + 1).toString(36);
+    const collidingObjectId = `object-${nextSuffix}`;
+    editor.dispatch({ type: "import-glb", objectId: collidingObjectId, asset: { id: "collision-asset" } });
+    editor.dispatch({ type: "import-glb", objectId: "source-object", asset: { id: "source-asset" } });
+    editor.dispatch({ type: "select-object", objectId: "source-object" });
+
+    editor.operations.copy();
+    const result = editor.operations.paste();
+
+    expect(result.ok).toBe(true);
+    expect(Object.keys(result.snapshot.objects)).toHaveLength(3);
+    expect(result.snapshot.selection.objectId).not.toBe(collidingObjectId);
   });
 
   it("does not retain an empty selection clipboard payload", () => {

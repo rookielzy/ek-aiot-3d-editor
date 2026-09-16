@@ -155,9 +155,12 @@ function buildObjectIdMap(
   const usedIds = new Set(Object.keys(snapshot.objects));
   for (const sourceId of sourceObjectIds) {
     const providedId = providedMap?.[sourceId];
-    const objectId = providedId ?? createId("object");
-    if (usedIds.has(objectId)) {
-      throw new Error(`Object ${objectId} already exists.`);
+    if (providedId && usedIds.has(providedId)) {
+      throw new Error(`Object ${providedId} already exists.`);
+    }
+    let objectId = providedId ?? createId("object");
+    while (usedIds.has(objectId)) {
+      objectId = createId("object");
     }
     usedIds.add(objectId);
     idMap[sourceId] = objectId;

@@ -1,4 +1,5 @@
 <template>
+  <WorkbenchProblemsDrawer :id="drawerId" :context="context" :open="open" @close="closeDrawer" />
   <div class="ek-workbench__default-status">
     <span class="ek-workbench__status-chip" :data-tone="status.selectionCount > 0 ? 'active' : 'neutral'">
       <strong>{{ t("reactWorkbench.status.group.selection") }}</strong>
@@ -35,10 +36,20 @@
       <strong>{{ t("reactWorkbench.status.group.save") }}</strong>
       <span>{{ status.dirty ? t("reactWorkbench.status.dirty") : t("reactWorkbench.status.saved") }}</span>
     </span>
-    <span class="ek-workbench__status-chip" :data-tone="problemTone">
+    <button
+      ref="trigger"
+      type="button"
+      class="ek-workbench__status-chip"
+      :data-tone="problemTone"
+      :aria-label="t('reactWorkbench.problems.details')"
+      :aria-expanded="open"
+      :aria-controls="drawerId"
+      :aria-describedby="`${drawerId}-count`"
+      @click="open = !open"
+    >
       <strong>{{ t("reactWorkbench.status.group.problems") }}</strong>
-      <span>{{ t("reactWorkbench.status.problems", { count: status.problemCount }) }}</span>
-    </span>
+      <span :id="`${drawerId}-count`">{{ t("reactWorkbench.status.problems", { count: status.problemCount }) }}</span>
+    </button>
     <span v-if="status.problemCount > 0" class="ek-workbench__status-chip" :data-tone="problemTone">
       <span>
       {{ t("reactWorkbench.status.problemBreakdown", {
@@ -52,15 +63,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, useId } from "vue";
 import type { ResolvedWorkbenchContext } from "../composables/use-workbench";
 import type { WorkbenchMessageValues } from "../i18n/workbench-i18n";
 import { problemToneFromCounts } from "./workbench-model-helpers";
+import WorkbenchProblemsDrawer from "./WorkbenchProblemsDrawer.vue";
 
 const props = defineProps<{
   context: ResolvedWorkbenchContext;
 }>();
 
+const open = ref(false);
+const trigger = ref<HTMLButtonElement | null>(null);
+const drawerId = `problems-drawer-${useId()}`;
 const status = computed(() => props.context.model.status);
 const selection = computed(() => props.context.model.selection);
 const project = computed(() => props.context.model.project);
@@ -77,4 +92,9 @@ const projectStatusLabel = computed(() => t(project.value.statusLabelDescriptor 
   fallback: project.value.statusLabel
 }));
 const problemTone = computed(() => problemToneFromCounts(props.context.model.problems.bySeverity, status.value.problemCount));
+
+function closeDrawer(): void {
+  open.value = false;
+  trigger.value?.focus();
+}
 </script>

@@ -19,6 +19,128 @@ import { expectAuthoredValuesPresent, expectNoI18nDurableLeakage, expectNoRuntim
 import { decodeProjectPackageText, resolveProjectPackageBytes, seedI18nDurableEditor } from "../../test/i18n-durable-fixture";
 
 describe("Vue EditorWorkbench", () => {
+  it("distinguishes blocked complete exports from explicit partial packages and updates repaired diagnostics", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    const urls = mockObjectUrls();
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer, defaultLocale: "zh-CN" },
+      slots: { rightPanel: () => null }
+    });
+
+    await wrapper.get('button[aria-controls^="project-menu"]').trigger("click");
+    await wrapper.get('[title="导出完整项目"]').trigger("click");
+    await waitForAssertion(() => expect(wrapper.text()).toContain("无法完整导出：资源载荷缺失"));
+    expect(urls.createObjectURL).not.toHaveBeenCalled();
+
+    await wrapper.get('[aria-label="问题详情"]').trigger("click");
+    const drawer = wrapper.get('[aria-label="问题详情"]');
+    expect(drawer.text()).toContain("资源 asset-a 没有可导出的载荷");
+
+    await wrapper.get('button[aria-controls^="project-menu"]').trigger("click");
+    await wrapper.get('[title="导出部分项目"]').trigger("click");
+    await waitForAssertion(() => expect(wrapper.text()).toContain("已导出部分项目"));
+    expect(urls.createObjectURL).toHaveBeenCalled();
+
+    const input = drawer.get("input").element as HTMLInputElement;
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [new File([new Uint8Array([1, 2, 3])], "repaired.glb")]
+    });
+    await drawer.get("input").trigger("change");
+    await waitForAssertion(() => expect(drawer.text()).not.toContain("无法完整导出"));
+
+    await wrapper.get('button[aria-controls^="project-menu"]').trigger("click");
+    await wrapper.get('[title="导出完整项目"]').trigger("click");
+    await waitForAssertion(() => expect(wrapper.text()).toContain("已导出项目"));
+
+    urls.restore();
+    wrapper.unmount();
+  });
+
+  it("keeps failed project-open diagnostics in the drawer without replacing the scene", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "add-group", groupId: "keep", name: "Keep me" });
+    const wrapper = mount(EditorWorkbench, {
+      attachTo: document.body,
+      props: { editor, rendererFactory: fakeRenderer },
+      slots: { rightPanel: () => null }
+    });
+    const before = editor.serialize();
+
+    await wrapper.get('button[aria-controls^="project-menu"]').trigger("click");
+    const input = wrapper.get('[aria-label="Open project package"]');
+    const file = new File(["invalid"], "broken.ek3d");
+    Object.defineProperty(file, "arrayBuffer", {
+      value: async () => new TextEncoder().encode("invalid").buffer
+    });
+    Object.defineProperty(input.element, "files", { configurable: true, value: [file] });
+    await input.trigger("change");
+    await wrapper.get('[aria-label="Problem details"]').trigger("click");
+    const drawer = wrapper.get('.ek-workbench__problems-drawer[aria-label="Problem details"]');
+    await waitForAssertion(() => expect(drawer.text()).toContain("Project Archive Invalid"));
+    expect(editor.serialize()).toEqual(before);
+
+    await drawer.get("button").trigger("click");
+    await wrapper.get('[aria-label="Problem details"]').trigger("click");
+    expect(drawer.text()).toContain("Project Archive Invalid");
+    wrapper.unmount();
+  });
+
+  it("keeps project commands in a dismissible global menu with the locale switch", async () => {
+    const editor = markRaw(createEditor());
+    const wrapper = mount(EditorWorkbench, {
+      attachTo: document.body,
+      props: { editor, rendererFactory: fakeRenderer },
+      slots: { rightPanel: () => null }
+    });
+    const trigger = wrapper.get('button[aria-controls^="project-menu"]');
+    expect(wrapper.find('[title="Export complete project"]:not([disabled])').isVisible()).toBe(false);
+
+    await trigger.trigger("click");
+    const menu = wrapper.get('[role="region"][aria-label="Project actions"]');
+    expect(menu.text()).toContain("Open");
+    expect(menu.text()).toContain("Export partial");
+    await menu.get('[aria-label="Language"]').setValue("zh-CN");
+    expect(editor.getRuntime()).toBeTruthy();
+
+    await menu.get('[aria-label="语言"]').trigger("keydown", { key: "Escape" });
+    expect(trigger.attributes("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(trigger.element);
+
+    await trigger.trigger("click");
+    document.querySelector<HTMLElement>('[aria-label="3D 视口"]')?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    await nextTick();
+    expect(trigger.attributes("aria-expanded")).toBe("false");
+    wrapper.unmount();
+  });
+
+  it("reports rejected asynchronous project bytes as an error without downloading", async () => {
+    const editor = markRaw(createEditor());
+    const rejected = createDeferred<Uint8Array>();
+    vi.spyOn(editor, "exportProject").mockReturnValueOnce({
+      ok: true,
+      packageBytes: rejected.promise,
+      problems: []
+    });
+    const urls = mockObjectUrls();
+    const wrapper = mount(EditorWorkbench, {
+      props: { editor, rendererFactory: fakeRenderer },
+      slots: { rightPanel: () => null }
+    });
+
+    await wrapper.get('button[aria-controls^="project-menu"]').trigger("click");
+    await wrapper.get('[title="Export complete project"]').trigger("click");
+    rejected.reject(new Error("archive stream failed"));
+    await waitForAssertion(() => expect(wrapper.text()).toContain("Project export failed"));
+    expect(urls.createObjectURL).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain("archive stream failed");
+
+    urls.restore();
+    wrapper.unmount();
+  });
+
   it.each(["material", "camera"] as const)("reports a rejected %s edit, translates it and retries the same draft", async (kind) => {
     const editor = markRaw(createEditor());
     if (kind === "material") {
@@ -88,6 +210,9 @@ describe("Vue EditorWorkbench", () => {
       expect(document.activeElement).toBe(trigger.element);
     };
     await command("Copy");
+    await waitForAssertion(() => {
+      expect(wrapper.findAll("button").find((button) => button.text() === "Paste")!.attributes("disabled")).toBeUndefined();
+    });
     await command("Paste");
     expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(2);
     await command("Duplicate");
@@ -960,14 +1085,14 @@ describe("Vue EditorWorkbench", () => {
 
     await wrapper.find(".ek-workbench__file-input").trigger("change");
     await waitForAssertion(() => {
-      expect(wrapper.text()).toContain("Project open failed");
+      expect(wrapper.text()).toContain("Project Archive Invalid");
       expect(wrapper.text()).toContain("invalid zip data");
     });
 
     await wrapper.find(".ek-workbench__locale-switcher select").setValue("zh-CN");
     await nextTick();
 
-    expect(wrapper.text()).toContain("项目打开失败");
+    expect(wrapper.text()).toContain("项目包无效");
     expect(wrapper.text()).toContain("invalid zip data");
     wrapper.unmount();
   });

@@ -17,6 +17,7 @@
         :context="context"
         :show-locale-switcher="showLocaleSwitcher"
         :locale-switcher-disabled="localeSwitcherDisabled"
+        @project-problems="setProjectProblems"
       />
       <div v-if="$slots.toolbar" class="ek-workbench__toolbar-region">
         <slot name="toolbar" v-bind="context" />
@@ -88,7 +89,7 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, toRef, useId } from "vue";
-import { resolveEditorShortcut, type EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
+import { buildWorkbenchModel, resolveEditorShortcut, type EditorRuntimeOptions, type Problem } from "@ek-aiot/3d-editor-core";
 import { useWorkbench } from "../composables/use-workbench";
 import type { EditorWorkbenchEmitDefinitions, EditorWorkbenchProps, EditorWorkbenchSlots } from "./EditorWorkbench.types";
 import EditorViewport from "./EditorViewport.vue";
@@ -133,7 +134,42 @@ const workbench = useWorkbench({
   onLocaleChange: (locale) => emit("update:locale", locale)
 });
 
-const context = computed(() => workbench.context.value);
+const projectFeedback = ref<{ editor: typeof workbench.editor; problems: Problem[] } | null>(null);
+const projectProblems = computed(() => projectFeedback.value?.editor === workbench.editor
+  ? projectFeedback.value.problems.filter((problem) => {
+      if (problem.assetId && (problem.code === "project-export-payload-missing" || problem.code === "project-export-asset-missing")) {
+        return workbench.model.value.assets.workspace?.items.some((asset) => asset.id === problem.assetId && asset.packageBlocking);
+      }
+      return true;
+    })
+  : []);
+const context = computed(() => {
+  const base = workbench.context.value;
+  if (!projectProblems.value.length) {
+    return base;
+  }
+  const model = buildWorkbenchModel(workbench.snapshot.value, {
+    canPaste: workbench.editor.operations.canPaste(),
+    inspector: workbench.inspector.value,
+    runtimeProblems: workbench.runtimeProblems.value,
+    projectProblems: projectProblems.value,
+    assetPayloads: base.assets.payloads,
+    history: workbench.editor.getHistoryState(),
+    snap: workbench.snap.value,
+    viewportHelpers: workbench.viewportHelperState.value,
+    transformMode: workbench.transformMode.value,
+    runtimeReady: workbench.runtime.value !== null
+  });
+  return {
+    ...base,
+    model,
+    problems: {
+      ...base.problems,
+      items: model.problems.items,
+      totalCount: model.problems.totalCount
+    }
+  };
+});
 const currentSnapshot = computed(() => workbench.snapshot.value);
 const currentInspector = computed(() => workbench.inspector.value);
 const rootClassName = computed(() => props.class ? `ek-workbench ${props.class}` : "ek-workbench");
@@ -173,6 +209,10 @@ function selectView(view: PanelView): void {
 
 function replaceAsset(assetId: string, file: File): void {
   void workbench.replaceAsset({ assetId, source: file, label: file.name, mimeType: file.type });
+}
+
+function setProjectProblems(problems: Problem[]): void {
+  projectFeedback.value = { editor: workbench.editor, problems };
 }
 
 function hasProp(name: string): boolean {
