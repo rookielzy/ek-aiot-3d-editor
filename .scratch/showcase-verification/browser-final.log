@@ -1,0 +1,100 @@
+
+> ek-aiot-3d-editor@0.0.0 test:browser /home/slimj/code/ek-aiot-3d-editor
+> vitest run --config vitest.browser.config.ts
+
+
+ RUN  v4.1.7 /home/slimj/code/ek-aiot-3d-editor
+
+9:11:34 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:34 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:34 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:34 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:34 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:34 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:34 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:34 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:34 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:39 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:39 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:39 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:39 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:39 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:39 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:39 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:39 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:39 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:42 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:42 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:42 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:42 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:42 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:42 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:42 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:42 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:42 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:58 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:11:58 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:13:56 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:13:56 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:13:56 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:13:56 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:13:56 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:13:56 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:13:56 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:13:56 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:13:56 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:13:59 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:13:59 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:13:59 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:13:59 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:14:00 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:14:00 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:14:00 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:14:00 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:14:00 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:14:02 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:14:02 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:14:02 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:14:03 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:14:03 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:14:03 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:14:03 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:14:03 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:14:03 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:14:19 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:14:19 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:08 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:08 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:08 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:08 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:08 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:08 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:08 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:08 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:08 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:11 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:11 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:11 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:11 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:11 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:11 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:11 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:11 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:12 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:14 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:14 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:14 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:14 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:14 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:14 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:15 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:15 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:15 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:31 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+9:16:31 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+
+ Test Files  12 passed (12)
+      Tests  75 passed (75)
+   Start at  21:10:00
+   Duration  380.90s (transform 0ms, setup 0ms, import 14.36s, tests 362.10s, environment 0ms)
+

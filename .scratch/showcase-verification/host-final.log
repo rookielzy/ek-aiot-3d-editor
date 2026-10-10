@@ -1,0 +1,9 @@
+
+ RUN  v4.1.7 /home/slimj/code/ek-aiot-3d-editor
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  21:10:12
+   Duration  12.88s (transform 1.61s, setup 0ms, import 5.90s, tests 5.46s, environment 1.21s)
+

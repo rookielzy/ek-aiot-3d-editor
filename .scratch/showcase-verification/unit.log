@@ -1,0 +1,15 @@
+
+> ek-aiot-3d-editor@0.0.0 test /home/slimj/code/ek-aiot-3d-editor
+> vitest run
+
+
+ RUN  v4.1.7 /home/slimj/code/ek-aiot-3d-editor
+
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+
+ Test Files  114 passed (114)
+      Tests  916 passed (916)
+   Start at  20:53:42
+   Duration  59.80s (transform 33.49s, setup 0ms, import 123.37s, tests 101.12s, environment 286.41s)
+

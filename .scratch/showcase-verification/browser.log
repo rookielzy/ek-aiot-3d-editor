@@ -1,0 +1,787 @@
+
+> ek-aiot-3d-editor@0.0.0 test:browser /home/slimj/code/ek-aiot-3d-editor
+> vitest run --config vitest.browser.config.ts
+
+
+ RUN  v4.1.7 /home/slimj/code/ek-aiot-3d-editor
+
+8:55:17 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:17 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:17 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:19 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:19 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:19 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:19 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:19 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:19 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:19 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:19 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:19 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:19 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:19 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:19 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:19 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:19 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:19 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:19 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:19 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:20 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:20 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:20 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:20 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:20 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:22 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:22 PM [vite] (client) [console.error] TransformControls: The attached 3D object must be a part of the scene graph.
+8:55:45 PM [vite] (client) [console.error] [vitest] Failed to take a screenshot TimeoutError: STACK_TRACE_ERROR
+    at ensureAwaited (http://localhost:63315/node_modules/.pnpm/@vitest+browser@4.1.7_vite@8.0.14_@types+node@25.9.1__vitest@4.1.7/node_modules/@vitest/browser/dist/context.js?v=370f794d:10:22)
+    at Object.screenshot (http://localhost:63315/node_modules/.pnpm/@vitest+browser@4.1.7_vite@8.0.14_@types+node@25.9.1__vitest@4.1.7/node_modules/@vitest/browser/dist/context.js?v=370f794d:465:10)
+    at async BrowserTestRunner.onTaskFinished (http://localhost:63315/__vitest_browser__/tester-DQAp97S5.js:926:28)
+    at async http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2968:6
+    at async callAroundHooks (http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2663:3)
+    at async callAroundEachHooks (http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2799:2)
+    at async runTest (http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2940:4)
+    at async http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:3159:10
+    at async callAroundHooks (http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2663:3)
+    at async callAroundAllHooks (http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2791:2)
+stderr | packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > round-trips a complete React project and keeps diagnostics usable in en
+[vitest] Failed to take a screenshot [TimeoutError: locator.screenshot: Timeout 4950.927000000003ms exceeded.
+Call log:
+[2m  - taking element screenshot[22m
+[2m  - waiting for fonts to load...[22m
+[2m  - fonts loaded[22m
+[2m  - attempting scroll into view action[22m
+[2m    - waiting for element to be stable[22m
+]
+8:58:05 PM [vite] (client) [console.error] [vitest] Failed to take a screenshot TimeoutError: STACK_TRACE_ERROR
+    at ensureAwaited (http://localhost:63315/node_modules/.pnpm/@vitest+browser@4.1.7_vite@8.0.14_@types+node@25.9.1__vitest@4.1.7/node_modules/@vitest/browser/dist/context.js?v=370f794d:10:22)
+    at Object.screenshot (http://localhost:63315/node_modules/.pnpm/@vitest+browser@4.1.7_vite@8.0.14_@types+node@25.9.1__vitest@4.1.7/node_modules/@vitest/browser/dist/context.js?v=370f794d:465:10)
+    at async BrowserTestRunner.onTaskFinished (http://localhost:63315/__vitest_browser__/tester-DQAp97S5.js:926:28)
+    at async http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2968:6
+    at async callAroundHooks (http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2663:3)
+    at async callAroundEachHooks (http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2799:2)
+    at async runTest (http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2940:4)
+    at async http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:3159:10
+    at async callAroundHooks (http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2663:3)
+    at async callAroundAllHooks (http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2791:2)
+stderr | packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > imports a real GLB and keeps canvas picking and undo working after React panel resize
+[vitest] Failed to take a screenshot [TimeoutError: locator.screenshot: Timeout 4916.945000000007ms exceeded.
+Call log:
+[2m  - taking element screenshot[22m
+[2m  - waiting for fonts to load...[22m
+[2m  - fonts loaded[22m
+[2m  - attempting scroll into view action[22m
+[2m    - waiting for element to be stable[22m
+]
+8:58:25 PM [vite] (client) [console.error] [vitest] Failed to take a screenshot TimeoutError: STACK_TRACE_ERROR
+    at ensureAwaited (http://localhost:63315/node_modules/.pnpm/@vitest+browser@4.1.7_vite@8.0.14_@types+node@25.9.1__vitest@4.1.7/node_modules/@vitest/browser/dist/context.js?v=370f794d:10:22)
+    at Object.screenshot (http://localhost:63315/node_modules/.pnpm/@vitest+browser@4.1.7_vite@8.0.14_@types+node@25.9.1__vitest@4.1.7/node_modules/@vitest/browser/dist/context.js?v=370f794d:465:10)
+    at async BrowserTestRunner.onTaskFinished (http://localhost:63315/__vitest_browser__/tester-DQAp97S5.js:926:28)
+    at async http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2968:6
+    at async callAroundHooks (http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2663:3)
+    at async callAroundEachHooks (http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2799:2)
+    at async runTest (http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2940:4)
+    at async http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:3159:10
+    at async callAroundHooks (http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2663:3)
+    at async callAroundAllHooks (http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2791:2)
+stderr | packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > restores React object transforms and material slots from a real project package
+[vitest] Failed to take a screenshot [TimeoutError: locator.screenshot: Timeout 5000ms exceeded.
+Call log:
+[2m  - waiting for locator('[data-vitest="true"]').contentFrame().locator('body')[22m
+]
+8:58:32 PM [vite] (client) [console.error] [vitest] Failed to take a screenshot TimeoutError: STACK_TRACE_ERROR
+    at ensureAwaited (http://localhost:63315/node_modules/.pnpm/@vitest+browser@4.1.7_vite@8.0.14_@types+node@25.9.1__vitest@4.1.7/node_modules/@vitest/browser/dist/context.js?v=370f794d:10:22)
+    at Object.screenshot (http://localhost:63315/node_modules/.pnpm/@vitest+browser@4.1.7_vite@8.0.14_@types+node@25.9.1__vitest@4.1.7/node_modules/@vitest/browser/dist/context.js?v=370f794d:465:10)
+    at async BrowserTestRunner.onTaskFinished (http://localhost:63315/__vitest_browser__/tester-DQAp97S5.js:926:28)
+    at async http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2968:6
+    at async callAroundHooks (http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2663:3)
+    at async callAroundEachHooks (http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2799:2)
+    at async runTest (http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2940:4)
+    at async http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:3159:10
+    at async callAroundHooks (http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2663:3)
+    at async callAroundAllHooks (http://localhost:63315/node_modules/.pnpm/@vitest+runner@4.1.7/node_modules/@vitest/runner/dist/chunk-artifact.js?v=370f794d:2791:2)
+stderr | packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > restores React object transforms and material slots from a real project package
+[vitest] Failed to take a screenshot [TimeoutError: locator.screenshot: Timeout 4921.951000000001ms exceeded.
+Call log:
+[2m  - taking element screenshot[22m
+[2m  - waiting for fonts to load...[22m
+[2m  - fonts loaded[22m
+[2m  - attempting scroll into view action[22m
+[2m    - waiting for element to be stable[22m
+]
+ ❯ |chromium-mobile| packages/react/test/showcase.browser.test.tsx (3 tests | 3 failed) 207009ms
+   × edits the local showcase and restores its complete project in a fresh host in en 100456ms
+   × edits the local showcase and restores its complete project in a fresh host in zh-CN 93888ms
+   × recovers a failed default model download through the real problem drawer 12661ms
+ ❯ |chromium-desktop-boundary| packages/react/test/showcase.browser.test.tsx (3 tests | 2 failed) 212958ms
+   × edits the local showcase and restores its complete project in a fresh host in en 99094ms
+   × edits the local showcase and restores its complete project in a fresh host in zh-CN 92916ms
+ ❯ |chromium-mobile| packages/react/test/proof-loop-demo.browser.test.tsx (14 tests | 9 failed) 212897ms
+     × round-trips a complete React project and keeps diagnostics usable in en 23338ms
+     × round-trips a complete React project and keeps diagnostics usable in zh-CN 21907ms
+     × drives an empty React host through the package default workbench 17744ms
+     × resizes and restores React panels across desktop sizes without replacing the canvas 32159ms
+     × keeps tools reachable when a host status drawer reduces the viewport 17786ms
+     × searches and focuses real imported hierarchy targets at desktop sizes 31002ms
+     × imports a real GLB and keeps canvas picking and undo working after React panel resize 5802ms
+     × restores React object transforms and material slots from a real project package 26412ms
+     × saves and restores React environment, lights and default camera through the host 20530ms
+ ❯ |chromium| packages/react/test/showcase.browser.test.tsx (3 tests | 3 failed) 215726ms
+   × edits the local showcase and restores its complete project in a fresh host in en 100601ms
+   × edits the local showcase and restores its complete project in a fresh host in zh-CN 93576ms
+   × recovers a failed default model download through the real problem drawer 21544ms
+ ❯ |chromium-desktop-boundary| packages/react/test/proof-loop-demo.browser.test.tsx (14 tests | 8 failed) 217826ms
+     × round-trips a complete React project and keeps diagnostics usable in en 25284ms
+     × round-trips a complete React project and keeps diagnostics usable in zh-CN 22267ms
+     × drives an empty React host through the package default workbench 17310ms
+     × resizes and restores React panels across desktop sizes without replacing the canvas 30359ms
+     × searches and focuses real imported hierarchy targets at desktop sizes 34179ms
+     × imports a real GLB and keeps canvas picking and undo working after React panel resize 20024ms
+     × restores React object transforms and material slots from a real project package 25046ms
+     × saves and restores React environment, lights and default camera through the host 22188ms
+ ❯ |chromium| packages/react/test/proof-loop-demo.browser.test.tsx (14 tests | 9 failed) 218654ms
+     × round-trips a complete React project and keeps diagnostics usable in en 23397ms
+     × round-trips a complete React project and keeps diagnostics usable in zh-CN 21454ms
+     × drives an empty React host through the package default workbench 17980ms
+     × resizes and restores React panels across desktop sizes without replacing the canvas 32489ms
+     × keeps tools reachable when a host status drawer reduces the viewport 17803ms
+     × searches and focuses real imported hierarchy targets at desktop sizes 30713ms
+     × imports a real GLB and keeps canvas picking and undo working after React panel resize 17201ms
+     × restores React object transforms and material slots from a real project package 22567ms
+     × saves and restores React environment, lights and default camera through the host 23943ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 34 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |chromium| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > round-trips a complete React project and keeps diagnostics usable in en
+ FAIL  |chromium| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > round-trips a complete React project and keeps diagnostics usable in zh-CN
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+Failure screenshots:
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-round-trips-a-complete-React-project-and-keeps-diagnostics-usable-in-en-1.png
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-round-trips-a-complete-React-project-and-keeps-diagnostics-usable-in-zh-CN-1.png
+
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:79:36
+     77|   });
+     78|
+     79|   it.each(["en", "zh-CN"] as const)("round-trips a complete React proj…
+       |                                    ^
+     80|     const originalSize = { width: window.innerWidth, height: window.in…
+     81|     const editor = createEditor();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/34]⎯
+
+ FAIL  |chromium| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > drives an empty React host through the package default workbench
+TimeoutError: locator.click: Timeout 1858ms exceeded.
+Call log:
+[2m  - waiting for locator('[data-vitest="true"]').contentFrame().getByLabel('Undo')[22m
+[2m    - locator resolved to <button title="Undo" type="button" aria-label="Undo" class="ek-workbench__command-button ek-workbench__command-button--icon">…</button>[22m
+[2m  - attempting click action[22m
+[2m    - waiting for element to be visible, enabled and stable[22m
+
+
+Failure screenshot:
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-drives-an-empty-React-host-through-the-package-default-workbench-1.png
+
+ ❯ clickByText packages/react/test/proof-loop-demo.browser.test.tsx:1092:20
+    1090|   }
+    1091|   if (menu || panel || target!.closest(".ek-workbench__viewport-tools"…
+    1092|     await userEvent.click(target!);
+       |                    ^
+    1093|     await waitForAnimationFrame();
+    1094|     return;
+ ❯ verifyStarterFlow packages/react/test/proof-loop-demo.browser.test.tsx:886:10
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:201:4
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/34]⎯
+
+ FAIL  |chromium| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > resizes and restores React panels across desktop sizes without replacing the canvas
+TimeoutError: locator.click: Timeout 24580ms exceeded.
+Call log:
+[2m  - waiting for locator('[data-vitest="true"]').contentFrame().getByLabel('Collapse left panel')[22m
+[2m    - locator resolved to <button type="button" aria-expanded="true" aria-controls="_r_1b_-left" aria-label="Collapse left panel">«</button>[22m
+[2m  - attempting click action[22m
+[2m    2 × waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - performing click action[22m
+[2m      - <aside data-testid="starter-overlay">0 objects · 0 assets</aside> from <div class="ek-workbench__overlay">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m    - waiting 20ms[22m
+[2m    2 × waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - performing click action[22m
+[2m      - <aside data-testid="starter-overlay">0 objects · 0 assets</aside> from <div class="ek-workbench__overlay">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m      - waiting 100ms[22m
+[2m    41 × waiting for element to be visible, enabled and stable[22m
+[2m       - element is visible, enabled and stable[22m
+[2m       - scrolling into view if needed[22m
+[2m       - done scrolling[22m
+[2m       - performing click action[22m
+[2m       - <aside data-testid="starter-overlay">0 objects · 0 assets</aside> from <div class="ek-workbench__overlay">…</div> subtree intercepts pointer events[22m
+[2m     - retrying click action[22m
+[2m       - waiting 500ms[22m
+
+
+Failure screenshot:
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-resizes-and-restores-React-panels-across-desktop-sizes-without-replacing-the-canvas-1.png
+
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:236:26
+    234|           expect(Number(separator.getAttribute("aria-valuenow"))).toBe…
+    235|           const expandedCanvasWidth = canvas.width;
+    236|           await userEvent.click(host.querySelector(`[aria-label="Colla…
+       |                          ^
+    237|           await waitFor(() => {
+    238|             expect(panel.hidden).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/34]⎯
+
+ FAIL  |chromium| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > keeps tools reachable when a host status drawer reduces the viewport
+Error: Test timed out in 15000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+Failure screenshot:
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-keeps-tools-reachable-when-a-host-status-drawer-reduces-the-viewport-1.png
+
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:275:2
+    273|   }, 30000);
+    274|
+    275|   it("keeps tools reachable when a host status drawer reduces the view…
+       |  ^
+    276|     const originalSize = { width: window.innerWidth, height: window.in…
+    277|     const editor = createEditor();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/34]⎯
+
+ FAIL  |chromium| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > searches and focuses real imported hierarchy targets at desktop sizes
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+Failure screenshot:
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-searches-and-focuses-real-imported-hierarchy-targets-at-desktop-sizes-1.png
+
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:329:2
+    327|   }, 15000);
+    328|
+    329|   it("searches and focuses real imported hierarchy targets at desktop …
+       |  ^
+    330|     const originalSize = { width: window.innerWidth, height: window.in…
+    331|     const editor = createEditor();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/34]⎯
+
+ FAIL  |chromium| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > imports a real GLB and keeps canvas picking and undo working after React panel resize
+Error: Test timed out in 15000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+Failure screenshot:
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-imports-a-real-GLB-and-keeps-canvas-picking-and-undo-working-after-React-panel-resize-1.png
+
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:451:2
+    449|   }, 30000);
+    450|
+    451|   it("imports a real GLB and keeps canvas picking and undo working aft…
+       |  ^
+    452|     const root = mountReactEmptyHost({ nativeRuntime: true });
+    453|     cleanup = root.cleanup;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/34]⎯
+
+ FAIL  |chromium| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > restores React object transforms and material slots from a real project package
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+Failure screenshot:
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-restores-React-object-transforms-and-material-slots-from-a-real-project-package-1.png
+
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:483:2
+    481|   }, 15000);
+    482|
+    483|   it("restores React object transforms and material slots from a real …
+       |  ^
+    484|     const originalSize = { width: window.innerWidth, height: window.in…
+    485|     const editor = createEditor();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/34]⎯
+
+ FAIL  |chromium| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > saves and restores React environment, lights and default camera through the host
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+Failure screenshot:
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-saves-and-restores-React-environment--lights-and-default-camera-through-the-host-1.png
+
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:614:2
+    612|   }, 20000);
+    613|
+    614|   it("saves and restores React environment, lights and default camera …
+       |  ^
+    615|     const originalSize = { width: window.innerWidth, height: window.in…
+    616|     const editor = createEditor();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/34]⎯
+
+ FAIL  |chromium| packages/react/test/showcase.browser.test.tsx > edits the local showcase and restores its complete project in a fresh host in en
+ FAIL  |chromium| packages/react/test/showcase.browser.test.tsx > edits the local showcase and restores its complete project in a fresh host in zh-CN
+Error: Test timed out in 90000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+Failure screenshots:
+  - packages/react/test/__screenshots__/showcase.browser.test.tsx/edits-the-local-showcase-and-restores-its-complete-project-in-a-fresh-host-in-en-1.png
+  - packages/react/test/__screenshots__/showcase.browser.test.tsx/edits-the-local-showcase-and-restores-its-complete-project-in-a-fresh-host-in-zh-CN-1.png
+
+ ❯ packages/react/test/showcase.browser.test.tsx:12:34
+     10| import modelUrl from "../../../examples/react-proof-loop/src/showcase/…
+     11|
+     12| it.each(["en", "zh-CN"] as const)("edits the local showcase and restor…
+       |                                  ^
+     13|   const originalSize = { width: window.innerWidth, height: window.inne…
+     14|   await page.viewport(1440, 900);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/34]⎯
+
+ FAIL  |chromium| packages/react/test/showcase.browser.test.tsx > recovers a failed default model download through the real problem drawer
+AssertionError: expected undefined to be truthy
+
+Failure screenshot:
+  - packages/react/test/__screenshots__/showcase.browser.test.tsx/recovers-a-failed-default-model-download-through-the-real-problem-drawer-1.png
+
+[32m- Expected:[39m
+true
+
+[31m+ Received:[39m
+undefined
+
+ ❯ packages/react/test/showcase.browser.test.tsx:155:45
+    153|     await userEvent.click(findButton(host, "Project menu"));
+    154|     await userEvent.click(findButton(host, "Export"));
+    155|     await expect.poll(() => downloads.bytes).toBeTruthy();
+       |                                             ^
+    156|     const fresh = createEditor();
+    157|     try {
+
+Caused by: Error: Matcher did not succeed in time.
+ ❯ packages/react/test/showcase.browser.test.tsx:155:4
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/34]⎯
+
+ FAIL  |chromium-desktop-boundary| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > round-trips a complete React project and keeps diagnostics usable in en
+ FAIL  |chromium-desktop-boundary| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > round-trips a complete React project and keeps diagnostics usable in zh-CN
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+Failure screenshot:
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-round-trips-a-complete-React-project-and-keeps-diagnostics-usable-in-zh-CN-1.png
+
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:79:36
+     77|   });
+     78|
+     79|   it.each(["en", "zh-CN"] as const)("round-trips a complete React proj…
+       |                                    ^
+     80|     const originalSize = { width: window.innerWidth, height: window.in…
+     81|     const editor = createEditor();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/34]⎯
+
+ FAIL  |chromium-desktop-boundary| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > drives an empty React host through the package default workbench
+TimeoutError: locator.click: Timeout 1407ms exceeded.
+Call log:
+[2m  - waiting for locator('[data-vitest="true"]').contentFrame().getByLabel('Undo')[22m
+[2m    - locator resolved to <button title="Undo" type="button" aria-label="Undo" class="ek-workbench__command-button ek-workbench__command-button--icon">…</button>[22m
+[2m  - attempting click action[22m
+[2m    - waiting for element to be visible, enabled and stable[22m
+
+
+Failure screenshot:
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-drives-an-empty-React-host-through-the-package-default-workbench-1.png
+
+ ❯ clickByText packages/react/test/proof-loop-demo.browser.test.tsx:1092:20
+    1090|   }
+    1091|   if (menu || panel || target!.closest(".ek-workbench__viewport-tools"…
+    1092|     await userEvent.click(target!);
+       |                    ^
+    1093|     await waitForAnimationFrame();
+    1094|     return;
+ ❯ verifyStarterFlow packages/react/test/proof-loop-demo.browser.test.tsx:886:10
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:201:4
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/34]⎯
+
+ FAIL  |chromium-desktop-boundary| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > resizes and restores React panels across desktop sizes without replacing the canvas
+TimeoutError: locator.click: Timeout 24471ms exceeded.
+Call log:
+[2m  - waiting for locator('[data-vitest="true"]').contentFrame().getByLabel('Collapse left panel')[22m
+[2m    - locator resolved to <button type="button" aria-expanded="true" aria-controls="_r_1b_-left" aria-label="Collapse left panel">«</button>[22m
+[2m  - attempting click action[22m
+[2m    2 × waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - performing click action[22m
+[2m      - <aside data-testid="starter-overlay">0 objects · 0 assets</aside> from <div class="ek-workbench__overlay">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m    - waiting 20ms[22m
+[2m    2 × waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - performing click action[22m
+[2m      - <aside data-testid="starter-overlay">0 objects · 0 assets</aside> from <div class="ek-workbench__overlay">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m      - waiting 100ms[22m
+[2m    37 × waiting for element to be visible, enabled and stable[22m
+[2m       - element is visible, enabled and stable[22m
+[2m       - scrolling into view if needed[22m
+[2m       - done scrolling[22m
+[2m       - performing click action[22m
+[2m       - <aside data-testid="starter-overlay">0 objects · 0 assets</aside> from <div class="ek-workbench__overlay">…</div> subtree intercepts pointer events[22m
+[2m     - retrying click action[22m
+[2m       - waiting 500ms[22m
+
+
+Failure screenshot:
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-resizes-and-restores-React-panels-across-desktop-sizes-without-replacing-the-canvas-1.png
+
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:236:26
+    234|           expect(Number(separator.getAttribute("aria-valuenow"))).toBe…
+    235|           const expandedCanvasWidth = canvas.width;
+    236|           await userEvent.click(host.querySelector(`[aria-label="Colla…
+       |                          ^
+    237|           await waitFor(() => {
+    238|             expect(panel.hidden).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/34]⎯
+
+ FAIL  |chromium-desktop-boundary| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > searches and focuses real imported hierarchy targets at desktop sizes
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+Failure screenshot:
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-searches-and-focuses-real-imported-hierarchy-targets-at-desktop-sizes-1.png
+
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:329:2
+    327|   }, 15000);
+    328|
+    329|   it("searches and focuses real imported hierarchy targets at desktop …
+       |  ^
+    330|     const originalSize = { width: window.innerWidth, height: window.in…
+    331|     const editor = createEditor();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/34]⎯
+
+ FAIL  |chromium-desktop-boundary| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > imports a real GLB and keeps canvas picking and undo working after React panel resize
+TimeoutError: locator.click: Timeout 6692ms exceeded.
+Call log:
+[2m  - waiting for locator('[data-vitest="true"]').contentFrame().getByLabel('Collapse left panel')[22m
+[2m    - locator resolved to <button type="button" aria-expanded="true" aria-controls="_r_2d_-left" aria-label="Collapse left panel">«</button>[22m
+[2m  - attempting click action[22m
+[2m    2 × waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - performing click action[22m
+[2m      - <aside data-testid="starter-overlay">1 objects · 1 assets</aside> from <div class="ek-workbench__overlay">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m    - waiting 20ms[22m
+[2m    2 × waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - performing click action[22m
+[2m      - <aside data-testid="starter-overlay">1 objects · 1 assets</aside> from <div class="ek-workbench__overlay">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m      - waiting 100ms[22m
+[2m    10 × waiting for element to be visible, enabled and stable[22m
+[2m       - element is visible, enabled and stable[22m
+[2m       - scrolling into view if needed[22m
+[2m       - done scrolling[22m
+[2m       - performing click action[22m
+[2m       - <aside data-testid="starter-overlay">1 objects · 1 assets</aside> from <div class="ek-workbench__overlay">…</div> subtree intercepts pointer events[22m
+[2m     - retrying click action[22m
+[2m       - waiting 500ms[22m
+
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:467:20
+    465|     await clickByText(root.host, "Frame all");
+    466|     const canvas = root.host.querySelector("canvas")!;
+    467|     await userEvent.click(root.host.querySelector('[aria-label="Collap…
+       |                    ^
+    468|     await userEvent.click(root.host.querySelector('[aria-label="Collap…
+    469|     await clickByText(root.host, "Clear");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/34]⎯
+
+ FAIL  |chromium-desktop-boundary| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > restores React object transforms and material slots from a real project package
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:483:2
+    481|   }, 15000);
+    482|
+    483|   it("restores React object transforms and material slots from a real …
+       |  ^
+    484|     const originalSize = { width: window.innerWidth, height: window.in…
+    485|     const editor = createEditor();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/34]⎯
+
+ FAIL  |chromium-desktop-boundary| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > saves and restores React environment, lights and default camera through the host
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+Failure screenshot:
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-saves-and-restores-React-environment--lights-and-default-camera-through-the-host-1.png
+
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:614:2
+    612|   }, 20000);
+    613|
+    614|   it("saves and restores React environment, lights and default camera …
+       |  ^
+    615|     const originalSize = { width: window.innerWidth, height: window.in…
+    616|     const editor = createEditor();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/34]⎯
+
+ FAIL  |chromium-desktop-boundary| packages/react/test/showcase.browser.test.tsx > edits the local showcase and restores its complete project in a fresh host in en
+ FAIL  |chromium-desktop-boundary| packages/react/test/showcase.browser.test.tsx > edits the local showcase and restores its complete project in a fresh host in zh-CN
+Error: Test timed out in 90000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+Failure screenshots:
+  - packages/react/test/__screenshots__/showcase.browser.test.tsx/edits-the-local-showcase-and-restores-its-complete-project-in-a-fresh-host-in-en-1.png
+  - packages/react/test/__screenshots__/showcase.browser.test.tsx/edits-the-local-showcase-and-restores-its-complete-project-in-a-fresh-host-in-zh-CN-1.png
+
+ ❯ packages/react/test/showcase.browser.test.tsx:12:34
+     10| import modelUrl from "../../../examples/react-proof-loop/src/showcase/…
+     11|
+     12| it.each(["en", "zh-CN"] as const)("edits the local showcase and restor…
+       |                                  ^
+     13|   const originalSize = { width: window.innerWidth, height: window.inne…
+     14|   await page.viewport(1440, 900);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/34]⎯
+
+ FAIL  |chromium-mobile| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > round-trips a complete React project and keeps diagnostics usable in en
+ FAIL  |chromium-mobile| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > round-trips a complete React project and keeps diagnostics usable in zh-CN
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+Failure screenshots:
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-round-trips-a-complete-React-project-and-keeps-diagnostics-usable-in-en-1.png
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-round-trips-a-complete-React-project-and-keeps-diagnostics-usable-in-zh-CN-1.png
+
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:79:36
+     77|   });
+     78|
+     79|   it.each(["en", "zh-CN"] as const)("round-trips a complete React proj…
+       |                                    ^
+     80|     const originalSize = { width: window.innerWidth, height: window.in…
+     81|     const editor = createEditor();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/34]⎯
+
+ FAIL  |chromium-mobile| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > drives an empty React host through the package default workbench
+TimeoutError: locator.click: Timeout 919ms exceeded.
+Call log:
+[2m  - waiting for locator('[data-vitest="true"]').contentFrame().getByLabel('Undo')[22m
+[2m    - locator resolved to <button title="Undo" type="button" aria-label="Undo" class="ek-workbench__command-button ek-workbench__command-button--icon">…</button>[22m
+[2m  - attempting click action[22m
+[2m    - waiting for element to be visible, enabled and stable[22m
+
+
+Failure screenshot:
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-drives-an-empty-React-host-through-the-package-default-workbench-1.png
+
+ ❯ clickByText packages/react/test/proof-loop-demo.browser.test.tsx:1092:20
+    1090|   }
+    1091|   if (menu || panel || target!.closest(".ek-workbench__viewport-tools"…
+    1092|     await userEvent.click(target!);
+       |                    ^
+    1093|     await waitForAnimationFrame();
+    1094|     return;
+ ❯ verifyStarterFlow packages/react/test/proof-loop-demo.browser.test.tsx:886:10
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:201:4
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/34]⎯
+
+ FAIL  |chromium-mobile| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > resizes and restores React panels across desktop sizes without replacing the canvas
+TimeoutError: locator.click: Timeout 24663ms exceeded.
+Call log:
+[2m  - waiting for locator('[data-vitest="true"]').contentFrame().getByLabel('Collapse left panel')[22m
+[2m    - locator resolved to <button type="button" aria-expanded="true" aria-controls="_r_1b_-left" aria-label="Collapse left panel">«</button>[22m
+[2m  - attempting click action[22m
+[2m    2 × waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - performing click action[22m
+[2m      - <aside data-testid="starter-overlay">0 objects · 0 assets</aside> from <div class="ek-workbench__overlay">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m    - waiting 20ms[22m
+[2m    2 × waiting for element to be visible, enabled and stable[22m
+[2m      - element is visible, enabled and stable[22m
+[2m      - scrolling into view if needed[22m
+[2m      - done scrolling[22m
+[2m      - performing click action[22m
+[2m      - <aside data-testid="starter-overlay">0 objects · 0 assets</aside> from <div class="ek-workbench__overlay">…</div> subtree intercepts pointer events[22m
+[2m    - retrying click action[22m
+[2m      - waiting 100ms[22m
+[2m    36 × waiting for element to be visible, enabled and stable[22m
+[2m       - element is visible, enabled and stable[22m
+[2m       - scrolling into view if needed[22m
+[2m       - done scrolling[22m
+[2m       - performing click action[22m
+[2m       - <aside data-testid="starter-overlay">0 objects · 0 assets</aside> from <div class="ek-workbench__overlay">…</div> subtree intercepts pointer events[22m
+[2m     - retrying click action[22m
+[2m       - waiting 500ms[22m
+
+
+Failure screenshot:
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-resizes-and-restores-React-panels-across-desktop-sizes-without-replacing-the-canvas-1.png
+
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:236:26
+    234|           expect(Number(separator.getAttribute("aria-valuenow"))).toBe…
+    235|           const expandedCanvasWidth = canvas.width;
+    236|           await userEvent.click(host.querySelector(`[aria-label="Colla…
+       |                          ^
+    237|           await waitFor(() => {
+    238|             expect(panel.hidden).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/34]⎯
+
+ FAIL  |chromium-mobile| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > keeps tools reachable when a host status drawer reduces the viewport
+Error: Test timed out in 15000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+Failure screenshot:
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-keeps-tools-reachable-when-a-host-status-drawer-reduces-the-viewport-1.png
+
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:275:2
+    273|   }, 30000);
+    274|
+    275|   it("keeps tools reachable when a host status drawer reduces the view…
+       |  ^
+    276|     const originalSize = { width: window.innerWidth, height: window.in…
+    277|     const editor = createEditor();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/34]⎯
+
+ FAIL  |chromium-mobile| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > searches and focuses real imported hierarchy targets at desktop sizes
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+Failure screenshot:
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-searches-and-focuses-real-imported-hierarchy-targets-at-desktop-sizes-1.png
+
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:329:2
+    327|   }, 15000);
+    328|
+    329|   it("searches and focuses real imported hierarchy targets at desktop …
+       |  ^
+    330|     const originalSize = { width: window.innerWidth, height: window.in…
+    331|     const editor = createEditor();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/34]⎯
+
+ FAIL  |chromium-mobile| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > imports a real GLB and keeps canvas picking and undo working after React panel resize
+AssertionError: expected '' to contain 'Runtime ready'
+
+Failure screenshot:
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-imports-a-real-GLB-and-keeps-canvas-picking-and-undo-working-after-React-panel-resize-1.png
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- Runtime ready[39m
+
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:454:48
+    452|     const root = mountReactEmptyHost({ nativeRuntime: true });
+    453|     cleanup = root.cleanup;
+    454|     await waitFor(() => expect(text(root.host)).toContain("Runtime rea…
+       |                                                ^
+    455|     const geometry = new BoxGeometry(1, 1, 1);
+    456|     const material = new MeshBasicMaterial({ color: 0x6fa8dc });
+ ❯ waitFor packages/react/test/proof-loop-demo.browser.test.tsx:1365:6
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:454:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/34]⎯
+
+ FAIL  |chromium-mobile| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > restores React object transforms and material slots from a real project package
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:483:2
+    481|   }, 15000);
+    482|
+    483|   it("restores React object transforms and material slots from a real …
+       |  ^
+    484|     const originalSize = { width: window.innerWidth, height: window.in…
+    485|     const editor = createEditor();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/34]⎯
+
+ FAIL  |chromium-mobile| packages/react/test/proof-loop-demo.browser.test.tsx > proof-loop starter demo browser verification > saves and restores React environment, lights and default camera through the host
+Error: Test timed out in 20000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+Failure screenshot:
+  - packages/react/test/__screenshots__/proof-loop-demo.browser.test.tsx/proof-loop-starter-demo-browser-verification-saves-and-restores-React-environment--lights-and-default-camera-through-the-host-1.png
+
+ ❯ packages/react/test/proof-loop-demo.browser.test.tsx:614:2
+    612|   }, 20000);
+    613|
+    614|   it("saves and restores React environment, lights and default camera …
+       |  ^
+    615|     const originalSize = { width: window.innerWidth, height: window.in…
+    616|     const editor = createEditor();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/34]⎯
+
+ FAIL  |chromium-mobile| packages/react/test/showcase.browser.test.tsx > edits the local showcase and restores its complete project in a fresh host in en
+ FAIL  |chromium-mobile| packages/react/test/showcase.browser.test.tsx > edits the local showcase and restores its complete project in a fresh host in zh-CN
+Error: Test timed out in 90000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+
+Failure screenshots:
+  - packages/react/test/__screenshots__/showcase.browser.test.tsx/edits-the-local-showcase-and-restores-its-complete-project-in-a-fresh-host-in-en-1.png
+  - packages/react/test/__screenshots__/showcase.browser.test.tsx/edits-the-local-showcase-and-restores-its-complete-project-in-a-fresh-host-in-zh-CN-1.png
+
+ ❯ packages/react/test/showcase.browser.test.tsx:12:34
+     10| import modelUrl from "../../../examples/react-proof-loop/src/showcase/…
+     11|
+     12| it.each(["en", "zh-CN"] as const)("edits the local showcase and restor…
+       |                                  ^
+     13|   const originalSize = { width: window.innerWidth, height: window.inne…
+     14|   await page.viewport(1440, 900);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/34]⎯
+
+ FAIL  |chromium-mobile| packages/react/test/showcase.browser.test.tsx > recovers a failed default model download through the real problem drawer
+AssertionError: expected 'Problem detailsClose detailsAsset fai…' to contain 'No problems.'
+
+Failure screenshot:
+  - packages/react/test/__screenshots__/showcase.browser.test.tsx/recovers-a-failed-default-model-download-through-the-real-problem-drawer-1.png
+
+Expected: [32m"No problems."[39m
+Received: [31m"Problem detailsClose detailsAsset failed to resolveerror · runtimeTarget · Object · showcase-modelMaximum call stack size exceededReplace assetenvironment asset failed to resolveerror · runtimeTarget · Environment · showcase-studioMaximum call stack size exceededReplace assetshowcase-car · Replaced with ToyCar.glb"[39m
+
+ ❯ packages/react/test/showcase.browser.test.tsx:151:68
+    149|     input.files = data.files;
+    150|     input.dispatchEvent(new Event("change", { bubbles: true }));
+    151|     await expect.poll(() => drawer.textContent, { timeout: 10000 }).to…
+       |                                                                    ^
+    152|     await userEvent.click(findButton(host, "Close details"));
+    153|     await userEvent.click(findButton(host, "Project menu"));
+
+Caused by: Error: Matcher did not succeed in time.
+ ❯ packages/react/test/showcase.browser.test.tsx:151:4
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/34]⎯
+
+
+ Test Files  6 failed | 6 passed (12)
+      Tests  34 failed | 41 passed (75)
+   Start at  20:55:03
+   Duration  232.20s (transform 0ms, setup 0ms, import 74.38s, tests 1285.64s, environment 0ms)
+
+ ELIFECYCLE  Command failed with exit code 1.

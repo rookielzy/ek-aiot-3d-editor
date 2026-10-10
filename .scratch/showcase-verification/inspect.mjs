@@ -1,0 +1,12 @@
+import { chromium } from 'playwright';
+const browser=await chromium.launch({headless:true});
+const page=await browser.newPage({viewport:{width:1440,height:900}});
+page.on('pageerror',e=>console.log('ERROR',e.message));
+page.on('console',m=>{if(m.type()==='error') console.log('CONSOLE',m.text());});
+await page.goto('http://127.0.0.1:5180');
+await page.locator('.ek-workbench__tree-row').filter({hasText:'Toy Car'}).first().waitFor();
+await page.waitForTimeout(2000);
+await page.screenshot({path:'.scratch/showcase-verification/default.png'});
+console.log((await page.locator('.ek-workbench__status').allTextContents()));
+console.log(await page.locator('[role=tree]').allTextContents());
+await browser.close();
