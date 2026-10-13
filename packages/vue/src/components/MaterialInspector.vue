@@ -11,12 +11,14 @@
           <label
             v-for="target in section.targets"
             :key="target.key"
+            data-ek-discard-draft
             class="ek-material-target-option"
             :data-unresolved="target.unresolved ? 'true' : undefined"
           >
             <input
               v-model="activeTargetKey"
               type="radio"
+              data-ek-discard-draft
               :name="`${id}-material-target`"
               :value="target.key"
               :disabled="!target.canSelect"
@@ -36,50 +38,9 @@
       <div class="ek-inspector-grid ek-material-fields">
         <label v-for="field in fields" :key="field.id" class="ek-inspector-field" :class="{ 'ek-inspector-field--checkbox': field.kind === 'checkbox' }">
           <span>{{ renderFieldLabel(resolvedI18n, field) }}</span>
-          <InspectorNumberInput
-            v-if="field.kind === 'number'"
-            :key="`${effectiveTargetKey}:${field.id}`"
-            :value="Number(field.value)"
-            :disabled="field.disabled"
-            :min="field.min"
-            :max="field.max"
-            :step="field.step ?? 0.01"
-            :aria-invalid="fieldProblem?.fieldId === field.id ? true : undefined"
-            :aria-describedby="fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined"
-            :on-commit="(value) => commit(field.id as MaterialFieldId, value.trim() === '' ? 'NaN' : value)"
-          />
-          <input
-            v-else-if="field.kind === 'color'"
-            :key="`${effectiveTargetKey}:${field.id}:${String(field.value)}`"
-            :value="field.value"
-            :disabled="field.disabled"
-            type="color"
-            :aria-invalid="fieldProblem?.fieldId === field.id ? true : undefined"
-            :aria-describedby="fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined"
-            @change="commit(field.id as MaterialFieldId, ($event.target as HTMLInputElement).value)"
-          />
-          <input
-            v-else-if="field.kind === 'checkbox'"
-            :key="`${effectiveTargetKey}:${field.id}:${String(field.value)}`"
-            :checked="Boolean(field.value)"
-            :disabled="field.disabled"
-            type="checkbox"
-            :aria-invalid="fieldProblem?.fieldId === field.id ? true : undefined"
-            :aria-describedby="fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined"
-            @change="commit(field.id as MaterialFieldId, ($event.target as HTMLInputElement).checked)"
-          />
-          <select
-            v-else
-            :key="`${effectiveTargetKey}:${field.id}:${String(field.value)}`"
-            :value="String(field.value)"
-            :disabled="field.disabled"
-            :aria-invalid="fieldProblem?.fieldId === field.id ? true : undefined"
-            :aria-describedby="fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined"
-            @change="commit(field.id as MaterialFieldId, ($event.target as HTMLSelectElement).value)"
-          >
-            <option v-if="field.kind === 'asset'" value="">{{ resolvedI18n.t("reactWorkbench.inspector.field.asset.none") }}</option>
-            <option v-for="option in field.options ?? []" :key="option.value" :value="option.value">{{ renderOptionLabel(resolvedI18n, option) }}</option>
-          </select>
+          <InspectorFieldControl :key="`${effectiveTargetKey}:${field.id}`" :field="field" :i18n="resolvedI18n"
+            :invalid="fieldProblem?.fieldId === field.id" :description-id="fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined"
+            :on-commit="(value) => commit(field.id as MaterialFieldId, value)" @cancel="fieldProblem = null" />
           <small v-if="fieldProblem?.fieldId === field.id" :id="problemId(field.id)" class="ek-inspector-field-problem" role="alert">{{ renderProblemMessage(resolvedI18n, fieldProblem) }}</small>
         </label>
       </div>
@@ -103,14 +64,13 @@ import {
 import {
   DEFAULT_INSPECTOR_I18N,
   renderFieldLabel,
-  renderOptionLabel,
   renderProblemMessage,
   renderSectionReason,
   renderSectionTitle,
   type InspectorI18n
 } from "./inspector-i18n";
 
-import InspectorNumberInput from "./InspectorNumberInput.vue";
+import InspectorFieldControl from "./InspectorFieldControl.vue";
 
 const props = defineProps<{
   editor: Editor;

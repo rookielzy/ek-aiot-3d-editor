@@ -18,7 +18,7 @@
     <p v-if="fieldProblem && !fieldProblem.fieldId" class="ek-inspector-warning" role="alert">{{ renderProblemMessage(resolvedI18n, fieldProblem) }}</p>
     <details v-for="group in ['lighting', 'background'] as const" :key="group" class="ek-inspector-fold" open>
       <summary>{{ resolvedI18n.t(`reactWorkbench.inspector.sceneFields.${group}`) }}</summary>
-      <SceneInspectorFields :fields="section.fields.filter((field) => group === 'lighting' ? !field.id.startsWith('background.') : field.id.startsWith('background.'))"
+      <SceneInspectorFields @reset-field="(fieldId) => { if (fieldProblem?.fieldId === fieldId) fieldProblem = null; }" :fields="section.fields.filter((field) => group === 'lighting' ? !field.id.startsWith('background.') : field.id.startsWith('background.'))"
         :problem="fieldProblem" :i18n="resolvedI18n" :on-commit="(fieldId, value) => commit(fieldId as EnvironmentFieldId, value)" />
     </details>
   </section>

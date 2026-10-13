@@ -2,15 +2,15 @@
   <section class="ek-inspector-section">
     <header class="ek-inspector-section__header">
       <h2>{{ renderSectionTitle(resolvedI18n, section) }}</h2>
-      <select :aria-label="resolvedI18n.t('reactWorkbench.inspector.lights.add.label')" class="ek-inspector-inline-select" :value="addKind" @change="addKind = ($event.target as HTMLSelectElement).value; addLight(addKind as LightKind)">
-        <option value="">{{ resolvedI18n.t("reactWorkbench.inspector.lights.add.option") }}</option>
-        <option v-for="option in section.addOptions" :key="option.value" :value="option.value">{{ renderOptionLabel(resolvedI18n, option) }}</option>
-      </select>
+      <InspectorSelect :aria-label="resolvedI18n.t('reactWorkbench.inspector.lights.add.label')" class="ek-inspector-inline-select" :value="addKind" :i18n="resolvedI18n"
+        :options="[{ value: '', label: resolvedI18n.t('reactWorkbench.inspector.lights.add.option') }, ...section.addOptions.map((option) => ({ value: option.value, label: renderOptionLabel(resolvedI18n, option) }))]"
+        :on-commit="(value) => { addLight(value as LightKind); return true; }" />
     </header>
     <div v-if="section.lights.length" class="ek-inspector-light-list" role="list">
       <button
         v-for="light in section.lights"
         :key="light.id"
+        data-ek-discard-draft
         type="button"
         :class="{ 'is-active': light.active }"
         :aria-pressed="light.active"
@@ -44,11 +44,11 @@
       </p>
     </div>
     <div v-if="section.activeLightId" class="ek-inspector-grid">
-      <SceneInspectorFields :fields="section.fields.filter((field) => !field.id.startsWith('shadow.'))"
+      <SceneInspectorFields @reset-field="(fieldId) => { if (fieldProblem?.fieldId === fieldId) fieldProblem = null; }" :fields="section.fields.filter((field) => !field.id.startsWith('shadow.'))"
         :target-key="section.activeLightId" :problem="fieldProblem" :i18n="resolvedI18n" :on-commit="(fieldId, value) => commit(fieldId as LightFieldId, value)" />
       <details v-if="section.fields.some((field) => field.id.startsWith('shadow.'))" class="ek-inspector-fold" open>
         <summary>{{ resolvedI18n.t('reactWorkbench.inspector.sceneFields.shadows') }}</summary>
-        <SceneInspectorFields :fields="section.fields.filter((field) => field.id.startsWith('shadow.'))"
+        <SceneInspectorFields @reset-field="(fieldId) => { if (fieldProblem?.fieldId === fieldId) fieldProblem = null; }" :fields="section.fields.filter((field) => field.id.startsWith('shadow.'))"
           :target-key="section.activeLightId" :problem="fieldProblem" :i18n="resolvedI18n" :on-commit="(fieldId, value) => commit(fieldId as LightFieldId, value)" />
       </details>
       <button class="ek-inspector-danger" type="button" @click="removeActive">{{ resolvedI18n.t("reactWorkbench.inspector.lights.remove.label") }}</button>
@@ -79,6 +79,7 @@ import {
   type InspectorI18n
 } from "./inspector-i18n";
 
+import InspectorSelect from "./InspectorSelect.vue";
 import SceneInspectorFields from "./SceneInspectorFields.vue";
 
 const props = defineProps<{

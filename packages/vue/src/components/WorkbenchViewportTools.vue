@@ -2,7 +2,7 @@
   <div ref="root" class="ek-workbench__viewport-tools" :aria-label="t('reactWorkbench.toolbar.controls.label')" @keydown.esc="dismissWithEscape" @focusout="dismissOnBlur">
     <div class="ek-workbench__viewport-tool-strip">
       <div v-for="group in directGroups" :key="group.key" class="ek-workbench__tool-group" role="group" :aria-label="t(group.label)">
-        <button v-for="command in group.commands" :key="command.key"
+        <button v-for="command in group.commands" :key="command.key" :data-ek-discard-draft="command.key === 'undo' || command.key === 'redo' ? '' : undefined"
           class="ek-workbench__command-button ek-workbench__command-button--icon"
           type="button" :title="command.reason ? t(command.reason) : t(command.title)" :aria-label="t(command.label)"
           :disabled="command.disabled" :aria-pressed="command.pressed" @click="command.onClick">
@@ -22,7 +22,7 @@
     <div v-for="group in secondaryGroups" :id="`${id}-${group.key}`" :key="group.key"
       class="ek-workbench__tool-popover" role="group" :hidden="openGroup !== group.key" :aria-label="t(group.label)">
       <strong>{{ t(group.label) }}</strong>
-      <button v-for="command in group.commands" :key="command.key" class="ek-workbench__command-button"
+      <button v-for="command in group.commands" :key="command.key" :data-ek-discard-draft="command.key === 'undo' || command.key === 'redo' ? '' : undefined" class="ek-workbench__command-button"
         type="button" :title="command.reason ? t(command.reason) : t(command.title)" :disabled="command.disabled"
         :aria-pressed="command.pressed" @click="runCommand(command)">
         <WorkbenchIcon :name="command.icon" /><span>{{ t(command.label) }}</span>

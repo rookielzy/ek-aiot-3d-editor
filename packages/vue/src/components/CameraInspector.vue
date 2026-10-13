@@ -10,6 +10,7 @@
       <button
         v-for="view in section.cameraViews"
         :key="view.id"
+        data-ek-discard-draft
         type="button"
         :class="{ 'is-active': view.active }"
         :aria-pressed="view.active"
@@ -29,7 +30,7 @@
         <button v-if="section.defaultCameraViewId === section.activeCameraViewId" type="button" @click="setDefault(null)">{{ resolvedI18n.t("reactWorkbench.inspector.camera.clearDefault.label") }}</button>
         <button v-else type="button" @click="setDefault(section.activeCameraViewId)">{{ resolvedI18n.t("reactWorkbench.inspector.camera.setDefault.label") }}</button>
       </div>
-      <SceneInspectorFields :fields="section.fields" :target-key="section.activeCameraViewId" :problem="fieldProblem" :i18n="resolvedI18n"
+      <SceneInspectorFields @reset-field="(fieldId) => { if (fieldProblem?.fieldId === fieldId) fieldProblem = null; }" :fields="section.fields" :target-key="section.activeCameraViewId" :problem="fieldProblem" :i18n="resolvedI18n"
         :on-commit="(fieldId, value) => commit(fieldId as CameraViewFieldId, value)" />
       <button class="ek-inspector-danger" type="button" @click="removeActive">{{ resolvedI18n.t("reactWorkbench.inspector.camera.delete.label") }}</button>
     </div>

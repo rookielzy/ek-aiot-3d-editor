@@ -1,10 +1,11 @@
 import { fileURLToPath, URL } from "node:url";
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
+import tailwindcss from "@tailwindcss/vite";
 import { threeDecoderAssetsPlugin } from "../../scripts/vite-three-decoder-assets";
 
 export default defineConfig({
-  plugins: [vue(), threeDecoderAssetsPlugin()],
+  plugins: [vue(), tailwindcss(), threeDecoderAssetsPlugin()],
   resolve: {
     alias: [
       {

@@ -93,3 +93,9 @@ Locale is a browser or host UI preference. Switch visibility, switch disabled st
 The bottom status bar summarizes problems; Problem details opens the full drawer with severity, source, and file replacement for recoverable assets. Closing and reopening the drawer preserves the diagnostics. Replacement passes the selected `File` to `editor.replaceAsset()` for the same asset ID. The Vue layer does not store files in snapshots and does not implement its own asset resolver, package validator, or runtime cleanup.
 
 The workbench and inspector do not implement box selection, full asset libraries, texture upload queues, persisted layouts, schema-driven inspector plugins, GLB internal hierarchy editing, per-submesh material discovery, or hosted runtime publishing.
+
+## Inspector form controls
+
+The Inspector uses internally adapted [shadcn-vue](https://www.shadcn-vue.com/) controls backed by Reka UI, matching the React shell. Import `@ek-aiot/3d-editor-vue/styles.css` as before; consumers do not need Tailwind configuration. The package compiles prefixed utilities without a global reset. Select and color popovers render outside the scrollable panel and inherit the current editor's theme.
+
+Number and text fields commit on Enter or blur; Escape discards drafts and clears validation feedback. IME confirmation does not submit text. Switching targets discards unfinished input. Invalid drafts leave the scene unchanged. Asset choices support search and an explicit None option where Core permits clearing. Switches and enum choices commit immediately. Colors use a picker or six-digit hex value; Apply commits once, while Cancel, Escape and outside dismissal discard previews.

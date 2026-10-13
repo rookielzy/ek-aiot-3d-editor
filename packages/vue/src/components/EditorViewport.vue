@@ -1,5 +1,5 @@
 <template>
-  <div ref="container" class="ek-editor-viewport">
+  <div ref="container" data-ek-discard-draft class="ek-editor-viewport">
     <div
       v-if="marquee.status === 'dragging' && marquee.rect"
       class="ek-editor-viewport__marquee"

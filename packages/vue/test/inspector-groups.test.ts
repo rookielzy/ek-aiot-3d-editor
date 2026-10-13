@@ -1,3 +1,4 @@
+import { inspectorOptions, selectInspectorOption } from "./support/inspector-controls";
 import { mount, type VueWrapper } from "@vue/test-utils";
 import { markRaw, nextTick } from "vue";
 import { describe, expect, it } from "vitest";
@@ -17,7 +18,7 @@ describe("Vue Inspector groups", () => {
     editor.dispatch({ type: "create-camera-view", view: { id: "hero", name: "Hero" } });
     editor.dispatch({ type: "create-camera-view", view: { id: "detail", name: "Detail", projection: { kind: "perspective", fov: 35 } } });
     editor.dispatch({ type: "select-node", nodeId: "hero" });
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
     const scene = await openGroup(wrapper, "Scene");
     await scene.findAll("button").find((button) => button.text().startsWith("Detail"))!.trigger("click");
     expect(editor.getSnapshot().selection.nodeId).toBe("detail");
@@ -28,18 +29,18 @@ describe("Vue Inspector groups", () => {
 
   it.each(["ambient", "hemisphere", "directional", "point", "spot"])("adds, edits and removes %s lights and resets the add control", async (kind) => {
     const editor = markRaw(createEditor());
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
     const scene = await openGroup(wrapper, "Scene");
     const add = scene.get('[aria-label="Add light"]');
-    await add.setValue(kind);
+    await selectInspectorOption(add, kind);
     const light = Object.values(editor.getSnapshot().lights)[0]!;
     expect(light.kind).toBe(kind);
     expect(editor.getSnapshot().nodes[editor.getSnapshot().selection.nodeId!].kind).toBe("light");
-    expect((add.element as HTMLSelectElement).value).toBe("");
+    expect(add.text()).toBe("Add");
     await scene.get('[aria-label="Intensity"]').setValue("2");
     await scene.get('[aria-label="Intensity"]').trigger("keydown", { key: "Enter" });
     expect(editor.getSnapshot().lights[light.id].intensity).toBe(2);
-    await add.setValue(kind);
+    await selectInspectorOption(add, kind);
     expect(Object.keys(editor.getSnapshot().lights)).toHaveLength(2);
     await scene.findAll("button").find((button) => button.text() === "Remove light")!.trigger("click");
     expect(Object.keys(editor.getSnapshot().lights)).toEqual([light.id]);
@@ -49,13 +50,13 @@ describe("Vue Inspector groups", () => {
   it("clears lighting and background assets independently and restores them with undo", async () => {
     const editor = markRaw(createEditor());
     editor.dispatch({ type: "register-asset", asset: { id: "hdr", kind: "hdr" } });
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
     const panel = await openGroup(wrapper, "Environment");
     await panel.findAll("button").find((button) => button.text() === "Shared lighting/background")!.trigger("click");
-    await panel.get('[aria-label="Lighting asset"]').setValue("");
+    await selectInspectorOption(panel.get('[aria-label="Lighting asset"]'), "");
     expect(editor.getSnapshot().environment.lighting.source).toEqual({ kind: "none" });
     expect(editor.getSnapshot().environment.background.source).toEqual({ kind: "hdr", assetId: "hdr" });
-    await panel.get('[aria-label="Background asset"]').setValue("");
+    await selectInspectorOption(panel.get('[aria-label="Background asset"]'), "");
     expect(editor.getSnapshot().environment.background.source).toEqual({ kind: "none" });
     editor.undo();
     expect(editor.getSnapshot().environment.background.source).toEqual({ kind: "hdr", assetId: "hdr" });
@@ -67,16 +68,17 @@ describe("Vue Inspector groups", () => {
     for (const id of ["px", "nx", "py", "ny", "pz", "nz", "image"]) {
       editor.dispatch({ type: "register-asset", asset: { id, kind: "image", label: id } });
     }
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
     const panel = await openGroup(wrapper, "Environment");
     await panel.findAll("button").find((button) => button.text() === "Use six textures for both")!.trigger("click");
-    await panel.get('[aria-label="Background asset"]').setValue("image");
-    await panel.get('[aria-label="Background source"]').setValue("flat-image");
-    const faces = panel.findAll("select").filter((select) => select.attributes("aria-label")?.startsWith("Lighting ") && !["Lighting source", "Lighting asset"].includes(select.attributes("aria-label")));
+    await selectInspectorOption(panel.get('[aria-label="Background asset"]'), "image");
+    await selectInspectorOption(panel.get('[aria-label="Background source"]'), "flat-image");
+    const faces = panel.findAll('[role="combobox"]').filter((select) => select.attributes("aria-label")?.startsWith("Lighting ") && !["Lighting source", "Lighting asset"].includes(select.attributes("aria-label")));
     expect(faces).toHaveLength(6);
     for (const face of faces) {
-      expect(face.get('option[value=""]').attributes("disabled")).toBeDefined();
-      await face.setValue("image");
+      const options = await inspectorOptions(face);
+      expect(options.find((option) => option.attributes("data-ek-value") === "")!.attributes("data-disabled")).toBeDefined();
+      await options.find((option) => option.attributes("data-ek-value") === "image")!.trigger("click");
     }
     expect(editor.getSnapshot().environment.lighting.source).toEqual({ kind: "cubemap", faces: ["positive-x", "negative-x", "positive-y", "negative-y", "positive-z", "negative-z"].map((role) => ({ role, assetId: "image" })) });
     expect(editor.getSnapshot().environment.background.source).toEqual({ kind: "flat-image", assetId: "image" });

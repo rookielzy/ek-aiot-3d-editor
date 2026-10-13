@@ -14,9 +14,7 @@ import {
 describe("React and Vue Workbench i18n parity", () => {
   it("keeps shared dictionary key sets aligned across adapters", () => {
     for (const locale of ["en", "zh-CN"] as const) {
-      // React-only form copy is introduced with its Inspector rollout; Vue will
-      // acquire it when its independently implemented controls are migrated.
-      const sharedReactKeys = Object.keys(REACT_WORKBENCH_DICTIONARIES[locale]).filter((key) => !key.startsWith("reactWorkbench.inspector.form."));
+      const sharedReactKeys = Object.keys(REACT_WORKBENCH_DICTIONARIES[locale]);
       expect(Object.keys(VUE_WORKBENCH_DICTIONARIES[locale]).sort()).toEqual(sharedReactKeys.sort());
     }
   });
@@ -29,6 +27,9 @@ describe("React and Vue Workbench i18n parity", () => {
       "reactWorkbench.leftPanel.assets.search.placeholder",
       "reactWorkbench.status.selection",
       "reactWorkbench.inspector.scene.label",
+      "reactWorkbench.inspector.form.search",
+      "reactWorkbench.inspector.form.invalidColor",
+      "reactWorkbench.inspector.form.apply",
       "reactWorkbench.inspector.problems.empty",
       "reactWorkbench.inspector.problems.replaceAsset.label",
       "inspector.section.material.title",

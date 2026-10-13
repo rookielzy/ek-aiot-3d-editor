@@ -1,3 +1,4 @@
+import { setInspectorColor } from "./support/inspector-controls";
 import { mount } from "@vue/test-utils";
 import { defineComponent, h, markRaw, nextTick } from "vue";
 import { Group } from "three";
@@ -1467,6 +1468,7 @@ describe("Vue EditorWorkbench", () => {
     editor.dispatch({ type: "select-node", nodeId: "object-a" });
     const slotId = getWorkbenchSlotIds(editor)[1]!;
     const wrapper = mount(EditorWorkbench, {
+      attachTo: document.body,
       props: { editor, rendererFactory: fakeRenderer, locale: "en" },
       slots: { toolbar: ({ editor: contextEditor, snapshot, dispatch }) => h("button", {
         "data-inspector-host": snapshot.selection.nodeId,
@@ -1477,7 +1479,7 @@ describe("Vue EditorWorkbench", () => {
     const screenTarget = wrapper.findAll(".ek-material-target-option").find((option) => option.text().includes("Screen"));
     expect(screenTarget).toBeTruthy();
     await screenTarget!.find('input[type="radio"]').setValue(true);
-    await wrapper.findAll('input[type="color"]')[0].setValue("#336699");
+    await setInspectorColor(wrapper.get('[aria-label="Base color"]'), "#336699");
 
     expect(editor.getSnapshot().materials.assignments[`material-slot:object-a:${slotId}`]).toMatchObject({
       target: { kind: "material-slot", objectId: "object-a", slotId }

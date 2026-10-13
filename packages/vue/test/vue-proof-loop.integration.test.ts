@@ -1,3 +1,4 @@
+import { setInspectorColor } from "./support/inspector-controls";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -166,8 +167,8 @@ describe("Vue proof-loop parity", () => {
       expect(wrapper.text()).toMatch(/Redo [1-9]/);
       await clickButton(wrapper, "Redo");
 
-      const baseColorInput = fieldInput(wrapper, "Base color");
-      await baseColorInput.setValue("#00aa88");
+      const baseColorInput = wrapper.get('[aria-label="Base color"]');
+      await setInspectorColor(baseColorInput, "#00aa88");
       await nextTick();
       await waitForVue(() => expect(wrapper.text()).toContain("Dirty"));
 

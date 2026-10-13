@@ -1,3 +1,4 @@
+import { selectInspectorOption, setInspectorColor } from "./support/inspector-controls";
 import { mount } from "@vue/test-utils";
 import { markRaw, nextTick } from "vue";
 import { describe, expect, it, vi } from "vitest";
@@ -26,7 +27,7 @@ describe("Vue InspectorPanel", () => {
         subscribeProblems: () => () => {}
     };
     vi.spyOn(editor, "getRuntime").mockReturnValue(runtime as never);
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
     const body = wrapper.findAll(".ek-material-target-option").find((target) => target.text().includes("Body"))!;
     expect(body.get("input").attributes("disabled")).toBeDefined();
     expect(body.text()).toContain("Slot is unresolved and cannot create a new assignment.");
@@ -39,7 +40,7 @@ describe("Vue InspectorPanel", () => {
 
   it("preserves a manual material slot across groups and discards drafts when targets change", async () => {
     const editor = markRaw(createSlotEditor());
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
     const target = (name: string) => wrapper.findAll(".ek-material-target-option").find((item) => item.text().includes(name))!.get('input[type="radio"]');
     const field = (name: string) => wrapper.findAll("label").find((label) => label.text().startsWith(name))!.get("input");
     await target("Body").setValue(true);
@@ -72,7 +73,7 @@ describe("Vue InspectorPanel", () => {
     editor.dispatch({ type: "set-material", target: { kind: "material-slot", objectId: "object-a", slotId }, material: { opacity: 0.5 } });
     const snapshot = editor.getSnapshot();
     editor.restore({ ...snapshot, nodes: Object.fromEntries(Object.entries(snapshot.nodes).map(([id, node]) => [id, node.kind === "imported" ? { ...node, materialSlots: [] } : node])) });
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
     await wrapper.findAll(".ek-material-target-option").find((item) => item.text().includes("Unresolved slot"))!.get("input").setValue(true);
     expect(wrapper.text()).toContain("Existing override values remain editable");
     const opacity = wrapper.findAll("label").find((label) => label.text() === "Opacity")!.get("input");
@@ -83,7 +84,7 @@ describe("Vue InspectorPanel", () => {
     await nextTick();
     expect((opacity.element as HTMLInputElement).value).toBe("0.5");
     for (const name of ["map", "normal map", "roughness map", "metalness map", "emissive map", "alpha map"]) {
-      expect(wrapper.findAll("label").find((label) => label.text().startsWith(name))!.get("select").attributes("disabled")).toBeUndefined();
+      expect(wrapper.findAll("label").find((label) => label.text().startsWith(name))!.get('[role="combobox"]').attributes("disabled")).toBeUndefined();
     }
     wrapper.unmount();
   });
@@ -128,7 +129,7 @@ describe("Vue InspectorPanel", () => {
 
   it("renders disabled node transform sections and available scene sections with no selection", () => {
     const editor = markRaw(createEditor());
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
 
     expect(wrapper.text()).toContain("Select a transformable node to edit transform.");
     expect(wrapper.text()).toContain("Environment");
@@ -142,7 +143,7 @@ describe("Vue InspectorPanel", () => {
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
     editor.dispatch({ type: "select-object", objectId: "object-a" });
     const dispatchSpy = vi.spyOn(editor, "dispatch");
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
 
     const input = wrapper.find('input[type="number"]');
     await input.setValue("4");
@@ -158,7 +159,7 @@ describe("Vue InspectorPanel", () => {
     const editor = markRaw(createEditor());
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
     editor.dispatch({ type: "select-object", objectId: "object-a" });
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
 
     const inputs = () => wrapper.findAll('input[type="number"]');
     await inputs()[0].setValue("4");
@@ -181,10 +182,10 @@ describe("Vue InspectorPanel", () => {
     const editor = markRaw(createEditor());
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
     editor.dispatch({ type: "select-object", objectId: "object-a" });
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
 
-    const colorInputs = wrapper.findAll('input[type="color"]');
-    await colorInputs[0].setValue("#336699");
+    const colorInputs = wrapper.findAll(".ek-ui-color-trigger");
+    await setInspectorColor(colorInputs[0], "#336699");
 
     expect(editor.getSnapshot().materials.definitions["material:object:object-a"].override.color).toBe("#336699");
     editor.undo();
@@ -197,13 +198,13 @@ describe("Vue InspectorPanel", () => {
     const editor = markRaw(createSlotEditor());
     const slotId = getSlotIds(editor)[0]!;
     const dispatchSpy = vi.spyOn(editor, "dispatch");
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
 
     const bodyTarget = wrapper.findAll(".ek-material-target-option").find((option) => option.text().includes("Body"));
     expect(bodyTarget).toBeTruthy();
     await bodyTarget!.find('input[type="radio"]').setValue(true);
-    const baseColor = wrapper.findAll('input[type="color"]')[0];
-    await baseColor.setValue("#336699");
+    const baseColor = wrapper.findAll(".ek-ui-color-trigger")[0];
+    await setInspectorColor(baseColor, "#336699");
 
     expect(dispatchSpy).toHaveBeenLastCalledWith({
       type: "set-material",
@@ -216,7 +217,7 @@ describe("Vue InspectorPanel", () => {
   it("keeps broad material target behavior when object override remains active", async () => {
     const editor = markRaw(createSlotEditor());
     const dispatchSpy = vi.spyOn(editor, "dispatch");
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
 
     const roughness = wrapper.findAll("label").find((label) => label.text().includes("Roughness"))?.find('input[type="number"]');
     if (!roughness) {
@@ -238,7 +239,7 @@ describe("Vue InspectorPanel", () => {
     const importedNodeId = getImportedNodeIds(editor)[0]!;
     const slotId = getSlotIds(editor)[0]!;
     const dispatchSpy = vi.spyOn(editor, "dispatch");
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
 
     const roughness = wrapper.findAll("label").find((label) => label.text().includes("Roughness"))?.find('input[type="number"]');
     if (!roughness) {
@@ -248,8 +249,8 @@ describe("Vue InspectorPanel", () => {
     await roughness.trigger("blur");
     editor.dispatch({ type: "select-node", nodeId: importedNodeId });
     await nextTick();
-    const baseColor = wrapper.findAll('input[type="color"]')[0];
-    await baseColor.setValue("#336699");
+    const baseColor = wrapper.findAll(".ek-ui-color-trigger")[0];
+    await setInspectorColor(baseColor, "#336699");
 
     expect(dispatchSpy).toHaveBeenLastCalledWith({
       type: "set-material",
@@ -263,13 +264,13 @@ describe("Vue InspectorPanel", () => {
     const editor = markRaw(createSlotEditor());
     const slotId = getSlotIds(editor)[0]!;
     const dispatchSpy = vi.spyOn(editor, "dispatch");
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
 
     const bodyTarget = wrapper.findAll(".ek-material-target-option").find((option) => option.text().includes("Body"));
     expect(bodyTarget).toBeTruthy();
     await bodyTarget!.find('input[type="radio"]').setValue(true);
-    const baseColor = wrapper.findAll('input[type="color"]')[0];
-    await baseColor.setValue("#336699");
+    const baseColor = wrapper.findAll(".ek-ui-color-trigger")[0];
+    await setInspectorColor(baseColor, "#336699");
     expect(dispatchSpy).toHaveBeenLastCalledWith(expect.objectContaining({
       target: { kind: "material-slot", objectId: "object-a", slotId }
     }));
@@ -300,7 +301,7 @@ describe("Vue InspectorPanel", () => {
   it("shows controlled material field problems without dispatching invalid drafts", async () => {
     const editor = markRaw(createSlotEditor());
     const dispatchSpy = vi.spyOn(editor, "dispatch");
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
 
     const opacity = wrapper.findAll("label").find((label) => label.text().includes("Opacity"))?.find('input[type="number"]');
     if (!opacity) {
@@ -333,7 +334,7 @@ describe("Vue InspectorPanel", () => {
   it("subscribes to runtime problems when viewport mounts after the inspector", async () => {
     const editor = markRaw(createEditor());
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
 
     const runtime = editor.mountRuntime({
       container: document.createElement("div"),
@@ -393,14 +394,14 @@ describe("Vue InspectorPanel", () => {
   it("selects an HDR environment asset from the default scene state", async () => {
     const editor = markRaw(createEditor());
     editor.dispatch({ type: "register-asset", asset: { id: "studio-hdr", kind: "hdr", label: "Studio HDR" } });
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
     await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Environment")!.trigger("click");
 
-    const lightingAsset = wrapper.findAll("label").find((label) => label.text().includes("Lighting asset"))?.find("select");
+    const lightingAsset = wrapper.findAll("label").find((label) => label.text().includes("Lighting asset"))?.find('[role="combobox"]');
     if (!lightingAsset) {
       throw new Error("Lighting asset select was not rendered");
     }
-    await lightingAsset.setValue("studio-hdr");
+    await selectInspectorOption(lightingAsset, "studio-hdr");
 
     expect(editor.getSnapshot().environment.lighting.source).toEqual({ kind: "hdr", assetId: "studio-hdr" });
     wrapper.unmount();
@@ -409,7 +410,7 @@ describe("Vue InspectorPanel", () => {
   it("applies shared environment presets through core commands", async () => {
     const editor = markRaw(createEditor());
     editor.dispatch({ type: "register-asset", asset: { id: "studio-hdr", kind: "hdr", label: "Studio HDR" } });
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
     await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Environment")!.trigger("click");
 
     const preset = wrapper.findAll("button").find((button) => button.text() === "Shared lighting/background");
@@ -426,14 +427,14 @@ describe("Vue InspectorPanel", () => {
     editor.dispatch({ type: "add-light", light: { id: "sun", kind: "directional" } });
     editor.dispatch({ type: "select-node", nodeId: "sun" });
     const dispatchSpy = vi.spyOn(editor, "dispatch");
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
 
-    const castShadows = wrapper.findAll("label").find((label) => label.text().includes("Cast shadows"))?.find('input[type="checkbox"]');
+    const castShadows = wrapper.findAll("label").find((label) => label.text().includes("Cast shadows"))?.find('[role="switch"]');
     const mapWidth = wrapper.findAll("label").find((label) => label.text().includes("Shadow map width"))?.find('input[type="number"]');
     if (!castShadows || !mapWidth) {
       throw new Error("Shadow controls were not rendered");
     }
-    await castShadows.setValue(true);
+    await castShadows.trigger("click");
     await mapWidth.setValue("2048");
     await mapWidth.trigger("blur");
 
@@ -477,7 +478,7 @@ describe("Vue InspectorPanel", () => {
       return () => {};
     });
     const dispatchSpy = vi.spyOn(editor, "dispatch");
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
 
     expect(wrapper.text()).toContain("Point light shadow is expensive");
     expect(wrapper.text()).toContain("Point light uses six shadow map faces.");
@@ -498,7 +499,7 @@ describe("Vue InspectorPanel", () => {
     editor.dispatch({ type: "add-light", light: { id: "sun", kind: "directional" } });
     editor.dispatch({ type: "select-node", nodeId: "sun" });
     const dispatchSpy = vi.spyOn(editor, "dispatch");
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
 
     const mapWidth = wrapper.findAll("label").find((label) => label.text().includes("Shadow map width"))?.find('input[type="number"]');
     if (!mapWidth) {
@@ -516,7 +517,7 @@ describe("Vue InspectorPanel", () => {
     const editor = markRaw(createEditor());
     editor.dispatch({ type: "create-camera-view", view: { id: "view-a", name: "Hero", projection: { kind: "perspective", fov: 60 } } });
     const dispatchSpy = vi.spyOn(editor, "dispatch");
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
     await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Scene")!.trigger("click");
 
     const fov = wrapper.findAll("label").find((label) => label.text().includes("FOV"))?.find('input[type="number"]');
@@ -540,7 +541,7 @@ describe("Vue InspectorPanel", () => {
     const editor = markRaw(createEditor());
     editor.dispatch({ type: "create-camera-view", view: { id: "view-a" } });
     const dispatchSpy = vi.spyOn(editor, "dispatch");
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
     await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Scene")!.trigger("click");
 
     const fov = wrapper.findAll("label").find((label) => label.text().includes("FOV"))?.find('input[type="number"]');
@@ -575,7 +576,7 @@ describe("Vue InspectorPanel", () => {
         far: 1000
       }
     });
-    const wrapper = mount(InspectorPanel, { props: { editor } });
+    const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
     await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Scene")!.trigger("click");
 
     await wrapper.findAll("button").find((button) => button.text() === "Capture")?.trigger("click");
