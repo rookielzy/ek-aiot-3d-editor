@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { defineComponent, h, markRaw, nextTick } from "vue";
 import { Group } from "three";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AssetResolverBridge,
   attachGlbImportManifestMetadata,
@@ -19,6 +19,48 @@ import { expectAuthoredValuesPresent, expectNoI18nDurableLeakage, expectNoRuntim
 import { decodeProjectPackageText, resolveProjectPackageBytes, seedI18nDurableEditor } from "../../test/i18n-durable-fixture";
 
 describe("Vue EditorWorkbench", () => {
+  beforeEach(() => {
+    window.localStorage.removeItem("ek-aiot.workbench.locale");
+  });
+
+  it("restores the latest language across fresh shell mounts ahead of defaultLocale", async () => {
+    const first = mount(EditorWorkbench, { props: { rendererFactory: fakeRenderer } });
+    await first.get('button[lang="zh-CN"]').trigger("click");
+    expect(window.localStorage.getItem("ek-aiot.workbench.locale")).toBe("zh-CN");
+    first.unmount();
+
+    const second = mount(EditorWorkbench, { props: { rendererFactory: fakeRenderer, defaultLocale: "en" } });
+    expect(second.find('[aria-label="编辑器控件"]').exists()).toBe(true);
+    await second.get('button[lang="en"]').trigger("click");
+    expect(window.localStorage.getItem("ek-aiot.workbench.locale")).toBe("en");
+    second.unmount();
+
+    const third = mount(EditorWorkbench, { props: { rendererFactory: fakeRenderer, defaultLocale: "zh-CN" } });
+    expect(third.find('[aria-label="Editor controls"]').exists()).toBe(true);
+    third.unmount();
+  });
+
+  it.each([undefined, "zh-CN"] as const)("ignores invalid cached languages and falls back to %s", (defaultLocale) => {
+    window.localStorage.setItem("ek-aiot.workbench.locale", "unsupported");
+    const wrapper = mount(EditorWorkbench, { props: { rendererFactory: fakeRenderer, defaultLocale } });
+    expect(wrapper.find(`[aria-label="${defaultLocale ? "编辑器控件" : "Editor controls"}"]`).exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("keeps language switching usable when browser storage throws", async () => {
+    const read = vi.spyOn(window.Storage.prototype, "getItem").mockImplementation(() => { throw new Error("Storage blocked"); });
+    const write = vi.spyOn(window.Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Storage blocked"); });
+    try {
+      const wrapper = mount(EditorWorkbench, { props: { rendererFactory: fakeRenderer } });
+      await wrapper.get('button[lang="zh-CN"]').trigger("click");
+      expect(wrapper.find('[aria-label="编辑器控件"]').exists()).toBe(true);
+      wrapper.unmount();
+    } finally {
+      read.mockRestore();
+      write.mockRestore();
+    }
+  });
+
   it("distinguishes blocked complete exports from explicit partial packages and updates repaired diagnostics", async () => {
     const editor = markRaw(createEditor());
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
@@ -1239,9 +1281,11 @@ describe("Vue EditorWorkbench", () => {
     await wrapper.find('[title="Toggle viewport grid"]').trigger("click");
     const helperState = editor.viewportHelpers.get();
     const snapshotBefore = editor.serialize();
-    const selector = wrapper.find(".ek-workbench__locale-switcher select");
+    const runtime = editor.getRuntime();
+    const historyBefore = editor.getHistoryState();
+    expect(wrapper.get(".ek-workbench__project-menu").attributes("hidden")).toBeDefined();
 
-    await selector.setValue("zh-CN");
+    await wrapper.get('button[lang="zh-CN"]').trigger("click");
     await nextTick();
 
     expect(wrapper.text()).toContain("层级");
@@ -1251,6 +1295,13 @@ describe("Vue EditorWorkbench", () => {
     expect(editor.viewportHelpers.get()).toEqual(helperState);
     expect(editor.serialize()).toEqual(snapshotBefore);
     expect(JSON.stringify(editor.serialize())).not.toContain("locale");
+    expect(wrapper.get('button[lang="en"]').text()).toBe("English");
+    await wrapper.get('button[lang="en"]').trigger("click");
+    expect(wrapper.emitted("update:locale")?.at(-1)).toEqual(["en"]);
+    expect(wrapper.get('button[lang="zh-CN"]').text()).toBe("简体中文");
+    expect(editor.getRuntime()).toBe(runtime);
+    expect(editor.getHistoryState()).toEqual(historyBefore);
+    expect(editor.serialize()).toEqual(snapshotBefore);
     wrapper.unmount();
   });
 
@@ -1304,6 +1355,7 @@ describe("Vue EditorWorkbench", () => {
   it("supports controlled locale, hidden switch, disabled switch, host translation override, and locale emits", async () => {
     const editor = markRaw(createEditor());
     const onLocaleChange = vi.fn();
+    window.localStorage.setItem("ek-aiot.workbench.locale", "zh-CN");
     const wrapper = mount(EditorWorkbench, {
       props: {
         editor,
@@ -1319,6 +1371,7 @@ describe("Vue EditorWorkbench", () => {
     });
 
     expect(wrapper.find(".ek-workbench__locale-switcher").exists()).toBe(false);
+    expect(wrapper.find("button[lang]").exists()).toBe(false);
     await wrapper.setProps({ locale: "zh-CN" });
     await nextTick();
     expect(wrapper.text()).toContain("Host open");
@@ -1326,22 +1379,27 @@ describe("Vue EditorWorkbench", () => {
     await wrapper.setProps({ locale: "en", showLocaleSwitcher: true });
     await nextTick();
     let selector = wrapper.find(".ek-workbench__locale-switcher select");
-    await selector.setValue("zh-CN");
+    await wrapper.get('button[lang="zh-CN"]').trigger("click");
     await nextTick();
 
     expect(onLocaleChange).toHaveBeenCalledWith("zh-CN");
     expect(wrapper.emitted("update:locale")?.[0]).toEqual(["zh-CN"]);
     expect(wrapper.text()).toContain("Open");
     expect(wrapper.text()).not.toContain("Host open");
+    expect(window.localStorage.getItem("ek-aiot.workbench.locale")).toBe("en");
 
     await wrapper.setProps({ locale: "zh-CN" });
     await nextTick();
     expect(wrapper.text()).toContain("Host open");
 
     onLocaleChange.mockClear();
+    expect(window.localStorage.getItem("ek-aiot.workbench.locale")).toBe("zh-CN");
     await wrapper.setProps({ localeSwitcherDisabled: true });
     selector = wrapper.find(".ek-workbench__locale-switcher select");
     expect((selector.element as HTMLSelectElement).disabled).toBe(true);
+    const languageButton = wrapper.get('button[lang="en"]');
+    expect((languageButton.element as HTMLButtonElement).disabled).toBe(true);
+    await languageButton.trigger("click");
     await selector.trigger("change");
     expect(onLocaleChange).not.toHaveBeenCalled();
     wrapper.unmount();

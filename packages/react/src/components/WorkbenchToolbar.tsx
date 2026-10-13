@@ -49,6 +49,7 @@ export function WorkbenchToolbar({
     tone: "neutral"
   });
   const t = context.i18n.t;
+  const nextLocale = context.i18n.locale === "en" ? "zh-CN" : "en";
   const projectStatusLabel = projectStatus.message
     ? t(projectStatus.message)
     : t(context.model.project.statusLabelDescriptor ?? {
@@ -202,6 +203,18 @@ export function WorkbenchToolbar({
         <span className="ek-workbench__toolbar-status-label">{t("reactWorkbench.toolbar.status.label")}</span>
         {projectStatusLabel}
       </span>
+      {showLocaleSwitcher ? (
+        <button
+          type="button"
+          className="ek-workbench__command-button"
+          lang={nextLocale}
+          title={t("reactWorkbench.toolbar.locale.switch.title")}
+          disabled={localeSwitcherDisabled}
+          onClick={() => context.i18n.setLocale(nextLocale)}
+        >
+          {context.i18n.localeLabel(nextLocale)}
+        </button>
+      ) : null}
     </div>
   );
 }

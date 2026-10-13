@@ -78,9 +78,11 @@ function BilingualWorkbench() {
 }
 ```
 
-Use `locale` and `onLocaleChange` when the host owns the language setting. The built-in switch is in Project menu. Use `defaultLocale="zh-CN"` for uncontrolled Workbench state that starts in Simplified Chinese. `showLocaleSwitcher={false}` hides the built-in switch, and `localeSwitcherDisabled={isSaving}` keeps it visible but disabled while host UI is busy. Switching locale does not replace the editor/runtime or clear selection, history, or viewport state.
+Use `locale` and `onLocaleChange` when the host owns the language setting. The toolbar language button shows the destination language (简体中文 or English) and switches with one click; the language selector is also available in Project menu. Use `defaultLocale="zh-CN"` for uncontrolled Workbench state that starts in Simplified Chinese. `showLocaleSwitcher={false}` hides both built-in controls, and `localeSwitcherDisabled={isSaving}` keeps them visible but disabled while host UI is busy. Switching locale does not replace the editor/runtime or clear selection, history, or viewport state.
 
-Locale, switch visibility, switch disabled state, dictionaries, translated copy, and host `translate` callbacks are session or host UI state. Do not store them in `SceneSnapshot`, `.ek3d`, command history, asset records, or runtime metadata. Authored file names, asset labels, object names, and project metadata remain authored values; they are interpolated into messages and are not translated by default.
+The displayed language is saved to browser `localStorage` under `ek-aiot.workbench.locale`, shared by React and Vue shells on the same origin. On a fresh mount, a valid saved language takes priority over `defaultLocale`; an explicit controlled `locale` takes priority over the cache and is saved when its displayed value changes. Invalid or unavailable storage falls back to the configured default (English if omitted), and storage failures do not block switching.
+
+Locale is a browser or host UI preference. Switch visibility, switch disabled state, dictionaries, translated copy, and host `translate` callbacks are session or host UI state. Do not store them in `SceneSnapshot`, `.ek3d`, command history, asset records, or runtime metadata. Authored file names, asset labels, object names, and project metadata remain authored values; they are interpolated into messages and are not translated by default.
 
 `EditorWorkbench` installs shared shortcut handling on the workbench root and ignores editable controls. Copy, paste, duplicate, delete, group, ungroup, select all, and clear selection route through core `editor.operations`, so React does not duplicate node hierarchy, payload cleanup, or clipboard semantics.
 

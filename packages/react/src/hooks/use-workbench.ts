@@ -38,7 +38,6 @@ import {
 } from "@ek-aiot/3d-editor-core";
 import { buildWorkbenchModel, executeEditorAction } from "@ek-aiot/3d-editor-core";
 import {
-  DEFAULT_WORKBENCH_LOCALE,
   WORKBENCH_LOCALES,
   getWorkbenchLocaleLabel,
   normalizeWorkbenchLocale,
@@ -50,6 +49,7 @@ import {
   type WorkbenchTranslate
 } from "../i18n/workbench-i18n";
 import { useEditor } from "./use-editor";
+import { readWorkbenchLocale, writeWorkbenchLocale } from "../i18n/workbench-locale-storage";
 import { useInspector } from "./use-inspector";
 
 export interface UseWorkbenchOptions extends EditorOptions {
@@ -188,11 +188,14 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   const editor = useEditor(editorOptions) as EditorWithGlbImport;
   const controlledLocale = locale !== undefined;
   const [uncontrolledLocale, setUncontrolledLocale] = useState<WorkbenchLocale>(() =>
-    normalizeWorkbenchLocale(defaultLocale ?? DEFAULT_WORKBENCH_LOCALE)
+    readWorkbenchLocale(defaultLocale)
   );
   const resolvedLocale = controlledLocale
     ? normalizeWorkbenchLocale(locale)
     : uncontrolledLocale;
+  useEffect(() => {
+    writeWorkbenchLocale(resolvedLocale);
+  }, [resolvedLocale]);
   const setLocale = useCallback((nextLocale: WorkbenchLocale) => {
     const normalized = normalizeWorkbenchLocale(nextLocale);
     onLocaleChange?.(normalized);

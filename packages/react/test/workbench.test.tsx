@@ -1,7 +1,7 @@
 import React, { StrictMode } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Group } from "three";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AssetResolverBridge,
   attachGlbImportManifestMetadata,
@@ -20,6 +20,45 @@ import { expectAuthoredValuesPresent, expectNoI18nDurableLeakage, expectNoRuntim
 import { decodeProjectPackageText, resolveProjectPackageBytes, seedI18nDurableEditor } from "../../test/i18n-durable-fixture";
 
 describe("React EditorWorkbench", () => {
+  beforeEach(() => {
+    window.localStorage.removeItem("ek-aiot.workbench.locale");
+  });
+
+  it("restores the latest language across fresh shell mounts ahead of defaultLocale", () => {
+    const first = render(<EditorWorkbench rendererFactory={fakeRenderer} />);
+    fireEvent.click(screen.getByRole("button", { name: "简体中文" }));
+    expect(window.localStorage.getItem("ek-aiot.workbench.locale")).toBe("zh-CN");
+    first.unmount();
+
+    const second = render(<EditorWorkbench rendererFactory={fakeRenderer} defaultLocale="en" />);
+    expect(screen.getByLabelText("编辑器控件")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "English" }));
+    expect(window.localStorage.getItem("ek-aiot.workbench.locale")).toBe("en");
+    second.unmount();
+
+    render(<EditorWorkbench rendererFactory={fakeRenderer} defaultLocale="zh-CN" />);
+    expect(screen.getByLabelText("Editor controls")).toBeTruthy();
+  });
+
+  it.each([undefined, "zh-CN"] as const)("ignores invalid cached languages and falls back to %s", (defaultLocale) => {
+    window.localStorage.setItem("ek-aiot.workbench.locale", "unsupported");
+    render(<EditorWorkbench rendererFactory={fakeRenderer} defaultLocale={defaultLocale} />);
+    expect(screen.getByLabelText(defaultLocale ? "编辑器控件" : "Editor controls")).toBeTruthy();
+  });
+
+  it("keeps language switching usable when browser storage throws", () => {
+    const read = vi.spyOn(window.Storage.prototype, "getItem").mockImplementation(() => { throw new Error("Storage blocked"); });
+    const write = vi.spyOn(window.Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Storage blocked"); });
+    try {
+      render(<EditorWorkbench rendererFactory={fakeRenderer} />);
+      fireEvent.click(screen.getByRole("button", { name: "简体中文" }));
+      expect(screen.getByLabelText("编辑器控件")).toBeTruthy();
+    } finally {
+      read.mockRestore();
+      write.mockRestore();
+    }
+  });
+
   it("distinguishes blocked complete exports from explicit partial packages and updates repaired diagnostics", async () => {
     const editor = createEditor();
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
@@ -780,7 +819,9 @@ describe("React EditorWorkbench", () => {
     clickToolbarCommand("Toggle viewport grid");
     const serializedBefore = editor.serialize();
 
-    fireEvent.change(screen.getByLabelText("Language"), { target: { value: "zh-CN" } });
+    const runtime = editor.getRuntime();
+    expect(screen.getByRole("button", { name: "Project menu" }).getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "简体中文" }));
 
     expect(onLocaleChange).toHaveBeenCalledWith("zh-CN");
     expect(screen.getByTitle("旋转模式").getAttribute("aria-pressed")).toBe("true");
@@ -789,6 +830,11 @@ describe("React EditorWorkbench", () => {
     expect(editor.serialize()).toEqual(serializedBefore);
     expect(JSON.stringify(editor.serialize())).not.toContain("zh-CN");
     expect(JSON.stringify(editor.serialize())).not.toContain("旋转");
+    fireEvent.click(screen.getByRole("button", { name: "English" }));
+    expect(onLocaleChange).toHaveBeenLastCalledWith("en");
+    expect(screen.getByLabelText("Editor controls")).toBeTruthy();
+    expect(editor.getRuntime()).toBe(runtime);
+    expect(editor.serialize()).toEqual(serializedBefore);
   });
 
   it("supports controlled locale, hidden switch, disabled switch, and host translation override", () => {
@@ -810,6 +856,7 @@ describe("React EditorWorkbench", () => {
     );
 
     expect(screen.queryByLabelText("Language")).toBeNull();
+    expect(screen.queryByRole("button", { name: "简体中文" })).toBeNull();
     expect(screen.getByText("Custom Open")).toBeTruthy();
 
     rerender(
@@ -830,6 +877,9 @@ describe("React EditorWorkbench", () => {
     expect(screen.getByText("Custom 载入工程")).toBeTruthy();
     const switcher = screen.getByLabelText("语言") as HTMLSelectElement;
     expect(switcher.disabled).toBe(true);
+    const languageButton = screen.getByRole("button", { name: "English" }) as HTMLButtonElement;
+    expect(languageButton.disabled).toBe(true);
+    fireEvent.click(languageButton);
     fireEvent.change(switcher, { target: { value: "en" } });
     expect(onLocaleChange).not.toHaveBeenCalled();
   });
@@ -838,13 +888,17 @@ describe("React EditorWorkbench", () => {
     const editor = createEditor();
     const onLocaleChange = vi.fn();
 
-    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} locale="en" onLocaleChange={onLocaleChange} />);
+    window.localStorage.setItem("ek-aiot.workbench.locale", "zh-CN");
+    const { rerender } = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} locale="en" onLocaleChange={onLocaleChange} />);
 
-    fireEvent.change(screen.getByLabelText("Language"), { target: { value: "zh-CN" } });
+    fireEvent.click(screen.getByRole("button", { name: "简体中文" }));
 
     expect(onLocaleChange).toHaveBeenCalledWith("zh-CN");
     expect(screen.getByLabelText("Editor controls")).toBeTruthy();
     expect(screen.queryByLabelText("编辑器控件")).toBeNull();
+    expect(window.localStorage.getItem("ek-aiot.workbench.locale")).toBe("en");
+    rerender(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} locale="zh-CN" onLocaleChange={onLocaleChange} />);
+    expect(window.localStorage.getItem("ek-aiot.workbench.locale")).toBe("zh-CN");
   });
 
   it("re-resolves completed asset import queue statuses after locale changes", async () => {

@@ -47,6 +47,17 @@
       <span class="ek-workbench__toolbar-status-label">{{ t("reactWorkbench.toolbar.status.label") }}</span>
       {{ projectStatusLabel }}
     </span>
+    <button
+      v-if="showLocaleSwitcher"
+      type="button"
+      class="ek-workbench__command-button"
+      :lang="nextLocale"
+      :title="t('reactWorkbench.toolbar.locale.switch.title')"
+      :disabled="localeSwitcherDisabled"
+      @click="context.i18n.setLocale(nextLocale)"
+    >
+      {{ context.i18n.localeLabel(nextLocale) }}
+    </button>
   </div>
 </template>
 
@@ -86,6 +97,7 @@ const projectStatus = ref<ProjectActionStatus>({
 });
 const showLocaleSwitcher = computed(() => props.showLocaleSwitcher ?? true);
 const localeSwitcherDisabled = computed(() => props.localeSwitcherDisabled ?? false);
+const nextLocale = computed(() => props.context.i18n.locale === "en" ? "zh-CN" : "en");
 const t = (message: Parameters<ResolvedWorkbenchContext["i18n"]["t"]>[0], values?: WorkbenchMessageValues) => props.context.i18n.t(message, values);
 const projectStatusLabel = computed(() => projectStatus.value.message
   ? props.context.i18n.t(projectStatus.value.message)

@@ -4,7 +4,7 @@ import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { createRoot } from "react-dom/client";
 import { createApp, h, markRaw, ref, type App as VueApp } from "vue";
 import { EditorWorkbench as VueEditorWorkbench } from "@ek-aiot/3d-editor-vue";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { BoxGeometry, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial } from "three";
 import { AssetResolverBridge, createEditor, ThreeGltfLoaderAdapter, type GltfLoaderAdapter, type RendererLike } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
@@ -20,6 +20,10 @@ import simpleBoxUrl from "../../core/test/fixtures/simple-box.glb?url";
 
 describe("proof-loop starter demo browser verification", () => {
   let cleanup: (() => void) | null = null;
+
+  beforeEach(() => {
+    window.localStorage.removeItem("ek-aiot.workbench.locale");
+  });
 
   afterEach(() => {
     cleanup?.();
@@ -138,17 +142,15 @@ describe("proof-loop starter demo browser verification", () => {
       const saved = editor.getSnapshot();
       const history = editor.getHistoryState();
       const positionField = input("Position X", "位置 X");
-      await click("Project menu", "项目菜单");
       const menu = host.querySelector<HTMLElement>(".ek-workbench__project-menu")!;
-      const switcher = section(host, label("Language", "语言")) as HTMLSelectElement;
-      await userEvent.selectOptions(switcher, locale === "en" ? "zh-CN" : "en");
+      expect(menu.hidden).toBe(true);
+      await clickByText(host, label("简体中文", "English"));
       expect(editor.getSnapshot()).toEqual(saved);
       expect(editor.getHistoryState()).toEqual(history);
       expect(host.querySelector("canvas")).toBe(canvas);
       expect(editor.getRuntime()).toBe(runtime);
       expect(positionField.isConnected).toBe(true);
-      await userEvent.selectOptions(switcher, locale);
-      await userEvent.keyboard("{Escape}");
+      await clickByText(host, label("English", "简体中文"));
       expect(menu.hidden).toBe(true);
       expect(editor.getSnapshot().selection).toEqual(saved.selection);
       await click("Export", "导出");
@@ -408,9 +410,8 @@ describe("proof-loop starter demo browser verification", () => {
       const resize = section(host, label("Resize right panel", "调整右面板宽度"));
       resize.focus();
       await userEvent.keyboard("{Home}{ArrowLeft}");
-      await clickByText(host, label("Project menu", "项目菜单"));
-      await userEvent.selectOptions(section(host, label("Language", "语言")) as HTMLSelectElement, locale === "en" ? "zh-CN" : "en");
-      await userEvent.keyboard("{Escape}");
+      expect(host.querySelector<HTMLElement>(".ek-workbench__project-menu")!.hidden).toBe(true);
+      await clickByText(host, label("简体中文", "English"));
       expect(editor.serialize()).toEqual(snapshot);
       expect(editor.getHistoryState()).toEqual(history);
       expect(editor.getRuntime()).toBe(runtime);

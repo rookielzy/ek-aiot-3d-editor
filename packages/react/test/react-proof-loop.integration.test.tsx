@@ -4,12 +4,16 @@ import { dirname, resolve } from "node:path";
 import React from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Group } from "three";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { AssetResolverBridge, createEditor, resolveDefaultPresentationView, type RendererLike } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
 import { EmptyHost } from "./support/EmptyHost";
 
 describe("React proof-loop parity", () => {
+  beforeEach(() => {
+    window.localStorage.removeItem("ek-aiot.workbench.locale");
+  });
+
   it("renders a restored core snapshot without React-local editor behavior", async () => {
     const editor = createEditor();
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });

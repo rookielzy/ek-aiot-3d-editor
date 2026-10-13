@@ -41,7 +41,6 @@ import {
   type ViewportHelperStateSnapshot
 } from "@ek-aiot/3d-editor-core";
 import {
-  DEFAULT_WORKBENCH_LOCALE,
   WORKBENCH_LOCALES,
   getWorkbenchLocaleLabel,
   normalizeWorkbenchLocale,
@@ -52,6 +51,7 @@ import {
   type WorkbenchMessageValues,
   type WorkbenchTranslate
 } from "../i18n/workbench-i18n";
+import { readWorkbenchLocale, writeWorkbenchLocale } from "../i18n/workbench-locale-storage";
 
 export interface UseWorkbenchOptions extends EditorOptions {
   editor?: EditorWithGlbImport | Ref<EditorWithGlbImport | undefined>;
@@ -213,7 +213,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   const localeOption = isRefValue<WorkbenchLocale | undefined>(options.locale) ? options.locale : undefined;
   const translateOption = isRefValue<WorkbenchTranslate | undefined>(options.translate) ? options.translate : undefined;
   const controlledLocale = computed(() => localeOption ? localeOption.value !== undefined : options.locale !== undefined);
-  const uncontrolledLocale = ref<WorkbenchLocale>(normalizeWorkbenchLocale(options.defaultLocale ?? DEFAULT_WORKBENCH_LOCALE));
+  const uncontrolledLocale = ref<WorkbenchLocale>(readWorkbenchLocale(options.defaultLocale));
   const initialEditor = resolveInitialEditor(options, editorOption);
   let viewportHelperStore = getViewportHelperStore(initialEditor);
   ensureDefaultWorkbenchViewportHelpers(viewportHelperStore);
@@ -424,6 +424,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
       return;
     }
     disposed = true;
+    stopLocalePersistence();
     cleanupSubscriptions();
     if (ownsCurrentEditor.value) {
       currentEditor.value.dispose();
@@ -477,6 +478,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
       : uncontrolledLocale.value
   );
   const translate = computed(() => translateOption ? translateOption.value : options.translate as WorkbenchTranslate | undefined);
+  const stopLocalePersistence = watch(resolvedLocale, writeWorkbenchLocale, { immediate: true, flush: "sync" });
   const i18n = computed<WorkbenchI18n>(() => ({
     locale: resolvedLocale.value,
     supportedLocales: WORKBENCH_LOCALES,
