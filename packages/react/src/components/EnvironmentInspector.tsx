@@ -3,12 +3,12 @@ import {
   createMessageDescriptor,
   type Editor,
   type EnvironmentFieldId,
-  type InspectorCommandProblem,
   type InspectorSection,
   type SceneSnapshot
 } from "@ek-aiot/3d-editor-core";
 import { useState } from "react";
 import { SceneInspectorFields } from "./SceneInspectorFields";
+import { useInspectorProblem } from "../hooks/use-inspector-problem";
 import type { InspectorI18n } from "./inspector-i18n";
 import { DEFAULT_INSPECTOR_I18N, renderProblemMessage, renderSectionTitle } from "./inspector-i18n";
 
@@ -20,7 +20,7 @@ export interface EnvironmentInspectorProps {
 }
 
 export function EnvironmentInspector({ editor, snapshot, section, i18n = DEFAULT_INSPECTOR_I18N }: EnvironmentInspectorProps) {
-  const [fieldProblem, setFieldProblem] = useState<InspectorCommandProblem | null>(null);
+  const [fieldProblem, setFieldProblem, clearField] = useInspectorProblem(section.fields, "environment");
 
   function commit(fieldId: EnvironmentFieldId, value: string) {
     const clearSource = value === "" && (fieldId === "lighting.source.assetId" || fieldId === "background.source.assetId");
@@ -79,7 +79,7 @@ export function EnvironmentInspector({ editor, snapshot, section, i18n = DEFAULT
         <details key={group} className="ek-inspector-fold" open>
           <summary>{i18n.t(`reactWorkbench.inspector.sceneFields.${group}`)}</summary>
           <SceneInspectorFields fields={section.fields.filter((field) => group === "lighting" ? !field.id.startsWith("background.") : field.id.startsWith("background."))}
-            problem={fieldProblem} i18n={i18n} onCommit={(fieldId, value) => commit(fieldId as EnvironmentFieldId, value)} />
+            problem={fieldProblem} i18n={i18n} onReset={clearField} onCommit={(fieldId, value) => commit(fieldId as EnvironmentFieldId, value)} />
         </details>
       ))}
     </section>

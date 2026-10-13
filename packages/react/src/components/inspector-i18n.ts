@@ -1,4 +1,5 @@
 import type { InspectorCommandProblem, InspectorFieldDescriptor, InspectorFieldOption, InspectorSection, ProblemSeverity, ProblemSource } from "@ek-aiot/3d-editor-core";
+import { createMessageDescriptor } from "@ek-aiot/3d-editor-core";
 import {
   DEFAULT_WORKBENCH_LOCALE,
   WORKBENCH_LOCALES,
@@ -11,6 +12,18 @@ import {
 } from "../i18n/workbench-i18n";
 
 export type InspectorI18n = Pick<WorkbenchI18n, "locale" | "supportedLocales" | "localeLabel" | "setLocale" | "t">;
+
+export function createInspectorDispatchProblem(fieldId: string, i18n: InspectorI18n, detail?: string): InspectorCommandProblem {
+  const key = detail ? "reactWorkbench.inspector.form.commitFailedDetail" : "reactWorkbench.inspector.form.commitFailed";
+  const values = detail ? { detail } : undefined;
+  return {
+    code: "inspector-dispatch-failed",
+    fieldId,
+    message: i18n.t(key, values),
+    messageDescriptor: createMessageDescriptor({ key, fallback: detail ? "Could not apply edit: {detail}" : "Could not apply edit.", values }),
+    severity: "warning"
+  };
+}
 
 export const DEFAULT_INSPECTOR_I18N: InspectorI18n = {
   locale: DEFAULT_WORKBENCH_LOCALE,

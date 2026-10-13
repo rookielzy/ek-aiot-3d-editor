@@ -1,3 +1,4 @@
+import { selectInspectorOption, setInspectorColor } from "./support/inspector-browser";
 import React, { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createApp, markRaw, type App as VueApp } from "vue";
@@ -62,11 +63,7 @@ it.each(["en", "zh-CN"] as const)("edits the local showcase and restores its com
     root.render(<StrictMode><App locale={locale} rendererFactory={rendererFactory} /></StrictMode>);
     await expect.poll(() => host.textContent).toContain(label("Selection Toy Car", "选择 Toy Car"));
     expect(field("Position X", "位置 X").value).toBe("0.2");
-    const color = field("Base color", "基础色");
-    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-    setValue.call(color, "#a8c9b6");
-    color.dispatchEvent(new Event("input", { bubbles: true }));
-    color.dispatchEvent(new Event("change", { bubbles: true }));
+    await setInspectorColor(field("Base color", "基础色"), "#a8c9b6");
     const assetsTab = [...host.querySelectorAll<HTMLButtonElement>(".ek-workbench__nav-button")]
       .find((button) => button.getAttribute("aria-label")?.startsWith(`${label("Assets", "资源")} `))!;
     await userEvent.click(assetsTab);
@@ -78,13 +75,16 @@ it.each(["en", "zh-CN"] as const)("edits the local showcase and restores its com
     importInput.dispatchEvent(new Event("change", { bubbles: true }));
     await expect.poll(() => host.textContent).toContain("cool-studio.hdr");
     await click("Environment", "环境");
-    await userEvent.selectOptions(field("Lighting source", "灯光源") as unknown as HTMLSelectElement, "none");
-    await userEvent.selectOptions(field("Lighting source", "灯光源") as unknown as HTMLSelectElement, "hdr");
-    const lightingAsset = field("Lighting asset", "灯光资源") as unknown as HTMLSelectElement;
-    await expect.poll(() => [...lightingAsset.options].some((option) => option.text.includes("cool-studio.hdr"))).toBe(true);
-    const alternateAssetId = [...lightingAsset.options].find((option) => option.text.includes("cool-studio.hdr"))!.value;
+    await selectInspectorOption(field("Lighting source", "灯光源"), "none");
+    await selectInspectorOption(field("Lighting source", "灯光源"), "hdr");
+    const lightingAsset = field("Lighting asset", "灯光资源");
+    await userEvent.click(lightingAsset);
+    await userEvent.fill(document.querySelector<HTMLInputElement>('[cmdk-input]')!, "cool-studio.hdr");
+    await expect.poll(() => document.querySelector('[role="option"][data-ek-value]:not([data-ek-value=""])')).toBeTruthy();
+    const alternateOption = document.querySelector('[role="option"][data-ek-value]:not([data-ek-value=""])')!;
+    const alternateAssetId = alternateOption.getAttribute("data-ek-value")!;
     expect(alternateAssetId).not.toBe("showcase-studio");
-    await userEvent.selectOptions(lightingAsset, alternateAssetId);
+    await userEvent.click(alternateOption);
     await edit("Lighting intensity", "灯光强度", "1.4");
     await edit("Lighting rotation Y", "灯光旋转 Y", "0.6");
     await click("Scene", "场景");
@@ -213,8 +213,11 @@ it("recovers a failed default model download through the real problem drawer", a
   const root = createRoot(host);
   const downloads = captureDownloads();
   try {
-    root.render(<App />);
+    root.render(<App locale="en" />);
     await expect.poll(() => host.textContent, { timeout: 15000 }).toContain("Toy Car");
+    // Wait until the failed runtime load reaches the visible diagnostics before
+    // restoring fetch; the authored hierarchy can appear before that load starts.
+    await expect.poll(() => [...host.querySelectorAll<HTMLButtonElement>("button")].some((button) => button.checkVisibility() && (button.getAttribute("aria-label") === "Problem details" || button.textContent?.trim() === "Problem details")), { timeout: 15000 }).toBe(true);
     fetchMock.mockRestore();
     await userEvent.click(findButton(host, "Problem details"));
     const drawer = host.querySelector<HTMLElement>(".ek-workbench__problems-drawer")!;

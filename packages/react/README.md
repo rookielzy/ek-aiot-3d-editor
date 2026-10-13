@@ -89,3 +89,23 @@ Locale is a browser or host UI preference. Switch visibility, switch disabled st
 The bottom status bar summarizes problems; Problem details opens the full drawer with severity, source, and file replacement for recoverable assets. Closing and reopening the drawer preserves the diagnostics. Replacement passes the selected `File` to `editor.replaceAsset()` for the same asset ID. The React layer does not store files in snapshots and does not implement its own asset resolver, package validator, or runtime cleanup.
 
 The workbench and inspector do not implement box selection, full asset libraries, texture upload queues, persisted layouts, schema-driven inspector plugins, GLB internal hierarchy editing, per-submesh material discovery, or hosted runtime publishing.
+## Inspector form controls
+
+The Inspector uses internally adapted shadcn/ui controls. Import
+`@ek-aiot/3d-editor-react/styles.css` as before; consumers do not need Tailwind
+configuration. The package compiles prefixed utilities without a global reset.
+Select and color popovers inherit the current editor's theme and render outside
+the scrollable panel to avoid clipping.
+
+Number and text fields keep local drafts until Enter or blur. Escape cancels the
+draft and clears its validation feedback. Invalid input stays visible without
+changing the scene. IME confirmation does not submit text. Switching edit targets
+discards unfinished input; history or external changes to that field replace its
+draft. Unrelated field updates preserve the draft.
+
+Enum choices and switches commit immediately; asset choices support search and
+an explicit None option where Core permits clearing. Colors are edited in a
+popover using a picker or six-digit hex value. Apply commits once; Cancel, Escape
+or outside dismissal leaves the scene unchanged. Color previews are local to the
+control until Apply. Explicit default-valued material edits can still create an
+override; repeated unchanged authored values do not add history entries.

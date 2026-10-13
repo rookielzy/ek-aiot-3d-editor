@@ -69,6 +69,7 @@ export function WorkbenchHierarchy({ context }: { context: ResolvedWorkbenchCont
           ) : <span className="ek-workbench__tree-toggle-space" />}
           <button
             type="button"
+            data-ek-discard-draft
             className="ek-workbench__tree-row"
             aria-pressed={row.selected}
             data-selected={row.selected ? "true" : undefined}

@@ -1,3 +1,4 @@
+import { selectInspectorOption, setInspectorColor } from "./support/inspector-browser";
 import React, { useState } from "react";
 import { page, userEvent } from "vitest/browser";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
@@ -127,11 +128,11 @@ describe("proof-loop starter demo browser verification", () => {
       await userEvent.fill(input("Opacity", "不透明度"), "0.6");
       await userEvent.keyboard("{Enter}{Tab}");
       await openInspectorGroup(host, label("Environment", "环境"));
-      await userEvent.selectOptions(findFieldInput(host, label("Background source", "背景源"), "select") as HTMLSelectElement, "solid");
+      await selectInspectorOption(findFieldInput(host, label("Background source", "背景源"), "select"), "solid");
       const background = findFieldInput(host, label("Background color", "背景颜色"), 'input[type="color"]') as HTMLInputElement;
-      setInputValue(background, "#ccddee");
+      await setInspectorColor(background, "#ccddee");
       await openInspectorGroup(host, label("Scene", "场景"));
-      await userEvent.selectOptions(section(host, label("Add light", "添加灯光")) as HTMLSelectElement, "directional");
+      await selectInspectorOption(section(host, label("Add light", "添加灯光")), "directional");
       await click("Frame all", "框选全部");
       const inspector = section(host, label("Scene inspector", "场景检查器"));
       await userEvent.click([...inspector.querySelectorAll("button")].find((button) => text(button) === label("Capture", "捕获"))!);
@@ -716,7 +717,7 @@ describe("proof-loop starter demo browser verification", () => {
     context.fillStyle = "#aabbcc";
     context.fillRect(0, 0, 1, 1);
     const textureBlob = await new Promise<Blob>((resolve) => textureCanvas.toBlob((blob) => resolve(blob!)));
-    const textureResults = await editor.importWorkbenchAssets({ files: [{ id: "paint", source: new File([textureBlob], "paint.png"), kind: "texture" }] });
+    const textureResults = await editor.importWorkbenchAssets({ files: [{ id: "paint", name: "paint.png", source: new File([textureBlob], "paint.png"), kind: "texture" }] });
     expect(textureResults[0]?.committed).toBe(true);
     const inheritedStyles = [...document.querySelectorAll<HTMLStyleElement>("style[data-vite-dev-id]")].map((style) => ({ style, disabled: style.disabled }));
     inheritedStyles.forEach(({ style }) => { style.disabled = true; });
@@ -770,7 +771,7 @@ describe("proof-loop starter demo browser verification", () => {
       await clickByText(host, "Redo");
       expect(field("Opacity").value).toBe("0.6");
       const textureSelect = findFieldInput(inspector, "map", "select") as HTMLSelectElement;
-      await userEvent.selectOptions(textureSelect, "paint");
+      await selectInspectorOption(textureSelect, "paint");
       expect(Object.values(editor.getSnapshot().materials.definitions).some((material) => material.override.textures?.map?.assetId === "paint")).toBe(true);
       await clickHierarchyRow(host, "Primitive 0");
       expect(slot().checked).toBe(true);
@@ -814,7 +815,9 @@ describe("proof-loop starter demo browser verification", () => {
       await userEvent.click(slot());
       expect(field("Opacity").value).toBe("0.6");
       expect(field("Rotation Y").value).toBe("90");
-      expect((findFieldInput(inspector, "map", "select") as HTMLSelectElement).value).toBe("paint");
+      const restoredTexture = findFieldInput(inspector, "map", "select")!;
+      if (restoredTexture instanceof HTMLSelectElement) expect(restoredTexture.value).toBe("paint");
+      else expect(restoredTexture.textContent).toContain("paint.png");
       await editor.getRuntime()!.project();
       expect(editor.getRuntime()!.getObject("panel")).toBeTruthy();
     } finally {
@@ -838,7 +841,7 @@ describe("proof-loop starter demo browser verification", () => {
       const inspector = section(host, "Scene inspector");
       const input = (label: string) => findFieldInput(inspector, label, 'input[type="number"]') as HTMLInputElement;
       await openInspectorGroup(host, "Environment");
-      await userEvent.selectOptions(findFieldInput(inspector, "Background source", "select") as HTMLSelectElement, "solid");
+      await selectInspectorOption(findFieldInput(inspector, "Background source", "select"), "solid");
       await userEvent.fill(input("Lighting intensity"), "1.7");
       await userEvent.keyboard("{Enter}{Tab}");
       await userEvent.fill(input("Background intensity"), "0.8");
@@ -862,7 +865,7 @@ describe("proof-loop starter demo browser verification", () => {
         if (framework === "Vue" && import.meta.env.VITE_CAPTURE_INSPECTOR) await page.screenshot({ path: `__screenshots__/vue-inspector/environment-${width}.png` });
       }
       await openInspectorGroup(host, "Scene");
-      await userEvent.selectOptions(inspector.querySelector('[aria-label="Add light"]') as HTMLSelectElement, "directional");
+      await selectInspectorOption(inspector.querySelector('[aria-label="Add light"]'), "directional");
       const lightId = Object.keys(editor.getSnapshot().lights)[0]!;
       await userEvent.fill(input("Intensity"), "3");
       await userEvent.keyboard("{Enter}{Tab}");
@@ -1094,7 +1097,7 @@ async function verifyStarterFlow(host: HTMLElement, options: { assertProfessiona
       expect(findFieldInput(host, "Base color", 'input[type="color"]'), "Expected material inspector Base color input").toBeTruthy();
     });
     const colorInput = findFieldInput(host, "Base color", 'input[type="color"]') as HTMLInputElement;
-    setInputValue(colorInput, "#00aa88");
+    await setInspectorColor(colorInput, "#00aa88");
     await waitFor(() => expect(text(host)).toContain("Dirty"));
 
     await clickByText(host, "Snap move");
@@ -1612,7 +1615,9 @@ function assertChildrenInside(container: HTMLElement, label: string): void {
 }
 
 function findFieldInput(host: HTMLElement, label: string, selector: string): Element | null {
-  const namedInput = host.querySelector(`${selector}[aria-label="${label}"]`);
+  if (selector === "select") selector = "select, button[role=combobox]";
+  if (selector === 'input[type="color"]') selector = 'input[type="color"], button.ek-ui-color-trigger';
+  const namedInput = host.querySelector(`[aria-label="${label}"]`);
   if (namedInput) return namedInput;
   const field = [...host.querySelectorAll("label")].find((candidate) => text(candidate).includes(label));
   return field?.querySelector(selector) ?? null;

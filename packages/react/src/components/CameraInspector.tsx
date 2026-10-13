@@ -9,11 +9,11 @@ import {
   type CameraInspectorSection,
   type CameraViewFieldId,
   type Editor,
-  type InspectorCommandProblem,
   type SceneSnapshot
 } from "@ek-aiot/3d-editor-core";
 import type { WorkbenchCameraContext } from "../hooks/use-workbench";
 import { SceneInspectorFields } from "./SceneInspectorFields";
+import { useInspectorProblem } from "../hooks/use-inspector-problem";
 import type { InspectorI18n } from "./inspector-i18n";
 import { DEFAULT_INSPECTOR_I18N, renderProblemMessage, renderSectionReason, renderSectionTitle } from "./inspector-i18n";
 
@@ -31,7 +31,7 @@ export function CameraInspector({ editor, snapshot, section, camera, i18n = DEFA
   const activeView = section.activeCameraViewId ? snapshot.cameras[section.activeCameraViewId] : null;
   const [problem, setProblem] = useState<string | null>(null);
 
-  const [fieldProblem, setFieldProblem] = useState<InspectorCommandProblem | null>(null);
+  const [fieldProblem, setFieldProblem, clearField] = useInspectorProblem(section.fields, targetKey);
   useEffect(() => { setProblem(null); setFieldProblem(null); }, [targetKey]);
 
   function selectCameraView(viewId: string | null) {
@@ -146,6 +146,7 @@ export function CameraInspector({ editor, snapshot, section, camera, i18n = DEFA
               aria-pressed={view.active}
               className={view.active ? "is-active" : ""}
               data-default={view.default ? "true" : "false"}
+              data-ek-discard-draft
               onClick={() => selectCameraView(view.id)}
             >
               <span>{view.label}</span>
@@ -176,7 +177,7 @@ export function CameraInspector({ editor, snapshot, section, camera, i18n = DEFA
               </button>
             )}
           </div>
-          <SceneInspectorFields fields={section.fields} targetKey={targetKey} problem={fieldProblem} i18n={i18n}
+          <SceneInspectorFields fields={section.fields} targetKey={targetKey} problem={fieldProblem} i18n={i18n} onReset={clearField}
             onCommit={(fieldId, value) => commit(fieldId as CameraViewFieldId, value)} />
           <button className="ek-inspector-danger" type="button" onClick={removeActive}>
             {i18n.t("reactWorkbench.inspector.camera.delete.label")}

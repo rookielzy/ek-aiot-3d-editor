@@ -1,15 +1,15 @@
-import { useId, useState } from "react";
+import { useId } from "react";
+import { useInspectorProblem } from "../hooks/use-inspector-problem";
 import {
   buildSetTransformCommand,
   type Editor,
-  type InspectorCommandProblem,
   type InspectorSection,
   type SceneSnapshot,
   type TransformFieldId
 } from "@ek-aiot/3d-editor-core";
 import { InspectorNumberInput } from "./InspectorNumberInput";
 import type { InspectorI18n } from "./inspector-i18n";
-import { DEFAULT_INSPECTOR_I18N, renderFieldLabel, renderProblemMessage, renderSectionReason, renderSectionTitle } from "./inspector-i18n";
+import { DEFAULT_INSPECTOR_I18N, createInspectorDispatchProblem, renderFieldLabel, renderProblemMessage, renderSectionReason, renderSectionTitle } from "./inspector-i18n";
 
 export interface TransformInspectorProps {
   editor: Editor;
@@ -20,7 +20,7 @@ export interface TransformInspectorProps {
 
 export function TransformInspector({ editor, snapshot, section, i18n = DEFAULT_INSPECTOR_I18N }: TransformInspectorProps) {
   const targetKey = snapshot.selection.nodeId ?? "none";
-  const [problem, setProblem] = useState<InspectorCommandProblem | null>(null);
+  const [problem, setProblem, clearField] = useInspectorProblem(section.fields, targetKey);
   const problemId = useId();
 
   function displayValue(fieldId: string, value: unknown): number {
@@ -35,7 +35,9 @@ export function TransformInspector({ editor, snapshot, section, i18n = DEFAULT_I
     if (field && number === displayValue(fieldId, field.value)) return true;
     const result = buildSetTransformCommand(editor.getSnapshot(), fieldId, fieldId.startsWith("rotation.") ? number * Math.PI / 180 : number);
     if (result.ok) {
-      editor.dispatch(result.command);
+      const dispatch = editor.dispatch(result.command);
+      if (!dispatch.ok) setProblem(createInspectorDispatchProblem(fieldId, i18n, dispatch.error));
+      return dispatch.ok;
     } else {
       setProblem(result.problem);
     }
@@ -67,6 +69,7 @@ export function TransformInspector({ editor, snapshot, section, i18n = DEFAULT_I
                     aria-invalid={problem?.fieldId === field.id ? true : undefined}
                     aria-describedby={problem?.fieldId === field.id ? problemId : undefined}
                     onCommit={(value) => commit(field.id as TransformFieldId, value)}
+                    onReset={() => clearField(field.id)}
                   />
                 </label>
               ))}

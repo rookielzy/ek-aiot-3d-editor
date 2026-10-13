@@ -367,6 +367,7 @@ export function WorkbenchViewportTools({ context, marqueeSelectionEnabled, onTog
     return (
       <button
         key={command.key}
+        data-ek-discard-draft={command.key === "undo" || command.key === "redo" ? true : undefined}
         className={`ek-workbench__command-button${compact ? " ek-workbench__command-button--icon" : ""}`}
         type="button"
         onClick={() => {

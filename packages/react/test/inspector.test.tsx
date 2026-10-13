@@ -10,8 +10,89 @@ import {
 } from "@ek-aiot/3d-editor-core";
 import { InspectorPanel } from "../src/components/InspectorPanel";
 import { ProblemsPanel } from "../src/components/ProblemsPanel";
+import { inspectorOptionValues, selectInspectorOption, setInspectorColor } from "./support/inspector-controls";
 
 describe("React InspectorPanel", () => {
+  it("retains failed dispatch drafts and exposes transient errors without changing snapshots", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+    render(<InspectorPanel editor={editor} />);
+    const snapshot = editor.getSnapshot();
+    const dispatch = vi.spyOn(editor, "dispatch").mockReturnValue({ ok: false, snapshot, error: "Target unavailable" });
+    for (const name of ["Position X", "Opacity"]) {
+      const input = screen.getByLabelText(name) as HTMLInputElement;
+      fireEvent.change(input, { target: { value: "0.4" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(input.value).toBe("0.4");
+      expect(input.getAttribute("aria-invalid")).toBe("true");
+      expect(screen.getAllByRole("alert").some((alert) => alert.textContent?.includes("Target unavailable"))).toBe(true);
+      fireEvent.keyDown(input, { key: "Escape" });
+    }
+    expect(editor.getSnapshot()).toBe(snapshot);
+    dispatch.mockRestore();
+  });
+  it("cancels numeric drafts and clears validation without changing history", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+    render(<InspectorPanel editor={editor} />);
+    const before = editor.getHistoryState().undoCount;
+    const input = screen.getByLabelText("Position X") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.getByRole("alert")).toBeTruthy();
+    fireEvent.keyDown(input, { key: "Escape" });
+    fireEvent.blur(input);
+    expect(input.value).toBe("0");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(editor.getHistoryState().undoCount).toBe(before);
+    const opacity = screen.getByLabelText("Opacity") as HTMLInputElement;
+    fireEvent.change(opacity, { target: { value: "" } });
+    fireEvent.blur(opacity);
+    expect(opacity.getAttribute("aria-invalid")).toBe("true");
+    fireEvent.keyDown(opacity, { key: "Escape" });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("clears stale field errors on external updates without discarding unrelated drafts", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+    render(<InspectorPanel editor={editor} />);
+    const x = screen.getByLabelText("Position X") as HTMLInputElement;
+    const y = screen.getByLabelText("Position Y") as HTMLInputElement;
+    fireEvent.change(x, { target: { value: "" } });
+    fireEvent.keyDown(x, { key: "Enter" });
+    fireEvent.change(y, { target: { value: "7" } });
+    act(() => { editor.dispatch({ type: "set-node-transform", nodeId: "object-a", transform: { position: [3, 0, 0] } }); });
+    expect(x.value).toBe("3");
+    expect(y.value).toBe("7");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("keeps color changes local until Apply and cancels without history", () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    editor.dispatch({ type: "select-object", objectId: "object-a" });
+    render(<InspectorPanel editor={editor} />);
+    const before = editor.getHistoryState().undoCount;
+    fireEvent.click(screen.getByLabelText("Base color"));
+    fireEvent.change(screen.getByLabelText("Hex color"), { target: { value: "#336699" } });
+    expect(editor.getHistoryState().undoCount).toBe(before);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel", exact: true }));
+    expect(editor.getHistoryState().undoCount).toBe(before);
+    fireEvent.click(screen.getByLabelText("Base color"));
+    fireEvent.change(screen.getByLabelText("Hex color"), { target: { value: "wrong" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply", exact: true }));
+    expect(screen.getByRole("alert")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Hex color"), { target: { value: "#336699" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply", exact: true }));
+    expect(editor.getHistoryState().undoCount).toBe(before + 1);
+    expect(editor.getSnapshot().materials.definitions["material:object:object-a"].override.color).toBe("#336699");
+    act(() => { editor.undo(); });
+    expect(screen.getByLabelText("Base color").textContent).toContain("#ffffff");
+  });
   it("renders disabled node transform sections and available scene sections with no selection", () => {
     const editor = createEditor();
 
@@ -113,7 +194,7 @@ describe("React InspectorPanel", () => {
     render(<InspectorPanel editor={editor} />);
     fireEvent.change(screen.getByLabelText("Opacity"), { target: { value: "0.5" } });
     fireEvent.blur(screen.getByLabelText("Opacity"));
-    fireEvent.change(screen.getByLabelText("Side"), { target: { value: "double" } });
+    selectInspectorOption(screen.getByLabelText("Side"), "double");
 
     const override = editor.getSnapshot().materials.definitions["material:object:object-a"].override;
     expect(override.opacity).toBe(0.5);
@@ -175,8 +256,8 @@ describe("React InspectorPanel", () => {
     fireEvent.blur(roughness);
     expect(editor.getSnapshot().materials.definitions["material:object:object-a"]?.override.roughness).toBe(1);
     expect(editor.getHistoryState().undoCount).toBe(before + 1);
-    fireEvent.change(screen.getByLabelText("Base color"), { target: { value: "#ff0000" } });
-    fireEvent.change(screen.getByLabelText("Base color"), { target: { value: "#ffffff" } });
+    setInspectorColor(screen.getByLabelText("Base color"), "#ff0000");
+    setInspectorColor(screen.getByLabelText("Base color"), "#ffffff");
     expect(editor.getSnapshot().materials.definitions["material:object:object-a"].override.color).toBe("#ffffff");
   });
 
@@ -233,7 +314,7 @@ describe("React InspectorPanel", () => {
 
     render(<InspectorPanel editor={editor} />);
     fireEvent.click(screen.getByLabelText(/Body/));
-    fireEvent.change(screen.getByLabelText("Base color"), { target: { value: "#336699" } });
+    setInspectorColor(screen.getByLabelText("Base color"), "#336699");
 
     expect(dispatchSpy).toHaveBeenLastCalledWith({
       type: "set-material",
@@ -269,7 +350,7 @@ describe("React InspectorPanel", () => {
     act(() => {
       editor.dispatch({ type: "select-node", nodeId: importedNodeId });
     });
-    fireEvent.change(screen.getByLabelText("Base color"), { target: { value: "#336699" } });
+    setInspectorColor(screen.getByLabelText("Base color"), "#336699");
 
     expect(dispatchSpy).toHaveBeenLastCalledWith({
       type: "set-material",
@@ -285,7 +366,7 @@ describe("React InspectorPanel", () => {
 
     render(<InspectorPanel editor={editor} />);
     fireEvent.click(screen.getByLabelText(/Body/));
-    fireEvent.change(screen.getByLabelText("Base color"), { target: { value: "#336699" } });
+    setInspectorColor(screen.getByLabelText("Base color"), "#336699");
     expect(dispatchSpy).toHaveBeenLastCalledWith(expect.objectContaining({
       target: { kind: "material-slot", objectId: "object-a", slotId }
     }));
@@ -457,7 +538,7 @@ describe("React InspectorPanel", () => {
     const editor = createEditor();
     render(<InspectorPanel editor={editor} />);
     fireEvent.click(screen.getByRole("tab", { name: "Scene" }));
-    fireEvent.change(screen.getByLabelText("Add light"), { target: { value: kind } });
+    selectInspectorOption(screen.getByLabelText("Add light"), kind);
     const light = Object.values(editor.getSnapshot().lights)[0]!;
     expect(light.kind).toBe(kind);
     expect(editor.getSnapshot().nodes[editor.getSnapshot().selection.nodeId!].kind).toBe("light");
@@ -473,18 +554,18 @@ describe("React InspectorPanel", () => {
     editor.dispatch({ type: "register-asset", asset: { id: "image", kind: "image", label: "Backdrop" } });
     render(<InspectorPanel editor={editor} />);
     fireEvent.click(screen.getByRole("tab", { name: "Environment" }));
-    expect([...(screen.getByLabelText("Lighting source") as HTMLSelectElement).options].map((option) => option.value)).toEqual(["none", "equirectangular", "hdr", "cubemap"]);
-    expect([...(screen.getByLabelText("Background source") as HTMLSelectElement).options].map((option) => option.value)).toEqual(["none", "solid", "flat-image", "equirectangular", "hdr", "cubemap"]);
+    expect(inspectorOptionValues(screen.getByLabelText("Lighting source"))).toEqual(["none", "equirectangular", "hdr", "cubemap"]);
+    expect(inspectorOptionValues(screen.getByLabelText("Background source"))).toEqual(["none", "solid", "flat-image", "equirectangular", "hdr", "cubemap"]);
     act(() => {
       for (const id of ["px", "nx", "py", "ny", "pz", "nz"]) editor.dispatch({ type: "register-asset", asset: { id, kind: "image", label: id } });
     });
     fireEvent.click(screen.getByRole("button", { name: "Use six textures for both" }));
-    fireEvent.change(screen.getByLabelText("Background asset"), { target: { value: "image" } });
-    fireEvent.change(screen.getByLabelText("Background source"), { target: { value: "flat-image" } });
+    selectInspectorOption(screen.getByLabelText("Background asset"), "image");
+    selectInspectorOption(screen.getByLabelText("Background source"), "flat-image");
     expect(editor.getSnapshot().environment.lighting.source.kind).toBe("cubemap");
     const faces = screen.getAllByRole("combobox").filter((select) => select.getAttribute("aria-label")?.startsWith("Lighting ") && !["Lighting source", "Lighting asset"].includes(select.getAttribute("aria-label")!));
     expect(faces).toHaveLength(6);
-    for (const face of faces) fireEvent.change(face, { target: { value: "image" } });
+    for (const face of faces) selectInspectorOption(face, "image");
     expect(editor.getSnapshot().environment.lighting.source.kind).toBe("cubemap");
     expect(editor.getSnapshot().environment.background.source).toEqual({ kind: "flat-image", assetId: "image" });
     fireEvent.change(screen.getByLabelText("Background blur"), { target: { value: "0.4" } });
@@ -498,10 +579,10 @@ describe("React InspectorPanel", () => {
     render(<InspectorPanel editor={editor} />);
     fireEvent.click(screen.getByRole("tab", { name: "Environment" }));
     fireEvent.click(screen.getByRole("button", { name: "Shared lighting/background" }));
-    fireEvent.change(screen.getByLabelText("Lighting asset"), { target: { value: "" } });
+    selectInspectorOption(screen.getByLabelText("Lighting asset"), "");
     expect(editor.getSnapshot().environment.lighting.source).toEqual({ kind: "none" });
     expect(editor.getSnapshot().environment.background.source).toEqual({ kind: "hdr", assetId: "hdr" });
-    fireEvent.change(screen.getByLabelText("Background asset"), { target: { value: "" } });
+    selectInspectorOption(screen.getByLabelText("Background asset"), "");
     expect(editor.getSnapshot().environment.background.source).toEqual({ kind: "none" });
     act(() => { editor.undo(); });
     expect(editor.getSnapshot().environment.background.source).toEqual({ kind: "hdr", assetId: "hdr" });
@@ -513,7 +594,7 @@ describe("React InspectorPanel", () => {
 
     render(<InspectorPanel editor={editor} />);
     fireEvent.click(screen.getByRole("tab", { name: "Environment" }));
-    fireEvent.change(screen.getByLabelText("Lighting asset"), { target: { value: "studio-hdr" } });
+    selectInspectorOption(screen.getByLabelText("Lighting asset"), "studio-hdr");
 
     expect(editor.getSnapshot().environment.lighting.source).toEqual({ kind: "hdr", assetId: "studio-hdr" });
   });
@@ -536,9 +617,9 @@ describe("React InspectorPanel", () => {
     render(<InspectorPanel editor={editor} />);
     fireEvent.click(screen.getByRole("tab", { name: "Scene" }));
     const addLight = screen.getByLabelText("Add light") as HTMLSelectElement;
-    fireEvent.change(addLight, { target: { value: "point" } });
-    expect(addLight.value).toBe("");
-    fireEvent.change(addLight, { target: { value: "point" } });
+    selectInspectorOption(addLight, "point");
+    expect(addLight.textContent).toBe("Add");
+    selectInspectorOption(addLight, "point");
 
     expect(Object.values(editor.getSnapshot().lights).filter((light) => light.kind === "point")).toHaveLength(2);
   });

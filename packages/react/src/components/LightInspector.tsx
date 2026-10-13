@@ -5,13 +5,14 @@ import {
   buildUpdateLightCommand,
   createMessageDescriptor,
   type Editor,
-  type InspectorCommandProblem,
   type LightFieldId,
   type LightInspectorSection,
   type LightKind,
   type SceneSnapshot
 } from "@ek-aiot/3d-editor-core";
+import { InspectorSelect } from "./InspectorSelect";
 import { SceneInspectorFields } from "./SceneInspectorFields";
+import { useInspectorProblem } from "../hooks/use-inspector-problem";
 import type { InspectorI18n } from "./inspector-i18n";
 import { DEFAULT_INSPECTOR_I18N, renderOptionLabel, renderProblemMessage, renderSectionReason, renderSectionTitle } from "./inspector-i18n";
 
@@ -26,7 +27,7 @@ export interface LightInspectorProps {
 export function LightInspector({ editor, snapshot, section, i18n = DEFAULT_INSPECTOR_I18N, onActiveLightIdChange }: LightInspectorProps) {
   const targetKey = section.activeLightId ?? "none";
   const [addKind, setAddKind] = useState<LightKind | "">("");
-  const [fieldProblem, setFieldProblem] = useState<InspectorCommandProblem | null>(null);
+  const [fieldProblem, setFieldProblem, clearField] = useInspectorProblem(section.fields, targetKey);
 
   useEffect(() => { setFieldProblem(null); }, [targetKey]);
 
@@ -87,23 +88,9 @@ export function LightInspector({ editor, snapshot, section, i18n = DEFAULT_INSPE
     <section className="ek-inspector-section">
       <header className="ek-inspector-section__header">
         <h2>{renderSectionTitle(i18n, section)}</h2>
-        <select
-          aria-label={i18n.t("reactWorkbench.inspector.lights.add.label")}
-          className="ek-inspector-inline-select"
-          value={addKind}
-          onChange={(event) => {
-            const nextKind = event.currentTarget.value as LightKind | "";
-            setAddKind(nextKind);
-            addLight(nextKind);
-          }}
-        >
-          <option value="">{i18n.t("reactWorkbench.inspector.lights.add.option")}</option>
-          {section.addOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {renderOptionLabel(i18n, option)}
-            </option>
-          ))}
-        </select>
+        <InspectorSelect aria-label={i18n.t("reactWorkbench.inspector.lights.add.label")} className="ek-inspector-inline-select" value={addKind} i18n={i18n}
+          options={[{ value: "", label: i18n.t("reactWorkbench.inspector.lights.add.option") }, ...section.addOptions.map((option) => ({ value: option.value, label: renderOptionLabel(i18n, option) }))]}
+          onCommit={(value) => { const nextKind = value as LightKind | ""; setAddKind(nextKind); addLight(nextKind); return true; }} />
       </header>
       {section.lights.length ? (
         <div className="ek-inspector-light-list" role="list">
@@ -111,6 +98,7 @@ export function LightInspector({ editor, snapshot, section, i18n = DEFAULT_INSPE
             <button
               key={light.id}
               type="button"
+              data-ek-discard-draft
               aria-pressed={light.active}
               className={light.active ? "is-active" : ""}
               data-node-id={light.nodeId ?? undefined}
@@ -157,12 +145,12 @@ export function LightInspector({ editor, snapshot, section, i18n = DEFAULT_INSPE
       {section.activeLightId ? (
         <div className="ek-inspector-grid">
           <SceneInspectorFields fields={section.fields.filter((field) => !field.id.startsWith("shadow."))}
-            targetKey={targetKey} problem={fieldProblem} i18n={i18n} onCommit={(fieldId, value) => commit(fieldId as LightFieldId, value)} />
+            targetKey={targetKey} problem={fieldProblem} i18n={i18n} onReset={clearField} onCommit={(fieldId, value) => commit(fieldId as LightFieldId, value)} />
           {section.fields.some((field) => field.id.startsWith("shadow.")) ? (
             <details className="ek-inspector-fold" open>
               <summary>{i18n.t("reactWorkbench.inspector.sceneFields.shadows")}</summary>
               <SceneInspectorFields fields={section.fields.filter((field) => field.id.startsWith("shadow."))}
-                targetKey={targetKey} problem={fieldProblem} i18n={i18n} onCommit={(fieldId, value) => commit(fieldId as LightFieldId, value)} />
+                targetKey={targetKey} problem={fieldProblem} i18n={i18n} onReset={clearField} onCommit={(fieldId, value) => commit(fieldId as LightFieldId, value)} />
             </details>
           ) : null}
           <button className="ek-inspector-danger" type="button" onClick={removeActive}>

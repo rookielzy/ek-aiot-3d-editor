@@ -42,7 +42,7 @@ export function EditorViewport({ editor, resolver, loader, rendererFactory, inte
   }, [editor, resolver, loader, rendererFactory, interactions]);
 
   return (
-    <div ref={containerRef} className={className ?? "ek-editor-viewport"}>
+    <div ref={containerRef} data-ek-discard-draft className={className ?? "ek-editor-viewport"}>
       <MarqueeSelectionOverlay state={marquee} />
     </div>
   );

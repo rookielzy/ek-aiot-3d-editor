@@ -14,7 +14,10 @@ import {
 describe("React and Vue Workbench i18n parity", () => {
   it("keeps shared dictionary key sets aligned across adapters", () => {
     for (const locale of ["en", "zh-CN"] as const) {
-      expect(Object.keys(VUE_WORKBENCH_DICTIONARIES[locale]).sort()).toEqual(Object.keys(REACT_WORKBENCH_DICTIONARIES[locale]).sort());
+      // React-only form copy is introduced with its Inspector rollout; Vue will
+      // acquire it when its independently implemented controls are migrated.
+      const sharedReactKeys = Object.keys(REACT_WORKBENCH_DICTIONARIES[locale]).filter((key) => !key.startsWith("reactWorkbench.inspector.form."));
+      expect(Object.keys(VUE_WORKBENCH_DICTIONARIES[locale]).sort()).toEqual(sharedReactKeys.sort());
     }
   });
 

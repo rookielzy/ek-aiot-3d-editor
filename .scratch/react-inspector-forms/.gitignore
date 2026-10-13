@@ -1,0 +1,6 @@
+/baseline/
+/baseline.tar
+/*.log
+/screenshots/
+/published.html
+/published-entry.mjs

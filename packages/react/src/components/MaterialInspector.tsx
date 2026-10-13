@@ -2,16 +2,16 @@ import {
   buildMaterialFieldsForTarget,
   buildSetMaterialCommand,
   type Editor,
-  type InspectorCommandProblem,
   type MaterialFieldId,
   type MaterialInspectorSection,
   type MaterialInspectorTarget,
   type SceneSnapshot
 } from "@ek-aiot/3d-editor-core";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { InspectorNumberInput } from "./InspectorNumberInput";
+import { InspectorFieldControl } from "./InspectorFieldControl";
+import { useInspectorProblem } from "../hooks/use-inspector-problem";
 import type { InspectorI18n } from "./inspector-i18n";
-import { DEFAULT_INSPECTOR_I18N, renderFieldLabel, renderOptionLabel, renderProblemMessage, renderSectionReason, renderSectionTitle } from "./inspector-i18n";
+import { DEFAULT_INSPECTOR_I18N, createInspectorDispatchProblem, renderFieldLabel, renderProblemMessage, renderSectionReason, renderSectionTitle } from "./inspector-i18n";
 
 export interface MaterialInspectorProps {
   editor: Editor;
@@ -29,7 +29,6 @@ export function MaterialInspector({ editor, snapshot, section, i18n = DEFAULT_IN
   const previousSelectionSignature = useRef(selectionSignature);
   const previousDefaultTargetKey = useRef(defaultTargetKey);
   const [activeTargetKey, setActiveTargetKey] = useState<string | null>(defaultTargetKey);
-  const [fieldProblem, setFieldProblem] = useState<InspectorCommandProblem | null>(null);
   const activeTarget = section.targets.find((target) => target.key === activeTargetKey && target.canSelect) ??
     section.targets.find((target) => target.key === defaultTargetKey && target.canSelect) ??
     selectableTargets[0] ??
@@ -38,6 +37,7 @@ export function MaterialInspector({ editor, snapshot, section, i18n = DEFAULT_IN
   const fields = activeTarget
     ? buildMaterialFieldsForTarget(snapshot, activeTarget, section.empty || !activeTarget.canSelect)
     : section.fields;
+  const [fieldProblem, setFieldProblem, clearField] = useInspectorProblem(fields, `${selectionSignature}:${effectiveTargetKey}`);
 
   useEffect(() => {
     const selectionChanged = previousSelectionSignature.current !== selectionSignature;
@@ -61,13 +61,23 @@ export function MaterialInspector({ editor, snapshot, section, i18n = DEFAULT_IN
   }, [defaultTargetKey, selectionSignature, targetsSignature]);
 
   function commit(fieldId: MaterialFieldId, value: unknown) {
-    if (value === "" && !fieldId.startsWith("textures.")) {
-      return false;
-    }
     setFieldProblem(null);
     const result = buildSetMaterialCommand(editor.getSnapshot(), fieldId, value, activeTarget);
     if (result.ok) {
-      editor.dispatch(result.command);
+      const override = activeTarget?.materialId ? editor.getSnapshot().materials.definitions[activeTarget.materialId]?.override : undefined;
+      // Explicit defaults create an override; already-authored equal values do not
+      // add another history entry.
+      const current = override as Record<string, unknown> | undefined;
+      if (current && result.command.type === "set-material" && Object.entries(result.command.material).every(([key, next]) => {
+        if (key === "textures") {
+          const textures = current.textures as Record<string, unknown> | undefined;
+          return Object.entries(next as Record<string, unknown>).every(([slot, texture]) => JSON.stringify(textures?.[slot]) === JSON.stringify(texture));
+        }
+        return Object.is(current[key], next);
+      })) return true;
+      const dispatch = editor.dispatch(result.command);
+      if (!dispatch.ok) setFieldProblem(createInspectorDispatchProblem(fieldId, i18n, dispatch.error));
+      return dispatch.ok;
     } else {
       setFieldProblem(result.problem);
     }
@@ -87,8 +97,9 @@ export function MaterialInspector({ editor, snapshot, section, i18n = DEFAULT_IN
               <legend>{i18n.t("reactWorkbench.inspector.material.target.legend")}</legend>
               <div className="ek-material-target-list">
                 {section.targets.map((target) => (
-                  <label key={target.key} className="ek-material-target-option" data-unresolved={target.unresolved ? "true" : undefined}>
+                  <label key={target.key} data-ek-discard-draft className="ek-material-target-option" data-unresolved={target.unresolved ? "true" : undefined}>
                     <input
+                      data-ek-discard-draft
                       type="radio"
                       name={`${id}-material-target`}
                       value={target.key}
@@ -126,55 +137,8 @@ export function MaterialInspector({ editor, snapshot, section, i18n = DEFAULT_IN
             {fields.map((field) => (
               <label key={field.id} className={field.kind === "checkbox" ? "ek-inspector-field ek-inspector-field--checkbox" : "ek-inspector-field"}>
                 <span>{renderFieldLabel(i18n, field)}</span>
-                {field.kind === "number" ? (
-                  <InspectorNumberInput
-                    key={`${effectiveTargetKey}:${field.id}`}
-                    value={String(field.value)}
-                    disabled={field.disabled}
-                    min={field.min}
-                    max={field.max}
-                    step={field.step ?? 0.01}
-                    aria-invalid={fieldProblem?.fieldId === field.id ? true : undefined}
-                    aria-describedby={fieldProblem?.fieldId === field.id ? `${id}-${problemId(field.id)}` : undefined}
-                    onCommit={(value) => commit(field.id as MaterialFieldId, value)}
-                  />
-                ) : field.kind === "color" ? (
-                  <input
-                    key={`${effectiveTargetKey}:${field.id}:${String(field.value)}`}
-                    defaultValue={String(field.value)}
-                    disabled={field.disabled}
-                    type="color"
-                    aria-invalid={fieldProblem?.fieldId === field.id ? true : undefined}
-                    aria-describedby={fieldProblem?.fieldId === field.id ? `${id}-${problemId(field.id)}` : undefined}
-                    onChange={(event) => commit(field.id as MaterialFieldId, event.currentTarget.value)}
-                  />
-                ) : field.kind === "checkbox" ? (
-                  <input
-                    key={`${effectiveTargetKey}:${field.id}:${String(field.value)}`}
-                    defaultChecked={Boolean(field.value)}
-                    disabled={field.disabled}
-                    type="checkbox"
-                    aria-invalid={fieldProblem?.fieldId === field.id ? true : undefined}
-                    aria-describedby={fieldProblem?.fieldId === field.id ? `${id}-${problemId(field.id)}` : undefined}
-                    onChange={(event) => commit(field.id as MaterialFieldId, event.currentTarget.checked)}
-                  />
-                ) : (
-                  <select
-                    key={`${effectiveTargetKey}:${field.id}:${String(field.value)}`}
-                    defaultValue={String(field.value)}
-                    disabled={field.disabled}
-                    aria-invalid={fieldProblem?.fieldId === field.id ? true : undefined}
-                    aria-describedby={fieldProblem?.fieldId === field.id ? `${id}-${problemId(field.id)}` : undefined}
-                    onChange={(event) => commit(field.id as MaterialFieldId, event.currentTarget.value)}
-                  >
-                    {field.kind === "asset" ? <option value="">{i18n.t("reactWorkbench.inspector.field.asset.none")}</option> : null}
-                    {(field.options ?? []).map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {renderOptionLabel(i18n, option)}
-                      </option>
-                    ))}
-                  </select>
-                )}
+                <InspectorFieldControl key={`${effectiveTargetKey}:${field.id}`} commitUnchanged field={field} invalid={fieldProblem?.fieldId === field.id} descriptionId={fieldProblem?.fieldId === field.id ? `${id}-${problemId(field.id)}` : undefined} i18n={i18n}
+                  onCommit={(value) => commit(field.id as MaterialFieldId, value)} onReset={() => clearField(field.id)} />
                 {fieldProblem?.fieldId === field.id ? (
                   <small id={`${id}-${problemId(field.id)}`} className="ek-inspector-field-problem" role="alert">{renderProblemMessage(i18n, fieldProblem)}</small>
                 ) : null}

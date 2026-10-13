@@ -1,4 +1,5 @@
 import React, { StrictMode } from "react";
+import { setInspectorColor } from "./support/inspector-controls";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Group } from "three";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -1240,7 +1241,7 @@ describe("React EditorWorkbench", () => {
 
     render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
     fireEvent.click(screen.getByLabelText(/Screen/));
-    fireEvent.change(screen.getByLabelText("Base color"), { target: { value: "#336699" } });
+    setInspectorColor(screen.getByLabelText("Base color"), "#336699");
 
     expect(editor.getSnapshot().materials.assignments[`material-slot:object-a:${slotId}`]).toMatchObject({
       target: { kind: "material-slot", objectId: "object-a", slotId }

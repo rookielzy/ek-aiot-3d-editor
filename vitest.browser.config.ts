@@ -1,10 +1,11 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import vue from "@vitejs/plugin-vue";
+import tailwindcss from "@tailwindcss/vite";
 import { playwright } from "@vitest/browser-playwright";
 
 export default defineConfig({
-  plugins: [react(), vue()],
+  plugins: [react(), vue(), tailwindcss()],
   test: {
     globals: true,
     // Real GLB/PMREM suites share the software GPU in headless environments.
@@ -14,6 +15,7 @@ export default defineConfig({
     exclude: ["**/node_modules/**", "**/dist/**"],
     browser: {
       enabled: true,
+      api: { host: "127.0.0.1" },
       provider: playwright(),
       headless: true,
       instances: [
