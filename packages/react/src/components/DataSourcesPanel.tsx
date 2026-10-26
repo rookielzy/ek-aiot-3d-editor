@@ -87,10 +87,10 @@ export function DataSourcesPanel({ context }: { context: ResolvedWorkbenchContex
     : null;
 
   useEffect(() => {
-    if (formKey) {
+    if (formKey && !discardOpen) {
       nameRef.current?.focus();
     }
-  }, [formKey]);
+  }, [formKey, discardOpen]);
 
   useEffect(() => {
     if (!focusTarget) {
@@ -294,7 +294,7 @@ export function DataSourcesPanel({ context }: { context: ResolvedWorkbenchContex
         <h2>{t("dataSources.panel.label")}</h2>
         <span>{t("dataSources.panel.count", { visibleCount: visibleConnections.length, totalCount: model.totalCount })}</span>
       </div>
-      <button ref={newButtonRef} type="button" onClick={openCreate}>{t("dataSources.new")}</button>
+      <button ref={newButtonRef} type="button" onClick={() => requestClose(openCreate)}>{t("dataSources.new")}</button>
       <label className="ek-workbench__field ek-workbench__field--search">
         <span>{t("dataSources.search.label")}</span>
         <input
@@ -360,7 +360,7 @@ export function DataSourcesPanel({ context }: { context: ResolvedWorkbenchContex
                   editButtonRefs.current.delete(connection.id);
                 }
               }}
-              onEdit={() => openEdit(connection)}
+              onEdit={() => requestClose(() => openEdit(connection))}
               onDuplicate={() => requestClose(() => duplicateConnection(connection))}
               onDelete={() => requestClose(() => deleteConnection(connection))}
             />

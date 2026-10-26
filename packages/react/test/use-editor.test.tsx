@@ -32,4 +32,28 @@ describe("React editor hooks", () => {
     expect(result.current.getSnapshot().nodes["object-a"]).toMatchObject({ kind: "object", objectId: "object-a" });
     expect(result.current.getSnapshot().objects["object-a"].asset.id).toBe("asset-a");
   });
+
+  it("preserves owned editor state when credential arrays are recreated or changed", () => {
+    const hook = renderHook(({ available }) => useEditor({
+      credentials: [{ ref: "credential-host", label: "Host token", available }]
+    }), { initialProps: { available: true } });
+    const editor = hook.result.current;
+    act(() => {
+      editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    });
+    const snapshot = editor.getSnapshot();
+    const history = editor.getHistoryState();
+
+    hook.rerender({ available: true });
+    expect(hook.result.current).toBe(editor);
+    hook.rerender({ available: false });
+    expect(hook.result.current).toBe(editor);
+    expect(hook.result.current.getSnapshot()).toBe(snapshot);
+    expect(hook.result.current.getHistoryState()).toEqual(history);
+    expect(hook.result.current.getDataCredentials?.()).toEqual([
+      { ref: "credential-host", label: "Host token", available: true }
+    ]);
+    hook.unmount();
+    editor.dispose();
+  });
 });

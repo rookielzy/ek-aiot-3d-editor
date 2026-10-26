@@ -86,8 +86,7 @@ export function buildDuplicateDataConnectionCommand(
   const requestedName = options.name?.trim();
   if (requestedName && isDataConnectionNameTaken(
     Object.values(snapshot.dataSources.connections),
-    requestedName,
-    { connectionId }
+    requestedName
   )) {
     return {
       ok: false,

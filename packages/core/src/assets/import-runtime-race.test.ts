@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { Group } from "three";
 import { createEditor } from "../editor/create-editor";
@@ -7,7 +8,7 @@ import { createGlbImportManifest } from "./import-pipeline";
 
 describe("import race with runtime projection", () => {
   it("registers project assets before runtime projection observes them", async () => {
-    const bytes = readFileSync(resolve("packages/core/test/fixtures/simple-box.glb"));
+    const bytes = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../test/fixtures/simple-box.glb"));
     const file = new File([bytes], "box.glb", { type: "model/gltf-binary" });
     const editor = createEditor();
     const container = document.createElement("div");

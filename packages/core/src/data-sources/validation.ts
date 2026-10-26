@@ -228,6 +228,10 @@ function validateAuth(value: unknown, problems: DataConnectionProblem[]): DataCo
     problems.push({ field: "auth", code: "auth-invalid", message: "Authentication must be none or bearer." });
     return null;
   }
+  if (Object.keys(value).some((key) => key !== "kind" && (value.kind !== "bearer" || key !== "credentialRef"))) {
+    problems.push({ field: "auth", code: "auth-invalid", message: "Authentication must contain only its kind and credential reference." });
+    return null;
+  }
   if (value.kind === "none") {
     return { kind: "none" };
   }

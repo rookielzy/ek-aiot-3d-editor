@@ -10,6 +10,7 @@ import {
   filterDataConnectionItems,
   validateDataConnectionDraft,
   validateSceneSnapshot,
+  validateSerializedSceneSnapshot,
   type DataConnectionDraft,
   type DataConnectionProblemCode,
   type SerializedSceneSnapshot
@@ -254,6 +255,64 @@ describe("data source connections", () => {
       connection: { id: "connection-a", ...BASE_CONNECTION, auth: { kind: "bearer", credentialRef: "credential-missing" } }
     }).ok).toBe(true);
     expect(JSON.stringify(editor.serialize())).not.toContain("credential-retired");
+    editor.dispose();
+  });
+
+  it.each([
+    { kind: "none", token: "raw-secret" } as const,
+    { kind: "bearer", credentialRef: "credential-host", token: "raw-secret" } as const
+  ])("rejects extra authentication fields at snapshot and command boundaries: $kind", (auth) => {
+    const editor = createEditor();
+    editor.dispatch({ type: "create-data-connection", connection: { id: "connection-a", ...BASE_CONNECTION } });
+    const before = editor.serialize();
+    const history = editor.getHistoryState();
+    const snapshot = {
+      ...editor.getSnapshot(),
+      dataSources: {
+        ...editor.getSnapshot().dataSources,
+        connections: {
+          "connection-a": { id: "connection-a", ...BASE_CONNECTION, auth }
+        }
+      }
+    };
+
+    expect(validateSceneSnapshot(snapshot).ok).toBe(false);
+    expect(validateSerializedSceneSnapshot(snapshot).ok).toBe(false);
+    expect(() => createEditor({ snapshot })).toThrow("auth-invalid");
+    expect(() => editor.restore(snapshot)).toThrow("auth-invalid");
+    const result = editor.dispatch({
+      type: "update-data-connection",
+      connectionId: "connection-a",
+      connection: { ...BASE_CONNECTION, auth }
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("auth-invalid");
+    expect(result.error).not.toContain("raw-secret");
+    expect(editor.serialize()).toEqual(before);
+    expect(editor.getHistoryState()).toEqual(history);
+    editor.dispose();
+  });
+
+  it.each(["Plant API", "  plant api  ", "Other API"])("rejects duplicate copy names consistently: %s", (name) => {
+    const editor = createEditor();
+    editor.dispatch({ type: "create-data-connection", connection: { id: "connection-a", ...BASE_CONNECTION } });
+    editor.dispatch({ type: "create-data-connection", connection: { id: "connection-b", ...BASE_CONNECTION, name: "Other API" } });
+    const before = editor.serialize();
+    const history = editor.getHistoryState();
+
+    const built = buildDuplicateDataConnectionCommand(editor.getSnapshot(), "connection-a", { name });
+    expect(built.ok).toBe(false);
+    expect(!built.ok && built.problems.map((problem) => problem.code)).toEqual(["name-duplicate"]);
+    const dispatched = editor.dispatch({ type: "duplicate-data-connection", connectionId: "connection-a", name });
+    expect(dispatched.ok).toBe(false);
+    expect(dispatched.error).toContain("name-duplicate");
+    expect(editor.serialize()).toEqual(before);
+    expect(editor.getHistoryState()).toEqual(history);
+
+    const valid = buildDuplicateDataConnectionCommand(editor.getSnapshot(), "connection-a", { name: "Fresh API" });
+    if (!valid.ok) throw new Error("Expected a valid duplicate command.");
+    expect(editor.dispatch(valid.command).ok).toBe(true);
+    expect(Object.values(editor.getSnapshot().dataSources.connections).map((connection) => connection.name)).toContain("Fresh API");
     editor.dispose();
   });
 

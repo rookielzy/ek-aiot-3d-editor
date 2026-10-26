@@ -238,6 +238,71 @@ describe("React data source workspace", () => {
     expect(screen.getByText("Credential: Live token")).toBeTruthy();
   });
 
+  it.each(["New connection", "Edit Existing API", "Edit Other API"])("protects dirty drafts before %s", async (action) => {
+    const editor = createEditor();
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} rightPanel={() => null} />);
+    openDataPanel();
+    await createConnection("Existing API", "https://existing.example.test");
+    await createConnection("Other API", "https://other.example.test");
+    fireEvent.click(screen.getByRole("button", { name: "Edit Existing API" }));
+    fireEvent.change(screen.getByLabelText("Connection name"), { target: { value: "Unsaved name" } });
+    fireEvent.change(screen.getByLabelText("Service URL"), { target: { value: "https://draft.example.test" } });
+    const before = editor.serialize();
+    const history = editor.getHistoryState();
+
+    fireEvent.click(screen.getByRole("button", { name: action }));
+    expect(screen.getByRole("alertdialog", { name: "Discard unsaved changes?" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect((screen.getByLabelText("Connection name") as HTMLInputElement).value).toBe("Unsaved name");
+    expect((screen.getByLabelText("Service URL") as HTMLInputElement).value).toBe("https://draft.example.test");
+    expect(document.activeElement).toBe(screen.getByLabelText("Connection name"));
+
+    fireEvent.click(screen.getByRole("button", { name: action }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect((screen.getByLabelText("Connection name") as HTMLInputElement).value).toBe(
+      action === "New connection" ? "" : action.replace("Edit ", "")
+    );
+    expect((screen.getByLabelText("Service URL") as HTMLInputElement).value).toBe(
+      action === "New connection" ? "" : action === "Edit Existing API" ? "https://existing.example.test" : "https://other.example.test"
+    );
+    expect(document.activeElement).toBe(screen.getByLabelText("Connection name"));
+    expect(editor.serialize()).toEqual(before);
+    expect(editor.getHistoryState()).toEqual(history);
+  });
+
+  it("preserves connections, history, and canvas across locale changes with inline credentials", async () => {
+    const view = render(
+      <EditorWorkbench
+        credentials={[{ ref: "credential-host", label: "Host token", available: true }]}
+        rendererFactory={fakeRenderer}
+        rightPanel={() => null}
+        locale="en"
+      />
+    );
+    openDataPanel();
+    await createConnection("Saved API", "https://saved.example.test");
+    const canvas = view.container.querySelector("canvas");
+    expect(canvas).not.toBeNull();
+
+    view.rerender(
+      <EditorWorkbench
+        credentials={[{ ref: "credential-host", label: "Host token", available: true }]}
+        rendererFactory={fakeRenderer}
+        rightPanel={() => null}
+        locale="zh-CN"
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "编辑 Saved API" })).toBeTruthy();
+    expect(view.container.querySelector("canvas")).toBe(canvas);
+    fireEvent.click(screen.getByRole("button", { name: "撤销" }));
+    expect(screen.queryByRole("button", { name: "编辑 Saved API" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "重做" }));
+    expect(screen.getByRole("button", { name: "编辑 Saved API" })).toBeTruthy();
+  });
+
   it("asks before row actions discard a dirty draft", async () => {
     const editor = createEditor();
     render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} rightPanel={() => null} />);

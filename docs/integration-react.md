@@ -80,6 +80,8 @@ export function EditorPage() {
 
 连接保存、复制、删除都通过 core 的 data connection command 进入 history；缺失或不可用的凭证只影响列表和表单提示，不阻止保存合法配置。默认 editor 与 Data 工作区不会自动发起网络请求，也不提供把密钥写入场景的输入框。
 
+`credentials` 是 editor 的初始化选项。`useEditor`、`useWorkbench` 和 `EditorWorkbench` 使用首次传入的凭证描述；后续重渲染即使传入新的数组或描述，也不会替换 editor、场景或 history。传入外部 `editor` 时，以该 editor 的凭证描述为准。
+
 ## 双语 Workbench UI
 
 默认 Workbench UI 内置 `en` 和 `zh-CN` 字典，默认语言是 English，不需要 `i18next`、`react-i18next`、FormatJS 或其他第三方 i18n runtime。宿主只需要继续从 package root 和公开 CSS 子路径导入：
