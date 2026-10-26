@@ -8,7 +8,7 @@ Use `createEditor()` to create a framework-neutral editor, dispatch commands, su
 
 ## Snapshot Contract
 
-Snapshots are portable JSON-compatible records. The current v9 schema stores a canonical `SceneNode` / `NodeId` graph, authored camera views, source-based environment lighting/background state, and a `dataSources` domain for HTTP connections plus query/binding references. Version 1/2/3/4/5/6/7/8 snapshots restore through the migration path and are normalized into the current schema.
+Snapshots are portable JSON-compatible records. The current v9 schema stores a canonical `SceneNode` / `NodeId` graph, authored camera views, source-based environment lighting/background state, and a `dataSources` domain for HTTP connections plus saved query definitions, device property mappings, and object-binding references. Version 1/2/3/4/5/6/7/8 snapshots restore through the migration path and are normalized into the current schema.
 
 Runtime values are never saved. Hosts may register GLB, texture, HDR, or image assets with runtime `source` values, but snapshots only keep stable asset references.
 
@@ -41,8 +41,11 @@ All durable edits enter through commands so undo/redo remains framework-neutral:
 - `set-environment` stores source-based lighting/background/skybox intent without PMREM or loaded textures. Legacy v6-style `mode` patches are normalized for compatibility.
 - `add-light`, `update-light`, and `remove-light` store durable light authoring data and keep light nodes synchronized with light payloads.
 - `create-data-connection`, `update-data-connection`, `duplicate-data-connection`, and `delete-data-connection` store HTTP/HTTPS connection configuration under the v9 `dataSources` domain. Bearer authentication stores only a host credential reference; credentials stay in runtime.
+- `create-data-query`, `update-data-query`, `duplicate-data-query`, and `delete-data-query` store named query paths, typed parameters, and device property mappings as one undoable configuration change. Duplicate queries receive new IDs and connection-scoped unique names; queries referenced by bindings cannot be deleted.
 
 `editor.getDataService()` builds and runs manual GET query drafts without a viewport. Pass `createEditor({ executor })` to give it a host-owned request executor; core sends a resolved URL, non-secret headers, a credential reference, timeout, and `AbortSignal`, then exposes status, raw text, parsed JSON, elapsed time, and diagnostics through a subscription. The service never calls global `fetch`, never writes request drafts or responses into snapshots/history, aborts on cancel, and rejects late responses after invalidation or disposal. `buildDataGetRequest()` is also exported for hosts that want to preview or validate a resolved draft before execution.
+
+`mapDataQueryBody()` turns an in-memory response body plus a saved `DataQueryMapping` into standard device samples with `connectionId`, `queryId`, `entityId`, property values, observed/received timestamps, and source quality. `validateDataQueryMapping()` exposes the same identity, path, transform, range, time, and quality rules for authoring. Array and single-object modes preserve string IDs, require explicit numeric conversion, isolate field failures, and treat duplicate entity IDs or invalid roots as whole-result failures. Samples, example JSON, and test overrides remain runtime-only.
 
 `editor.operations` exposes core-backed helpers for copy, paste, duplicate, delete, group, ungroup, select all, and clear selection. Default calls operate on node selection; calls with explicit object IDs keep object-only compatibility. Clipboard payloads are transient JSON editor data; v2 payloads can carry group/object/light node subtrees while v1 object payloads still paste into v4 editors. Clipboard data does not contain browser clipboard state, files, blobs, object URLs, loaded Three.js objects, resolver output, or project payload bytes.
 

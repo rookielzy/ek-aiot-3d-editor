@@ -474,7 +474,7 @@ Snapshot 中的 `problems` 是 authored problem state。resolver、loader、PMRE
 
 ## Data Sources
 
-v9 新增顶层 `dataSources`，用于保存 HTTP JSON 数据源配置。当前切片落地连接配置；查询和绑定只建立稳定引用边界，后续任务在同一 v9 schema 内扩展，不提升版本。
+v9 新增顶层 `dataSources`，用于保存 HTTP JSON 数据源配置。当前切片落地连接配置、已保存查询与设备属性映射；绑定仍只建立稳定引用边界，后续任务在同一 v9 schema 内扩展，不提升版本。
 
 ```ts
 type DataConnectionAuth =
@@ -490,10 +490,71 @@ interface DataConnection {
   timeoutMs: number;
 }
 
+type DataParameterType = "string" | "number" | "boolean";
+type DataParameterValue = string | number | boolean;
+
+interface DataQueryParameter {
+  name: string;
+  type: DataParameterType;
+  defaultValue?: DataParameterValue;
+}
+
+type DataPathSegment =
+  | { kind: "key"; key: string }
+  | { kind: "index"; index: number };
+
+type DataMappedValueType = "number" | "string" | "boolean";
+
+interface DataPropertyRange {
+  min: number | null;
+  max: number | null;
+}
+
+type DataPropertyTransform =
+  | { kind: "raw" }
+  | { kind: "number" }
+  | { kind: "scale"; factor: number; offset: number }
+  | { kind: "map"; entries: readonly { from: string | number | boolean | null; to: DataParameterValue }[] };
+
+interface DataPropertyMapping {
+  key: string;
+  label: string;
+  type: DataMappedValueType;
+  nullable: boolean;
+  unit: string | null;
+  source: readonly DataPathSegment[];
+  transform: DataPropertyTransform;
+  range: DataPropertyRange | null;
+  allowed: readonly DataParameterValue[] | null;
+}
+
+type DataIdentityMapping =
+  | { kind: "path"; path: readonly DataPathSegment[]; valueType: "string" | "number" }
+  | { kind: "parameter"; parameterName: string }
+  | { kind: "literal"; value: string };
+
+type DataTimeFormat = "iso" | "unix-seconds" | "unix-milliseconds";
+
+interface DataQueryMapping {
+  mode: "array" | "single";
+  root: readonly DataPathSegment[];
+  identity: DataIdentityMapping;
+  displayName: readonly DataPathSegment[] | null;
+  properties: readonly DataPropertyMapping[];
+  observedAt: { path: readonly DataPathSegment[]; format: DataTimeFormat } | null;
+  sourceQuality: {
+    path: readonly DataPathSegment[];
+    entries: readonly { from: string | number | boolean | null; quality: "good" | "uncertain" | "bad" | "unknown" }[];
+  } | null;
+}
+
 interface DataQuery {
   id: string;
   connectionId: string;
   name: string;
+  path: string;
+  parameters: readonly DataQueryParameter[];
+  mapping: DataQueryMapping;
 }
 
 interface DataObjectBinding {
@@ -517,13 +578,20 @@ Validation 规则：
 - `headers` 只保存非秘密公共头；header name 必须是 HTTP token，拒绝 `authorization`、`proxy-authorization`、`cookie`、`set-cookie`，header value 不允许 CR/LF 或控制字符。
 - `timeoutMs` 必须是正的 finite safe integer；默认 `10000`。UI 以秒显示和编辑，Snapshot 内统一毫秒。
 - bearer auth 的 `credentialRef` 必须非空。凭证是否存在、是否可用属于宿主能力，不是 Snapshot 校验错误；缺失凭证仍可恢复、编辑和保存。
-- query 的 `connectionId` 必须指向现有 connection；binding key 必须是现有 object node ID，`queryId` 必须指向现有 query。
+- 每个 query 的 `id` 必须和 map key 一致，`connectionId` 必须指向现有 connection；query 名称在同一 connection 内大小写不敏感去重，跨 connection 可同名。
+- query `path` 只能是相对于连接 `baseUrl` 的路径；参数名、类型、默认值、路径编码、穿越防护和占位符完整性复用 `buildDataGetRequest()` 的规则。
+- mapping 至少包含一个属性；属性键在 query 内唯一，来源路径只能是对象键/非负数组索引，禁止通配、递归、脚本和原型链访问。
+- 属性类型、可空性、单位、可选范围/枚举与转换共同校验：range 仅适用于数字属性的 min/max 约束；allowed 是非空、无重复且类型匹配属性类型的值列表。转换输出必须符合声明类型。数组模式每行一个设备；单对象模式的身份可来自字段、参数或固定值。重复设备 ID 使整次映射失败，单字段错误按属性隔离。
+- 时间格式支持带明确时区的 ISO 与 Unix 秒/毫秒；源时间超前接收时间超过 30 秒视为无效。source quality 只由明确映射产生，HTTP 成功不推断 `good`。
+- 每个 binding 的 key 必须是现有 object node ID，`queryId` 必须指向现有 query。
 
 连接变更通过 `create-data-connection`、`update-data-connection`、`duplicate-data-connection`、`delete-data-connection` command 进入 command/history；一次保存对应一次可撤销编辑。失败会保持 Snapshot/history 原子不变。复制连接生成新 ID 和唯一名称，不复制 query。存在 query/binding 引用时拒绝删除 connection；引用统计由 `countDataConnectionReferences` 提供。
 
+查询变更通过 `create-data-query`、`update-data-query`、`duplicate-data-query`、`delete-data-query` command 进入 command/history。查询配置与映射在同一 command 中保存，只增加一次编辑历史；复制查询生成新 ID 和同一 connection 内的唯一名称；存在 binding 引用时拒绝删除查询。`buildDataQueryList()` 与 `countDataQueryReferences()` 提供列表和引用统计。
+
 Host credential descriptors（`ref`、`label`、`available`）通过 `createEditor({ credentials })` 注入，只存在运行态；它们不会写入 Snapshot、项目包或 clipboard。React 数据工作区的连接列表由 `buildDataSourcesWorkspaceModel` 从 Snapshot 与 host credentials 派生。
 
-当前切片的查询测试是窗口草稿，不写入 `dataSources.queries`。`buildDataGetRequest()` 只接受相对于连接 `baseUrl` 的路径，拒绝绝对地址、协议相对地址、编码穿越和带 query/fragment 的路径；参数定义区分 `string`、finite `number` 和 `boolean`，默认值与临时覆盖分别解析，未提供、`""`、`0`、`false` 不会互相替代。宿主通过 `createEditor({ executor })` 注入请求执行器，收到 `method`、最终 URL、非秘密 headers、`credentialRef`、`timeoutMs` 和 `AbortSignal`，返回状态、允许的响应头、content type 与文本 body。请求摘要、原始响应、JSON、耗时、取消状态和 generation 只属于 editor session，不进入 Snapshot、项目包、`.ek3d` 或 clipboard；没有 executor 时返回结构化运行态问题，不会回退到浏览器 `fetch`。
+查询配置、示例 JSON、请求结果、临时参数覆盖、原始响应、JSON、耗时、取消状态和 generation 只属于 editor session，不进入 Snapshot、项目包、`.ek3d` 或 clipboard。`buildDataGetRequest()` 只接受相对于连接 `baseUrl` 的路径，拒绝绝对地址、协议相对地址、编码穿越和带 query/fragment 的路径；参数定义区分 `string`、finite `number` 和 `boolean`，默认值与临时覆盖分别解析，未提供、`""`、`0`、`false` 不会互相替代。宿主通过 `createEditor({ executor })` 注入请求执行器，收到 `method`、最终 URL、非秘密 headers、`credentialRef`、`timeoutMs` 和 `AbortSignal`，返回状态、允许的响应头、content type 与文本 body。没有 executor 时返回结构化运行态问题，不会回退到浏览器 `fetch`。`mapDataQueryBody()` 从映射配置和内存中的响应 body 产生带 `connectionId`、`queryId`、`entityId`、属性值、`observedAt`、`receivedAt` 与 `sourceQuality` 的标准样本；这些样本不写入 Snapshot。
 
 ## Command 与 Snapshot 的关系
 

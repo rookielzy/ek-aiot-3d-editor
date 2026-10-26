@@ -3,8 +3,20 @@ import type {
   DataConnectionAuth,
   DataConnectionReferenceCounts,
   DataCredentialDescriptor,
+  DataQueryReferenceCounts,
   SceneDataSources
 } from "./types";
+
+export interface DataQueryListItem {
+  id: string;
+  connectionId: string;
+  name: string;
+  path: string;
+  mode: "array" | "single";
+  propertyCount: number;
+  bindingCount: number;
+  referenced: boolean;
+}
 
 export interface DataConnectionListItem {
   id: string;
@@ -20,6 +32,7 @@ export interface DataConnectionListItem {
   bindingCount: number;
   referenced: boolean;
   missingCredential: boolean;
+  queries: DataQueryListItem[];
 }
 
 export interface DataSourcesWorkspaceModel {
@@ -63,7 +76,8 @@ export function buildDataSourcesWorkspaceModel(
         queryCount: counts.queryCount,
         bindingCount: counts.bindingCount,
         referenced: counts.queryCount > 0,
-        missingCredential: credentialRef !== null && !credentialAvailable
+        missingCredential: credentialRef !== null && !credentialAvailable,
+        queries: buildDataQueryList(snapshot.dataSources, connection.id)
       };
     })
     .sort((left, right) => left.name.localeCompare(right.name));
@@ -90,6 +104,37 @@ export function countDataConnectionReferences(
     queryCount: queryIds.size,
     bindingCount: Object.values(dataSources.bindings).filter((binding) => queryIds.has(binding.queryId)).length
   };
+}
+
+export function countDataQueryReferences(
+  dataSources: Pick<SceneDataSources, "bindings">,
+  queryId: string
+): DataQueryReferenceCounts {
+  return {
+    bindingCount: Object.values(dataSources.bindings).filter((binding) => binding.queryId === queryId).length
+  };
+}
+
+export function buildDataQueryList(
+  dataSources: Pick<SceneDataSources, "queries" | "bindings">,
+  connectionId: string
+): DataQueryListItem[] {
+  return Object.values(dataSources.queries)
+    .filter((query) => query.connectionId === connectionId)
+    .map((query): DataQueryListItem => {
+      const counts = countDataQueryReferences(dataSources, query.id);
+      return {
+        id: query.id,
+        connectionId: query.connectionId,
+        name: query.name,
+        path: query.path,
+        mode: query.mapping.mode,
+        propertyCount: query.mapping.properties.length,
+        bindingCount: counts.bindingCount,
+        referenced: counts.bindingCount > 0
+      };
+    })
+    .sort((left, right) => left.name.localeCompare(right.name));
 }
 
 export function filterDataConnectionItems(

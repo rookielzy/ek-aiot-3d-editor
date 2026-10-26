@@ -14,7 +14,7 @@ import type { LightDefinition, LightKind } from "../lights/types";
 import type { MaterialAssignmentTarget, MaterialPatch } from "../materials/types";
 import type { EditorClipboardPayload } from "../clipboard/types";
 import type { JsonValue, NodeId, SceneSnapshot, Transform } from "../snapshot/types";
-import type { DataConnectionDraft, DataConnectionId, DataConnectionInput } from "../data-sources/types";
+import type { DataConnectionDraft, DataConnectionId, DataConnectionInput, DataQueryDefinition, DataQueryId, DataQueryInput } from "../data-sources/types";
 
 export type Command =
   | BatchCommand
@@ -54,7 +54,11 @@ export type SingleCommand =
   | CreateDataConnectionCommand
   | UpdateDataConnectionCommand
   | DuplicateDataConnectionCommand
-  | DeleteDataConnectionCommand;
+  | DeleteDataConnectionCommand
+  | CreateDataQueryCommand
+  | UpdateDataQueryCommand
+  | DuplicateDataQueryCommand
+  | DeleteDataQueryCommand;
 
 export interface ImportGlbCommand {
   type: "import-glb";
@@ -296,6 +300,29 @@ export interface DuplicateDataConnectionCommand {
 export interface DeleteDataConnectionCommand {
   type: "delete-data-connection";
   connectionId: DataConnectionId;
+}
+
+export interface CreateDataQueryCommand {
+  type: "create-data-query";
+  query: DataQueryInput;
+}
+
+export interface UpdateDataQueryCommand {
+  type: "update-data-query";
+  queryId: DataQueryId;
+  query: DataQueryDefinition;
+}
+
+export interface DuplicateDataQueryCommand {
+  type: "duplicate-data-query";
+  queryId: DataQueryId;
+  id?: DataQueryId;
+  name?: string;
+}
+
+export interface DeleteDataQueryCommand {
+  type: "delete-data-query";
+  queryId: DataQueryId;
 }
 
 export interface BatchCommand {

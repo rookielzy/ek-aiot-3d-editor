@@ -1,8 +1,9 @@
-import type { DataConnection, DataConnectionId, DataConnectionNameEntry, SceneDataSources } from "./types";
+import type { DataConnection, DataConnectionId, DataConnectionNameEntry, DataQuery, DataQueryId, SceneDataSources } from "./types";
 
 export const DEFAULT_DATA_CONNECTION_TIMEOUT_MS = 10_000;
 
 let nextConnectionId = 0;
+let nextQueryId = 0;
 
 export function createEmptyDataSources(): SceneDataSources {
   return {
@@ -10,6 +11,28 @@ export function createEmptyDataSources(): SceneDataSources {
     queries: {},
     bindings: {}
   };
+}
+
+export function createDataQueryId(existing: Record<string, DataQuery> = {}): DataQueryId {
+  let candidate: string;
+  do {
+    nextQueryId += 1;
+    candidate = `query-${nextQueryId.toString(36)}`;
+  } while (existing[candidate]);
+  return candidate;
+}
+
+export function createUniqueDataQueryName(
+  existing: readonly DataQuery[],
+  connectionId: DataConnectionId,
+  desiredName: string
+): string {
+  return createUniqueName(
+    existing
+      .filter((query) => query.connectionId === connectionId)
+      .map((query) => query.name),
+    desiredName
+  );
 }
 
 export function createDataConnectionId(existing: Record<string, DataConnection> = {}): DataConnectionId {
@@ -34,6 +57,10 @@ export function isDataConnectionNameTaken(
 }
 
 export function createUniqueDataConnectionName(existingNames: readonly string[], desiredName: string): string {
+  return createUniqueName(existingNames, desiredName);
+}
+
+function createUniqueName(existingNames: readonly string[], desiredName: string): string {
   const desired = desiredName.trim();
   const taken = new Set(existingNames.map(normalizeDataConnectionName));
   if (!taken.has(normalizeDataConnectionName(desired))) {

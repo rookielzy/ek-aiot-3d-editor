@@ -10,26 +10,23 @@ import {
   buildDataGetRequest,
   type DataParameterType,
   type DataParameterValue,
-  type DataQueryParameterDraft,
-  type DataQueryParameterOverrides,
-  type DataQueryProblem,
-  type DataQueryProblemCode,
   type DataQueryRunState,
-  type DataQueryRunStatus,
   type DataServiceState
 } from "@ek-aiot/3d-editor-core";
-import type { WorkbenchI18n, WorkbenchMessageKey, WorkbenchMessageValues } from "../i18n/workbench-i18n";
+import type { WorkbenchI18n } from "../i18n/workbench-i18n";
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
-
-interface RequestParameterForm {
-  id: string;
-  name: string;
-  type: DataParameterType;
-  useDefault: boolean;
-  defaultText: string;
-  override: boolean;
-  overrideText: string;
-}
+import {
+  collectQueryOverrides,
+  createQueryParameterForm,
+  toQueryParameterDrafts,
+  type QueryParameterForm
+} from "./data-query-form";
+import { DataParameterValueInput } from "./DataParameterValueInput";
+import {
+  DATA_QUERY_RUN_STATUS_MESSAGE_KEYS,
+  formatDataQueryProblem,
+  PARAMETER_TYPE_MESSAGE_KEYS
+} from "./data-query-problem-messages";
 
 export interface DataQueryTesterProps {
   context: ResolvedWorkbenchContext;
@@ -43,42 +40,6 @@ const EMPTY_SERVICE_STATE: DataServiceState = Object.freeze({
   run: null
 });
 
-const PROBLEM_MESSAGE_KEYS = {
-  "connection-not-found": "dataSources.request.problem.connectionNotFound",
-  "credential-unavailable": "dataSources.request.problem.credentialUnavailable",
-  "executor-unavailable": "dataSources.request.problem.executorUnavailable",
-  "parameter-definition-invalid": "dataSources.request.problem.parameterDefinitionInvalid",
-  "parameter-duplicate": "dataSources.request.problem.parameterDuplicate",
-  "parameter-missing": "dataSources.request.problem.parameterMissing",
-  "parameter-type": "dataSources.request.problem.parameterType",
-  "path-absolute": "dataSources.request.problem.pathAbsolute",
-  "path-invalid": "dataSources.request.problem.pathInvalid",
-  "path-parameter-missing": "dataSources.request.problem.pathParameterMissing",
-  "path-protocol-relative": "dataSources.request.problem.pathProtocolRelative",
-  "path-required": "dataSources.request.problem.pathRequired",
-  "path-traversal": "dataSources.request.problem.pathTraversal",
-  "request-aborted": "dataSources.request.problem.requestAborted",
-  "request-failed": "dataSources.request.problem.requestFailed",
-  "request-timeout": "dataSources.request.problem.requestTimeout",
-  "response-http": "dataSources.request.problem.responseHttp",
-  "response-invalid": "dataSources.request.problem.responseInvalid",
-  "response-json-invalid": "dataSources.request.problem.responseJsonInvalid",
-  "service-disposed": "dataSources.request.problem.serviceDisposed"
-} satisfies Record<DataQueryProblemCode, WorkbenchMessageKey>;
-
-const RUN_STATUS_MESSAGE_KEYS = {
-  running: "dataSources.request.status.running",
-  success: "dataSources.request.status.success",
-  error: "dataSources.request.status.error",
-  cancelled: "dataSources.request.status.cancelled"
-} satisfies Record<Exclude<DataQueryRunStatus, "stale">, WorkbenchMessageKey>;
-
-const PARAMETER_TYPE_MESSAGE_KEYS = {
-  string: "dataSources.request.type.string",
-  number: "dataSources.request.type.number",
-  boolean: "dataSources.request.type.boolean"
-} satisfies Record<DataParameterType, WorkbenchMessageKey>;
-
 export function DataQueryTester({ context, connectionId, onClose }: DataQueryTesterProps) {
   const service = context.editor.getDataService?.() ?? null;
   const subscribe = useCallback(
@@ -91,7 +52,7 @@ export function DataQueryTester({ context, connectionId, onClose }: DataQueryTes
   );
   const dataState = useSyncExternalStore(subscribe, getState, getState);
   const [path, setPath] = useState("");
-  const [parameters, setParameters] = useState<RequestParameterForm[]>([]);
+  const [parameters, setParameters] = useState<QueryParameterForm[]>([]);
   const pathRef = useRef<HTMLInputElement>(null);
   const t = context.i18n.t;
   const connection = context.snapshot.dataSources.connections[connectionId];
@@ -111,8 +72,8 @@ export function DataQueryTester({ context, connectionId, onClose }: DataQueryTes
     return null;
   }
 
-  const parameterDrafts = parameters.map(toParameterDraft);
-  const overrides = collectOverrides(parameters);
+  const parameterDrafts = toQueryParameterDrafts(parameters);
+  const overrides = collectQueryOverrides(parameters);
   const preview = buildDataGetRequest(context.snapshot, {
     connectionId,
     path,
@@ -127,10 +88,10 @@ export function DataQueryTester({ context, connectionId, onClose }: DataQueryTes
 
   function addParameter(): void {
     invalidateRuns();
-    setParameters((current) => [...current, createParameterForm()]);
+    setParameters((current) => [...current, createQueryParameterForm()]);
   }
 
-  function updateParameter(id: string, patch: Partial<RequestParameterForm>): void {
+  function updateParameter(id: string, patch: Partial<QueryParameterForm>): void {
     invalidateRuns();
     setParameters((current) => current.map((parameter) =>
       parameter.id === id ? { ...parameter, ...patch } : parameter
@@ -239,7 +200,7 @@ export function DataQueryTester({ context, connectionId, onClose }: DataQueryTes
                 <div className="ek-workbench__request-parameter-value">
                   <label className="ek-workbench__field">
                     <span>{t("dataSources.request.parameter.label.default")}</span>
-                    <ParameterValueInput
+                    <DataParameterValueInput
                       id={`${parameter.id}-default`}
                       type={parameter.type}
                       value={parameter.defaultText}
@@ -278,7 +239,7 @@ export function DataQueryTester({ context, connectionId, onClose }: DataQueryTes
                   {parameter.override ? (
                     <label className="ek-workbench__field">
                       <span>{t("dataSources.request.parameter.testValue", { index: row })}</span>
-                      <ParameterValueInput
+                      <DataParameterValueInput
                         id={`${parameter.id}-override`}
                         type={parameter.type}
                         value={parameter.overrideText}
@@ -327,7 +288,7 @@ function RequestRunResult({ run, i18n }: { run: DataQueryRunState; i18n: Workben
     >
       <div className="ek-workbench__request-result-header">
         <span className="ek-workbench__request-status" data-status={run.status}>
-          {t(RUN_STATUS_MESSAGE_KEYS[run.status])}
+          {t(DATA_QUERY_RUN_STATUS_MESSAGE_KEYS[run.status])}
         </span>
         {run.elapsedMs !== null ? (
           <small>{t("dataSources.request.response.durationValue", { milliseconds: run.elapsedMs })}</small>
@@ -341,7 +302,7 @@ function RequestRunResult({ run, i18n }: { run: DataQueryRunState; i18n: Workben
         <ul className="ek-workbench__request-problems" aria-label={t("dataSources.request.problems")}>
           {run.problems.map((problem, index) => (
             <li key={`${problem.code}-${problem.parameterName ?? ""}-${index}`}>
-              {formatProblem(i18n, problem)}
+              {formatDataQueryProblem(i18n, problem)}
             </li>
           ))}
         </ul>
@@ -436,109 +397,6 @@ function ResponseDetails({ run, i18n }: { run: DataQueryRunState; i18n: Workbenc
   );
 }
 
-function ParameterValueInput({
-  id,
-  type,
-  value,
-  disabled,
-  label,
-  trueLabel,
-  falseLabel,
-  onChange
-}: {
-  id: string;
-  type: DataParameterType;
-  value: string;
-  disabled: boolean;
-  label: string;
-  trueLabel: string;
-  falseLabel: string;
-  onChange(value: string): void;
-}) {
-  if (type === "boolean") {
-    return (
-      <select
-        id={id}
-        aria-label={label}
-        value={value === "true" ? "true" : "false"}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="true">{trueLabel}</option>
-        <option value="false">{falseLabel}</option>
-      </select>
-    );
-  }
-  return (
-    <input
-      id={id}
-      type={type === "number" ? "number" : "text"}
-      step={type === "number" ? "any" : undefined}
-      inputMode={type === "number" ? "decimal" : undefined}
-      aria-label={label}
-      value={value}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value)}
-    />
-  );
-}
-
-function formatProblem(i18n: WorkbenchI18n, problem: DataQueryProblem): string {
-  const values: WorkbenchMessageValues = {
-    parameterName: problem.parameterName ?? "",
-    status: problem.status ?? "",
-    credentialRef: problem.credentialRef ?? "",
-    detail: problem.message
-  };
-  return i18n.t(PROBLEM_MESSAGE_KEYS[problem.code], values);
-}
-
 function formatRecord(values: Readonly<Record<string, DataParameterValue | string>>): string {
   return JSON.stringify(values, null, 2);
-}
-
-let nextParameterId = 0;
-
-function createParameterForm(): RequestParameterForm {
-  nextParameterId += 1;
-  return {
-    id: `data-parameter-${nextParameterId}`,
-    name: "",
-    type: "string",
-    useDefault: true,
-    defaultText: "",
-    override: false,
-    overrideText: ""
-  };
-}
-
-function toParameterDraft(parameter: RequestParameterForm): DataQueryParameterDraft {
-  return {
-    name: parameter.name.trim(),
-    type: parameter.type,
-    ...(parameter.useDefault
-      ? { defaultValue: parseParameterText(parameter.type, parameter.defaultText) }
-      : {})
-  };
-}
-
-function collectOverrides(parameters: readonly RequestParameterForm[]): DataQueryParameterOverrides {
-  const overrides: Record<string, DataParameterValue | undefined> = {};
-  for (const parameter of parameters) {
-    if (!parameter.override) {
-      continue;
-    }
-    overrides[parameter.name.trim()] = parseParameterText(parameter.type, parameter.overrideText);
-  }
-  return overrides;
-}
-
-function parseParameterText(type: DataParameterType, text: string): DataParameterValue {
-  if (type === "string") {
-    return text;
-  }
-  if (type === "boolean") {
-    return text === "true";
-  }
-  return text.trim() === "" ? Number.NaN : Number(text);
 }

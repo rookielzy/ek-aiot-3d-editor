@@ -1,16 +1,19 @@
 import type { SceneSnapshot } from "../snapshot/types";
-import type { DataConnection, DataConnectionId } from "./types";
+import type {
+  DataConnection,
+  DataConnectionId,
+  DataParameterType,
+  DataParameterValue,
+  DataQueryParameterDraft,
+  DataQueryParameterOverrides
+} from "./types";
 
-export type DataParameterType = "string" | "number" | "boolean";
-export type DataParameterValue = string | number | boolean;
-export type DataQueryParameterOverrides = Readonly<Record<string, DataParameterValue | null | undefined>>;
-
-export interface DataQueryParameterDraft {
-  name: string;
-  type: DataParameterType;
-  /** Omit to require an explicit test/binding value for this parameter. */
-  defaultValue?: DataParameterValue;
-}
+export type {
+  DataParameterType,
+  DataParameterValue,
+  DataQueryParameterDraft,
+  DataQueryParameterOverrides
+} from "./types";
 
 export interface DataQueryDraft {
   connectionId: DataConnectionId;
@@ -105,8 +108,7 @@ export function buildDataGetRequest(
     };
   }
 
-  const resolution = resolveDataQueryParameters(draft.parameters, options.overrides, connection.id);
-  if (!resolution.ok) {
+  const resolution = resolveDataQueryParameters(draft.parameters, options.overrides, connection.id);  if (!resolution.ok) {
     return { ok: false, problems: resolution.problems };
   }
 
@@ -134,7 +136,7 @@ export function resolveDataQueryParameters(
   overrides: DataQueryParameterOverrides = {},
   connectionId: string | null = null
 ): ResolveDataQueryParametersResult {
-  const definitionProblems = validateParameterDefinitions(parameters, connectionId);
+  const definitionProblems = validateDataQueryParameterDefinitions(parameters, connectionId);
   if (definitionProblems.length > 0) {
     return { ok: false, values: {}, problems: definitionProblems };
   }
@@ -178,7 +180,7 @@ export function resolveDataQueryParameters(
   return { ok: problems.length === 0, values, problems };
 }
 
-function validateParameterDefinitions(
+export function validateDataQueryParameterDefinitions(
   parameters: readonly DataQueryParameterDraft[] | unknown,
   connectionId: string | null
 ): DataQueryProblem[] {

@@ -59,13 +59,16 @@ export type {
   CommandResult,
   CreateCameraViewCommand,
   CreateDataConnectionCommand,
+  CreateDataQueryCommand,
   CreateGroupCommand,
   CreateImportedGlbTargetsCommand,
   DeleteCameraViewCommand,
   DeleteDataConnectionCommand,
+  DeleteDataQueryCommand,
   DeleteNodesCommand,
   DeleteObjectsCommand,
   DuplicateDataConnectionCommand,
+  DuplicateDataQueryCommand,
   DuplicateObjectsCommand,
   GroupNodesCommand,
   GroupObjectsCommand,
@@ -91,11 +94,13 @@ export type {
   UngroupObjectsCommand,
   UpdateCameraViewCommand,
   UpdateDataConnectionCommand,
+  UpdateDataQueryCommand,
   UpdateLightCommand
 } from "./commands/types";
 export type {
   BuildDataSourcesWorkspaceOptions,
   DataConnectionListItem,
+  DataQueryListItem,
   DataSourcesWorkspaceModel,
   FilterDataConnectionsOptions
 } from "./data-sources/workspace";
@@ -104,6 +109,23 @@ export type {
   DataConnectionCommandBuildResult,
   SaveDataConnectionOptions
 } from "./data-sources/commands";
+export type {
+  DataQueryCommand,
+  DataQueryCommandBuildResult,
+  SaveDataQueryOptions
+} from "./data-sources/query-commands";
+export type {
+  DataMappingProblem,
+  DataMappingProblemCode,
+  DataMappedEntity,
+  DataMappedField,
+  DataFieldStatus,
+  DataMappingResult,
+  DataMappingValidationResult,
+  DataStandardSample,
+  MapDataQueryBodyOptions,
+  ValidateDataQueryMappingOptions
+} from "./data-sources/mapping";
 export type {
   BuildDataGetRequestOptions,
   BuildDataGetRequestResult,
@@ -118,6 +140,9 @@ export type {
   DataRequestSummary,
   ResolveDataQueryParametersResult
 } from "./data-sources/query";
+export type {
+  ValidateDataQueryDefinitionOptions
+} from "./data-sources/query-validation";
 export type {
   DataQueryDraftExecutionOptions,
   DataQueryResponse,
@@ -147,9 +172,32 @@ export type {
   DataConnectionReferenceCounts,
   DataConnectionValidationResult,
   DataCredentialDescriptor,
+  DataIdentityMapping,
+  DataMappedValueType,
+  DataMappingMode,
   DataObjectBinding,
+  DataObservedAtMapping,
+  DataPath,
+  DataPathPrimitive,
+  DataPathSegment,
+  DataPropertyMapping,
+  DataPropertyRange,
+  DataPropertyTransform,
+  DataQuality,
+  DataQualityMapEntry,
+  DataQualityMapping,
   DataQuery,
+  DataQueryDefinition,
+  DataQueryDefinitionProblem,
+  DataQueryDefinitionProblemCode,
+  DataQueryField,
   DataQueryId,
+  DataQueryInput,
+  DataQueryMapping,
+  DataQueryReferenceCounts,
+  DataQueryValidationResult,
+  DataTimeFormat,
+  DataValueMapEntry,
   SceneDataSources
 } from "./data-sources/types";
 export type {
@@ -420,7 +468,9 @@ export type {
 
 export {
   buildDataSourcesWorkspaceModel,
+  buildDataQueryList,
   countDataConnectionReferences,
+  countDataQueryReferences,
   filterDataConnectionItems
 } from "./data-sources/workspace";
 export {
@@ -428,12 +478,31 @@ export {
   buildDuplicateDataConnectionCommand,
   buildSaveDataConnectionCommand
 } from "./data-sources/commands";
-export { buildDataGetRequest, resolveDataQueryParameters } from "./data-sources/query";
+export {
+  buildDeleteDataQueryCommand,
+  buildDuplicateDataQueryCommand,
+  buildSaveDataQueryCommand
+} from "./data-sources/query-commands";
+export {
+  DATA_OBSERVED_AT_FUTURE_TOLERANCE_MS,
+  mapDataQueryBody,
+  validateDataQueryMapping
+} from "./data-sources/mapping";
+export { validateDataQueryDefinition } from "./data-sources/query-validation";
+export {
+  formatDataPath,
+  isValidDataPath,
+  parseDataPath,
+  resolveDataPath
+} from "./data-sources/path";
+export { buildDataGetRequest, resolveDataQueryParameters, validateDataQueryParameterDefinitions } from "./data-sources/query";
 export {
   DEFAULT_DATA_CONNECTION_TIMEOUT_MS,
   createDataConnectionId,
+  createDataQueryId,
   createEmptyDataSources,
-  createUniqueDataConnectionName
+  createUniqueDataConnectionName,
+  createUniqueDataQueryName
 } from "./data-sources/defaults";
 export { validateDataConnectionDraft } from "./data-sources/validation";
 

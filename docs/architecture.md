@@ -81,7 +81,7 @@ Snapshot 保存：
 - material overrides
 - environment/background authoring intent
 - light definitions and their light node targets
-- `dataSources` 中的连接配置与 query/binding 引用记录；host credentials、请求草稿、执行器、原始响应和测试参数都留在 runtime
+- `dataSources` 中的已保存连接、查询配置与设备属性映射，以及 query/binding 引用记录；host credentials、请求草稿、示例 JSON、执行器、原始响应和测试参数都留在 runtime
 - presentation state, including authored camera views and the default presentation view pointer
 - imported GLB target identity, owner hierarchy constraints, source descriptors, optional transform overrides, imported material slot descriptors, and JSON-compatible reimport remap metadata
 - authored problem metadata
@@ -109,7 +109,7 @@ Authored camera view 是 presentation resource，不是 runtime camera。Runtime
 
 Material projection 只消费 durable material assignment、imported slot descriptor 和 runtime target map。Object-level assignment 是 broad pass；material-slot assignment 是 narrower pass，只覆盖匹配 primitive mesh 或 material array index 的 projection-owned clone。Texture loader result、shared texture resource owner、slot resolver result、cloned material 和 projection problem 都属于 runtime projection，不能写回 Snapshot 或 `.ek3d`。
 
-Data service 与 viewport 独立：`editor.getDataService()` 在无 DOM/WebGL 环境也能读取运行态、订阅、执行草稿查询、取消和销毁。请求执行器由宿主通过 `createEditor({ executor })` 注入；core 只产生带 `credentialRef` 的请求描述，不读取或保存秘密，也不使用 global `fetch` 作为回退。运行结果、取消标记、timer 和 generation 都是 runtime-only；草稿修改、连接配置变化、undo/redo 或 dispose 会失效旧 generation，即使宿主执行器忽略 abort，晚到响应也不会提交为当前结果。当前切片的查询测试草稿不写入 `dataSources.queries`。
+Data service 与 viewport 独立：`editor.getDataService()` 在无 DOM/WebGL 环境也能读取运行态、订阅、执行草稿查询、取消和销毁。请求执行器由宿主通过 `createEditor({ executor })` 注入；core 只产生带 `credentialRef` 的请求描述，不读取或保存秘密，也不使用 global `fetch` 作为回退。运行结果、取消标记、timer 和 generation 都是 runtime-only；草稿修改、连接配置变化、undo/redo 或 dispose 会失效旧 generation，即使宿主执行器忽略 abort，晚到响应也不会提交为当前结果。已保存的 query 与 mapping 属于 durable `dataSources.queries`；只有经 command/history 的保存会写入 Snapshot，窗口内请求草稿、示例 JSON、测试覆盖和预览样本不会进入 Snapshot。
 
 ## Asset 解析边界
 

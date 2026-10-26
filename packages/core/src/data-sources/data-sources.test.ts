@@ -200,7 +200,28 @@ describe("data source connections", () => {
           "query-devices": {
             id: "query-devices",
             connectionId: "connection-a",
-            name: "Devices"
+            name: "Devices",
+            path: "/devices",
+            parameters: [],
+            mapping: {
+              mode: "array",
+              root: [],
+              identity: { kind: "path", path: [{ kind: "key", key: "id" }], valueType: "string" },
+              displayName: null,
+              properties: [{
+                key: "value",
+                label: "Value",
+                type: "string",
+                nullable: false,
+                unit: null,
+                source: [{ kind: "key", key: "value" }],
+                transform: { kind: "raw" },
+                range: null,
+                allowed: null
+              }],
+              observedAt: null,
+              sourceQuality: null
+            }
           }
         }
       }

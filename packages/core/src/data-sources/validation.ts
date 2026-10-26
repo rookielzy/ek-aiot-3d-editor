@@ -1,5 +1,7 @@
 import type { SceneSnapshot } from "../snapshot/types";
 import { isPlainRecord } from "../snapshot/json";
+import { validateDataQueryDefinition } from "./query-validation";
+import type { DataConnection, DataQuery } from "./types";
 import {
   DEFAULT_DATA_CONNECTION_TIMEOUT_MS,
   isDataConnectionNameTaken
@@ -42,7 +44,6 @@ export function validateDataSources(value: unknown, nodes: unknown, errors: stri
     errors.push("Snapshot dataSources.bindings must be a plain object map.");
   }
 
-  const knownConnections = new Set<string>();
   if (connections) {
     const existing: DataConnectionNameEntry[] = [];
     for (const [connectionId, connection] of Object.entries(connections)) {
@@ -72,12 +73,12 @@ export function validateDataSources(value: unknown, nodes: unknown, errors: stri
       if (typeof connection.name === "string") {
         existing.push({ id: connectionId, name: connection.name });
       }
-      knownConnections.add(connectionId);
     }
   }
 
   const knownQueries = new Set<string>();
   if (queries) {
+    const existingQueries: Pick<DataQuery, "id" | "name" | "connectionId">[] = [];
     for (const [queryId, query] of Object.entries(queries)) {
       if (!isPlainRecord(query)) {
         errors.push(`Data query ${queryId} must be a plain object.`);
@@ -86,11 +87,22 @@ export function validateDataSources(value: unknown, nodes: unknown, errors: stri
       if (query.id !== queryId || typeof query.id !== "string" || query.id.length === 0) {
         errors.push(`Data query ${queryId} must use a matching non-empty id.`);
       }
-      if (typeof query.connectionId !== "string" || !knownConnections.has(query.connectionId)) {
-        errors.push(`Data query ${queryId} connection ${String(query.connectionId)} must exist in dataSources.connections.`);
+      const connectionId = typeof query.connectionId === "string" ? query.connectionId : "";
+      const connection = connections && connectionId ? connections[connectionId] : undefined;
+      const result = validateDataQueryDefinition(query, {
+        queryId,
+        existingQueries,
+        connection: isPlainRecord(connection) ? connection as unknown as DataConnection : null
+      });
+      for (const problem of result.problems) {
+        errors.push(`Data query ${queryId} ${problem.code}: ${problem.message}`);
       }
-      if (typeof query.name !== "string" || query.name.trim().length === 0) {
-        errors.push(`Data query ${queryId} must include a non-empty name.`);
+      if (typeof query.name === "string") {
+        existingQueries.push({
+          id: queryId,
+          name: query.name,
+          connectionId
+        });
       }
       knownQueries.add(queryId);
     }
