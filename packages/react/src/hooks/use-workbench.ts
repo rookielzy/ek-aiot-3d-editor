@@ -292,10 +292,12 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   }, [editor, ownsEditor]);
   const historyState = editor.getHistoryState();
   const assetPayloads = getAssetWorkspacePayloads(editor);
+  const dataCredentials = editor.getDataCredentials?.() ?? [];
   const model = buildWorkbenchModel(inspector.snapshot, {
     inspector: inspector.inspector,
     runtimeProblems: inspector.runtimeProblems,
     assetPayloads,
+    dataCredentials,
     history: historyState,
     snap,
     viewportHelpers: viewportHelperState,

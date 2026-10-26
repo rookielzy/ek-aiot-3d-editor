@@ -56,7 +56,7 @@ sequenceDiagram
 
 Core 内部可以分成两层：
 
-- Durable contract：`snapshot`、`commands`、`history`、`editor`、`assets`、`materials`、`environment`、`lights`、`problems`、`project`。
+- Durable contract：`snapshot`、`commands`、`history`、`editor`、`assets`、`materials`、`environment`、`lights`、`dataSources`、`problems`、`project`。
 - Runtime projection：`runtime` 下的 Three.js scene projector、loader adapter、texture/HDR projector、PMREM adapter、picking、transform transaction。
 
 Durable contract 应尽量可在无 DOM / 无 WebGL 环境中测试。Runtime projection 允许使用 Three.js 和浏览器 DOM，但必须有明确 dispose 路径。
@@ -81,6 +81,7 @@ Snapshot 保存：
 - material overrides
 - environment/background authoring intent
 - light definitions and their light node targets
+- data source connection configuration plus query/binding reference records; host credentials stay in runtime
 - presentation state, including authored camera views and the default presentation view pointer
 - imported GLB target identity, owner hierarchy constraints, source descriptors, optional transform overrides, imported material slot descriptors, and JSON-compatible reimport remap metadata
 - authored problem metadata

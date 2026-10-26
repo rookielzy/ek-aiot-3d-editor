@@ -3,17 +3,18 @@ import { Object3D } from "three";
 import { createLightDefinition } from "../lights/defaults";
 import { createEmptySnapshot, createLightNode, createTransform } from "./defaults";
 import { migrateSerializedSnapshot } from "./migrations";
-import type { SceneSnapshot, V5SceneSnapshot, V4SceneSnapshot, V7SceneSnapshot } from "./types";
+import type { SceneSnapshot, V5SceneSnapshot, V4SceneSnapshot, V7SceneSnapshot, V8SceneSnapshot } from "./types";
 import { isJsonCompatible, validateSceneSnapshot } from "./validation";
 
 describe("scene snapshot contract", () => {
   it("creates a versioned JSON-compatible empty snapshot", () => {
     const snapshot = createEmptySnapshot("scene-a");
 
-    expect(snapshot.version).toBe(8);
+    expect(snapshot.version).toBe(9);
     expect(snapshot.scene.id).toBe("scene-a");
     expect(snapshot.nodes).toEqual({});
     expect(snapshot.rootNodeIds).toEqual([]);
+    expect(snapshot.dataSources).toEqual({ connections: {}, queries: {}, bindings: {} });
     expect(snapshot.materials).toEqual({ definitions: {}, assignments: {} });
     expect(snapshot.environment.lighting.source).toEqual({ kind: "none" });
     expect(snapshot.environment.background.source).toEqual({ kind: "none" });
@@ -234,9 +235,10 @@ describe("scene snapshot contract", () => {
       version: 5
     } satisfies V5SceneSnapshot);
 
-    expect(migrated.version).toBe(8);
+    expect(migrated.version).toBe(9);
     expect(migrated.cameras).toEqual({});
     expect(migrated.presentation).toEqual({ defaultCameraId: null });
+    expect(migrated.dataSources).toEqual({ connections: {}, queries: {}, bindings: {} });
     expect(migrated.nodes["object-a"]).toEqual(v5.nodes["object-a"]);
     expect(migrated.objects["object-a"]).toEqual(v5.objects["object-a"]);
   });
@@ -253,9 +255,10 @@ describe("scene snapshot contract", () => {
 
     const migrated = migrateSerializedSnapshot(v4);
 
-    expect(migrated.version).toBe(8);
+    expect(migrated.version).toBe(9);
     expect(migrated.cameras).toEqual({});
     expect(migrated.presentation).toEqual({ defaultCameraId: null });
+    expect(migrated.dataSources).toEqual({ connections: {}, queries: {}, bindings: {} });
     expect(Object.values(migrated.nodes).some((node) => node.kind === "imported")).toBe(false);
     expect(migrated.nodes["object-a"]).toEqual(v4.nodes["object-a"]);
   });
@@ -310,7 +313,8 @@ describe("scene snapshot contract", () => {
 
     const migrated = migrateSerializedSnapshot(v7);
 
-    expect(migrated.version).toBe(8);
+    expect(migrated.version).toBe(9);
+    expect(migrated.dataSources).toEqual({ connections: {}, queries: {}, bindings: {} });
     expect("shadow" in migrated.lights.ambient).toBe(false);
     expect(migrated.lights.directional).toMatchObject({
       kind: "directional",
@@ -336,6 +340,19 @@ describe("scene snapshot contract", () => {
         camera: { near: 0.5, far: 100 }
       }
     });
+  });
+
+  it("migrates v8 snapshots by adding an empty data source domain", () => {
+    const { dataSources: _dataSources, ...v8 } = createValidObjectSnapshot();
+    const migrated = migrateSerializedSnapshot({
+      ...v8,
+      version: 8
+    } satisfies V8SceneSnapshot);
+
+    expect(migrated.version).toBe(9);
+    expect(migrated.dataSources).toEqual({ connections: {}, queries: {}, bindings: {} });
+    expect(migrated.nodes["object-a"]).toEqual(v8.nodes["object-a"]);
+    expect(migrated.selection).toEqual(v8.selection);
   });
 
   it("accepts valid imported GLB target nodes owned by a GLB object", () => {

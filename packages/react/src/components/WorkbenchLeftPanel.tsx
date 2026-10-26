@@ -17,6 +17,7 @@ import {
 } from "@ek-aiot/3d-editor-core";
 import type { WorkbenchI18n, WorkbenchMessageKey, WorkbenchMessageValues } from "../i18n/workbench-i18n";
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
+import { DataSourcesPanel } from "./DataSourcesPanel";
 import { WorkbenchHierarchy } from "./WorkbenchHierarchy";
 import { problemToneFromCounts } from "./workbench-model-helpers";
 
@@ -45,7 +46,7 @@ type AssetRecoveryState = Record<string, LocalizedStatusMessage>;
 type AssetQueueStatus = "queued" | "importing" | "succeeded" | "failed";
 type AssetStatusFilter = "all" | AssetWorkspaceStatus;
 type AssetKindFilter = "all" | AssetKind;
-export type WorkbenchPanelView = "scene" | "assets" | "project";
+export type WorkbenchPanelView = "scene" | "assets" | "data" | "project";
 
 interface AssetQueueItem {
   id: string;
@@ -407,6 +408,14 @@ export function WorkbenchLeftPanel({ context, activeView }: WorkbenchLeftPanelPr
             ))}
           </div>
         ) : null}
+      </section>
+
+      <section
+        className="ek-workbench__panel-section"
+        aria-label={t("dataSources.panel.label")}
+        hidden={activeView !== "data"}
+      >
+        <DataSourcesPanel context={context} />
       </section>
 
       <section

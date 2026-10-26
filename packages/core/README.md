@@ -8,7 +8,7 @@ Use `createEditor()` to create a framework-neutral editor, dispatch commands, su
 
 ## Snapshot Contract
 
-Snapshots are portable JSON-compatible records. The current v7 schema stores a canonical `SceneNode` / `NodeId` graph, authored camera views, and source-based environment lighting/background state. Version 1/2/3/4/5/6 snapshots restore through the migration path and are normalized into the current schema.
+Snapshots are portable JSON-compatible records. The current v9 schema stores a canonical `SceneNode` / `NodeId` graph, authored camera views, source-based environment lighting/background state, and a `dataSources` domain for HTTP connections plus query/binding references. Version 1/2/3/4/5/6/7/8 snapshots restore through the migration path and are normalized into the current schema.
 
 Runtime values are never saved. Hosts may register GLB, texture, HDR, or image assets with runtime `source` values, but snapshots only keep stable asset references.
 
@@ -24,7 +24,7 @@ The experimental `.ek3d` project package is a ZIP container with:
 - `scene.json`: the normal serialized `SceneSnapshot`
 - `assets/*`: GLB, texture, HDR, or image payload bytes referenced by asset ID
 
-Import validates archive shape, entry paths, manifest records, scene snapshot, payload references, and size limits before replacing editor state. Old scene snapshots are migrated to the current v7 schema during import. Export fails by default when a referenced payload is unavailable; callers can opt into `partial: true`, which marks the manifest as partial and reports structured package problems. The package manifest remains version 1 because the package layout is unchanged.
+Import validates archive shape, entry paths, manifest records, scene snapshot, payload references, and size limits before replacing editor state. Old scene snapshots are migrated to the current schema during import. Export fails by default when a referenced payload is unavailable; callers can opt into `partial: true`, which marks the manifest as partial and reports structured package problems. The package manifest remains version 1 because the package layout is unchanged.
 
 `editor.replaceAsset({ assetId, source })` replaces the transient payload for an existing asset ID. Scene objects, materials, environment sources, cubemap faces, and authored problem state keep their durable references. Mounted runtimes retry projection through the project-aware resolver; successful recovery removes derived runtime problems without writing resolver output, `File`, `Blob`, object URLs, loaded textures, cubemaps, or PMREM output into the snapshot.
 
@@ -40,6 +40,7 @@ All durable edits enter through commands so undo/redo remains framework-neutral:
 - `set-material` stores a small `MeshStandardMaterial` override subset with texture-slot references.
 - `set-environment` stores source-based lighting/background/skybox intent without PMREM or loaded textures. Legacy v6-style `mode` patches are normalized for compatibility.
 - `add-light`, `update-light`, and `remove-light` store durable light authoring data and keep light nodes synchronized with light payloads.
+- `create-data-connection`, `update-data-connection`, `duplicate-data-connection`, and `delete-data-connection` store HTTP/HTTPS connection configuration under the v9 `dataSources` domain. Bearer authentication stores only a host credential reference; credentials stay in runtime.
 
 `editor.operations` exposes core-backed helpers for copy, paste, duplicate, delete, group, ungroup, select all, and clear selection. Default calls operate on node selection; calls with explicit object IDs keep object-only compatibility. Clipboard payloads are transient JSON editor data; v2 payloads can carry group/object/light node subtrees while v1 object payloads still paste into v4 editors. Clipboard data does not contain browser clipboard state, files, blobs, object URLs, loaded Three.js objects, resolver output, or project payload bytes.
 

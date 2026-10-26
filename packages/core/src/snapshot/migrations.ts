@@ -1,4 +1,5 @@
 import { createEmptyCameraState, createEmptyPresentationState } from "../cameras/defaults";
+import { createEmptyDataSources } from "../data-sources/defaults";
 import { createLegacyDefaultEnvironment, migrateLegacySceneEnvironment } from "../environment/migration";
 import { createDefaultLightShadow } from "../lights/defaults";
 import type { LegacyLightDefinition, LightDefinition } from "../lights/types";
@@ -10,6 +11,7 @@ import {
   SNAPSHOT_VERSION,
   type V6SceneSnapshot,
   type V7SceneSnapshot,
+  type V8SceneSnapshot,
   type LegacySceneSnapshot,
   type PreviousSceneSnapshot,
   type SceneSnapshot,
@@ -25,6 +27,12 @@ export function migrateSerializedSnapshot(serialized: SerializedSceneSnapshot): 
   if (serialized.version === SNAPSHOT_VERSION) {
     assertValidSceneSnapshot(serialized);
     return immutableClone(serialized);
+  }
+
+  if (serialized.version === 8) {
+    const migrated = migrateV8Snapshot(serialized);
+    assertValidSceneSnapshot(migrated);
+    return immutableClone(migrated);
   }
 
   if (serialized.version === 7) {
@@ -73,12 +81,20 @@ export function migrateSerializedSnapshot(serialized: SerializedSceneSnapshot): 
   throw new Error(`Unsupported snapshot version: ${String(version)}.`);
 }
 
-export function migrateV7Snapshot(serialized: V7SceneSnapshot): SceneSnapshot {
+export function migrateV8Snapshot(serialized: V8SceneSnapshot): SceneSnapshot {
   return {
     ...serialized,
     version: SNAPSHOT_VERSION,
-    lights: migrateLightShadows(serialized.lights)
+    dataSources: createEmptyDataSources()
   };
+}
+
+export function migrateV7Snapshot(serialized: V7SceneSnapshot): SceneSnapshot {
+  return migrateV8Snapshot({
+    ...serialized,
+    version: 8,
+    lights: migrateLightShadows(serialized.lights)
+  });
 }
 
 export function migrateV6Snapshot(serialized: V6SceneSnapshot): SceneSnapshot {

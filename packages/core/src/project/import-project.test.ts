@@ -108,7 +108,7 @@ describe("project import", () => {
 
     expect(imported.ok).toBe(true);
     expect(imported.manifest?.version).toBe(1);
-    expect(fresh.getSnapshot().version).toBe(8);
+    expect(fresh.getSnapshot().version).toBe(9);
     expect(fresh.getSnapshot().nodes["group-a"]).toMatchObject({ kind: "group", children: ["object-a", "point-a"] });
     expect(fresh.getSnapshot().selection).toEqual({ nodeId: "group-a", nodeIds: ["group-a"], objectId: null, objectIds: [] });
     expect(fresh.getSnapshot().objects["object-a"].asset.id).toBe("asset-a");

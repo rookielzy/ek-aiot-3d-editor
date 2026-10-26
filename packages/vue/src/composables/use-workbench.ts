@@ -450,6 +450,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
       inspector: inspector.value,
       runtimeProblems: runtimeProblems.value,
       assetPayloads: getAssetWorkspacePayloads(currentEditor.value),
+      dataCredentials: currentEditor.value.getDataCredentials?.() ?? [],
       history: currentEditor.value.getHistoryState(),
       snap: snap.value,
       viewportHelpers: viewportHelperState.value,
@@ -646,7 +647,7 @@ function resolveInitialEditor(options: UseWorkbenchOptions, editorOption: Ref<Ed
   if (options.editor && !isRefOption(options.editor)) {
     return options.editor;
   }
-  return createEditor({ snapshot: options.snapshot });
+  return createEditor({ snapshot: options.snapshot, credentials: options.credentials });
 }
 
 function defaultSnapIncrement(channel: SnapChannel): number {

@@ -62,9 +62,23 @@ export function EditorPage() {
 }
 ```
 
-不传 `toolbar`、`leftPanel`、`rightPanel` 或 `status` 时，Workbench 会使用 package-owned 默认 UI。Open、完整/部分导出和语言切换位于 Project menu；undo/redo、transform、snap 和 marquee 直接位于视口上方，helpers、camera 与 node operations 使用相邻工具组。默认 viewport 开启 pointer picking，并保留左键拖拽给相机旋转。右侧 inspector 通过 Object、Environment、Scene 分组承载 selection、材质、环境、灯光和 camera views。左侧导航切换 Scene、Assets、Project，再次激活当前项会收放左栏；左右栏均可鼠标或键盘调宽。底部只显示摘要，Problem details 打开含 severity/source/恢复动作的抽屉，关闭抽屉不清除问题。
+不传 `toolbar`、`leftPanel`、`rightPanel` 或 `status` 时，Workbench 会使用 package-owned 默认 UI。Open、完整/部分导出和语言切换位于 Project menu；undo/redo、transform、snap 和 marquee 直接位于视口上方，helpers、camera 与 node operations 使用相邻工具组。默认 viewport 开启 pointer picking，并保留左键拖拽给相机旋转。右侧 inspector 通过 Object、Environment、Scene 分组承载 selection、材质、环境、灯光和 camera views。左侧导航切换 Scene、Assets、Data、Project，再次激活当前项会收放左栏；左右栏均可鼠标或键盘调宽。底部只显示摘要，Problem details 打开含 severity/source/恢复动作的抽屉，关闭抽屉不清除问题。
 
 宿主扩展区域为 `toolbar`、`leftPanel`、兼容 `sidePanel`、`viewportOverlay`、`rightPanel` 和 `status`。`leftPanel` 优先于 `sidePanel`；`showDefaultToolbar={false}` 同时隐藏默认顶部及视口工具，但不隐藏宿主 `toolbar`。切换 locale、导航或抽屉只改变 session UI，不替换 editor/runtime、selection、history 或 canvas。
+
+## 数据源连接
+
+默认 Data 工作区从 Snapshot 的 `dataSources` 读取连接，并通过 `credentials` 接收宿主凭证描述。凭证描述只包含 `ref`、`label`、`available`，不会进入 Snapshot、项目包或 command history：
+
+```tsx
+<EditorWorkbench
+  credentials={[
+    { ref: "warehouse-token", label: "Warehouse token", available: true }
+  ]}
+/>
+```
+
+连接保存、复制、删除都通过 core 的 data connection command 进入 history；缺失或不可用的凭证只影响列表和表单提示，不阻止保存合法配置。默认 editor 与 Data 工作区不会自动发起网络请求，也不提供把密钥写入场景的输入框。
 
 ## 双语 Workbench UI
 

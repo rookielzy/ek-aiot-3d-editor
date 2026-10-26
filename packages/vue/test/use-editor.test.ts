@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createEditor } from "@ek-aiot/3d-editor-core";
 import { createLegacyProofLoopSnapshot } from "../../core/test/fixtures/legacy-proof-loop";
 import { useEditor } from "../src/composables/use-editor";
 
@@ -31,9 +32,39 @@ describe("useEditor", () => {
   it("initializes legacy serialized snapshots through core migration", () => {
     const { snapshot, dispose } = useEditor({ snapshot: createLegacyProofLoopSnapshot() });
 
-    expect(snapshot.value.version).toBe(8);
+    expect(snapshot.value.version).toBe(9);
+    expect(snapshot.value.dataSources).toEqual({ connections: {}, queries: {}, bindings: {} });
     expect(snapshot.value.nodes["object-a"]).toMatchObject({ kind: "object", objectId: "object-a" });
     expect(snapshot.value.objects["object-a"].asset.id).toBe("asset-a");
+    dispose();
+  });
+
+  it("loads a v9 connection-only data domain without Vue-specific data UI", () => {
+    const source = createEditor();
+    source.dispatch({
+      type: "create-data-connection",
+      connection: {
+        id: "connection-a",
+        name: "Plant API",
+        baseUrl: "https://api.example.test/v1",
+        auth: { kind: "none" },
+        headers: {},
+        timeoutMs: 10_000
+      }
+    });
+    const serialized = source.serialize();
+    source.dispose();
+
+    const { editor, snapshot, dispose } = useEditor({ snapshot: serialized });
+
+    expect(snapshot.value.version).toBe(9);
+    expect(snapshot.value.dataSources.queries).toEqual({});
+    expect(snapshot.value.dataSources.bindings).toEqual({});
+    expect(snapshot.value.dataSources.connections["connection-a"]).toMatchObject({
+      name: "Plant API",
+      baseUrl: "https://api.example.test/v1"
+    });
+    expect(editor.getSnapshot()).toEqual(snapshot.value);
     dispose();
   });
 });

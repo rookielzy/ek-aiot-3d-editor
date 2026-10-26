@@ -13,6 +13,7 @@ export function WorkbenchNavigation({ context, activeView, collapsed, panelId, o
   const views: Array<{ id: WorkbenchPanelView; icon: WorkbenchIconName; count: number }> = [
     { id: "scene", icon: "group", count: model.hierarchy.totalCount },
     { id: "assets", icon: "floor", count: model.assets.workspace?.totalCount ?? model.assets.totalCount },
+    { id: "data", icon: "data", count: model.dataSources.totalCount },
     { id: "project", icon: "open", count: model.problems.totalCount }
   ];
 

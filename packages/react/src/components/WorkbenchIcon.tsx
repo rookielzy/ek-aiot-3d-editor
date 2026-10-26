@@ -9,6 +9,7 @@ import {
   Crosshair,
   Cube,
   Cursor,
+  Database,
   DownloadSimple,
   Eye,
   FileArrowUp,
@@ -33,6 +34,7 @@ export type WorkbenchIconName =
   | "capture-view"
   | "clear-selection"
   | "copy"
+  | "data"
   | "delete"
   | "duplicate"
   | "export"
@@ -66,6 +68,7 @@ const ICONS = {
   "capture-view": Camera,
   "clear-selection": SelectionAll,
   copy: Copy,
+  data: Database,
   delete: Trash,
   duplicate: StackPlus,
   export: DownloadSimple,

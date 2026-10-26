@@ -64,8 +64,9 @@ pnpm release:verify
 - Runtime：core 内置 Three.js 投影层，将 Snapshot 投影为 scene、camera、renderer、对象、环境、灯光和问题列表。
 - 问题：resolver、loader、PMREM、runtime、project package 等失败以结构化 problem 暴露，不写回为 runtime-only 状态。
 - 项目包：实验性 `.ek3d` ZIP 容器，包含 `project.json`、`scene.json` 和 `assets/*` payload。
-- React：`useEditor()`、`useEditorSnapshot()`、`useInspector()`、`useWorkbench()`、`EditorViewport`、`InspectorPanel`、`EditorWorkbench`。
-- Vue：`useEditor()`、`useInspector()`、`useWorkbench()`、`EditorViewport`、`InspectorPanel`、`EditorWorkbench`。
+- 数据源：v9 顶层 `dataSources` 保存 HTTP/HTTPS 连接配置（名称、服务地址、非秘密公共头、认证引用、超时）以及查询/绑定引用；宿主凭证只存在于运行态，默认 editor 不注入连接也不联网。
+- React：`useEditor()`、`useEditorSnapshot()`、`useInspector()`、`useWorkbench()`、`EditorViewport`、`InspectorPanel`、`EditorWorkbench`；默认 Data 工作区支持连接搜索、创建、编辑、复制、删除、撤销和未保存草稿确认。
+- Vue：`useEditor()`、`useInspector()`、`useWorkbench()`、`EditorViewport`、`InspectorPanel`、`EditorWorkbench`；可加载包含 `dataSources` 的 v9 Snapshot，数据工作区 UI 由后续任务交付。
 - 双语 Workbench：React/Vue package docs 和集成指南覆盖默认 English、内置 `zh-CN`、locale prop / `v-model:locale`、switch 控制、host translate callback、render prop / scoped slot 的 `i18n`。locale/switch/dictionary/translated copy 属于宿主或 session UI state，不进入 Snapshot 或 `.ek3d`。
 - 本地 React/Vue proof-loop demo：提供同一可恢复展示场景，以及 Project menu、视口工具组、Scene/Assets/Project 左栏、Object/Environment/Scene 右栏、状态摘要和问题抽屉，用于验证 camera view authoring、selection、transform、material inspector、history、hierarchy、project package 和缺失资产恢复流程。
 

@@ -6,7 +6,10 @@ export interface UseEditorOptions extends EditorOptions {
 }
 
 export function useEditor(options: UseEditorOptions = {}): Editor {
-  return useMemo(() => options.editor ?? createEditor({ snapshot: options.snapshot }), [options.editor, options.snapshot]);
+  return useMemo(() => options.editor ?? createEditor({
+    snapshot: options.snapshot,
+    credentials: options.credentials
+  }), [options.editor, options.snapshot, options.credentials]);
 }
 
 export function useEditorSnapshot(editor: Editor): SceneSnapshot {

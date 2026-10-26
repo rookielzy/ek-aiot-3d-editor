@@ -7,6 +7,7 @@ const DEFAULT_WORKBENCH_COMPONENTS = [
   "packages/react/src/components/WorkbenchToolbar.tsx",
   "packages/react/src/components/WorkbenchViewportTools.tsx",
   "packages/react/src/components/WorkbenchLeftPanel.tsx",
+  "packages/react/src/components/DataSourcesPanel.tsx",
   "packages/react/src/components/WorkbenchStatusBar.tsx",
   "packages/react/src/components/WorkbenchProblemsDrawer.tsx",
   "packages/react/src/components/InspectorView.tsx",

@@ -1228,3 +1228,197 @@ button.ek-workbench__status-chip { cursor: pointer; font: inherit; }
 .ek-workbench__toolbar-region { min-width: 0; overflow-x: auto; }
 .ek-workbench__default-toolbar { min-width: 0; }
 .ek-workbench__toolbar-status { flex: 1 1 0; min-width: 0; max-width: none; border: 0; }
+
+.ek-workbench__data-panel {
+  display: grid;
+  gap: var(--ek-workbench-space-3);
+}
+
+.ek-workbench__data-panel > button,
+.ek-workbench__connection-actions button,
+.ek-workbench__connection-form-actions button,
+.ek-workbench__connection-header-row button,
+.ek-workbench__connection-headers > button {
+  justify-self: start;
+  min-height: 2rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--ek-workbench-border);
+  border-radius: var(--ek-workbench-radius-sm);
+  background: var(--ek-workbench-surface-raised);
+  color: var(--ek-workbench-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ek-workbench__connection-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.ek-workbench__connection-list {
+  display: grid;
+  gap: var(--ek-workbench-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ek-workbench__connection-row {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.65rem;
+  border: 1px solid var(--ek-workbench-border);
+  border-radius: var(--ek-workbench-radius-sm);
+  background: var(--ek-workbench-surface);
+}
+
+.ek-workbench__connection-main {
+  display: grid;
+  gap: 0.15rem;
+  overflow-wrap: anywhere;
+}
+
+.ek-workbench__connection-main small,
+.ek-workbench__connection-usage {
+  color: var(--ek-workbench-muted);
+  font-size: 0.72rem;
+}
+
+.ek-workbench__connection-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.ek-workbench__connection-badges span {
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--ek-workbench-border);
+  border-radius: 999px;
+  color: var(--ek-workbench-muted-strong);
+  font-size: 0.68rem;
+}
+
+.ek-workbench__connection-badges span[data-state="missing"] {
+  border-color: var(--ek-workbench-warning);
+  background: var(--ek-workbench-warning-soft);
+  color: var(--ek-workbench-warning);
+}
+
+.ek-workbench__connection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.ek-workbench__data-status {
+  margin: 0;
+  color: var(--ek-workbench-success);
+  font-size: 0.75rem;
+}
+
+.ek-workbench__connection-form {
+  display: grid;
+  gap: var(--ek-workbench-space-2);
+  padding: var(--ek-workbench-space-3);
+  border: 1px solid var(--ek-workbench-border);
+  border-radius: var(--ek-workbench-radius-sm);
+  background: var(--ek-workbench-surface-inset);
+}
+
+.ek-workbench__connection-form h3 {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.ek-workbench__connection-form small {
+  color: var(--ek-workbench-muted);
+  font-size: 0.72rem;
+}
+
+.ek-workbench__connection-form small[role="alert"],
+.ek-workbench__connection-form small[data-state="missing"] {
+  color: var(--ek-workbench-error);
+}
+
+.ek-workbench__connection-headers {
+  display: grid;
+  gap: var(--ek-workbench-space-1);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ek-workbench__connection-headers legend {
+  padding: 0;
+  font-size: 0.75rem;
+}
+
+.ek-workbench__connection-header-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: var(--ek-workbench-space-1);
+}
+
+.ek-workbench__connection-header-row input {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--ek-workbench-control-height);
+  padding: 0 0.55rem;
+  border: 1px solid var(--ek-workbench-border);
+  border-radius: var(--ek-workbench-radius-sm);
+  background: var(--ek-workbench-surface-raised);
+  color: var(--ek-workbench-text);
+  font: inherit;
+}
+
+.ek-workbench__connection-problems {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border: 1px solid var(--ek-workbench-error);
+  border-radius: var(--ek-workbench-radius-sm);
+  background: var(--ek-workbench-error-soft);
+  color: var(--ek-workbench-error);
+  font-size: 0.75rem;
+}
+
+.ek-workbench__connection-problems ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.ek-workbench__connection-form-actions {
+  display: flex;
+  gap: var(--ek-workbench-space-2);
+}
+
+.ek-workbench__connection-discard {
+  display: grid;
+  gap: var(--ek-workbench-space-2);
+  padding: var(--ek-workbench-space-3);
+  border: 1px solid var(--ek-workbench-warning);
+  border-radius: var(--ek-workbench-radius-sm);
+  background: var(--ek-workbench-warning-soft);
+}
+
+.ek-workbench__connection-discard p {
+  margin: 0;
+  font-size: 0.75rem;
+}
+
+.ek-workbench__connection-discard-actions {
+  display: flex;
+  gap: var(--ek-workbench-space-2);
+}
+
+.ek-workbench__connection-discard-actions button {
+  min-height: 2rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--ek-workbench-border);
+  border-radius: var(--ek-workbench-radius-sm);
+  background: var(--ek-workbench-surface-raised);
+  color: var(--ek-workbench-text);
+  font: inherit;
+  cursor: pointer;
+}

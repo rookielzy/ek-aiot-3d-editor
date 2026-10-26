@@ -8,6 +8,7 @@ import { applyAddLight } from "./add-light";
 import { applyCreateCameraView, applyDeleteCameraView, applySetDefaultCameraView, applyUpdateCameraView } from "./camera-commands";
 import { applyCreateGroup } from "./create-group";
 import { applyCreateImportedGlbTargets } from "./create-imported-glb-targets";
+import { applyCreateDataConnection, applyDeleteDataConnection, applyDuplicateDataConnection, applyUpdateDataConnection } from "./data-connection-commands";
 import { applyDeleteNodes } from "./delete-nodes";
 import { applyDeleteObjects } from "./delete-objects";
 import { applyDuplicateObjects } from "./duplicate-objects";
@@ -170,6 +171,14 @@ export class CommandDispatcher {
         return applyUpdateLight(snapshot, command);
       case "remove-light":
         return applyRemoveLight(snapshot, command);
+      case "create-data-connection":
+        return applyCreateDataConnection(snapshot, command);
+      case "update-data-connection":
+        return applyUpdateDataConnection(snapshot, command);
+      case "duplicate-data-connection":
+        return applyDuplicateDataConnection(snapshot, command);
+      case "delete-data-connection":
+        return applyDeleteDataConnection(snapshot, command);
       default:
         return assertNever(command);
     }

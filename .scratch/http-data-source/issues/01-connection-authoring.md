@@ -12,7 +12,9 @@ User stories: 1, 2, 26, 29, 32
 
 Decisions: D01, D02, D03, D12
 
-当前只授权规格与任务整理；本任务尚未启动。实施时必须先完成 Blocked by 中的任务。
+实施前必须完成 Blocked by 中的任务。
+
+2026-10-26：已按本任务实现并完成验证，实际命令与结果见 Comments。
 
 ## What to build
 
@@ -28,12 +30,12 @@ Decisions: D01, D02, D03, D12
 
 ## Acceptance criteria
 
-- [ ] 空 editor 不注入连接、查询或模拟设备，不发网络请求；v1–v8 恢复后数据域为空。
-- [ ] 连接名称去重，拒绝非法服务地址/秘密嵌入与非法超时；无凭证或离线仍可保存合法配置。
-- [ ] 一次保存是一项 command/history；失败不改变 Snapshot，undo/redo 与序列化恢复保持等价。
-- [ ] 复制连接生成新 ID/名称，不复制查询；无引用可删除。
-- [ ] 数据面板与表单提供双语、可访问标签和稳定焦点；不得为了原型入口改写正式 viewport。
-- [ ] v9 能通过现有 Snapshot/项目 scene 校验入口，旧 React/Vue/vanilla 创建与读取路径保持可用。
+- [x] 空 editor 不注入连接、查询或模拟设备，不发网络请求；v1–v8 恢复后数据域为空。
+- [x] 连接名称去重，拒绝非法服务地址/秘密嵌入与非法超时；无凭证或离线仍可保存合法配置。
+- [x] 一次保存是一项 command/history；失败不改变 Snapshot，undo/redo 与序列化恢复保持等价。
+- [x] 复制连接生成新 ID/名称，不复制查询；无引用可删除。
+- [x] 数据面板与表单提供双语、可访问标签和稳定焦点；不得为了原型入口改写正式 viewport。
+- [x] v9 能通过现有 Snapshot/项目 scene 校验入口，旧 React/Vue/vanilla 创建与读取路径保持可用。
 
 ## Testing
 
@@ -50,3 +52,18 @@ Decisions: D01, D02, D03, D12
 ## Comments
 
 2026-10-26：按用户认可的原型流程整理为正式规划任务。Status 表示定义就绪，不代表实现、验证或用户已授权开始执行。
+
+2026-10-26：实现完成，代码审查后补齐公共请求头编辑、未保存草稿确认、毫秒级 timeout 往返，以及 `EditorWorkbench` 的 `credentials` 透传和 project problem 重建时的凭证保留；移除未要求的 metadata/默认输入 helper。实际验证：
+
+- `pnpm --filter @ek-aiot/3d-editor-core build`：通过。
+- `pnpm --filter @ek-aiot/3d-editor-react build`：通过。
+- `pnpm --filter @ek-aiot/3d-editor-vue build`：通过。
+- `pnpm --filter @ek-aiot/3d-editor-core typecheck`：通过。
+- `pnpm --filter @ek-aiot/3d-editor-react typecheck`：通过。
+- `pnpm --filter @ek-aiot/3d-editor-vue typecheck`：通过。
+- `pnpm vitest run packages/core/src/data-sources/data-sources.test.ts packages/core/src/public-api.test.ts`：29 tests passed。
+- `pnpm vitest run packages/react/test/workbench-data-sources.test.tsx`：12 tests passed。
+- `pnpm test`：119 test files / 1009 tests passed。
+- `pnpm test:browser`：18 test files / 108 tests passed（Chromium）。
+
+测试覆盖空 editor 离线、v1–v8 迁移、连接增改复制删除/撤销、字段级校验原子性、凭证缺失与透传、公共请求头、未保存草稿确认、timeout 往返、搜索/双语/焦点保持，以及 Vue package-root 加载 v9 连接配置。未改动正式 viewport。

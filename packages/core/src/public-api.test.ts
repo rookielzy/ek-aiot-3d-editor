@@ -13,7 +13,11 @@ import {
   createEmptySnapshot,
   resolveDefaultPresentationView,
   buildAssetWorkspaceModel,
+  buildDataSourcesWorkspaceModel,
+  buildDeleteDataConnectionCommand,
+  buildDuplicateDataConnectionCommand,
   buildInspectorModel,
+  buildSaveDataConnectionCommand,
   buildWorkbenchModel,
   buildSolidBackgroundPreset,
   buildEnvironmentSharedAssetPreset,
@@ -25,6 +29,8 @@ import {
   buildSetDefaultCameraViewCommand,
   buildMaterialFieldsForTarget,
   classifyWorkbenchAssetImportFile,
+  createEmptyDataSources,
+  filterDataConnectionItems,
   filterAssetWorkspaceItems,
   GLB_IMPORT_MANIFEST_METADATA_KEY,
   importWorkbenchAssets,
@@ -45,6 +51,7 @@ import {
   isMessageKey,
   resolveEditorShortcut,
   snapNumber,
+  validateDataConnectionDraft,
   validateSceneSnapshot,
   type AdvancedEditorOperations,
   type AssetWorkspacePayloadSummary,
@@ -52,6 +59,10 @@ import {
   type AssetWorkspaceStatus,
   type BatchCommand,
   type CreateCameraViewCommand,
+  type CreateDataConnectionCommand,
+  type DataConnection,
+  type DataConnectionDraft,
+  type DataCredentialDescriptor,
   type DisplayMessageDescriptorInput,
   type DisplayMessageField,
   type DisplayMessageNamespace,
@@ -59,7 +70,9 @@ import {
   type CreateImportedGlbTargetsCommand,
   type DeleteNodesCommand,
   type DeleteCameraViewCommand,
+  type DeleteDataConnectionCommand,
   type DeleteObjectsCommand,
+  type DuplicateDataConnectionCommand,
   type DuplicateObjectsCommand,
   type EditorAction,
   type EditorClipboardPayload,
@@ -142,7 +155,9 @@ import {
   type TransformVectorName,
   type UngroupNodesCommand,
   type UpdateCameraViewCommand,
+  type UpdateDataConnectionCommand,
   type UpdateLightCommand,
+  type V8SceneSnapshot,
   type AuthoredCameraView,
   type AuthoredCameraViewProjection,
   type CameraViewId,
@@ -512,6 +527,53 @@ describe("core public API", () => {
       diagnostics: [],
       snapshot: createEmptySnapshot("scene-import-result")
     };
+    const dataSources = createEmptyDataSources();
+    const dataConnectionDraft: DataConnectionDraft = {
+      name: "Plant API",
+      baseUrl: "https://api.example.test/v1",
+      auth: { kind: "none" },
+      headers: {},
+      timeoutMs: 10_000
+    };
+    const dataConnection: DataConnection = { id: "connection-a", ...dataConnectionDraft };
+    const dataCredential: DataCredentialDescriptor = {
+      ref: "credential-ops",
+      label: "Operations token",
+      available: true
+    };
+    const dataSnapshot = {
+      ...createEmptySnapshot("scene-data"),
+      dataSources: {
+        ...dataSources,
+        connections: { [dataConnection.id]: dataConnection }
+      }
+    };
+    const dataWorkspace = buildDataSourcesWorkspaceModel(dataSnapshot, { credentials: [dataCredential] });
+    const filteredConnections = filterDataConnectionItems(dataWorkspace.connections, { query: "plant" });
+    const draftValidation = validateDataConnectionDraft(createEmptySnapshot("scene-data"), dataConnectionDraft);
+    const createConnectionCommand: CreateDataConnectionCommand = {
+      type: "create-data-connection",
+      connection: dataConnection
+    };
+    const updateConnectionCommand: UpdateDataConnectionCommand = {
+      type: "update-data-connection",
+      connectionId: dataConnection.id,
+      connection: dataConnectionDraft
+    };
+    const duplicateConnectionCommand: DuplicateDataConnectionCommand = {
+      type: "duplicate-data-connection",
+      connectionId: dataConnection.id,
+      name: "Plant API copy"
+    };
+    const deleteConnectionCommand: DeleteDataConnectionCommand = {
+      type: "delete-data-connection",
+      connectionId: dataConnection.id
+    };
+    const saveConnectionCommand = buildSaveDataConnectionCommand(createEmptySnapshot("scene-data"), dataConnectionDraft);
+    const duplicateConnectionResult = buildDuplicateDataConnectionCommand(dataSnapshot, dataConnection.id);
+    const deleteConnectionResult = buildDeleteDataConnectionCommand(dataSnapshot, dataConnection.id);
+    const { dataSources: _dataSources, ...emptyWithoutDataSources } = createEmptySnapshot("scene-v8");
+    const v8Snapshot: V8SceneSnapshot = { ...emptyWithoutDataSources, version: 8 };
     const editorWithImport: EditorWithGlbImport = createEditor();
     const baseEditor: Editor = editorWithImport;
     const readonlyMarqueeSelection: ReadonlyEditorMarqueeSelectionState | undefined = baseEditor.marqueeSelection;
@@ -631,6 +693,19 @@ describe("core public API", () => {
     expect(new EditorViewportHelperState({ grid: true }).get().visibility.grid).toBe(true);
     expect(workspaceImportOptions.rasterKind).toBe("texture");
     expect(workspaceImportResult.status).toBe("succeeded");
+    expect(dataSources).toEqual({ connections: {}, queries: {}, bindings: {} });
+    expect(dataConnectionDraft.name).toBe("Plant API");
+    expect(dataWorkspace.connections[0]?.credentialAvailable).toBeNull();
+    expect(filteredConnections).toHaveLength(1);
+    expect(draftValidation.ok).toBe(true);
+    expect(createConnectionCommand.connection.id).toBe("connection-a");
+    expect(updateConnectionCommand.connectionId).toBe("connection-a");
+    expect(duplicateConnectionCommand.name).toBe("Plant API copy");
+    expect(deleteConnectionCommand.connectionId).toBe("connection-a");
+    expect(saveConnectionCommand.ok).toBe(true);
+    expect(duplicateConnectionResult.ok).toBe(true);
+    expect(deleteConnectionResult.ok).toBe(true);
+    expect(v8Snapshot.version).toBe(8);
     expect(classifyWorkbenchAssetImportFile({ name: "texture.png", source: new Uint8Array([1]) }, rasterKind)).toMatchObject({
       kind: "texture"
     });

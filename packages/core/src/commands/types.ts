@@ -14,6 +14,7 @@ import type { LightDefinition, LightKind } from "../lights/types";
 import type { MaterialAssignmentTarget, MaterialPatch } from "../materials/types";
 import type { EditorClipboardPayload } from "../clipboard/types";
 import type { JsonValue, NodeId, SceneSnapshot, Transform } from "../snapshot/types";
+import type { DataConnectionDraft, DataConnectionId, DataConnectionInput } from "../data-sources/types";
 
 export type Command =
   | BatchCommand
@@ -49,7 +50,11 @@ export type SingleCommand =
   | SetDefaultCameraViewCommand
   | AddLightCommand
   | UpdateLightCommand
-  | RemoveLightCommand;
+  | RemoveLightCommand
+  | CreateDataConnectionCommand
+  | UpdateDataConnectionCommand
+  | DuplicateDataConnectionCommand
+  | DeleteDataConnectionCommand;
 
 export interface ImportGlbCommand {
   type: "import-glb";
@@ -268,6 +273,29 @@ export interface UpdateLightCommand {
 export interface RemoveLightCommand {
   type: "remove-light";
   lightId: string;
+}
+
+export interface CreateDataConnectionCommand {
+  type: "create-data-connection";
+  connection: DataConnectionInput;
+}
+
+export interface UpdateDataConnectionCommand {
+  type: "update-data-connection";
+  connectionId: DataConnectionId;
+  connection: DataConnectionDraft;
+}
+
+export interface DuplicateDataConnectionCommand {
+  type: "duplicate-data-connection";
+  connectionId: DataConnectionId;
+  id?: DataConnectionId;
+  name?: string;
+}
+
+export interface DeleteDataConnectionCommand {
+  type: "delete-data-connection";
+  connectionId: DataConnectionId;
 }
 
 export interface BatchCommand {

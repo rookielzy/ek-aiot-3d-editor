@@ -14,6 +14,7 @@ import {
 import { planGlbImportRemap } from "../assets/import-remap";
 import { CommandDispatcher } from "../commands/dispatcher";
 import type { Command, CommandResult } from "../commands/types";
+import type { DataCredentialDescriptor } from "../data-sources/types";
 import { CommandHistory, type HistoryState } from "../history/history";
 import { defaultArchiveAdapter } from "../project/archive-adapter";
 import { blobToBytes, checksumBytes, normalizeProjectAssetSource, ProjectAssetStore } from "../project/asset-store";
@@ -52,12 +53,14 @@ export class CoreEditor implements EditorWithGlbImport {
   #assetWorkspaceSubscribers = new Set<AssetWorkspaceSubscriber>();
   #assetWorkspaceVersion = 0;
   #resolver = new AssetResolverBridge(undefined, this.projectAssets);
+  #dataCredentials: readonly DataCredentialDescriptor[] = [];
   #disposed = false;
 
   constructor(options: EditorOptions = {}) {
     this.store = new EditorStore(options.snapshot ? restoreSnapshot(options.snapshot) : undefined);
     this.dispatcher = new CommandDispatcher(this.store, this.history, this.assets);
     this.operations = createAdvancedEditorOperations(this, this.clipboard);
+    this.#dataCredentials = Object.freeze([...(options.credentials ?? [])]);
   }
 
   getSnapshot(): SceneSnapshot {
@@ -151,6 +154,10 @@ export class CoreEditor implements EditorWithGlbImport {
       this.#notifyAssetWorkspaceSubscribers();
     }
     return reference;
+  }
+
+  getDataCredentials(): readonly DataCredentialDescriptor[] {
+    return this.#dataCredentials;
   }
 
   getAssetWorkspacePayloads(): ProjectAssetPayloadSummary[] {

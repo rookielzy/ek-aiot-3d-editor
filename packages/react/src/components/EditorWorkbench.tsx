@@ -53,6 +53,7 @@ export interface EditorWorkbenchProps extends UseWorkbenchOptions {
 export function EditorWorkbench({
   editor: providedEditor,
   snapshot,
+  credentials,
   locale,
   defaultLocale,
   onLocaleChange,
@@ -79,6 +80,7 @@ export function EditorWorkbench({
   const session = useWorkbench({
     editor: providedEditor,
     snapshot,
+    credentials,
     loader,
     locale,
     defaultLocale,
@@ -97,6 +99,7 @@ export function EditorWorkbench({
     runtimeProblems: session.runtimeProblems,
     projectProblems,
     assetPayloads: session.assets.payloads,
+    dataCredentials: session.editor.getDataCredentials?.() ?? [],
     history: session.historyState,
     snap: session.snap,
     viewportHelpers: session.viewportHelperState,

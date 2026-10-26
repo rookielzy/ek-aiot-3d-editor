@@ -4,7 +4,8 @@ Scene Snapshot 是本项目的 durable editor state。它必须是 JSON-compatib
 
 当前版本：
 
-- `SceneSnapshot.version = 8`
+- `SceneSnapshot.version = 9`
+- `V8SceneSnapshot.version = 8`
 - `V7SceneSnapshot.version = 7`
 - `V6SceneSnapshot.version = 6`
 - `V5SceneSnapshot.version = 5`
@@ -13,13 +14,13 @@ Scene Snapshot 是本项目的 durable editor state。它必须是 JSON-compatib
 - `PreviousSceneSnapshot.version = 2`
 - `LegacySceneSnapshot.version = 1`
 
-Version 1/2/3/4/5/6/7 snapshot 会通过 migration 规范化为当前 schema。v4 scene node graph 会原样升级到 v5，再补齐 v6 presentation state，v6 environment `mode`/`background.mode` 会迁移为 v7 source-based environment，v7 shadow-capable lights 会补齐 disabled shadow defaults 并升级为 v8；migration 不会根据已有 GLB object metadata 自动生成 imported targets，也不会根据 transient runtime camera 自动生成 authored camera view，也不会自动开启 shadows。
+Version 1/2/3/4/5/6/7/8 snapshot 会通过 migration 规范化为当前 schema。v4 scene node graph 会原样升级到 v5，再补齐 v6 presentation state，v6 environment `mode`/`background.mode` 会迁移为 v7 source-based environment，v7 shadow-capable lights 会补齐 disabled shadow defaults 并升级为 v8，v8 会补齐空 `dataSources` 并升级为 v9；migration 不会根据已有 GLB object metadata 自动生成 imported targets，也不会根据 transient runtime camera 自动生成 authored camera view，也不会自动开启 shadows 或合成连接/查询/绑定。
 
 ## 顶层结构
 
 ```ts
 interface SceneSnapshot {
-  version: 8;
+  version: 9;
   scene: {
     id: string;
     name: string;
@@ -41,6 +42,7 @@ interface SceneSnapshot {
   cameras: Record<string, AuthoredCameraView>;
   presentation: ScenePresentationState;
   problems: AuthoredProblemState;
+  dataSources: SceneDataSources;
   metadata?: Record<string, JsonValue>;
 }
 ```
@@ -234,7 +236,7 @@ type SceneNode =
 - v3 object 默认迁移为同 ID 的 object node。
 - v3 light 默认迁移为同 ID 的 light node。
 - 如果 object ID 与 light ID 冲突，object node 保留 object ID，light payload ID 不变，light node ID 会稳定生成为类似 `light-a:light` 的 collision-safe ID。
-- v4 node graph 默认升级为 v5，再补齐 v6 empty presentation state，不会为已有 GLB object 合成 imported node 或 authored camera view。
+- v4 node graph 默认升级为 v5，再补齐 v6 empty presentation state，v8 会补齐空 `dataSources` 并升级为 v9，不会为已有 GLB object 合成 imported node、authored camera view、connection 或 query。
 
 ## Imported GLB Targets
 
@@ -470,6 +472,57 @@ Runtime 会把这些定义投影为 Three.js light object，并在更新/删除�
 
 Snapshot 中的 `problems` 是 authored problem state。resolver、loader、PMREM、runtime projection 失败属于 derived runtime problem，通过 runtime API 暴露，不写回 Snapshot。
 
+## Data Sources
+
+v9 新增顶层 `dataSources`，用于保存 HTTP JSON 数据源配置。当前切片落地连接配置；查询和绑定只建立稳定引用边界，后续任务在同一 v9 schema 内扩展，不提升版本。
+
+```ts
+type DataConnectionAuth =
+  | { kind: "none" }
+  | { kind: "bearer"; credentialRef: string };
+
+interface DataConnection {
+  id: string;
+  name: string;
+  baseUrl: string;
+  auth: DataConnectionAuth;
+  headers: Record<string, string>;
+  timeoutMs: number;
+}
+
+interface DataQuery {
+  id: string;
+  connectionId: string;
+  name: string;
+}
+
+interface DataObjectBinding {
+  objectNodeId: string;
+  queryId: string;
+}
+
+interface SceneDataSources {
+  connections: Record<string, DataConnection>;
+  queries: Record<string, DataQuery>;
+  bindings: Record<string, DataObjectBinding>;
+}
+```
+
+Validation 规则：
+
+- `dataSources.connections`、`queries`、`bindings` 必须都是 plain object map；空 map 合法。
+- 每个 connection 的 `id` 必须和 map key 一致且非空。
+- connection 名称非空，且在整个 connection 范围内大小写不敏感去重。
+- `baseUrl` 必须是绝对 HTTP/HTTPS 地址；拒绝 userinfo、query string、fragment，以及空白/控制字符。保存时去掉末尾 `/`。
+- `headers` 只保存非秘密公共头；header name 必须是 HTTP token，拒绝 `authorization`、`proxy-authorization`、`cookie`、`set-cookie`，header value 不允许 CR/LF 或控制字符。
+- `timeoutMs` 必须是正的 finite safe integer；默认 `10000`。UI 以秒显示和编辑，Snapshot 内统一毫秒。
+- bearer auth 的 `credentialRef` 必须非空。凭证是否存在、是否可用属于宿主能力，不是 Snapshot 校验错误；缺失凭证仍可恢复、编辑和保存。
+- query 的 `connectionId` 必须指向现有 connection；binding key 必须是现有 object node ID，`queryId` 必须指向现有 query。
+
+连接变更通过 `create-data-connection`、`update-data-connection`、`duplicate-data-connection`、`delete-data-connection` command 进入 command/history；一次保存对应一次可撤销编辑。失败会保持 Snapshot/history 原子不变。复制连接生成新 ID 和唯一名称，不复制 query。存在 query/binding 引用时拒绝删除 connection；引用统计由 `countDataConnectionReferences` 提供。
+
+Host credential descriptors（`ref`、`label`、`available`）通过 `createEditor({ credentials })` 注入，只存在运行态；它们不会写入 Snapshot、项目包或 clipboard。React 数据工作区的连接列表由 `buildDataSourcesWorkspaceModel` 从 Snapshot 与 host credentials 派生。
+
 ## Command 与 Snapshot 的关系
 
 持久化变更只能通过 command 进入 Snapshot：
@@ -501,7 +554,11 @@ type Command =
   | SetEnvironmentCommand
   | AddLightCommand
   | UpdateLightCommand
-  | RemoveLightCommand;
+  | RemoveLightCommand
+  | CreateDataConnectionCommand
+  | UpdateDataConnectionCommand
+  | DuplicateDataConnectionCommand
+  | DeleteDataConnectionCommand;
 ```
 
 不要从 React/Vue UI 直接改 Snapshot object。正确方式是：
@@ -537,7 +594,7 @@ Clipboard payload 是 transient JSON editor data，不属于 durable Snapshot：
 
 ```json
 {
-  "version": 8,
+  "version": 9,
   "scene": {
     "id": "scene",
     "name": "Untitled scene"
@@ -590,8 +647,13 @@ Clipboard payload 是 transient JSON editor data，不属于 durable Snapshot：
       "kind": "glb",
       "label": "Simple box"
     }
+  },
+  "dataSources": {
+    "connections": {},
+    "queries": {},
+    "bindings": {}
   }
 }
 ```
 
-实际 Snapshot 还会包含 `materials`、`environment`、`lights`、`problems` 的默认结构。
+实际 Snapshot 还会包含 `materials`、`environment`、`lights`、`presentation`、`problems` 和 `dataSources` 的默认结构。

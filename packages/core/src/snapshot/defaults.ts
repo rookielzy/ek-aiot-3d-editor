@@ -1,5 +1,6 @@
 import { createEmptyCameraState, createEmptyPresentationState } from "../cameras/defaults";
 import type { AuthoredCameraDefinition } from "../cameras/types";
+import { createEmptyDataSources } from "../data-sources/defaults";
 import { createDefaultEnvironment } from "../environment/defaults";
 import type { LegacyLightDefinition, LightDefinition } from "../lights/types";
 import { createEmptyMaterialState } from "../materials/defaults";
@@ -44,7 +45,8 @@ export function createEmptySnapshot(sceneId = createId("scene")): SceneSnapshot 
     lights: {},
     cameras: createEmptyCameraState(),
     presentation: createEmptyPresentationState(),
-    problems: createEmptyAuthoredProblemState()
+    problems: createEmptyAuthoredProblemState(),
+    dataSources: createEmptyDataSources()
   };
 
   return Object.freeze(snapshot);

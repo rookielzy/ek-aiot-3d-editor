@@ -3,6 +3,8 @@ import {
   type AssetWorkspaceModel,
   type AssetWorkspacePayloadSummary
 } from "../assets/workspace";
+import { buildDataSourcesWorkspaceModel, type DataSourcesWorkspaceModel } from "../data-sources/workspace";
+import type { DataCredentialDescriptor } from "../data-sources/types";
 import { buildInspectorModel } from "../inspector/selection";
 import type { InspectorModel, InspectorProblemItem } from "../inspector/types";
 import type { HistoryState } from "../history/history";
@@ -29,6 +31,7 @@ export interface BuildWorkbenchModelOptions {
   projectCompleteness?: ProjectCompleteness;
   assetPayloads?: readonly AssetWorkspacePayloadSummary[];
   assetWorkspace?: AssetWorkspaceModel;
+  dataCredentials?: readonly DataCredentialDescriptor[];
   dirty?: boolean;
 }
 
@@ -176,6 +179,7 @@ export interface WorkbenchProjectModel {
 export interface WorkbenchModel {
   hierarchy: WorkbenchHierarchyModel;
   assets: WorkbenchAssetModel;
+  dataSources: DataSourcesWorkspaceModel;
   problems: WorkbenchProblemsModel;
   selection: WorkbenchSelectionModel;
   toolbar: WorkbenchToolbarModel;
@@ -213,6 +217,7 @@ export function buildWorkbenchModel(snapshot: SceneSnapshot, options: BuildWorkb
   });
   const projectCompleteness = options.projectCompleteness ?? assetWorkspace.readiness.completeness;
   const assets = buildWorkbenchAssets(snapshot, assetWorkspace);
+  const dataSources = buildDataSourcesWorkspaceModel(snapshot, { credentials: options.dataCredentials });
   const toolbar = buildWorkbenchToolbar(snapshot, inspector, {
     canPaste: options.canPaste,
     history,
@@ -233,6 +238,7 @@ export function buildWorkbenchModel(snapshot: SceneSnapshot, options: BuildWorkb
   return {
     hierarchy,
     assets,
+    dataSources,
     problems,
     selection,
     toolbar,

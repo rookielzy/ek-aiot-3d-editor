@@ -58,11 +58,14 @@ export type {
   Command,
   CommandResult,
   CreateCameraViewCommand,
+  CreateDataConnectionCommand,
   CreateGroupCommand,
   CreateImportedGlbTargetsCommand,
   DeleteCameraViewCommand,
+  DeleteDataConnectionCommand,
   DeleteNodesCommand,
   DeleteObjectsCommand,
+  DuplicateDataConnectionCommand,
   DuplicateObjectsCommand,
   GroupNodesCommand,
   GroupObjectsCommand,
@@ -87,8 +90,39 @@ export type {
   UngroupNodesCommand,
   UngroupObjectsCommand,
   UpdateCameraViewCommand,
+  UpdateDataConnectionCommand,
   UpdateLightCommand
 } from "./commands/types";
+export type {
+  BuildDataSourcesWorkspaceOptions,
+  DataConnectionListItem,
+  DataSourcesWorkspaceModel,
+  FilterDataConnectionsOptions
+} from "./data-sources/workspace";
+export type {
+  DataConnectionCommand,
+  DataConnectionCommandBuildResult,
+  SaveDataConnectionOptions
+} from "./data-sources/commands";
+export type {
+  DataConnection,
+  DataConnectionAuth,
+  DataConnectionAuthBearer,
+  DataConnectionAuthNone,
+  DataConnectionDraft,
+  DataConnectionField,
+  DataConnectionId,
+  DataConnectionInput,
+  DataConnectionProblem,
+  DataConnectionProblemCode,
+  DataConnectionReferenceCounts,
+  DataConnectionValidationResult,
+  DataCredentialDescriptor,
+  DataObjectBinding,
+  DataQuery,
+  DataQueryId,
+  SceneDataSources
+} from "./data-sources/types";
 export type {
   AssetWorkspaceSubscriber,
   Editor,
@@ -346,6 +380,7 @@ export type {
   SceneSnapshot,
   SerializedSceneSnapshot,
   Transform,
+  V8SceneSnapshot,
   V7SceneSnapshot,
   V6SceneSnapshot,
   V5SceneNode,
@@ -353,6 +388,24 @@ export type {
   V4SceneSnapshot,
   V3SceneSnapshot
 } from "./snapshot/types";
+
+export {
+  buildDataSourcesWorkspaceModel,
+  countDataConnectionReferences,
+  filterDataConnectionItems
+} from "./data-sources/workspace";
+export {
+  buildDeleteDataConnectionCommand,
+  buildDuplicateDataConnectionCommand,
+  buildSaveDataConnectionCommand
+} from "./data-sources/commands";
+export {
+  DEFAULT_DATA_CONNECTION_TIMEOUT_MS,
+  createDataConnectionId,
+  createEmptyDataSources,
+  createUniqueDataConnectionName
+} from "./data-sources/defaults";
+export { validateDataConnectionDraft } from "./data-sources/validation";
 
 export { createAuthoredCameraView, createAuthoredCameraViewInput, createEmptyPresentationState } from "./cameras/defaults";
 export {

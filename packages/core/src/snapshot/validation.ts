@@ -1,5 +1,6 @@
 import { validateCameras, validatePresentationState } from "../cameras/validation";
 import type { AuthoredCameraView } from "../cameras/types";
+import { validateDataSources } from "../data-sources/validation";
 import { validateSceneEnvironment } from "../environment/validation";
 import type { ImportedGlbMaterialSlotDescriptor, ImportedGlbSourceDescriptor } from "../imported-targets/types";
 import { validateLights } from "../lights/validation";
@@ -88,6 +89,7 @@ export function validateSceneSnapshot(value: unknown): ValidationResult {
   validateCameras(value.cameras, errors);
   validatePresentationState(value.presentation, value.cameras, errors);
   validateAuthoredProblemState(value.problems, errors);
+  validateDataSources(value.dataSources, value.nodes, errors);
 
   if ("metadata" in value && !isJsonCompatible(value.metadata)) {
     errors.push("Snapshot metadata must be JSON-compatible.");
