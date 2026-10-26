@@ -131,6 +131,7 @@ export class CoreDataService implements EditorDataService {
   readonly #unsubscribeSnapshot: (() => void) | null;
   #state: DataServiceState;
   #dataSourcesKey: string;
+  #runConnectionKey: string | undefined;
   #configRevision = 0;
   #current: ActiveRun | null = null;
   #nextRunId = 0;
@@ -207,6 +208,7 @@ export class CoreDataService implements EditorDataService {
       resolve
     };
     this.#current = active;
+    this.#runConnectionKey = JSON.stringify(this.#getSnapshot().dataSources.connections[draft.connectionId]);
     this.#publish({ ...this.#state, run: active.state });
     void this.#execute(active, draft, options.overrides ?? {});
 
@@ -267,6 +269,10 @@ export class CoreDataService implements EditorDataService {
     draft: DataQueryDraft,
     overrides: DataQueryParameterOverrides
   ): Promise<void> {
+    // A running-state subscriber can synchronously cancel, invalidate, or dispose this run.
+    if (active.settled) {
+      return;
+    }
     const built = buildDataGetRequest(this.#getSnapshot(), draft, { overrides });
     if (!built.ok) {
       this.#finish(active, { status: "error", problems: built.problems });
@@ -461,17 +467,22 @@ export class CoreDataService implements EditorDataService {
     if (this.#disposed) {
       return;
     }
-    const nextKey = dataSourcesKey(this.#getSnapshot());
+    const snapshot = this.#getSnapshot();
+    const nextKey = dataSourcesKey(snapshot);
     if (nextKey === this.#dataSourcesKey) {
       return;
     }
     this.#dataSourcesKey = nextKey;
     this.#configRevision += 1;
-    this.#invalidateActive();
+    const invalidated = this.#state.run !== null &&
+      JSON.stringify(snapshot.dataSources.connections[this.#state.run.connectionId]) !== this.#runConnectionKey;
+    if (invalidated) {
+      this.#invalidateActive();
+    }
     this.#publish({
       executorAvailable: this.#executor !== null,
       configRevision: this.#configRevision,
-      run: null
+      run: invalidated ? null : this.#state.run
     });
   }
 

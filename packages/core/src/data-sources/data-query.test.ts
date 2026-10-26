@@ -53,6 +53,10 @@ describe("GET request drafting", () => {
     expect(!missing.ok && missing.problems.map((problem) => [problem.code, problem.parameterName])).toEqual([
       ["parameter-missing", "include"]
     ]);
+    const encodedSlash = buildDataGetRequest(editor.getSnapshot(), draft, { overrides: { include: false } });
+    expect(encodedSlash.ok && encodedSlash.summary.url).toBe(
+      "https://api.example.test/v1/devices/pump%2F1/events?include=false&offset=0&q="
+    );
     expect(Object.keys(editor.getSnapshot().dataSources.queries)).toEqual([]);
     editor.dispose();
   });

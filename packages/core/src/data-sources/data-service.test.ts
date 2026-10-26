@@ -188,6 +188,61 @@ describe("Editor data service", () => {
     editor.dispose();
   });
 
+  it.each([
+    ["/devices/{id}/events", "."],
+    ["/devices/{id}/events", ".."],
+    ["/devices/%2e{id}/events", "."],
+    ["/devices/{id}%2E/events", "."]
+  ])("rejects a dot segment formed by %s with parameter %s before execution", async (path, value) => {
+    const requests: DataRequestDescriptor[] = [];
+    const context = createDataEditor({
+      executor: (request) => {
+        requests.push(request);
+        return okResponse();
+      }
+    });
+
+    const result = await context.service.executeQueryDraft({
+      ...context.draft,
+      path,
+      parameters: [{ name: "id", type: "string", defaultValue: value }]
+    }).result;
+
+    expect(result.status).toBe("error");
+    expect(result.problems).toEqual([
+      expect.objectContaining({ code: "path-traversal", field: "path", connectionId: "connection-a" })
+    ]);
+    expect(requests).toEqual([]);
+    context.editor.dispose();
+  });
+
+  it.each(["cancel", "invalidate", "dispose"] as const)(
+    "does not start an executor or timeout after a running subscriber requests %s",
+    async (action) => {
+      vi.useFakeTimers();
+      const requests: DataRequestDescriptor[] = [];
+      const context = createDataEditor({
+        executor: (request) => {
+          requests.push(request);
+          return new Promise<DataResponseDescriptor>(() => {});
+        }
+      });
+      context.service.subscribe((state) => {
+        if (state.run?.status !== "running") return;
+        if (action === "cancel") context.service.cancelQueryRun(state.run.id);
+        if (action === "invalidate") context.service.invalidateQueryRuns();
+        if (action === "dispose") context.editor.dispose();
+      });
+
+      const result = await context.service.executeQueryDraft(context.draft).result;
+
+      expect(result.status).toBe(action === "cancel" ? "cancelled" : "stale");
+      expect(requests).toEqual([]);
+      expect(vi.getTimerCount()).toBe(0);
+      context.editor.dispose();
+    }
+  );
+
   it("cancels a run and ignores a late response that the host still delivers", async () => {
     let signal: AbortSignal | undefined;
     let deliver!: (response: DataResponseDescriptor) => void;
@@ -280,6 +335,91 @@ describe("Editor data service", () => {
     expect(secondResult.configRevision).toBe(1);
     expect(secondResult.request?.url).toBe("https://api.example.test/v2/devices");
     editor.dispose();
+  });
+
+  it.each(["running", "success"] as const)("preserves a %s run when an unrelated connection changes", async (status) => {
+    const requests: DataRequestDescriptor[] = [];
+    let deliver!: (response: DataResponseDescriptor) => void;
+    const context = createDataEditor({
+      executor: (request) => {
+        requests.push(request);
+        return new Promise<DataResponseDescriptor>((resolve) => {
+          deliver = resolve;
+        });
+      }
+    });
+    expect(context.editor.dispatch({
+      type: "create-data-connection",
+      connection: {
+        ...context.editor.getSnapshot().dataSources.connections["connection-a"],
+        id: "connection-b",
+        name: "Other API"
+      }
+    }).ok).toBe(true);
+    const handle = context.service.executeQueryDraft(context.draft);
+    if (status === "success") {
+      deliver(okResponse());
+      await handle.result;
+    }
+    const run = context.service.getState().run;
+
+    expect(context.editor.dispatch({
+      type: "update-data-connection",
+      connectionId: "connection-b",
+      connection: {
+        ...context.editor.getSnapshot().dataSources.connections["connection-b"],
+        baseUrl: "https://other.example.test/v2"
+      }
+    }).ok).toBe(true);
+    expect(context.service.getState().run).toEqual(run);
+    context.editor.undo();
+    expect(context.service.getState().run).toEqual(run);
+    context.editor.redo();
+    expect(context.service.getState().run).toEqual(run);
+    expect(context.service.getState().configRevision).toBe(handle.configRevision + 3);
+    expect(requests[0].signal.aborted).toBe(false);
+
+    if (status === "running") deliver(okResponse());
+    expect(await handle.result).toMatchObject({
+      status: "success",
+      current: true,
+      configRevision: handle.configRevision
+    });
+    context.editor.dispose();
+  });
+
+  it.each(["update", "delete"] as const)("invalidates an in-flight run on a related connection %s", async (action) => {
+    const requests: DataRequestDescriptor[] = [];
+    let deliver!: (response: DataResponseDescriptor) => void;
+    const context = createDataEditor({
+      executor: (request) => {
+        requests.push(request);
+        return new Promise<DataResponseDescriptor>((resolve) => {
+          deliver = resolve;
+        });
+      }
+    });
+    const handle = context.service.executeQueryDraft(context.draft);
+
+    expect(context.editor.dispatch(action === "delete" ? {
+      type: "delete-data-connection",
+      connectionId: "connection-a"
+    } : {
+      type: "update-data-connection",
+      connectionId: "connection-a",
+      connection: {
+        ...context.editor.getSnapshot().dataSources.connections["connection-a"],
+        baseUrl: "https://api.example.test/v2"
+      }
+    }).ok).toBe(true);
+
+    expect(await handle.result).toMatchObject({ status: "stale", current: false });
+    expect(requests[0].signal.aborted).toBe(true);
+    expect(context.service.getState().run).toBeNull();
+    deliver(okResponse());
+    await flushPromises();
+    expect(context.service.getState().run).toBeNull();
+    context.editor.dispose();
   });
 
   it.each([

@@ -312,6 +312,10 @@ function buildRequestUrl(
     if (/[{}]/.test(replaced)) {
       return { ok: false, problems: [problem("path-invalid", "The request path contains an invalid parameter placeholder.")] };
     }
+    // URL parsing normalizes both literal and percent-encoded dot segments.
+    if (/^(?:\.|%2e){1,2}$/i.test(replaced)) {
+      return { ok: false, problems: [problem("path-traversal", "The request path must not contain dot segments.")] };
+    }
     builtSegments.push(replaced);
   }
 

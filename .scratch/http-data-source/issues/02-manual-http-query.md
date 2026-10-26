@@ -75,3 +75,13 @@ Decisions: D04, D05, D06, D13
 测试覆盖：core 的草稿构建、参数默认/覆盖与严格类型、编码与路径逃逸表、摘要秘密隔离；数据服务的 executor/凭证守卫、超时中止、取消与晚到响应、invalidate/dispose/config revision、HTTP 与非法响应、Snapshot/history 不变；React 的临时覆盖隔离、缺 executor 不联网、缺参/类型错误不调用、取消、改草稿清空旧结果、焦点恢复、双语；浏览器 smoke 断言同源 fixture 实际收到编码路径/query/头且响应不污染 Snapshot。
 
 环境差异：Windows 下根 `pnpm typecheck` 的 `pnpm -r --filter './packages/*'` 未匹配包（既有问题），因此按明确包名完成类型检查与构建。浏览器全量测试和 jsdom 全量测试未并行运行，避免既有软件 GPU/超时干扰。
+
+2026-10-26：修复 `7565740` 的三项 core review 问题：参数替换后拒绝完整的 `.`/`..` 路径段（包括与字面量 `%2e` 拼接的情况），保持普通编码斜杠参数可用；运行态订阅者同步取消、失效或销毁后不再启动 executor 或 timeout；按本次运行依赖的连接配置决定失效，无关连接的编辑及 undo/redo 保留进行中的请求和已完成结果，全局配置 revision 继续递增，结果保留执行时的 revision。当前连接更新或删除仍取消请求并拒绝晚到响应。
+
+本轮新增 11 项公开数据服务回归用例。修复前从 `packages/core` 执行 `pnpm exec vitest run --root ../.. packages/core/src/data-sources/data-service.test.ts`：9 failed / 13 passed，复现三类问题；修复后实际验证：
+
+- 从 `packages/core` 执行 `pnpm exec vitest run --root ../.. packages/core/src/data-sources packages/core/src/public-api.test.ts`：4 test files / 66 tests passed。
+- 从 `packages/core` 执行 `pnpm exec vitest run --root ../.. --maxWorkers=2`：122 test files / 1059 tests passed。
+- 从 `packages/core`、`packages/react`、`packages/vue` 分别执行 `pnpm run typecheck`：均通过。
+- 从 `packages/core` 执行 `pnpm --config.script-shell="C:/Program Files/Git/bin/bash.exe" run build`：通过。默认 Windows shell 因找不到 `rm` 失败，改用本机 Git Bash 执行原有脚本；未修改构建配置。本机没有 Bun，根 `package.json` 未提供 `check` 脚本，因此使用仓库现有 pnpm 校验入口。
+- `git diff --check`（本轮修改文件）：通过。
