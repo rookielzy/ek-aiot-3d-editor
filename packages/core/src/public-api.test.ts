@@ -14,6 +14,7 @@ import {
   resolveDefaultPresentationView,
   buildAssetWorkspaceModel,
   buildDataSourcesWorkspaceModel,
+  buildDataGetRequest,
   buildDeleteDataConnectionCommand,
   buildDuplicateDataConnectionCommand,
   buildInspectorModel,
@@ -63,6 +64,11 @@ import {
   type DataConnection,
   type DataConnectionDraft,
   type DataCredentialDescriptor,
+  type DataQueryDraft,
+  type DataRequestDescriptor,
+  type DataRequestExecutor,
+  type DataResponseDescriptor,
+  type EditorDataService,
   type DisplayMessageDescriptorInput,
   type DisplayMessageField,
   type DisplayMessageNamespace,
@@ -572,10 +578,23 @@ describe("core public API", () => {
     const saveConnectionCommand = buildSaveDataConnectionCommand(createEmptySnapshot("scene-data"), dataConnectionDraft);
     const duplicateConnectionResult = buildDuplicateDataConnectionCommand(dataSnapshot, dataConnection.id);
     const deleteConnectionResult = buildDeleteDataConnectionCommand(dataSnapshot, dataConnection.id);
+    const queryDraft: DataQueryDraft = {
+      connectionId: dataConnection.id,
+      path: "/devices/{deviceId}",
+      parameters: [{ name: "deviceId", type: "string", defaultValue: "pump-1" }]
+    };
+    const requestBuild = buildDataGetRequest(dataSnapshot, queryDraft);
+    const requestExecutor: DataRequestExecutor = async (request: DataRequestDescriptor): Promise<DataResponseDescriptor> => ({
+      status: 200,
+      body: JSON.stringify({ url: request.url })
+    });
     const { dataSources: _dataSources, ...emptyWithoutDataSources } = createEmptySnapshot("scene-v8");
     const v8Snapshot: V8SceneSnapshot = { ...emptyWithoutDataSources, version: 8 };
     const editorWithImport: EditorWithGlbImport = createEditor();
     const baseEditor: Editor = editorWithImport;
+    const editorDataService: EditorDataService | undefined = editorWithImport.getDataService?.();
+    const editorWithExecutor = createEditor({ executor: requestExecutor });
+    const editorWithExecutorDataService: EditorDataService | undefined = editorWithExecutor.getDataService?.();
     const readonlyMarqueeSelection: ReadonlyEditorMarqueeSelectionState | undefined = baseEditor.marqueeSelection;
     const structuralEditorWithoutViewportHelpers: Editor = {
       getSnapshot: baseEditor.getSnapshot,
@@ -705,6 +724,11 @@ describe("core public API", () => {
     expect(saveConnectionCommand.ok).toBe(true);
     expect(duplicateConnectionResult.ok).toBe(true);
     expect(deleteConnectionResult.ok).toBe(true);
+    expect(requestBuild.ok).toBe(true);
+    expect(requestBuild.ok && requestBuild.summary.url).toBe("https://api.example.test/v1/devices/pump-1");
+    expect(editorDataService?.getState()).toMatchObject({ executorAvailable: false, configRevision: 0, run: null });
+    expect(editorWithExecutorDataService?.getState()).toMatchObject({ executorAvailable: true, configRevision: 0, run: null });
+    expect(typeof baseEditor.getDataService).toBe("function");
     expect(v8Snapshot.version).toBe(8);
     expect(classifyWorkbenchAssetImportFile({ name: "texture.png", source: new Uint8Array([1]) }, rasterKind)).toMatchObject({
       kind: "texture"
@@ -734,6 +758,7 @@ describe("core public API", () => {
       rootObjectIds: ["object-a"]
     }, "object-a", importedSlot.slotKey)?.slot.slotKey).toBe(importedSlot.slotKey);
     editorWithImport.dispose();
+    editorWithExecutor.dispose();
   });
 
   it("exports shared inspector contracts without exposing runtime internals", () => {

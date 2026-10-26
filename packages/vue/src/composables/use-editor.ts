@@ -16,7 +16,8 @@ export interface UseEditorResult {
 export function useEditor(options: UseEditorOptions = {}): UseEditorResult {
   const editor = markRaw(options.editor ?? createEditor({
     snapshot: options.snapshot,
-    credentials: options.credentials
+    credentials: options.credentials,
+    executor: options.executor
   }));
   const snapshot = shallowRef(editor.getSnapshot());
   const unsubscribe = editor.subscribe((nextSnapshot) => {

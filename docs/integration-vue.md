@@ -58,6 +58,31 @@ if (!editor.getSnapshot().objects.box) {
 
 不传 `toolbar`、`leftPanel`、`rightPanel` 或 `status` slot 时，Workbench 会使用 package-owned 默认 UI。Open、完整/部分导出和语言切换位于 Project menu；undo/redo、transform、snap 和 marquee 直接位于视口上方，helpers、camera 与 node operations 使用相邻工具组。默认 viewport 开启 pointer picking，并保留左键拖拽给相机旋转。右侧 inspector 通过 Object、Environment、Scene 分组承载 selection、材质、环境、灯光和 camera views。左侧导航切换 Scene、Assets、Project，再次激活当前项会收放左栏；左右栏均可鼠标或键盘调宽。底部只显示摘要，Problem details 打开含 severity/source/恢复动作的抽屉，关闭抽屉不清除问题。
 
+## 数据服务与执行器
+
+core 的数据服务与 viewport 无关。宿主把 `DataRequestExecutor` 传给 `useEditor({ executor })` 或 `EditorWorkbench` 的 `executor` prop 后，可通过 `editor.getDataService()` 执行会话内手动 GET 草稿、取消请求并订阅运行态：
+
+```ts
+import type { DataRequestExecutor } from "@ek-aiot/3d-editor-core";
+
+const executor: DataRequestExecutor = async (request) => {
+  const response = await fetch(request.url, {
+    method: request.method,
+    headers: request.headers,
+    signal: request.signal
+  });
+  return {
+    status: response.status,
+    contentType: response.headers.get("content-type"),
+    body: await response.text()
+  };
+};
+
+const { editor } = useEditor({ executor });
+```
+
+请求描述只携带非秘密公共头和 `credentialRef`；认证秘密由宿主执行器在发送时解析。响应正文、耗时、generation、取消和诊断只留在当前会话，不写入 Snapshot、history 或项目包。Vue 数据工作区 UI 保持现状，不因启用数据服务而新增请求表单。
+
 宿主扩展区域为 `toolbar`、`leftPanel`、兼容 `sidePanel`、`viewportOverlay`、`rightPanel` 和 `status`。`leftPanel` 优先于 `sidePanel`；`show-default-toolbar="false"` 同时隐藏默认顶部及视口工具，但不隐藏宿主 `toolbar` slot。切换 locale、导航或抽屉只改变 session UI，不替换 editor/runtime、selection、history 或 canvas。
 
 ## 双语 Workbench UI

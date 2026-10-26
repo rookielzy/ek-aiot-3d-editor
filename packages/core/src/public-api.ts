@@ -105,6 +105,35 @@ export type {
   SaveDataConnectionOptions
 } from "./data-sources/commands";
 export type {
+  BuildDataGetRequestOptions,
+  BuildDataGetRequestResult,
+  DataParameterType,
+  DataParameterValue,
+  DataQueryDraft,
+  DataQueryParameterDraft,
+  DataQueryParameterOverrides,
+  DataQueryProblem,
+  DataQueryProblemCode,
+  DataQueryProblemField,
+  DataRequestSummary,
+  ResolveDataQueryParametersResult
+} from "./data-sources/query";
+export type {
+  DataQueryDraftExecutionOptions,
+  DataQueryResponse,
+  DataQueryRunHandle,
+  DataQueryRunResult,
+  DataQueryRunState,
+  DataQueryRunStatus,
+  DataRequestDescriptor,
+  DataRequestExecutor,
+  DataResponseBodyKind,
+  DataResponseDescriptor,
+  DataServiceState,
+  DataServiceSubscriber,
+  EditorDataService
+} from "./data-sources/service";
+export type {
   DataConnection,
   DataConnectionAuth,
   DataConnectionAuthBearer,
@@ -399,6 +428,7 @@ export {
   buildDuplicateDataConnectionCommand,
   buildSaveDataConnectionCommand
 } from "./data-sources/commands";
+export { buildDataGetRequest, resolveDataQueryParameters } from "./data-sources/query";
 export {
   DEFAULT_DATA_CONNECTION_TIMEOUT_MS,
   createDataConnectionId,

@@ -15,6 +15,7 @@ import { planGlbImportRemap } from "../assets/import-remap";
 import { CommandDispatcher } from "../commands/dispatcher";
 import type { Command, CommandResult } from "../commands/types";
 import type { DataCredentialDescriptor } from "../data-sources/types";
+import { CoreDataService, type EditorDataService } from "../data-sources/service";
 import { CommandHistory, type HistoryState } from "../history/history";
 import { defaultArchiveAdapter } from "../project/archive-adapter";
 import { blobToBytes, checksumBytes, normalizeProjectAssetSource, ProjectAssetStore } from "../project/asset-store";
@@ -54,6 +55,7 @@ export class CoreEditor implements EditorWithGlbImport {
   #assetWorkspaceVersion = 0;
   #resolver = new AssetResolverBridge(undefined, this.projectAssets);
   #dataCredentials: readonly DataCredentialDescriptor[] = [];
+  #dataService: EditorDataService;
   #disposed = false;
 
   constructor(options: EditorOptions = {}) {
@@ -61,6 +63,12 @@ export class CoreEditor implements EditorWithGlbImport {
     this.dispatcher = new CommandDispatcher(this.store, this.history, this.assets);
     this.operations = createAdvancedEditorOperations(this, this.clipboard);
     this.#dataCredentials = Object.freeze([...(options.credentials ?? [])]);
+    this.#dataService = new CoreDataService({
+      getSnapshot: () => this.store.getSnapshot(),
+      subscribeSnapshot: (listener) => this.store.subscribe(() => listener()),
+      executor: options.executor ?? null,
+      credentials: this.#dataCredentials
+    });
   }
 
   getSnapshot(): SceneSnapshot {
@@ -158,6 +166,10 @@ export class CoreEditor implements EditorWithGlbImport {
 
   getDataCredentials(): readonly DataCredentialDescriptor[] {
     return this.#dataCredentials;
+  }
+
+  getDataService(): EditorDataService {
+    return this.#dataService;
   }
 
   getAssetWorkspacePayloads(): ProjectAssetPayloadSummary[] {
@@ -521,6 +533,7 @@ export class CoreEditor implements EditorWithGlbImport {
     }
 
     this.#disposed = true;
+    this.#dataService.dispose();
     this.#runtime?.dispose();
     this.#runtime = null;
     this.#notifyRuntimeSubscribers();

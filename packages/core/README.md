@@ -42,6 +42,8 @@ All durable edits enter through commands so undo/redo remains framework-neutral:
 - `add-light`, `update-light`, and `remove-light` store durable light authoring data and keep light nodes synchronized with light payloads.
 - `create-data-connection`, `update-data-connection`, `duplicate-data-connection`, and `delete-data-connection` store HTTP/HTTPS connection configuration under the v9 `dataSources` domain. Bearer authentication stores only a host credential reference; credentials stay in runtime.
 
+`editor.getDataService()` builds and runs manual GET query drafts without a viewport. Pass `createEditor({ executor })` to give it a host-owned request executor; core sends a resolved URL, non-secret headers, a credential reference, timeout, and `AbortSignal`, then exposes status, raw text, parsed JSON, elapsed time, and diagnostics through a subscription. The service never calls global `fetch`, never writes request drafts or responses into snapshots/history, aborts on cancel, and rejects late responses after invalidation or disposal. `buildDataGetRequest()` is also exported for hosts that want to preview or validate a resolved draft before execution.
+
 `editor.operations` exposes core-backed helpers for copy, paste, duplicate, delete, group, ungroup, select all, and clear selection. Default calls operate on node selection; calls with explicit object IDs keep object-only compatibility. Clipboard payloads are transient JSON editor data; v2 payloads can carry group/object/light node subtrees while v1 object payloads still paste into v4 editors. Clipboard data does not contain browser clipboard state, files, blobs, object URLs, loaded Three.js objects, resolver output, or project payload bytes.
 
 ## Inspector Helpers

@@ -1,10 +1,24 @@
 import { useEffect, useState } from "react";
-import { resolveDefaultPresentationView, type EditorRuntimeOptions, type EditorWithGlbImport } from "@ek-aiot/3d-editor-core";
+import { resolveDefaultPresentationView, type DataRequestExecutor, type EditorRuntimeOptions, type EditorWithGlbImport } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench, type WorkbenchLocale } from "@ek-aiot/3d-editor-react";
 import { createDemoGltfLoader } from "./demo-gltf-loader";
 import { createShowcaseEditor, showcaseInteractions } from "../../showcase/showcase";
 
 const demoLoader = createDemoGltfLoader();
+
+/** Browser demo host: real same-origin fetch; credentials stay a host concern. */
+const fetchDataRequestExecutor: DataRequestExecutor = async (request) => {
+  const response = await fetch(request.url, {
+    method: request.method,
+    headers: request.headers,
+    signal: request.signal
+  });
+  return {
+    status: response.status,
+    contentType: response.headers.get("content-type"),
+    body: await response.text()
+  };
+};
 
 export interface AppProps {
   locale?: WorkbenchLocale;
@@ -21,7 +35,7 @@ export function App({ locale, loader = demoLoader, rendererFactory }: AppProps =
     let ownedEditor: EditorWithGlbImport | null = null;
     setEditor(null);
     setFailed(false);
-    void createShowcaseEditor(loader, controller.signal).then((created) => {
+    void createShowcaseEditor(loader, controller.signal, { executor: fetchDataRequestExecutor }).then((created) => {
       if (controller.signal.aborted) { created.dispose(); return; }
       ownedEditor = created;
       setEditor(created);

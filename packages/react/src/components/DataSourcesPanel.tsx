@@ -15,6 +15,7 @@ import {
 } from "@ek-aiot/3d-editor-core";
 import type { WorkbenchI18n, WorkbenchMessageKey, WorkbenchMessageValues } from "../i18n/workbench-i18n";
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
+import { DataQueryTester } from "./DataQueryTester";
 
 type DataFormMode =
   | { kind: "create" }
@@ -42,7 +43,10 @@ interface StatusMessage {
   values?: WorkbenchMessageValues;
 }
 
-type FocusTarget = { kind: "new" } | { kind: "connection"; connectionId: string };
+type FocusTarget =
+  | { kind: "new" }
+  | { kind: "connection"; connectionId: string }
+  | { kind: "request"; connectionId: string };
 
 const PROBLEM_MESSAGE_KEYS = {
   "auth-invalid": "dataSources.problem.authInvalid",
@@ -64,6 +68,7 @@ const PROBLEM_MESSAGE_KEYS = {
 export function DataSourcesPanel({ context }: { context: ResolvedWorkbenchContext }) {
   const [query, setQuery] = useState("");
   const [form, setForm] = useState<DataFormState | null>(null);
+  const [requestConnectionId, setRequestConnectionId] = useState<string | null>(null);
   const [problems, setProblems] = useState<DataConnectionProblem[]>([]);
   const [status, setStatus] = useState<StatusMessage | null>(null);
   const [focusTarget, setFocusTarget] = useState<FocusTarget | null>(null);
@@ -77,6 +82,7 @@ export function DataSourcesPanel({ context }: { context: ResolvedWorkbenchContex
   const keepEditingRef = useRef<HTMLButtonElement>(null);
   const newButtonRef = useRef<HTMLButtonElement>(null);
   const editButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const requestButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const discardId = useId();
   const t = context.i18n.t;
   const model = context.model.dataSources;
@@ -98,6 +104,8 @@ export function DataSourcesPanel({ context }: { context: ResolvedWorkbenchContex
     }
     if (focusTarget.kind === "connection") {
       editButtonRefs.current.get(focusTarget.connectionId)?.focus();
+    } else if (focusTarget.kind === "request") {
+      requestButtonRefs.current.get(focusTarget.connectionId)?.focus();
     } else {
       newButtonRef.current?.focus();
     }
@@ -131,7 +139,16 @@ export function DataSourcesPanel({ context }: { context: ResolvedWorkbenchContex
     }
   }, [problems]);
 
+  useEffect(() => {
+    if (requestConnectionId && !context.snapshot.dataSources.connections[requestConnectionId]) {
+      const missingId = requestConnectionId;
+      setRequestConnectionId(null);
+      setFocusTarget({ kind: "request", connectionId: missingId });
+    }
+  }, [context.snapshot.dataSources.connections, requestConnectionId]);
+
   function openCreate() {
+    setRequestConnectionId(null);
     setProblems([]);
     setStatus(null);
     const next: DataFormState = {
@@ -153,6 +170,7 @@ export function DataSourcesPanel({ context }: { context: ResolvedWorkbenchContex
       setStatus({ key: PROBLEM_MESSAGE_KEYS["connection-not-found"] });
       return;
     }
+    setRequestConnectionId(null);
     setProblems([]);
     setStatus(null);
     const next: DataFormState = {
@@ -176,6 +194,21 @@ export function DataSourcesPanel({ context }: { context: ResolvedWorkbenchContex
     setProblems([]);
     setStatus(null);
     setFocusTarget(editing ? { kind: "connection", connectionId: editing } : { kind: "new" });
+  }
+
+  function openRequest(connection: DataConnectionListItem) {
+    setForm(null);
+    setProblems([]);
+    setStatus(null);
+    setRequestConnectionId(connection.id);
+  }
+
+  function closeRequest() {
+    const connectionId = requestConnectionId;
+    setRequestConnectionId(null);
+    if (connectionId) {
+      setFocusTarget({ kind: "request", connectionId });
+    }
   }
 
   function requestClose(action: () => void) {
@@ -286,6 +319,9 @@ export function DataSourcesPanel({ context }: { context: ResolvedWorkbenchContex
     setProblems([]);
     setStatus({ key: "dataSources.status.deleted" });
     setFocusTarget(remaining[0] ? { kind: "connection", connectionId: remaining[0] } : { kind: "new" });
+    if (requestConnectionId === connection.id) {
+      setRequestConnectionId(null);
+    }
   }
 
   return (
@@ -319,6 +355,13 @@ export function DataSourcesPanel({ context }: { context: ResolvedWorkbenchContex
           onSubmit={saveForm}
           onCancel={() => requestClose(closeForm)}
           i18n={context.i18n}
+        />
+      ) : requestConnectionId ? (
+        <DataQueryTester
+          key={requestConnectionId}
+          context={context}
+          connectionId={requestConnectionId}
+          onClose={closeRequest}
         />
       ) : null}
       {discardOpen ? (
@@ -360,7 +403,15 @@ export function DataSourcesPanel({ context }: { context: ResolvedWorkbenchContex
                   editButtonRefs.current.delete(connection.id);
                 }
               }}
+              requestButtonRef={(element) => {
+                if (element) {
+                  requestButtonRefs.current.set(connection.id, element);
+                } else {
+                  requestButtonRefs.current.delete(connection.id);
+                }
+              }}
               onEdit={() => requestClose(() => openEdit(connection))}
+              onTest={() => requestClose(() => openRequest(connection))}
               onDuplicate={() => requestClose(() => duplicateConnection(connection))}
               onDelete={() => requestClose(() => deleteConnection(connection))}
             />
@@ -375,14 +426,18 @@ function ConnectionRow({
   connection,
   i18n,
   editButtonRef,
+  requestButtonRef,
   onEdit,
+  onTest,
   onDuplicate,
   onDelete
 }: {
   connection: DataConnectionListItem;
   i18n: WorkbenchI18n;
   editButtonRef(element: HTMLButtonElement | null): void;
+  requestButtonRef(element: HTMLButtonElement | null): void;
   onEdit(): void;
+  onTest(): void;
   onDuplicate(): void;
   onDelete(): void;
 }) {
@@ -410,6 +465,7 @@ function ConnectionRow({
       <small className="ek-workbench__connection-usage">{t("dataSources.list.queries", { count: connection.queryCount })}</small>
       <div className="ek-workbench__connection-actions">
         <button ref={editButtonRef} type="button" aria-label={t("dataSources.actions.editAria", { name: connection.name })} onClick={onEdit}>{t("dataSources.actions.edit")}</button>
+        <button ref={requestButtonRef} type="button" aria-label={t("dataSources.actions.testAria", { name: connection.name })} onClick={onTest}>{t("dataSources.actions.test")}</button>
         <button type="button" aria-label={t("dataSources.actions.duplicateAria", { name: connection.name })} onClick={onDuplicate}>{t("dataSources.actions.duplicate")}</button>
         <button
           type="button"

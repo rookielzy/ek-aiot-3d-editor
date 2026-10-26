@@ -41,7 +41,7 @@ React/Vue 示例使用同一套本地 Toy Car、HDR、灯光和默认镜头展�
 pnpm test:browser
 ```
 
-该命令使用 Vitest browser mode + headless Chromium，覆盖 runtime picking、TransformControls smoke，以及 React/Vue proof-loop demo 的可见 checklist、层级、问题 badge 和 canvas 非空渲染 smoke。
+该命令使用 Vitest browser mode + headless Chromium，覆盖 runtime picking、TransformControls smoke、React/Vue proof-loop demo 的可见 checklist、层级、问题 badge 和 canvas 非空渲染 smoke，以及通过本机同源夹具执行的手动数据源 GET 请求。
 
 新机器首次运行前需要执行 `pnpm exec playwright install chromium`。Linux CI/容器还需要 Playwright Chromium 的系统依赖；可用 `pnpm exec playwright install-deps --dry-run chromium` 查看缺失包。
 
@@ -64,9 +64,9 @@ pnpm release:verify
 - Runtime：core 内置 Three.js 投影层，将 Snapshot 投影为 scene、camera、renderer、对象、环境、灯光和问题列表。
 - 问题：resolver、loader、PMREM、runtime、project package 等失败以结构化 problem 暴露，不写回为 runtime-only 状态。
 - 项目包：实验性 `.ek3d` ZIP 容器，包含 `project.json`、`scene.json` 和 `assets/*` payload。
-- 数据源：v9 顶层 `dataSources` 保存 HTTP/HTTPS 连接配置（名称、服务地址、非秘密公共头、认证引用、超时）以及查询/绑定引用；宿主凭证只存在于运行态，默认 editor 不注入连接也不联网。
-- React：`useEditor()`、`useEditorSnapshot()`、`useInspector()`、`useWorkbench()`、`EditorViewport`、`InspectorPanel`、`EditorWorkbench`；默认 Data 工作区支持连接搜索、创建、编辑、复制、删除、撤销和未保存草稿确认。
-- Vue：`useEditor()`、`useInspector()`、`useWorkbench()`、`EditorViewport`、`InspectorPanel`、`EditorWorkbench`；可加载包含 `dataSources` 的 v9 Snapshot，数据工作区 UI 由后续任务交付。
+- 数据源：v9 顶层 `dataSources` 保存 HTTP/HTTPS 连接配置（名称、服务地址、非秘密公共头、认证引用、超时）以及查询/绑定引用；宿主凭证、请求草稿、执行器和响应只存在于运行态，默认 editor 不注入连接也不联网。`editor.getDataService()` 提供与 viewport 独立的受控请求门面，宿主通过 executor 执行真实 HTTP。
+- React：`useEditor()`、`useEditorSnapshot()`、`useInspector()`、`useWorkbench()`、`EditorViewport`、`InspectorPanel`、`EditorWorkbench`；默认 Data 工作区支持连接搜索、创建、编辑、复制、删除、撤销、未保存草稿确认，以及带类型参数的手动 GET 请求测试（默认值与临时覆盖分离、运行/取消、会话内响应与配置修订标记）。
+- Vue：`useEditor()`、`useInspector()`、`useWorkbench()`、`EditorViewport`、`InspectorPanel`、`EditorWorkbench`；可加载包含 `dataSources` 的 v9 Snapshot，并透传 host executor 到 core 数据服务；Vue 数据工作区 UI 保持现状。
 - 双语 Workbench：React/Vue package docs 和集成指南覆盖默认 English、内置 `zh-CN`、locale prop / `v-model:locale`、switch 控制、host translate callback、render prop / scoped slot 的 `i18n`。locale/switch/dictionary/translated copy 属于宿主或 session UI state，不进入 Snapshot 或 `.ek3d`。
 - 本地 React/Vue proof-loop demo：提供同一可恢复展示场景，以及 Project menu、视口工具组、Scene/Assets/Project 左栏、Object/Environment/Scene 右栏、状态摘要和问题抽屉，用于验证 camera view authoring、selection、transform、material inspector、history、hierarchy、project package 和缺失资产恢复流程。
 

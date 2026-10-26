@@ -1,6 +1,6 @@
 import { renderHook, act } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import { createEditor } from "@ek-aiot/3d-editor-core";
+import { describe, expect, it, vi } from "vitest";
+import { createEditor, type DataRequestExecutor } from "@ek-aiot/3d-editor-core";
 import { createLegacyProofLoopSnapshot } from "../../core/test/fixtures/legacy-proof-loop";
 import { useEditor, useEditorSnapshot } from "../src/hooks/use-editor";
 
@@ -53,6 +53,25 @@ describe("React editor hooks", () => {
     expect(hook.result.current.getDataCredentials?.()).toEqual([
       { ref: "credential-host", label: "Host token", available: true }
     ]);
+    hook.unmount();
+    editor.dispose();
+  });
+
+  it("initializes the host request executor once and keeps the editor stable", () => {
+    const firstExecutor: DataRequestExecutor = async () => ({ status: 200, body: "{}" });
+    const secondExecutor: DataRequestExecutor = async () => ({ status: 500, body: "{}" });
+    const hook = renderHook(({ executor }) => useEditor({ executor }), {
+      initialProps: { executor: firstExecutor }
+    });
+    const editor = hook.result.current;
+    const service = editor.getDataService?.();
+    expect(service?.getState().executorAvailable).toBe(true);
+
+    hook.rerender({ executor: secondExecutor });
+
+    expect(hook.result.current).toBe(editor);
+    expect(hook.result.current.getDataService?.()).toBe(service);
+    expect(hook.result.current.getDataService?.().getState().executorAvailable).toBe(true);
     hook.unmount();
     editor.dispose();
   });

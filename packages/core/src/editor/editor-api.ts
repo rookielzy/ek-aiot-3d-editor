@@ -4,6 +4,7 @@ import type { GlbImportRemapPlan } from "../assets/import-remap";
 import type { WorkbenchAssetImportOptions, WorkbenchAssetImportResult } from "../assets/workspace-import";
 import type { Command, CommandResult } from "../commands/types";
 import type { DataCredentialDescriptor } from "../data-sources/types";
+import type { DataRequestExecutor, EditorDataService } from "../data-sources/service";
 import type { AdvancedEditorOperations, EditorClipboard } from "./operations";
 import type { MarqueeSelectionSubscriber, ReadonlyEditorMarqueeSelectionState } from "./marquee-selection-state";
 import type { EditorSnapState, SnapSubscriber } from "./snap-state";
@@ -21,6 +22,7 @@ export type AssetWorkspaceSubscriber = (version: number) => void;
 export interface EditorOptions {
   snapshot?: SerializedSceneSnapshot;
   credentials?: readonly DataCredentialDescriptor[];
+  executor?: DataRequestExecutor | null;
 }
 
 export interface MountRuntimeOptions extends Omit<EditorRuntimeOptions, "store" | "dispatcher"> {}
@@ -84,6 +86,7 @@ export interface Editor {
   subscribeMarqueeSelection?(subscriber: MarqueeSelectionSubscriber): () => void;
   registerAsset(asset: Parameters<import("../assets/registry").AssetRegistry["register"]>[0]): AssetReference;
   getDataCredentials?(): readonly DataCredentialDescriptor[];
+  getDataService?(): EditorDataService;
   getAssetWorkspacePayloads?(): ProjectAssetPayloadSummary[];
   getAssetWorkspaceVersion?(): number;
   subscribeAssetWorkspace?(subscriber: AssetWorkspaceSubscriber): () => void;

@@ -81,7 +81,7 @@ Snapshot 保存：
 - material overrides
 - environment/background authoring intent
 - light definitions and their light node targets
-- data source connection configuration plus query/binding reference records; host credentials stay in runtime
+- `dataSources` 中的连接配置与 query/binding 引用记录；host credentials、请求草稿、执行器、原始响应和测试参数都留在 runtime
 - presentation state, including authored camera views and the default presentation view pointer
 - imported GLB target identity, owner hierarchy constraints, source descriptors, optional transform overrides, imported material slot descriptors, and JSON-compatible reimport remap metadata
 - authored problem metadata
@@ -96,6 +96,7 @@ Runtime 保存或派生：
 - PMREM render target
 - renderer / camera / scene
 - editor camera navigation, OrbitControls state, camera helper output, and controls target object
+- data service run state: request descriptors, raw response text/JSON, elapsed timing, generations, cancellation, and recoverable request diagnostics
 - resolver output
 - recoverable runtime problem
 - imported target match records linking durable imported nodes to loaded GLB descendants
@@ -107,6 +108,8 @@ Imported GLB target 是 durable target identity，不是 runtime traversal cache
 Authored camera view 是 presentation resource，不是 runtime camera。Runtime capture/apply helper 负责在 plain JSON view data 和 transient `PerspectiveCamera`/controls target 之间转换；只有 camera view commands 会写入 `SceneSnapshot.presentation`。`resolveDefaultPresentationView()` 是 pure resolver，供 viewer startup 或 host preview 找到默认 authored view，但不会挂载 renderer 或启用 editor controls。
 
 Material projection 只消费 durable material assignment、imported slot descriptor 和 runtime target map。Object-level assignment 是 broad pass；material-slot assignment 是 narrower pass，只覆盖匹配 primitive mesh 或 material array index 的 projection-owned clone。Texture loader result、shared texture resource owner、slot resolver result、cloned material 和 projection problem 都属于 runtime projection，不能写回 Snapshot 或 `.ek3d`。
+
+Data service 与 viewport 独立：`editor.getDataService()` 在无 DOM/WebGL 环境也能读取运行态、订阅、执行草稿查询、取消和销毁。请求执行器由宿主通过 `createEditor({ executor })` 注入；core 只产生带 `credentialRef` 的请求描述，不读取或保存秘密，也不使用 global `fetch` 作为回退。运行结果、取消标记、timer 和 generation 都是 runtime-only；草稿修改、连接配置变化、undo/redo 或 dispose 会失效旧 generation，即使宿主执行器忽略 abort，晚到响应也不会提交为当前结果。当前切片的查询测试草稿不写入 `dataSources.queries`。
 
 ## Asset 解析边界
 

@@ -82,6 +82,32 @@ export function EditorPage() {
 
 `credentials` 是 editor 的初始化选项。`useEditor`、`useWorkbench` 和 `EditorWorkbench` 使用首次传入的凭证描述；后续重渲染即使传入新的数组或描述，也不会替换 editor、场景或 history。传入外部 `editor` 时，以该 editor 的凭证描述为准。
 
+### 手动 GET 请求
+
+Data 工作区的 “Test request” 可以在未保存查询的情况下运行一次受控 GET。宿主通过 `executor` 注入真实网络能力；core 只构建请求、校验参数、管理超时/取消与运行态，不会调用 global `fetch`：
+
+```tsx
+import type { DataRequestExecutor } from "@ek-aiot/3d-editor-core";
+
+const executor: DataRequestExecutor = async ({ method, url, headers, signal }) => {
+  const response = await fetch(url, { method, headers, signal });
+  return {
+    status: response.status,
+    contentType: response.headers.get("content-type"),
+    body: await response.text()
+  };
+};
+
+<EditorWorkbench
+  executor={executor}
+  credentials={[{ ref: "warehouse-token", label: "Warehouse token", available: true }]}
+/>
+```
+
+executor 收到 `credentialRef` 而不是秘密；认证头、来源校验、重定向和网络边界由宿主负责。`executor` 与 `credentials` 一样是 editor 初始化选项：`useEditor`/`EditorWorkbench` 不会因后续重渲染替换它们；传入外部 `editor` 时以该 editor 的能力为准。
+
+请求草稿只存在于当前窗口会话。core 的参数解析区分未提供、空字符串、`0` 和 `false`，缺少必填值或类型错误时不会调用 executor；路径只允许相对服务前缀，路径参数和 query 参数分别编码。运行结果包含请求摘要（方法、最终地址、公共头、超时、凭证引用、解析后的参数）、执行时的 `dataSources` 配置修订、HTTP 状态、原始文本、解析后的 JSON、耗时和诊断。响应、测试参数覆盖、取消状态和 timer 都不进入 `Snapshot`、`.ek3d`、command history 或 clipboard；修改草稿、连接配置、undo/redo 或销毁 editor 后，晚到响应不会成为当前结果。没有配置 executor 时，Data 工作区保留连接编辑能力并显示可定位问题，而不是静默请求。
+
 ## 双语 Workbench UI
 
 默认 Workbench UI 内置 `en` 和 `zh-CN` 字典，默认语言是 English，不需要 `i18next`、`react-i18next`、FormatJS 或其他第三方 i18n runtime。宿主只需要继续从 package root 和公开 CSS 子路径导入：

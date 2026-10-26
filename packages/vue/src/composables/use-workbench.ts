@@ -647,7 +647,7 @@ function resolveInitialEditor(options: UseWorkbenchOptions, editorOption: Ref<Ed
   if (options.editor && !isRefOption(options.editor)) {
     return options.editor;
   }
-  return createEditor({ snapshot: options.snapshot, credentials: options.credentials });
+  return createEditor({ snapshot: options.snapshot, credentials: options.credentials, executor: options.executor });
 }
 
 function defaultSnapIncrement(channel: SnapChannel): number {

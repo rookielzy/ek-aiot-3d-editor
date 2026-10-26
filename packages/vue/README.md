@@ -10,6 +10,8 @@ This package is experimental `0.x`. It tracks the current core package contract 
 
 `useWorkbench()` and `EditorWorkbench` compose the primitive pieces into a professional default editor workbench: narrow Scene/Assets/Project navigation and left workspace, central viewport tools, Object/Environment/Scene inspector groups, grouped status chips, and a problem drawer. Project open/export and locale controls live in Project menu; transform, snap, camera, helper, and node commands remain directly reachable over the viewport. Both side panels can be collapsed or resized by pointer or keyboard. Pass a raw host-owned editor when the host owns editor lifetime; the workbench will not dispose it on unmount. If no editor is passed, the shell creates one and disposes it with the workbench. The composable keeps editor/runtime instances out of deep reactivity and exposes shallow snapshot/problem state.
 
+`useEditor({ executor })` and the `executor` prop on `EditorWorkbench` pass a host `DataRequestExecutor` into core. The resulting `editor.getDataService()` is framework-independent and runs session-only manual GET drafts; Vue owns no request UI and performs no network access unless the host executor sends it. Runtime response, timing, cancellation, and diagnostics stay out of the snapshot.
+
 The default command bar uses a private icon layer backed by `@phosphor-icons/vue`. Consumers do not install icon packages, import icon components, or receive icon types through public props; icon rendering remains an implementation detail behind the Vue package surface.
 
 ```vue

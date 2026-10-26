@@ -1422,3 +1422,260 @@ button.ek-workbench__status-chip { cursor: pointer; font: inherit; }
   font: inherit;
   cursor: pointer;
 }
+
+.ek-workbench__request {
+  display: grid;
+  gap: var(--ek-workbench-space-3);
+  padding: var(--ek-workbench-space-3);
+  border: 1px solid var(--ek-workbench-border);
+  border-radius: var(--ek-workbench-radius-sm);
+  background: var(--ek-workbench-surface-inset);
+}
+
+.ek-workbench__request h3,
+.ek-workbench__request h4,
+.ek-workbench__request h5 {
+  margin: 0;
+}
+
+.ek-workbench__request h3 { font-size: 0.85rem; }
+.ek-workbench__request h4 { font-size: 0.78rem; }
+.ek-workbench__request h5 { font-size: 0.72rem; color: var(--ek-workbench-muted-strong); }
+
+.ek-workbench__request .ek-workbench__section-header {
+  align-items: flex-start;
+  gap: var(--ek-workbench-space-2);
+}
+
+.ek-workbench__request button,
+.ek-workbench__request-actions button,
+.ek-workbench__request-parameters > button,
+.ek-workbench__request-parameter > button {
+  justify-self: start;
+  min-height: 2rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--ek-workbench-border);
+  border-radius: var(--ek-workbench-radius-sm);
+  background: var(--ek-workbench-surface-raised);
+  color: var(--ek-workbench-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ek-workbench__request button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.ek-workbench__request-hint,
+.ek-workbench__request-warning,
+.ek-workbench__request-running {
+  margin: 0;
+  font-size: 0.72rem;
+}
+
+.ek-workbench__request-hint { color: var(--ek-workbench-muted); }
+
+.ek-workbench__request-warning {
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--ek-workbench-warning);
+  border-radius: var(--ek-workbench-radius-sm);
+  background: var(--ek-workbench-warning-soft);
+  color: var(--ek-workbench-warning);
+}
+
+.ek-workbench__request-running { color: var(--ek-workbench-info); }
+
+.ek-workbench__request-form {
+  display: grid;
+  gap: var(--ek-workbench-space-2);
+}
+
+.ek-workbench__request-preview {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--ek-workbench-border);
+  border-radius: var(--ek-workbench-radius-sm);
+  background: var(--ek-workbench-surface-raised);
+}
+
+.ek-workbench__request-preview span {
+  color: var(--ek-workbench-muted);
+  font-size: 0.68rem;
+}
+
+.ek-workbench__request-preview code {
+  overflow-wrap: anywhere;
+  font: 0.68rem/1.5 Consolas, "SFMono-Regular", monospace;
+}
+
+.ek-workbench__request-preview small {
+  color: var(--ek-workbench-muted);
+  font-size: 0.7rem;
+}
+
+.ek-workbench__request-parameters {
+  display: grid;
+  gap: var(--ek-workbench-space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ek-workbench__request-parameters > legend {
+  padding: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.ek-workbench__request-parameters > small {
+  color: var(--ek-workbench-muted);
+  font-size: 0.72rem;
+}
+
+.ek-workbench__request-parameter {
+  display: grid;
+  gap: var(--ek-workbench-space-2);
+  padding: 0.55rem;
+  border: 1px solid var(--ek-workbench-border);
+  border-radius: var(--ek-workbench-radius-sm);
+  background: var(--ek-workbench-surface);
+}
+
+.ek-workbench__request-parameter-value {
+  display: grid;
+  gap: var(--ek-workbench-space-1);
+}
+
+.ek-workbench__request-check {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--ek-workbench-muted-strong);
+  font-size: 0.7rem;
+}
+
+.ek-workbench__request-check input {
+  width: 0.95rem;
+  height: 0.95rem;
+  accent-color: var(--ek-workbench-accent);
+}
+
+.ek-workbench__request-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ek-workbench-space-2);
+}
+
+.ek-workbench__request-result {
+  display: grid;
+  gap: var(--ek-workbench-space-2);
+  padding-top: var(--ek-workbench-space-2);
+  border-top: 1px solid var(--ek-workbench-border);
+}
+
+.ek-workbench__request-result-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.ek-workbench__request-result-header small {
+  color: var(--ek-workbench-muted);
+  font-size: 0.68rem;
+}
+
+.ek-workbench__request-status {
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--ek-workbench-border);
+  border-radius: 999px;
+  font-size: 0.68rem;
+  color: var(--ek-workbench-muted-strong);
+}
+
+.ek-workbench__request-status[data-status="success"] {
+  border-color: var(--ek-workbench-success);
+  background: var(--ek-workbench-success-soft);
+  color: var(--ek-workbench-success);
+}
+
+.ek-workbench__request-status[data-status="error"] {
+  border-color: var(--ek-workbench-error);
+  background: var(--ek-workbench-error-soft);
+  color: var(--ek-workbench-error);
+}
+
+.ek-workbench__request-status[data-status="cancelled"] {
+  border-color: var(--ek-workbench-warning);
+  background: var(--ek-workbench-warning-soft);
+  color: var(--ek-workbench-warning);
+}
+
+.ek-workbench__request-problems {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0.5rem 0.5rem 0.5rem 1.4rem;
+  border: 1px solid var(--ek-workbench-error);
+  border-radius: var(--ek-workbench-radius-sm);
+  background: var(--ek-workbench-error-soft);
+  color: var(--ek-workbench-error);
+  font-size: 0.72rem;
+}
+
+.ek-workbench__request-summary,
+.ek-workbench__request-response {
+  display: grid;
+  gap: var(--ek-workbench-space-1);
+}
+
+.ek-workbench__request-summary dl,
+.ek-workbench__request-response dl {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+}
+
+.ek-workbench__request-summary dl > div,
+.ek-workbench__request-response dl > div {
+  display: grid;
+  grid-template-columns: minmax(5rem, auto) minmax(0, 1fr);
+  gap: var(--ek-workbench-space-2);
+  align-items: start;
+}
+
+.ek-workbench__request-summary dt,
+.ek-workbench__request-response dt {
+  color: var(--ek-workbench-muted);
+  font-size: 0.68rem;
+}
+
+.ek-workbench__request-summary dd,
+.ek-workbench__request-response dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.72rem;
+}
+
+.ek-workbench__request-summary code {
+  font: 0.68rem/1.5 Consolas, "SFMono-Regular", monospace;
+}
+
+.ek-workbench__request-summary pre,
+.ek-workbench__request-response pre {
+  margin: 0;
+}
+
+.ek-workbench__request-payload {
+  max-height: 16rem;
+  overflow: auto;
+  padding: 0.5rem;
+  border: 1px solid var(--ek-workbench-border);
+  border-radius: var(--ek-workbench-radius-sm);
+  background: var(--ek-workbench-surface-raised);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 0.68rem/1.55 Consolas, "SFMono-Regular", monospace;
+}

@@ -2,13 +2,18 @@ import {
   createEditor,
   createEmptySnapshot,
   type AssetInput,
+  type DataRequestExecutor,
   type EditorRuntimeOptions
 } from "@ek-aiot/3d-editor-core";
 import modelUrl from "./assets/ToyCar.glb?url";
 import environmentUrl from "./assets/studio.hdr?url";
 
 /** Demo-owned assets and authored state; the packages never call this bootstrap. */
-export async function createShowcaseEditor(loader: EditorRuntimeOptions["loader"], signal: AbortSignal) {
+export async function createShowcaseEditor(
+  loader: EditorRuntimeOptions["loader"],
+  signal: AbortSignal,
+  options: { executor?: DataRequestExecutor } = {}
+) {
   const empty = createEmptySnapshot("toy-car-studio");
   const author = createEditor({ snapshot: { ...empty, scene: { ...empty.scene, name: "Toy Car Studio" } } });
   const model = {
@@ -44,7 +49,7 @@ export async function createShowcaseEditor(loader: EditorRuntimeOptions["loader"
     author.dispatch({ type: "select-object", objectId: null });
     signal.throwIfAborted();
     // Start a clean editing history, retaining payloads outside the durable snapshot.
-    const editor = createEditor({ snapshot: author.serialize() });
+    const editor = createEditor({ snapshot: author.serialize(), executor: options.executor });
     if (imported && imported.ok && modelBytes) editor.registerAsset({ ...editor.getSnapshot().assets[model.id], source: modelBytes });
     if (environmentBytes) editor.registerAsset({ ...environment, source: environmentBytes });
     editor.viewportHelpers?.setVisibility({ grid: true, hover: true, snapFeedback: true });

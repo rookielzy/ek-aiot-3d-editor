@@ -127,6 +127,7 @@ const instance = getCurrentInstance();
 const workbench = useWorkbench({
   editor: toRef(props, "editor"),
   snapshot: props.snapshot,
+  executor: props.executor,
   loader: toRef(props, "loader"),
   locale: toRef(props, "locale"),
   defaultLocale: props.defaultLocale,

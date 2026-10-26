@@ -30,3 +30,21 @@ Asset authorship, source, modifications, and CC0 notices are recorded in
 [SHOWCASE-LICENSES.md](public/SHOWCASE-LICENSES.md). Shared source assets live in
 `../showcase/assets` and are bundled locally; the demo does not depend on a
 third-party asset host at runtime.
+
+## Data source request fixture
+
+The dev server exposes a same-origin JSON fixture at
+`/__fixtures__/http-data-source/*`; it echoes the path, query, and an
+`X-Fixture-Probe` header from the request. The demo host already provides a
+browser fetch executor. To verify a real manual GET:
+
+1. Open **Data**, create a connection with service URL
+   `http://localhost:5173/__fixtures__/http-data-source` (use the actual dev
+   origin), and add the public header `X-Fixture-Probe: demo`.
+2. Save, choose **Test request**, enter `/pumps/{areaId}`, add a string
+   `areaId` parameter with default `A`, and run.
+3. The response echoes the received path/query/header. Raw responses, test
+   overrides, and diagnostics stay in the browser session and are never written
+   into the scene snapshot or exported project.
+
+The fixture is dev-only, same-origin, and never contacts an external service.

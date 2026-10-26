@@ -523,6 +523,8 @@ Validation 规则：
 
 Host credential descriptors（`ref`、`label`、`available`）通过 `createEditor({ credentials })` 注入，只存在运行态；它们不会写入 Snapshot、项目包或 clipboard。React 数据工作区的连接列表由 `buildDataSourcesWorkspaceModel` 从 Snapshot 与 host credentials 派生。
 
+当前切片的查询测试是窗口草稿，不写入 `dataSources.queries`。`buildDataGetRequest()` 只接受相对于连接 `baseUrl` 的路径，拒绝绝对地址、协议相对地址、编码穿越和带 query/fragment 的路径；参数定义区分 `string`、finite `number` 和 `boolean`，默认值与临时覆盖分别解析，未提供、`""`、`0`、`false` 不会互相替代。宿主通过 `createEditor({ executor })` 注入请求执行器，收到 `method`、最终 URL、非秘密 headers、`credentialRef`、`timeoutMs` 和 `AbortSignal`，返回状态、允许的响应头、content type 与文本 body。请求摘要、原始响应、JSON、耗时、取消状态和 generation 只属于 editor session，不进入 Snapshot、项目包、`.ek3d` 或 clipboard；没有 executor 时返回结构化运行态问题，不会回退到浏览器 `fetch`。
+
 ## Command 与 Snapshot 的关系
 
 持久化变更只能通过 command 进入 Snapshot：

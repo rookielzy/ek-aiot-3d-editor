@@ -28,13 +28,13 @@ Decisions: D04, D05, D06, D13
 
 ## Acceptance criteria
 
-- [ ] 单次执行可在无 DOM/WebGL 的 core host 完成；没有 executor 时返回可定位问题，不偷偷 fetch。
-- [ ] 有效参数严格区分空值、0、false 与未提供；缺参/类型错误不调用 executor。
-- [ ] 路径/参数正确编码，不能用绝对地址、协议相对地址或前缀穿越绕过连接；摘要不含认证秘密。
-- [ ] 默认参数 A、临时测试 B 只影响本次请求，默认值及将来的对象覆盖保持不变。
-- [ ] 运行时能取消；改草稿或销毁后的旧响应不标为当前已验证结果，即使 executor 不配合 abort。
-- [ ] 响应状态、文本/JSON、耗时与诊断仅在当前会话保留；未映射查询此时作为窗口草稿，不写半成品 durable query。
-- [ ] React 示例/受控宿主通过本机同源 HTTP 夹具证明请求确实到达服务；不访问外网。
+- [x] 单次执行可在无 DOM/WebGL 的 core host 完成；没有 executor 时返回可定位问题，不偷偷 fetch。
+- [x] 有效参数严格区分空值、0、false 与未提供；缺参/类型错误不调用 executor。
+- [x] 路径/参数正确编码，不能用绝对地址、协议相对地址或前缀穿越绕过连接；摘要不含认证秘密。
+- [x] 默认参数 A、临时测试 B 只影响本次请求，默认值及将来的对象覆盖保持不变。
+- [x] 运行时能取消；改草稿或销毁后的旧响应不标为当前已验证结果，即使 executor 不配合 abort。
+- [x] 响应状态、文本/JSON、耗时与诊断仅在当前会话保留；未映射查询此时作为窗口草稿，不写半成品 durable query。
+- [x] React 示例/受控宿主通过本机同源 HTTP 夹具证明请求确实到达服务；不访问外网。
 
 ## Testing
 
@@ -51,3 +51,27 @@ Decisions: D04, D05, D06, D13
 ## Comments
 
 2026-10-26：按用户认可的原型流程整理为正式规划任务。Status 表示定义就绪，不代表实现、验证或用户已授权开始执行。
+
+2026-10-26：实现完成。core 新增 `buildDataGetRequest()`/`resolveDataQueryParameters()` 与 `editor.getDataService()`：宿主 executor/credential 描述接入、严格类型参数、路径/query 编码与穿越防护、timeout、取消、运行 generation、配置 revision 与独立运行态订阅；没有 executor 或凭证不可用时只返回结构化问题，不调用 `fetch`。React Data 工作区新增双语手动 GET 测试器，分离默认参数与临时测试值，展示请求摘要、可见配置修订、状态/内容类型、原始与 JSON 响应、耗时和诊断；响应、覆盖值、取消状态和 timer 均不进入 Snapshot/history。Vue 保持数据 UI 不变，仅让 `useEditor`/`EditorWorkbench` 透传 executor。新增 dev-only 同源 Vite fixture，浏览器 smoke 通过真实 HTTP 验证路径、query 和公共头到达服务。
+
+代码审查后修复：结果区显示配置 revision 并补充断言；浏览器 smoke 固定 `locale="en"`，并在 zh-CN proof loop 之后重跑验证顺序隔离；修正 architecture 文档把运行态误列在 Snapshot 保存项；补充 `docs/README.md` 能力概览和 Vue 集成文档；移除未使用的公开 helper 与字典键，合并重复参数定义校验和共享 run 类型，清理测试中的同义反复与重复构建；请求 payload CSS class 改名以继续满足 package CSS 边界守卫。
+
+实际验证：
+
+- `pnpm --filter @ek-aiot/3d-editor-core build`：通过。
+- `pnpm --filter @ek-aiot/3d-editor-react build`：通过。
+- `pnpm --filter @ek-aiot/3d-editor-vue build`：通过。
+- `pnpm --filter @ek-aiot/3d-editor-core typecheck`：通过。
+- `pnpm --filter @ek-aiot/3d-editor-react typecheck`：通过。
+- `pnpm --filter @ek-aiot/3d-editor-vue typecheck`：通过。
+- `pnpm --filter @ek-aiot/react-proof-loop build`：通过（example typecheck + Vite build；仅既有 chunk size warning）。
+- `pnpm vitest run packages/core/src/data-sources packages/core/src/public-api.test.ts`：55 tests passed。
+- `pnpm vitest run packages/react/test/workbench-http-query.test.tsx packages/react/test/workbench-i18n-parity.test.ts packages/react/test/i18n-string-audit.test.ts packages/react/test/build-config.test.ts`：18 tests passed。
+- `pnpm exec vitest run --config vitest.browser.config.ts packages/react/test/proof-loop-demo.browser.test.tsx packages/react/test/http-data-source.browser.test.tsx`：6 test files / 69 tests passed（Chromium 三个 viewport 实例，先 zh-CN proof loop 后同源 HTTP smoke）。
+- `pnpm test`：122 test files / 1048 tests passed。
+- `pnpm test:browser`：21 test files / 111 tests passed（Chromium 三个 viewport 实例）。
+- `git diff --check`：通过；仅 Git 对既有 CRLF/LF 文件给出提示。
+
+测试覆盖：core 的草稿构建、参数默认/覆盖与严格类型、编码与路径逃逸表、摘要秘密隔离；数据服务的 executor/凭证守卫、超时中止、取消与晚到响应、invalidate/dispose/config revision、HTTP 与非法响应、Snapshot/history 不变；React 的临时覆盖隔离、缺 executor 不联网、缺参/类型错误不调用、取消、改草稿清空旧结果、焦点恢复、双语；浏览器 smoke 断言同源 fixture 实际收到编码路径/query/头且响应不污染 Snapshot。
+
+环境差异：Windows 下根 `pnpm typecheck` 的 `pnpm -r --filter './packages/*'` 未匹配包（既有问题），因此按明确包名完成类型检查与构建。浏览器全量测试和 jsdom 全量测试未并行运行，避免既有软件 GPU/超时干扰。
