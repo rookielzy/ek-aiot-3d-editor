@@ -136,6 +136,7 @@ describe("durable object bindings", () => {
     [{ details: [{ key: "missing", label: null, precision: null }] }, "detail-unknown"],
     [{ details: [{ key: "temperature", label: null, precision: 7 }] }, "detail-precision"],
     [{ details: [{ key: "temperature", label: null, precision: 1.5 }] }, "detail-precision"],
+    [{ details: [{ key: "running", label: null, precision: 1 }] }, "detail-precision"],
     [{ parameterOverrides: { missing: "x" } }, "parameter-unknown"],
     [{ parameterOverrides: { areaId: 1 } }, "parameter-type"],
     [{ parameterOverrides: { areaId: null as never } }, "parameter-type"],

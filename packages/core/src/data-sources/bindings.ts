@@ -384,6 +384,15 @@ function normalizeDetails(
     }
 
     let precision: number | null = null;
+    if (property.type !== "number" && entry.precision !== undefined && entry.precision !== null) {
+      problems.push({
+        field: "details",
+        code: "detail-precision",
+        propertyKey: key,
+        message: `Detail field ${key} precision applies only to numeric properties.`
+      });
+      continue;
+    }
     if (entry.precision !== undefined && entry.precision !== null) {
       if (
         typeof entry.precision !== "number" ||
