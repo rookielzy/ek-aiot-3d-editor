@@ -172,6 +172,10 @@ export function DataQueryEditor({
   const [sampleError, setSampleError] = useState<WorkbenchMessageKey | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
   const [discardOpen, setDiscardOpen] = useState(false);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const discardRef = useRef<HTMLButtonElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const keepEditingRef = useRef<HTMLButtonElement>(null);
   const t = context.i18n.t;
@@ -204,7 +208,10 @@ export function DataQueryEditor({
   const mapping = mappingBuild.problems.length === 0 && mappingValidation?.ok
     ? mappingValidation.value ?? null
     : null;
-  const signature = useMemo(() => queryDraftSignature(form, overrides), [form, overrides]);
+  const signature = useMemo(
+    () => JSON.stringify([connection, queryDraftSignature(form, overrides)]),
+    [connection, form, overrides]
+  );
   const sampleStale = sample !== null && sample.signature !== signature;
   const preview = useMemo(
     () => sample && mapping
@@ -235,13 +242,24 @@ export function DataQueryEditor({
   }, [service]);
 
   useEffect(() => {
-    nameRef.current?.focus();
+    const dialog = dialogRef.current;
+    if (!dialog || dialog.open) {
+      return;
+    }
+    if (typeof dialog.showModal === "function") {
+      dialog.showModal();
+      return;
+    }
+    // Nonvisual DOM hosts do not implement the modal dialog API.
+    dialog.setAttribute("open", "");
   }, []);
 
   useEffect(() => {
     if (discardOpen) {
       keepEditingRef.current?.focus();
+      return;
     }
+    nameRef.current?.focus();
   }, [discardOpen]);
 
   function updateForm(patch: Partial<QueryFormState>): void {
@@ -338,7 +356,6 @@ export function DataQueryEditor({
     service.invalidateQueryRuns();
     setSampleError(null);
     setRunId(null);
-    const requestSignature = queryDraftSignature(form, overrides);
     const requestOverrides = overrides;
     const usedOverrides = hasQueryOverrides(form.parameters);
     const handle = service.executeQueryDraft({
@@ -365,7 +382,7 @@ export function DataQueryEditor({
       body,
       receivedAt: result.response.receivedAt,
       executionId: result.id,
-      signature: requestSignature,
+      signature,
       parameters: result.request?.parameters ?? resolvedParametersForForm(form, requestOverrides),
       usedOverrides,
       status: result.response.status
@@ -410,6 +427,14 @@ export function DataQueryEditor({
     onClose();
   }
 
+  function cancelDialog(): void {
+    if (discardOpen) {
+      setDiscardOpen(false);
+      return;
+    }
+    requestClose();
+  }
+
   function discardChanges(): void {
     setDiscardOpen(false);
     onClose();
@@ -448,15 +473,42 @@ export function DataQueryEditor({
     : t("dataSources.queryEditor.newTitle", { connection: connection?.name ?? "" });
 
   return (
-    <section
+    <dialog
+      ref={dialogRef}
       className="ek-workbench__query-editor"
       role="dialog"
       aria-modal="true"
       aria-label={t("dataSources.queryEditor.label")}
+      onKeyDownCapture={(event) => {
+        event.stopPropagation();
+        if (event.key === "Escape") {
+          event.preventDefault();
+          cancelDialog();
+          return;
+        }
+        if (event.key !== "Tab") {
+          return;
+        }
+        const first = discardOpen ? keepEditingRef.current : closeRef.current;
+        const last = discardOpen ? discardRef.current : cancelRef.current ?? closeRef.current;
+        if (event.shiftKey && event.target === first) {
+          event.preventDefault();
+          last?.focus();
+          return;
+        }
+        if (!event.shiftKey && event.target === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }}
+      onCancel={(event) => {
+        event.preventDefault();
+        cancelDialog();
+      }}
     >
-      <div className="ek-workbench__query-editor-header">
+      <div className="ek-workbench__query-editor-header" inert={discardOpen ? true : undefined}>
         <h3>{title}</h3>
-        <button type="button" onClick={requestClose}>{t("dataSources.queryEditor.close")}</button>
+        <button ref={closeRef} type="button" onClick={requestClose}>{t("dataSources.queryEditor.close")}</button>
       </div>
 
       {!connection ? (
@@ -464,7 +516,7 @@ export function DataQueryEditor({
           {t("dataSources.queryEditor.connectionMissing")}
         </p>
       ) : (
-        <div className="ek-workbench__query-editor-form">
+        <div className="ek-workbench__query-editor-form" inert={discardOpen ? true : undefined}>
           <label className="ek-workbench__field">
             <span>{t("dataSources.queryEditor.name")}</span>
             <input
@@ -800,7 +852,7 @@ export function DataQueryEditor({
 
           <div className="ek-workbench__connection-form-actions">
             <button type="button" onClick={save}>{t("dataSources.queryEditor.save")}</button>
-            <button type="button" onClick={requestClose}>{t("dataSources.queryEditor.cancel")}</button>
+            <button ref={cancelRef} type="button" onClick={requestClose}>{t("dataSources.queryEditor.cancel")}</button>
           </div>
         </div>
       )}
@@ -817,9 +869,8 @@ export function DataQueryEditor({
           <div className="ek-workbench__connection-discard-actions">
             <button ref={keepEditingRef} type="button" onClick={() => {
               setDiscardOpen(false);
-              nameRef.current?.focus();
             }}>{t("dataSources.queryEditor.discard.keep")}</button>
-            <button type="button" onClick={discardChanges}>{t("dataSources.queryEditor.discard.confirm")}</button>
+            <button ref={discardRef} type="button" onClick={discardChanges}>{t("dataSources.queryEditor.discard.confirm")}</button>
           </div>
         </div>
       ) : null}
@@ -829,7 +880,7 @@ export function DataQueryEditor({
       <datalist id={suggestionListId}>
         {suggestions.map((suggestion) => <option key={suggestion} value={suggestion} />)}
       </datalist>
-    </section>
+    </dialog>
   );
 }
 

@@ -92,3 +92,16 @@ React Data 工作区新增双语查询配置对话框：请求与保存分离，
 - 从 `packages/react` 运行 `pnpm typecheck`：通过。
 - `git diff --check`：通过；新增测试和 changeset 另经 `git diff --no-index --check` 检查通过。
 - 根目录 `bun run check` 仍因未安装 Bun 无法执行，使用仓库现有 pnpm/Vitest 命令验证。
+
+2026-10-27：修复完整 review 的两个 P2 与一个 P3。样本签名纳入所属连接配置，连接地址、认证或请求头改变后保留预览并显示过期标记；无关连接变更不影响样本，重新测试后恢复当前状态。查询配置改用原生 modal dialog，使整个工作区背景不可交互；补齐首尾 Tab 循环、后台快捷键隔离、Escape 与放弃确认的焦点管理，关闭或保存后恢复原列表焦点。schema 文档更正为已保存查询与映射属于 durable DataQuery，只有未保存草稿和执行样本属于 session。新增四个连接样本 DOM 回归用例，以及真实浏览器键盘流程测试。
+
+本轮完整 review 修复验证（测试均从 `packages/react` 运行）：
+
+- 修复前运行 `pnpm exec vitest run --root ../.. packages/react/test/workbench-query-mapping-regressions.test.tsx --maxWorkers 1 -t "connection"`：新增四个连接回归用例全部失败，复现样本未标记过期的问题。
+- 修复前运行 `pnpm exec vitest run --root ../.. --config vitest.browser.config.ts packages/react/test/query-editor-focus.browser.test.tsx --project chromium`：Tab 从 Cancel 移到背景 Resize 按钮，复现焦点逃逸；修复后同命令通过，并覆盖下拉框 Escape、Tab/Shift+Tab、放弃确认、后台快捷键、关闭/保存焦点恢复与保存历史。
+- `pnpm exec vitest run --root ../.. packages/react/test/workbench-query-mapping-regressions.test.tsx packages/react/test/workbench-query-mapping.test.tsx --maxWorkers 1`：2 files / 16 tests passed。
+- `pnpm exec vitest run --root ../.. --config vitest.browser.config.ts`：三个 Chromium viewport 共 24 files / 114 tests passed，包含新增键盘用例在三个视口的运行。
+- `pnpm exec vitest run --root ../.. --maxWorkers 2`：124 files / 1125 tests passed；另有两个现有用例超过 10000ms：Inspector 的 independent environment sources 用例及 query mapping 的 runs a real request 用例。串行复跑这两个完整文件为 44 passed / 2 timed out，未修改测试时限或无关测试。
+- 使用临时 Vite transform 配置加载 `HEAD` 中的查询组件、面板和 CSS，仅运行上述两个超时用例：2 passed。删除临时配置后，运行 `pnpm exec vitest run --root ../.. packages/react/test/inspector.test.tsx packages/react/test/workbench-query-mapping.test.tsx --maxWorkers 1 -t "runs a real request|retains independent environment sources" --reporter verbose`：修复后同样 2 passed / 44 skipped，耗时分别 3560ms、2065ms，保留 10000ms 限制。单独对照未复现超时，但全量结果仍按上项记录。
+- `pnpm typecheck`：通过；`git diff --check`：通过。新增浏览器测试和 changeset 的 `git diff --no-index --check` 未报告空白错误，仅有 CRLF/LF 提示（新增文件差异退出码为 1）。
+- 根目录 `bun run check` 因未安装 Bun 无法执行，且仓库未配置该脚本；使用现有 pnpm/Vitest 验证。本轮临时测试配置、调试日志及失败截图已清理，保留原有未跟踪截图与其他工作区改动。

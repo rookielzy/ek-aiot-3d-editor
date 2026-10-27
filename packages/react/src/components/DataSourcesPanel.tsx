@@ -551,9 +551,6 @@ function DataSourcesSession({ context }: { context: ResolvedWorkbenchContext }) 
         </ul>
       )}
       {queryEditor ? (
-        <div className="ek-workbench__query-editor-backdrop" aria-hidden="true" />
-      ) : null}
-      {queryEditor ? (
         <DataQueryEditor
           key={`${queryEditor.connectionId}:${queryEditor.queryId ?? "new"}`}
           context={context}

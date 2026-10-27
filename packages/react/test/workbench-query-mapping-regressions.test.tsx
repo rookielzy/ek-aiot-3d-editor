@@ -90,6 +90,68 @@ describe("React query mapping regressions", () => {
     expect(editor.getHistoryState()).toEqual(history);
   });
 
+  it.each([
+    { label: "address", patch: { baseUrl: "https://changed.example.test" } },
+    { label: "authentication", patch: { auth: { kind: "bearer", credentialRef: "changed-credential" } } },
+    { label: "headers", patch: { headers: { "X-Area": "changed" } } }
+  ] as const)("marks tested samples stale when the connection $label changes", async ({ patch }) => {
+    const editor = createQueryEditor({ executor: () => ({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ data: { items: [{ id: "001", tempRaw: 426 }] } })
+    }) });
+    render(<EditorWorkbench editor={editor} locale="en" rendererFactory={fakeRenderer} rightPanel={() => null} />);
+    openQuery("Query");
+    fireEvent.click(screen.getByRole("button", { name: "Run request" }));
+    await screen.findByText("Tested with a real response");
+    expect(screen.queryByText("Draft changed after this sample")).toBeNull();
+    const history = editor.getHistoryState().undoCount;
+
+    act(() => {
+      expect(editor.dispatch({ type: "update-data-connection", connectionId: "connection-a", connection: {
+        ...editor.getSnapshot().dataSources.connections["connection-a"], ...patch
+      } }).ok).toBe(true);
+    });
+
+    expect(screen.getByText("Draft changed after this sample")).toBeTruthy();
+    expect(screen.getByLabelText("Device 001").textContent).toContain("426");
+    expect(editor.getHistoryState().undoCount).toBe(history + 1);
+    expect(JSON.stringify(editor.serialize())).not.toContain('"tempRaw":426');
+  });
+
+  it("keeps samples current for unrelated connection edits and clears staleness after retesting", async () => {
+    const urls: string[] = [];
+    const editor = createQueryEditor({ executor: (request) => {
+      urls.push(request.url);
+      return { status: 200, contentType: "application/json", body: '{"data":{"items":[{"id":"001","tempRaw":426}]}}' };
+    } });
+    expect(editor.dispatch({ type: "create-data-connection", connection: {
+      ...editor.getSnapshot().dataSources.connections["connection-a"], id: "connection-b", name: "Other API"
+    } }).ok).toBe(true);
+    render(<EditorWorkbench editor={editor} locale="en" rendererFactory={fakeRenderer} rightPanel={() => null} />);
+    openQuery("Query");
+    fireEvent.click(screen.getByRole("button", { name: "Run request" }));
+    await screen.findByText("Tested with a real response");
+
+    act(() => {
+      expect(editor.dispatch({ type: "update-data-connection", connectionId: "connection-b", connection: {
+        ...editor.getSnapshot().dataSources.connections["connection-b"], baseUrl: "https://other.example.test"
+      } }).ok).toBe(true);
+    });
+    expect(screen.queryByText("Draft changed after this sample")).toBeNull();
+
+    act(() => {
+      expect(editor.dispatch({ type: "update-data-connection", connectionId: "connection-a", connection: {
+        ...editor.getSnapshot().dataSources.connections["connection-a"], baseUrl: "https://changed.example.test"
+      } }).ok).toBe(true);
+    });
+    expect(screen.getByText("Draft changed after this sample")).toBeTruthy();
+    const history = editor.getHistoryState();
+    fireEvent.click(screen.getByRole("button", { name: "Run request" }));
+    await waitFor(() => expect(screen.queryByText("Draft changed after this sample")).toBeNull());
+    expect(urls).toEqual(["https://api.example.test/Query", "https://changed.example.test/Query"]);
+    expect(editor.getHistoryState()).toEqual(history);
+  });
+
   it("resets the query session when the host replaces an editor with matching IDs", async () => {
     const first = createQueryEditor({ name: "First", executor: () => ({
       status: 200,

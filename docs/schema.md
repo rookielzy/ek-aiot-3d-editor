@@ -592,7 +592,7 @@ Validation 规则：
 
 Host credential descriptors（`ref`、`label`、`available`）通过 `createEditor({ credentials })` 注入，只存在运行态；它们不会写入 Snapshot、项目包或 clipboard。React 数据工作区的连接列表由 `buildDataSourcesWorkspaceModel` 从 Snapshot 与 host credentials 派生。
 
-查询配置、示例 JSON、请求结果、临时参数覆盖、原始响应、JSON、耗时、取消状态和 generation 只属于 editor session，不进入 Snapshot、项目包、`.ek3d` 或 clipboard。`buildDataGetRequest()` 只接受相对于连接 `baseUrl` 的路径，拒绝绝对地址、协议相对地址、编码穿越和带 query/fragment 的路径；参数定义区分 `string`、finite `number` 和 `boolean`，默认值与临时覆盖分别解析，未提供、`""`、`0`、`false` 不会互相替代。宿主通过 `createEditor({ executor })` 注入请求执行器，收到 `method`、最终 URL、非秘密 headers、`credentialRef`、`timeoutMs` 和 `AbortSignal`，返回状态、允许的响应头、content type 与文本 body。没有 executor 时返回结构化运行态问题，不会回退到浏览器 `fetch`。`mapDataQueryBody()` 从映射配置和内存中的响应 body 产生带 `connectionId`、`queryId`、`entityId`、属性值、`observedAt`、`receivedAt` 与 `sourceQuality` 的标准样本；这些样本不写入 Snapshot。
+已保存的查询配置与映射属于 durable `DataQuery`，通过 command 写入 Snapshot，并随项目包和 `.ek3d` 保存。未保存的请求/映射草稿、示例 JSON、请求结果、临时参数覆盖、原始响应及其 JSON、耗时、取消状态和 generation 只属于 editor session，不进入 Snapshot、项目包、`.ek3d` 或 clipboard。`buildDataGetRequest()` 只接受相对于连接 `baseUrl` 的路径，拒绝绝对地址、协议相对地址、编码穿越和带 query/fragment 的路径；参数定义区分 `string`、finite `number` 和 `boolean`，默认值与临时覆盖分别解析，未提供、`""`、`0`、`false` 不会互相替代。宿主通过 `createEditor({ executor })` 注入请求执行器，收到 `method`、最终 URL、非秘密 headers、`credentialRef`、`timeoutMs` 和 `AbortSignal`，返回状态、允许的响应头、content type 与文本 body。没有 executor 时返回结构化运行态问题，不会回退到浏览器 `fetch`。`mapDataQueryBody()` 从映射配置和内存中的响应 body 产生带 `connectionId`、`queryId`、`entityId`、属性值、`observedAt`、`receivedAt` 与 `sourceQuality` 的标准样本；这些样本不写入 Snapshot。
 
 ## Command 与 Snapshot 的关系
 

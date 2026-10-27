@@ -1753,10 +1753,7 @@ button.ek-workbench__status-chip { cursor: pointer; font: inherit; }
   opacity: 0.55;
 }
 
-.ek-workbench__query-editor-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 39;
+.ek-workbench__query-editor::backdrop {
   background: #10182826;
 }
 
@@ -1766,9 +1763,13 @@ button.ek-workbench__status-chip { cursor: pointer; font: inherit; }
   top: max(3.5rem, 6vh);
   left: max(1.5rem, 5vw);
   right: max(1.5rem, 5vw);
+  bottom: auto;
+  width: auto;
   max-width: 68rem;
   max-height: min(88vh, 54rem);
   margin-inline: auto;
+  margin-block: 0;
+  color: var(--ek-workbench-text);
   overflow: auto;
   padding: var(--ek-workbench-space-4);
   border: 1px solid var(--ek-workbench-border-strong, var(--ek-workbench-border));
