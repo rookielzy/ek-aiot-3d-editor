@@ -93,8 +93,6 @@ const EMPTY_SERVICE_STATE: DataServiceState = Object.freeze({
   run: null
 });
 
-const MAPPING_PROBLEM_MESSAGE_KEYS = DATA_MAPPING_PROBLEM_MESSAGE_KEYS;
-
 const QUALITY_MESSAGE_KEYS = {
   good: "dataSources.mapping.quality.good",
   uncertain: "dataSources.mapping.quality.uncertain",
@@ -1445,7 +1443,7 @@ function MappingProblems({
     <ul className="ek-workbench__request-problems">
       {problems.map((problem, index) => (
         <li key={`${problem.code}-${problem.propertyKey ?? ""}-${index}`}>
-          {i18n.t(MAPPING_PROBLEM_MESSAGE_KEYS[problem.code], {
+          {i18n.t(DATA_MAPPING_PROBLEM_MESSAGE_KEYS[problem.code], {
             propertyKey: problem.propertyKey ?? "",
             entityId: problem.entityId ?? ""
           } satisfies WorkbenchMessageValues)}
