@@ -139,6 +139,8 @@ export interface DataQueryInput extends DataQueryDefinition {
 export type DataQueryField = "name" | "connection" | "path" | "parameters" | "mapping" | "query";
 
 export type DataQueryDefinitionProblemCode =
+  | "binding-parameter-in-use"
+  | "binding-property-in-use"
   | "command-failed"
   | "connection-not-found"
   | "mapping-invalid"
@@ -168,12 +170,76 @@ export interface DataQueryValidationResult {
 }
 
 /**
- * Reference portion of an object binding. Binding authoring extends this
- * record; bindings are keyed by object NodeId.
+ * Ordered detail entry for an object binding. Null label and precision fall
+ * back to the mapped property definition and the display default.
+ */
+export interface DataBindingDetailField {
+  key: string;
+  label: string | null;
+  precision: number | null;
+}
+
+/**
+ * Reference and authoring portion of an object binding. Bindings are keyed by
+ * object NodeId; one object owns at most one query context.
  */
 export interface DataObjectBinding {
   objectNodeId: string;
   queryId: DataQueryId;
+  parameterOverrides: Readonly<Record<string, DataParameterValue>>;
+  deviceId: string;
+  enabled: boolean;
+  details: readonly DataBindingDetailField[];
+}
+
+export interface DataObjectBindingInput {
+  objectNodeId: string;
+  queryId: DataQueryId;
+  parameterOverrides?: DataQueryParameterOverrides | null;
+  deviceId: string;
+  enabled?: boolean;
+  details?: readonly DataBindingDetailFieldInput[] | null;
+}
+
+export interface DataBindingDetailFieldInput {
+  key: string;
+  label?: string | null;
+  precision?: number | null;
+}
+
+export type DataBindingProblemField = "object" | "query" | "parameters" | "device" | "details" | "binding";
+
+export type DataBindingProblemCode =
+  | "binding-invalid"
+  | "binding-not-found"
+  | "command-failed"
+  | "device-required"
+  | "detail-duplicate"
+  | "detail-precision"
+  | "detail-required"
+  | "detail-unknown"
+  | "parameter-missing"
+  | "parameter-type"
+  | "parameter-unknown"
+  | "query-not-found"
+  | "target-imported"
+  | "target-not-found"
+  | "target-unsupported";
+
+export interface DataBindingProblem {
+  field: DataBindingProblemField;
+  code: DataBindingProblemCode;
+  message: string;
+  parameterName?: string;
+  propertyKey?: string;
+  ownerObjectId?: string;
+  targetKind?: string;
+}
+
+export interface DataObjectBindingValidationResult {
+  ok: boolean;
+  problems: DataBindingProblem[];
+  value?: DataObjectBinding;
 }
 
 export interface SceneDataSources {

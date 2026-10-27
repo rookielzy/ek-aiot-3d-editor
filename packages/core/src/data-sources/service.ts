@@ -7,7 +7,15 @@ import {
   type DataQueryProblem,
   type DataRequestSummary
 } from "./query";
-import type { DataCredentialDescriptor } from "./types";
+import { resolveDataObjectBindingParameters } from "./bindings";
+import { mapDataQueryBody } from "./mapping";
+import type {
+  DataObjectDataState,
+  DataObjectDataSubscriber,
+  DataObjectRuntimeProblem,
+  DataObjectRuntimeState
+} from "./object-data";
+import type { DataCredentialDescriptor, DataObjectBinding, SceneDataSources } from "./types";
 
 export interface DataRequestDescriptor {
   method: "GET";
@@ -92,6 +100,11 @@ export interface EditorDataService {
   executeQueryDraft(draft: DataQueryDraft, options?: DataQueryDraftExecutionOptions): DataQueryRunHandle;
   cancelQueryRun(runId: string): boolean;
   invalidateQueryRuns(): void;
+  getObjectDataState(): DataObjectDataState;
+  subscribeObjectData(subscriber: DataObjectDataSubscriber): () => void;
+  startPreview(): Promise<void>;
+  stopPreview(): void;
+  refreshPreview(): Promise<void>;
   getCredentials(): readonly DataCredentialDescriptor[];
   readonly disposed: boolean;
   dispose(): void;
@@ -116,6 +129,13 @@ interface ActiveRun {
   resolve(result: DataQueryRunResult): void;
 }
 
+interface BindingRun {
+  objectNodeId: string;
+  controller: AbortController;
+  timer: ReturnType<typeof setTimeout> | null;
+  settled: boolean;
+}
+
 interface RunOutcome {
   status: Exclude<DataQueryRunStatus, "running" | "stale">;
   request?: DataRequestSummary | null;
@@ -128,25 +148,37 @@ export class CoreDataService implements EditorDataService {
   readonly #executor: DataRequestExecutor | null;
   readonly #credentials: readonly DataCredentialDescriptor[];
   readonly #subscribers = new Set<DataServiceSubscriber>();
+  readonly #objectSubscribers = new Set<DataObjectDataSubscriber>();
   readonly #unsubscribeSnapshot: (() => void) | null;
   #state: DataServiceState;
+  #objectState: DataObjectDataState;
+  #objectStates: Record<string, DataObjectRuntimeState> = {};
+  #dataSources: SceneDataSources;
   #dataSourcesKey: string;
   #runConnectionKey: string | undefined;
   #configRevision = 0;
   #current: ActiveRun | null = null;
   #nextRunId = 0;
+  #previewEnabled = false;
+  #previewRefreshing = false;
+  #previewLastRefreshAt: number | null = null;
+  #previewGeneration = 0;
+  #previewRefresh: Promise<void> | null = null;
+  readonly #bindingRuns = new Map<string, BindingRun>();
   #disposed = false;
 
   constructor(options: CoreDataServiceOptions) {
     this.#getSnapshot = options.getSnapshot;
     this.#executor = options.executor ?? null;
     this.#credentials = Object.freeze([...(options.credentials ?? [])]);
+    this.#dataSources = this.#getSnapshot().dataSources;
     this.#dataSourcesKey = dataSourcesKey(this.#getSnapshot());
     this.#state = Object.freeze({
       executorAvailable: this.#executor !== null,
       configRevision: 0,
       run: null
     });
+    this.#objectState = freezeObjectDataState(false, false, null, {});
     this.#unsubscribeSnapshot = options.subscribeSnapshot?.(() => this.#refreshConfigRevision()) ?? null;
   }
 
@@ -249,19 +281,440 @@ export class CoreDataService implements EditorDataService {
     }
   }
 
+  getObjectDataState(): DataObjectDataState {
+    return this.#objectState;
+  }
+
+  subscribeObjectData(subscriber: DataObjectDataSubscriber): () => void {
+    if (this.#disposed) {
+      return () => {};
+    }
+    this.#objectSubscribers.add(subscriber);
+    this.#notifyObjectSubscriber(subscriber);
+    return () => {
+      this.#objectSubscribers.delete(subscriber);
+    };
+  }
+
+  startPreview(): Promise<void> {
+    if (this.#disposed) {
+      return Promise.resolve();
+    }
+    if (!this.#previewEnabled) {
+      this.#previewEnabled = true;
+      this.#publishObjectState();
+    }
+    return this.refreshPreview();
+  }
+
+  stopPreview(): void {
+    if (this.#disposed) {
+      return;
+    }
+    this.#previewEnabled = false;
+    this.#previewRefreshing = false;
+    this.#previewLastRefreshAt = null;
+    this.#previewRefresh = null;
+    this.#previewGeneration += 1;
+    this.#cancelBindingRuns();
+    this.#objectStates = {};
+    this.#publishObjectState();
+  }
+
+  refreshPreview(): Promise<void> {
+    if (this.#disposed || !this.#previewEnabled) {
+      return Promise.resolve();
+    }
+    if (this.#previewRefresh) {
+      return this.#previewRefresh;
+    }
+    this.#previewRefresh = this.#runObjectRefresh();
+    return this.#previewRefresh;
+  }
+
   dispose(): void {
     if (this.#disposed) {
       return;
     }
     this.#disposed = true;
+    this.#previewEnabled = false;
+    this.#previewRefreshing = false;
+    this.#previewRefresh = null;
+    this.#previewGeneration += 1;
+    this.#cancelBindingRuns();
+    this.#objectStates = {};
+    this.#objectState = freezeObjectDataState(false, false, null, {});
     this.#unsubscribeSnapshot?.();
     this.#invalidateActive();
     this.#subscribers.clear();
+    this.#objectSubscribers.clear();
     this.#state = Object.freeze({
       executorAvailable: this.#executor !== null,
       configRevision: this.#configRevision,
       run: null
     });
+  }
+
+  async #runObjectRefresh(): Promise<void> {
+    const generation = ++this.#previewGeneration;
+    const snapshot = this.#getSnapshot();
+    const bindings = Object.values(snapshot.dataSources.bindings).filter((binding) => binding.enabled);
+    this.#cancelBindingRuns();
+
+    const states: Record<string, DataObjectRuntimeState> = {};
+    for (const binding of bindings) {
+      const query = snapshot.dataSources.queries[binding.queryId];
+      states[binding.objectNodeId] = createRuntimeState(binding, query ? "loading" : "error", {
+        problems: query
+          ? []
+          : [{
+              kind: "binding",
+              code: "query-missing",
+              message: `Query ${binding.queryId} does not exist.`
+            }]
+      });
+    }
+    this.#objectStates = states;
+    this.#previewRefreshing = true;
+    this.#publishObjectState();
+
+    await Promise.all(bindings.map((binding) => this.#refreshBinding(binding, generation)));
+
+    if (this.#disposed || generation !== this.#previewGeneration) {
+      return;
+    }
+    this.#previewRefreshing = false;
+    this.#previewLastRefreshAt = Date.now();
+    this.#previewRefresh = null;
+    this.#publishObjectState();
+  }
+
+  async #refreshBinding(binding: DataObjectBinding, generation: number): Promise<void> {
+    if (this.#disposed || generation !== this.#previewGeneration) {
+      return;
+    }
+    const snapshot = this.#getSnapshot();
+    const query = snapshot.dataSources.queries[binding.queryId];
+    if (!query) {
+      return;
+    }
+    const parameters = resolveDataObjectBindingParameters(snapshot, binding);
+    if (!parameters.ok) {
+      this.#completeBinding(generation, binding, {
+        status: "error",
+        problems: parameters.problems.map((problem) => ({
+          kind: "parameters",
+          code: problem.code,
+          message: problem.message,
+          ...(problem.parameterName ? { parameterName: problem.parameterName } : {})
+        }))
+      });
+      return;
+    }
+    const built = buildDataGetRequest(snapshot, {
+      connectionId: query.connectionId,
+      path: query.path,
+      parameters: query.parameters
+    }, { overrides: binding.parameterOverrides });
+    if (!built.ok) {
+      this.#completeBinding(generation, binding, {
+        status: "error",
+        problems: built.problems.map((problem) => ({
+          kind: problem.field === "parameters" ? "parameters" : "request",
+          code: problem.code,
+          message: problem.message,
+          ...(problem.parameterName ? { parameterName: problem.parameterName } : {}),
+          ...(problem.status !== undefined ? { status: problem.status } : {})
+        }))
+      });
+      return;
+    }
+    if (!this.#executor) {
+      this.#completeBinding(generation, binding, {
+        status: "error",
+        problems: [{
+          kind: "request",
+          code: "executor-unavailable",
+          message: "No host request executor is configured."
+        }]
+      });
+      return;
+    }
+    const credentialProblem = this.#credentialProblem(query.connectionId, built.summary.credentialRef);
+    if (credentialProblem) {
+      this.#completeBinding(generation, binding, {
+        status: "error",
+        problems: [{
+          kind: "request",
+          code: credentialProblem.code,
+          message: credentialProblem.message
+        }]
+      });
+      return;
+    }
+
+    const controller = new AbortController();
+    const run: BindingRun = {
+      objectNodeId: binding.objectNodeId,
+      controller,
+      timer: null,
+      settled: false
+    };
+    this.#bindingRuns.set(binding.objectNodeId, run);
+    run.timer = setTimeout(() => {
+      if (run.settled) {
+        return;
+      }
+      run.settled = true;
+      controller.abort();
+      this.#finishBindingRun(run);
+      this.#completeBinding(generation, binding, {
+        status: "error",
+        problems: [{
+          kind: "request",
+          code: "request-timeout",
+          message: `The request exceeded ${built.summary.timeoutMs} ms.`
+        }]
+      });
+    }, built.summary.timeoutMs);
+
+    let descriptor: DataResponseDescriptor | null;
+    try {
+      const aborted = new Promise<null>((resolve) => {
+        if (controller.signal.aborted) {
+          resolve(null);
+          return;
+        }
+        controller.signal.addEventListener("abort", () => resolve(null), { once: true });
+      });
+      descriptor = await Promise.race([
+        this.#executor({
+          method: "GET",
+          url: built.summary.url,
+          headers: built.summary.headers,
+          credentialRef: built.summary.credentialRef,
+          timeoutMs: built.summary.timeoutMs,
+          signal: controller.signal
+        }),
+        aborted
+      ]);
+    } catch (error) {
+      if (run.settled || this.#disposed || generation !== this.#previewGeneration) {
+        return;
+      }
+      run.settled = true;
+      this.#finishBindingRun(run);
+      this.#completeBinding(generation, binding, {
+        status: "error",
+        problems: [{
+          kind: "request",
+          code: "request-failed",
+          message: error instanceof Error ? error.message : String(error)
+        }]
+      });
+      return;
+    }
+    if (descriptor === null || run.settled || this.#disposed || generation !== this.#previewGeneration) {
+      return;
+    }
+    run.settled = true;
+    this.#finishBindingRun(run);
+
+    const receivedAt = Date.now();
+    const response = normalizeResponse(descriptor, receivedAt);
+    if (!response.ok) {
+      this.#completeBinding(generation, binding, {
+        status: "error",
+        receivedAt,
+        problems: [{
+          kind: "request",
+          code: "response-invalid",
+          message: response.message
+        }]
+      });
+      return;
+    }
+    if (!response.value.ok) {
+      this.#completeBinding(generation, binding, {
+        status: "error",
+        receivedAt,
+        problems: [{
+          kind: "request",
+          code: "response-http",
+          status: response.value.status,
+          message: `The service returned HTTP ${response.value.status}.`
+        }]
+      });
+      return;
+    }
+    if (response.value.bodyKind === "text") {
+      this.#completeBinding(generation, binding, {
+        status: "error",
+        receivedAt,
+        problems: [{
+          kind: "request",
+          code: "response-json-invalid",
+          message: "The response body is not valid JSON."
+        }]
+      });
+      return;
+    }
+    if (response.value.bodyKind === "empty" || response.value.json === undefined) {
+      this.#completeBinding(generation, binding, {
+        status: "error",
+        receivedAt,
+        problems: [{
+          kind: "mapping",
+          code: "response-empty",
+          message: "The response body is empty."
+        }]
+      });
+      return;
+    }
+
+    const mapped = mapDataQueryBody(query.mapping, response.value.json, {
+      connectionId: query.connectionId,
+      queryId: query.id,
+      executionId: `binding-${generation}-${binding.objectNodeId}`,
+      receivedAt,
+      parameters: built.summary.parameters
+    });
+    if (!mapped.ok) {
+      this.#completeBinding(generation, binding, {
+        status: "error",
+        receivedAt,
+        problems: mapped.errors.map((problem) => ({
+          kind: "mapping",
+          code: problem.code,
+          message: problem.message,
+          ...(problem.propertyKey ? { propertyKey: problem.propertyKey } : {})
+        }))
+      });
+      return;
+    }
+
+    const mappingProblems = mapped.problems.map((problem) => ({
+      kind: "mapping" as const,
+      code: problem.code,
+      message: problem.message,
+      ...(problem.propertyKey ? { propertyKey: problem.propertyKey } : {})
+    }));
+    if (mapped.entities.length === 0 && mappingProblems.length > 0) {
+      this.#completeBinding(generation, binding, {
+        status: "error",
+        receivedAt,
+        problems: mappingProblems
+      });
+      return;
+    }
+
+    const entity = mapped.entities.find((candidate) => candidate.entityId === binding.deviceId) ?? null;
+    if (!entity) {
+      this.#completeBinding(generation, binding, {
+        status: "missing-device",
+        receivedAt,
+        problems: [{
+          kind: "device",
+          code: "device-missing",
+          message: `Device ${binding.deviceId} is not present in the current result.`
+        }, ...mappingProblems]
+      });
+      return;
+    }
+
+    const allDetailsValid = binding.details.every((detail) =>
+      entity.fields.find((field) => field.key === detail.key)?.status === "ok"
+    );
+    this.#completeBinding(generation, binding, {
+      status: allDetailsValid ? "ready" : "partial",
+      receivedAt,
+      entityId: entity.entityId,
+      displayName: entity.displayName,
+      fields: entity.fields,
+      observedAt: entity.observedAt,
+      sourceQuality: entity.sourceQuality,
+      observedAtProblem: entity.observedAtProblem,
+      qualityProblem: entity.qualityProblem
+    });
+  }
+
+  #completeBinding(
+    generation: number,
+    binding: DataObjectBinding,
+    patch: Partial<DataObjectRuntimeState> & { status: DataObjectRuntimeState["status"] }
+  ): void {
+    if (this.#disposed || generation !== this.#previewGeneration) {
+      return;
+    }
+    const current = this.#objectStates[binding.objectNodeId];
+    if (!current) {
+      return;
+    }
+    const problems = (patch.problems ?? current.problems) as readonly DataObjectRuntimeProblem[];
+    const next = createRuntimeState(binding, patch.status, {
+      ...current,
+      ...patch,
+      problems
+    });
+    this.#objectStates = {
+      ...this.#objectStates,
+      [binding.objectNodeId]: next
+    };
+    this.#publishObjectState();
+  }
+
+  #finishBindingRun(run: BindingRun): void {
+    if (run.timer !== null) {
+      clearTimeout(run.timer);
+      run.timer = null;
+    }
+    if (this.#bindingRuns.get(run.objectNodeId) === run) {
+      this.#bindingRuns.delete(run.objectNodeId);
+    }
+  }
+
+  #cancelBindingRun(objectNodeId: string): void {
+    const run = this.#bindingRuns.get(objectNodeId);
+    if (!run) {
+      return;
+    }
+    run.settled = true;
+    if (run.timer !== null) {
+      clearTimeout(run.timer);
+    }
+    run.controller.abort();
+    this.#bindingRuns.delete(objectNodeId);
+  }
+
+  #cancelBindingRuns(): void {
+    for (const run of this.#bindingRuns.values()) {
+      run.settled = true;
+      if (run.timer !== null) {
+        clearTimeout(run.timer);
+      }
+      run.controller.abort();
+    }
+    this.#bindingRuns.clear();
+  }
+
+  #publishObjectState(): void {
+    this.#objectState = freezeObjectDataState(
+      this.#previewEnabled,
+      this.#previewRefreshing,
+      this.#previewLastRefreshAt,
+      this.#objectStates
+    );
+    for (const subscriber of [...this.#objectSubscribers]) {
+      this.#notifyObjectSubscriber(subscriber);
+    }
+  }
+
+  #notifyObjectSubscriber(subscriber: DataObjectDataSubscriber): void {
+    try {
+      subscriber(this.#objectState);
+    } catch {
+      // Runtime subscribers must not affect request lifecycle results.
+    }
   }
 
   async #execute(
@@ -472,12 +925,26 @@ export class CoreDataService implements EditorDataService {
     if (nextKey === this.#dataSourcesKey) {
       return;
     }
+    const previousDataSources = this.#dataSources;
+    this.#dataSources = snapshot.dataSources;
     this.#dataSourcesKey = nextKey;
     this.#configRevision += 1;
     const invalidated = this.#state.run !== null &&
       JSON.stringify(snapshot.dataSources.connections[this.#state.run.connectionId]) !== this.#runConnectionKey;
     if (invalidated) {
       this.#invalidateActive();
+    }
+    if (this.#previewEnabled) {
+      const affected = collectAffectedObjectIds(previousDataSources, snapshot.dataSources);
+      if (affected.size > 0) {
+        for (const objectNodeId of affected) {
+          this.#cancelBindingRun(objectNodeId);
+        }
+        this.#objectStates = Object.fromEntries(
+          Object.entries(this.#objectStates).filter(([objectNodeId]) => !affected.has(objectNodeId))
+        );
+        this.#publishObjectState();
+      }
     }
     this.#publish({
       executorAvailable: this.#executor !== null,
@@ -504,6 +971,88 @@ export class CoreDataService implements EditorDataService {
 
 function dataSourcesKey(snapshot: Pick<SceneSnapshot, "dataSources">): string {
   return JSON.stringify(snapshot.dataSources);
+}
+
+function collectAffectedObjectIds(
+  previous: SceneDataSources,
+  next: SceneDataSources
+): Set<string> {
+  const affected = new Set<string>();
+  const changedQueries = changedIds(previous.queries, next.queries);
+  const changedConnections = changedIds(previous.connections, next.connections);
+  const objectNodeIds = new Set([
+    ...Object.keys(previous.bindings),
+    ...Object.keys(next.bindings)
+  ]);
+  for (const objectNodeId of objectNodeIds) {
+    const before = previous.bindings[objectNodeId];
+    const after = next.bindings[objectNodeId];
+    if (JSON.stringify(before) !== JSON.stringify(after)) {
+      affected.add(objectNodeId);
+      continue;
+    }
+    if (!after) {
+      continue;
+    }
+    const previousQuery = previous.queries[after.queryId];
+    const nextQuery = next.queries[after.queryId];
+    if (
+      changedQueries.has(after.queryId) ||
+      (previousQuery ? changedConnections.has(previousQuery.connectionId) : false) ||
+      (nextQuery ? changedConnections.has(nextQuery.connectionId) : false)
+    ) {
+      affected.add(objectNodeId);
+    }
+  }
+  return affected;
+}
+
+function changedIds(
+  previous: Readonly<Record<string, unknown>>,
+  next: Readonly<Record<string, unknown>>
+): Set<string> {
+  const changed = new Set<string>();
+  for (const id of new Set([...Object.keys(previous), ...Object.keys(next)])) {
+    if (JSON.stringify(previous[id]) !== JSON.stringify(next[id])) {
+      changed.add(id);
+    }
+  }
+  return changed;
+}
+
+function createRuntimeState(
+  binding: DataObjectBinding,
+  status: DataObjectRuntimeState["status"],
+  patch: Partial<DataObjectRuntimeState> = {}
+): DataObjectRuntimeState {
+  return Object.freeze({
+    objectNodeId: binding.objectNodeId,
+    queryId: binding.queryId,
+    deviceId: binding.deviceId,
+    enabled: binding.enabled,
+    status,
+    entityId: patch.entityId ?? null,
+    displayName: patch.displayName ?? null,
+    fields: Object.freeze([...(patch.fields ?? [])]),
+    observedAt: patch.observedAt ?? null,
+    receivedAt: patch.receivedAt ?? null,
+    sourceQuality: patch.sourceQuality ?? null,
+    observedAtProblem: patch.observedAtProblem ?? null,
+    qualityProblem: patch.qualityProblem ?? null,
+    problems: Object.freeze([...(patch.problems ?? [])])
+  });
+}
+
+function freezeObjectDataState(
+  enabled: boolean,
+  refreshing: boolean,
+  lastRefreshAt: number | null,
+  objects: Record<string, DataObjectRuntimeState>
+): DataObjectDataState {
+  return Object.freeze({
+    preview: Object.freeze({ enabled, refreshing, lastRefreshAt }),
+    objects: Object.freeze({ ...objects })
+  });
 }
 
 function disposedHandle(runId: string, connectionId: string, configRevision: number): DataQueryRunHandle {

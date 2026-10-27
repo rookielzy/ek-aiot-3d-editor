@@ -60,6 +60,7 @@ import {
 } from "./data-query-mapping-form";
 import { DataParameterValueInput } from "./DataParameterValueInput";
 import {
+  DATA_MAPPING_PROBLEM_MESSAGE_KEYS,
   DATA_QUERY_DEFINITION_PROBLEM_MESSAGE_KEYS,
   DATA_QUERY_PROBLEM_MESSAGE_KEYS,
   DATA_QUERY_RUN_STATUS_MESSAGE_KEYS,
@@ -92,24 +93,7 @@ const EMPTY_SERVICE_STATE: DataServiceState = Object.freeze({
   run: null
 });
 
-const MAPPING_PROBLEM_MESSAGE_KEYS = {
-  "display-name-invalid": "dataSources.mappingProblem.displayNameInvalid",
-  "entity-id-duplicate": "dataSources.mappingProblem.entityIdDuplicate",
-  "entity-id-invalid": "dataSources.mappingProblem.entityIdInvalid",
-  "entity-id-missing": "dataSources.mappingProblem.entityIdMissing",
-  "observed-at-future": "dataSources.mappingProblem.observedAtFuture",
-  "observed-at-invalid": "dataSources.mappingProblem.observedAtInvalid",
-  "observed-at-missing": "dataSources.mappingProblem.observedAtMissing",
-  "property-allowed": "dataSources.mappingProblem.propertyAllowed",
-  "property-conversion": "dataSources.mappingProblem.propertyConversion",
-  "property-missing": "dataSources.mappingProblem.propertyMissing",
-  "property-null": "dataSources.mappingProblem.propertyNull",
-  "property-range": "dataSources.mappingProblem.propertyRange",
-  "property-type": "dataSources.mappingProblem.propertyType",
-  "root-missing": "dataSources.mappingProblem.rootMissing",
-  "root-type": "dataSources.mappingProblem.rootType",
-  "source-quality-invalid": "dataSources.mappingProblem.sourceQualityInvalid"
-} satisfies Record<DataMappingProblem["code"], WorkbenchMessageKey>;
+const MAPPING_PROBLEM_MESSAGE_KEYS = DATA_MAPPING_PROBLEM_MESSAGE_KEYS;
 
 const QUALITY_MESSAGE_KEYS = {
   good: "dataSources.mapping.quality.good",

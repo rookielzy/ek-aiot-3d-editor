@@ -1,4 +1,5 @@
 import type { SceneSnapshot } from "../snapshot/types";
+import { isPlainRecord } from "../snapshot/json";
 import type {
   DataConnection,
   DataConnectionId,
@@ -196,7 +197,16 @@ export function validateDataQueryParameterDefinitions(
   const problems: DataQueryProblem[] = [];
   const names = new Set<string>();
   for (const parameter of parameters) {
-    const name = typeof parameter?.name === "string" ? parameter.name.trim() : "";
+    if (!isPlainRecord(parameter)) {
+      problems.push({
+        code: "parameter-definition-invalid",
+        field: "parameters",
+        connectionId,
+        message: "Each parameter must be a plain object."
+      });
+      continue;
+    }
+    const name = typeof parameter.name === "string" ? parameter.name.trim() : "";
     if (!name || !PARAMETER_NAME.test(name) || UNSAFE_PARAMETER_NAMES.has(name)) {
       problems.push({
         code: "parameter-definition-invalid",

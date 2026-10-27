@@ -64,9 +64,9 @@ pnpm release:verify
 - Runtime：core 内置 Three.js 投影层，将 Snapshot 投影为 scene、camera、renderer、对象、环境、灯光和问题列表。
 - 问题：resolver、loader、PMREM、runtime、project package 等失败以结构化 problem 暴露，不写回为 runtime-only 状态。
 - 项目包：实验性 `.ek3d` ZIP 容器，包含 `project.json`、`scene.json` 和 `assets/*` payload。
-- 数据源：v9 顶层 `dataSources` 保存 HTTP/HTTPS 连接配置（名称、服务地址、非秘密公共头、认证引用、超时）、已保存的命名查询与设备属性映射，以及绑定引用；宿主凭证、请求草稿、示例 JSON、执行器和响应只存在于运行态，默认 editor 不注入连接也不联网。`editor.getDataService()` 提供与 viewport 独立的受控请求门面，宿主通过 executor 执行真实 HTTP；React 数据工作区可把单对象/数组响应映射为标准设备属性并一次性保存查询与映射。
-- React：`useEditor()`、`useEditorSnapshot()`、`useInspector()`、`useWorkbench()`、`EditorViewport`、`InspectorPanel`、`EditorWorkbench`；默认 Data 工作区支持连接搜索、创建、编辑、复制、删除、撤销、未保存草稿确认，以及带类型参数的手动 GET 请求测试（默认值与临时覆盖分离、运行/取消、会话内响应与配置修订标记）。
-- Vue：`useEditor()`、`useInspector()`、`useWorkbench()`、`EditorViewport`、`InspectorPanel`、`EditorWorkbench`；可加载包含 `dataSources` 的 v9 Snapshot，并透传 host executor 到 core 数据服务；Vue 数据工作区 UI 保持现状。
+- 数据源：v9 顶层 `dataSources` 保存 HTTP/HTTPS 连接配置（名称、服务地址、非秘密公共头、认证引用、超时）、已保存的命名查询与设备属性映射，以及对象绑定（查询、设备、参数覆盖、启停、详情字段与精度）；宿主凭证、请求草稿、示例 JSON、执行器、有效参数、预览状态和响应只存在于运行态，默认 editor 不注入连接也不联网。`editor.getDataService()` 提供与 viewport 独立的受控请求门面，宿主通过 executor 执行真实 HTTP；React 数据工作区可把单对象/数组响应映射为标准设备属性并一次性保存查询与映射，Object inspector/查询 Bindings 可保存对象绑定，视口工具条手动开始/刷新/停止预览，选中对象显示字段、单位、精度、时间、质量和明确失败原因的详情卡。
+- React：`useEditor()`、`useEditorSnapshot()`、`useInspector()`、`useWorkbench()`、`EditorViewport`、`InspectorPanel`、`EditorWorkbench`；默认 Data 工作区支持连接搜索、创建、编辑、复制、删除、撤销、未保存草稿确认，以及带类型参数的手动 GET 请求测试（默认值与临时覆盖分离、运行/取消、会话内响应与配置修订标记）；Object inspector 和查询 Bindings 提供同一套设备绑定表单，视口提供手动预览与选中对象详情卡。
+- Vue：`useEditor()`、`useInspector()`、`useWorkbench()`、`EditorViewport`、`InspectorPanel`、`EditorWorkbench`；可加载包含 `dataSources` 的 v9 Snapshot，并透传 host executor 到 core 数据服务；core 绑定、手动预览和详情模型可被宿主消费，Vue 数据工作区 UI 保持现状。
 - 双语 Workbench：React/Vue package docs 和集成指南覆盖默认 English、内置 `zh-CN`、locale prop / `v-model:locale`、switch 控制、host translate callback、render prop / scoped slot 的 `i18n`。locale/switch/dictionary/translated copy 属于宿主或 session UI state，不进入 Snapshot 或 `.ek3d`。
 - 本地 React/Vue proof-loop demo：提供同一可恢复展示场景，以及 Project menu、视口工具组、Scene/Assets/Project 左栏、Object/Environment/Scene 右栏、状态摘要和问题抽屉，用于验证 camera view authoring、selection、transform、material inspector、history、hierarchy、project package 和缺失资产恢复流程。
 
@@ -88,7 +88,7 @@ pnpm release:verify
 - Durable editor state 只存在于版本化 Scene Snapshot 中。
 - 禁止把 Three.js 对象、`File`、`Blob`、object URL、已加载 texture、PMREM render target、resolver 结果、framework component state 写入 Snapshot。
 - Core 是编辑行为来源；Vue/React 只负责生命周期、渲染和宿主集成。
-- 持久化编辑必须通过 command：`import-glb`、`register-asset`、`select-node`、`select-nodes`、`create-group`、`set-node-transform`、`delete-nodes`、`group-nodes`、`set-material`、`set-environment`、`add-light`、`update-light`、`remove-light`、`create-camera-view`、`update-camera-view`、`delete-camera-view`、`set-default-camera-view`。旧 `select-object` / `set-transform` 等 object-only 命令是兼容路径。
+- 持久化编辑必须通过 command：`import-glb`、`register-asset`、`select-node`、`select-nodes`、`create-group`、`set-node-transform`、`delete-nodes`、`group-nodes`、`set-material`、`set-environment`、`add-light`、`update-light`、`remove-light`、`create-camera-view`、`update-camera-view`、`delete-camera-view`、`set-default-camera-view`、data connection/query commands、`set-data-object-binding`、`delete-data-object-binding`。旧 `select-object` / `set-transform` 等 object-only 命令是兼容路径。
 - Snapshot 是 JSON-compatible 记录；二进制资产通过 `.ek3d` 项目包 payload 或宿主 resolver 管理。
 - runtime problem 是派生状态；除非未来新增显式恢复命令，否则不要把 resolver/loader 失败结果写回 Snapshot。
 - `@ek-aiot/3d-editor-core` 是 ESM only，并直接依赖 Three.js。
@@ -98,7 +98,7 @@ pnpm release:verify
 
 ## 当前非目标
 
-框选/lasso、系统剪贴板集成、外部 paste 格式、完整资产库、云端资产库、模型市场、本地导入队列、持久化布局、schema-driven inspector 插件、per-submesh 材质槽发现、完整 GLTF 材质图编辑、阴影、高级辅助器、数据绑定、事件编排、运行态发布、Agent 集成和稳定非 `0.x` API 都是后续工作。
+框选/lasso、系统剪贴板集成、外部 paste 格式、完整资产库、云端资产库、模型市场、本地导入队列、持久化布局、schema-driven inspector 插件、per-submesh 材质槽发现、完整 GLTF 材质图编辑、阴影、高级辅助器、持续数据预览调度与数据驱动外观、事件编排、运行态发布、Agent 集成和稳定非 `0.x` API 都是后续工作。
 
 ## 需求与规划来源
 

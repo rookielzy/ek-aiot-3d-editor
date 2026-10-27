@@ -1,7 +1,8 @@
 import { useId, useState } from "react";
 import type { Editor, InspectorModel, SceneSnapshot } from "@ek-aiot/3d-editor-core";
-import type { WorkbenchCameraContext } from "../hooks/use-workbench";
+import type { ResolvedWorkbenchContext, WorkbenchCameraContext } from "../hooks/use-workbench";
 import { CameraInspector } from "./CameraInspector";
+import { DataBindingInspector } from "./DataBindingInspector";
 import { EnvironmentInspector } from "./EnvironmentInspector";
 import { LightInspector } from "./LightInspector";
 import { MaterialInspector } from "./MaterialInspector";
@@ -18,12 +19,13 @@ export interface InspectorViewProps {
   setActiveLightId(value: string | null): void;
   setActiveCameraViewId?(value: string | null): void;
   camera?: WorkbenchCameraContext;
+  dataContext?: ResolvedWorkbenchContext;
   i18n?: InspectorI18n;
   onReplaceAsset?(assetId: string, file: File): void | Promise<void>;
   className?: string;
 }
 
-export function InspectorView({ editor, snapshot, inspector, setActiveLightId, setActiveCameraViewId, camera, i18n = DEFAULT_INSPECTOR_I18N, onReplaceAsset, className }: InspectorViewProps) {
+export function InspectorView({ editor, snapshot, inspector, setActiveLightId, setActiveCameraViewId, camera, dataContext, i18n = DEFAULT_INSPECTOR_I18N, onReplaceAsset, className }: InspectorViewProps) {
   const [activeGroup, setActiveGroup] = useState<"object" | "environment" | "scene">("object");
   const id = useId();
   const groups = ["object", "environment", "scene"] as const;
@@ -99,6 +101,7 @@ export function InspectorView({ editor, snapshot, inspector, setActiveLightId, s
         </header>
         {!selection.light && !selection.cameraView ? <TransformInspector key={`transform:${selection.nodeId}`} editor={editor} snapshot={snapshot} section={inspector.transform} i18n={i18n} /> : null}
         {!selection.light && !selection.cameraView ? <MaterialInspector key={`material:${selection.nodeId}`} editor={editor} snapshot={snapshot} section={inspector.material} i18n={i18n} /> : null}
+        {dataContext ? <DataBindingInspector context={dataContext} /> : null}
         {showSelectedLight ? lightInspector : null}
         {showSelectedCamera ? cameraInspector : null}
       </div>

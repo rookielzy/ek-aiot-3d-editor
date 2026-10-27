@@ -10,6 +10,7 @@ import {
   createUniqueDataQueryName
 } from "./defaults";
 import type {
+  DataQuery,
   DataQueryDefinition,
   DataQueryDefinitionProblem,
   DataQueryInput
@@ -37,8 +38,9 @@ export function buildSaveDataQueryCommand(
   options: SaveDataQueryOptions = {}
 ): DataQueryCommandBuildResult {
   const queryId = options.queryId ?? null;
+  let existing: DataQuery | null = null;
   if (queryId) {
-    const existing = snapshot.dataSources.queries[queryId];
+    existing = snapshot.dataSources.queries[queryId] ?? null;
     if (!existing) {
       return { ok: false, problems: [queryNotFoundProblem(queryId)] };
     }
@@ -56,10 +58,15 @@ export function buildSaveDataQueryCommand(
 
   const connectionId = typeof input.connectionId === "string" ? input.connectionId.trim() : "";
   const connection = snapshot.dataSources.connections[connectionId] ?? null;
+  const referencingBindings = queryId
+    ? Object.values(snapshot.dataSources.bindings).filter((binding) => binding.queryId === queryId)
+    : [];
   const validation = validateDataQueryDefinition(input, {
     queryId,
     connection,
-    existingQueries: Object.values(snapshot.dataSources.queries)
+    existingQueries: Object.values(snapshot.dataSources.queries),
+    existingQuery: existing,
+    referencingBindings
   });
   if (!validation.ok || !validation.value) {
     return { ok: false, problems: validation.problems };

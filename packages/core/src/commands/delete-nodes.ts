@@ -88,6 +88,13 @@ export function applyDeleteNodes(snapshot: SceneSnapshot, command: DeleteNodesCo
 
   return {
     ...nextSnapshot,
+    dataSources: {
+      ...nextSnapshot.dataSources,
+      bindings: Object.fromEntries(
+        Object.entries(nextSnapshot.dataSources.bindings)
+          .filter(([objectNodeId]) => !removedNodeIds.has(objectNodeId))
+      )
+    },
     selection: normalizeNodeSelection(nextSnapshot, {
       mode: "replace",
       nodeIds,

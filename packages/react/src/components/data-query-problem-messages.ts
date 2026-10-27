@@ -1,4 +1,5 @@
 import type {
+  DataMappingProblem,
   DataParameterType,
   DataQueryDefinitionProblemCode,
   DataQueryProblem,
@@ -8,6 +9,8 @@ import type {
 import type { WorkbenchI18n, WorkbenchMessageKey, WorkbenchMessageValues } from "../i18n/workbench-i18n";
 
 export const DATA_QUERY_DEFINITION_PROBLEM_MESSAGE_KEYS = {
+  "binding-parameter-in-use": "dataSources.queryProblem.bindingParameterInUse",
+  "binding-property-in-use": "dataSources.queryProblem.bindingPropertyInUse",
   "command-failed": "dataSources.queryProblem.commandFailed",
   "connection-not-found": "dataSources.queryProblem.connectionNotFound",
   "mapping-invalid": "dataSources.queryProblem.mappingInvalid",
@@ -22,6 +25,25 @@ export const DATA_QUERY_DEFINITION_PROBLEM_MESSAGE_KEYS = {
   "query-in-use": "dataSources.queryProblem.queryInUse",
   "query-not-found": "dataSources.queryProblem.queryNotFound"
 } satisfies Record<DataQueryDefinitionProblemCode, WorkbenchMessageKey>;
+
+export const DATA_MAPPING_PROBLEM_MESSAGE_KEYS = {
+  "display-name-invalid": "dataSources.mappingProblem.displayNameInvalid",
+  "entity-id-duplicate": "dataSources.mappingProblem.entityIdDuplicate",
+  "entity-id-invalid": "dataSources.mappingProblem.entityIdInvalid",
+  "entity-id-missing": "dataSources.mappingProblem.entityIdMissing",
+  "observed-at-future": "dataSources.mappingProblem.observedAtFuture",
+  "observed-at-invalid": "dataSources.mappingProblem.observedAtInvalid",
+  "observed-at-missing": "dataSources.mappingProblem.observedAtMissing",
+  "property-allowed": "dataSources.mappingProblem.propertyAllowed",
+  "property-conversion": "dataSources.mappingProblem.propertyConversion",
+  "property-missing": "dataSources.mappingProblem.propertyMissing",
+  "property-null": "dataSources.mappingProblem.propertyNull",
+  "property-range": "dataSources.mappingProblem.propertyRange",
+  "property-type": "dataSources.mappingProblem.propertyType",
+  "root-missing": "dataSources.mappingProblem.rootMissing",
+  "root-type": "dataSources.mappingProblem.rootType",
+  "source-quality-invalid": "dataSources.mappingProblem.sourceQualityInvalid"
+} satisfies Record<DataMappingProblem["code"], WorkbenchMessageKey>;
 
 export const DATA_QUERY_PROBLEM_MESSAGE_KEYS = {
   "connection-not-found": "dataSources.request.problem.connectionNotFound",

@@ -3,16 +3,19 @@ import type { SceneSnapshot } from "../snapshot/types";
 import { validateDataQueryMapping } from "./mapping";
 import {
   buildDataGetRequest,
+  resolveDataQueryParameters,
   validateDataQueryParameterDefinitions,
   type DataQueryProblemCode
 } from "./query";
 import type {
   DataConnection,
+  DataObjectBinding,
   DataParameterType,
   DataParameterValue,
   DataQuery,
   DataQueryDefinition,
   DataQueryDefinitionProblem,
+  DataQueryMapping,
   DataQueryParameterDraft,
   DataQueryValidationResult
 } from "./types";
@@ -20,6 +23,8 @@ import type {
 export interface ValidateDataQueryDefinitionOptions {
   queryId?: string | null;
   existingQueries?: readonly Pick<DataQuery, "id" | "name" | "connectionId">[];
+  existingQuery?: DataQuery | null;
+  referencingBindings?: readonly DataObjectBinding[];
   connection?: DataConnection | null;
 }
 
@@ -100,6 +105,17 @@ export function validateDataQueryDefinition(
   const mapping = validateDataQueryMapping(input.mapping, { parameters: parameters ?? [] });
   for (const problem of mapping.problems) {
     problems.push(problem);
+  }
+
+  if (
+    problems.length === 0 &&
+    parameters &&
+    mapping.value &&
+    options.existingQuery &&
+    options.referencingBindings &&
+    options.referencingBindings.length > 0
+  ) {
+    validateBindingReferences(options.existingQuery, parameters, mapping.value, options.referencingBindings, problems);
   }
 
   if (problems.length > 0 || !mapping.value || !parameters) {
@@ -212,5 +228,83 @@ function mapRequestProblemCode(code: DataQueryProblemCode): DataQueryDefinitionP
       return "parameter-type";
     default:
       return code.startsWith("path-") ? "path-invalid" : "parameter-invalid";
+  }
+}
+
+function validateBindingReferences(
+  existingQuery: DataQuery,
+  parameters: readonly DataQueryParameterDraft[],
+  mapping: DataQueryMapping,
+  bindings: readonly DataObjectBinding[],
+  problems: DataQueryDefinitionProblem[]
+): void {
+  const previousParameters = new Map(existingQuery.parameters.map((parameter) => [parameter.name.trim(), parameter]));
+  const nextParameters = new Map(parameters.map((parameter) => [parameter.name.trim(), parameter]));
+  const previousProperties = new Map(existingQuery.mapping.properties.map((property) => [property.key, property]));
+  const nextProperties = new Map(mapping.properties.map((property) => [property.key, property]));
+
+  const reportedProperties = new Set<string>();
+  for (const binding of bindings) {
+    const details = Array.isArray(binding.details) ? binding.details : [];
+    for (const detail of details) {
+      if (!isPlainRecord(detail) || typeof detail.key !== "string") {
+        continue;
+      }
+      if (reportedProperties.has(detail.key)) {
+        continue;
+      }
+      const previous = previousProperties.get(detail.key);
+      const next = nextProperties.get(detail.key);
+      if (!next || (previous && previous.type !== next.type)) {
+        reportedProperties.add(detail.key);
+        problems.push({
+          field: "mapping",
+          code: "binding-property-in-use",
+          propertyKey: detail.key,
+          message: `Property ${detail.key} is used by an object binding. Remove the binding or keep a compatible property.`
+        });
+      }
+    }
+  }
+
+  const reportedParameters = new Set<string>();
+  for (const binding of bindings) {
+    const overrides = isPlainRecord(binding.parameterOverrides) ? binding.parameterOverrides : {};
+    for (const name of Object.keys(overrides)) {
+      if (reportedParameters.has(name)) {
+        continue;
+      }
+      const previous = previousParameters.get(name);
+      const next = nextParameters.get(name);
+      if (!next || (previous && previous.type !== next.type)) {
+        reportedParameters.add(name);
+        problems.push({
+          field: "parameters",
+          code: "binding-parameter-in-use",
+          parameterName: name,
+          message: `Parameter ${name} is overridden by an object binding. Remove the override or keep its type.`
+        });
+      }
+    }
+
+    const resolution = resolveDataQueryParameters(parameters, overrides, existingQuery.connectionId);
+    for (const problem of resolution.problems) {
+      if (problem.code !== "parameter-missing" && problem.code !== "parameter-type") {
+        continue;
+      }
+      const name = problem.parameterName ?? "";
+      if (name && reportedParameters.has(name)) {
+        continue;
+      }
+      if (name) {
+        reportedParameters.add(name);
+      }
+      problems.push({
+        field: "parameters",
+        code: "binding-parameter-in-use",
+        ...(name ? { parameterName: name } : {}),
+        message: problem.message
+      });
+    }
   }
 }

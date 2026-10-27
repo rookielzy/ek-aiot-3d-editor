@@ -19,6 +19,7 @@ import {
 import type { WorkbenchI18n, WorkbenchMessageKey, WorkbenchMessageValues } from "../i18n/workbench-i18n";
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
 import { DataQueryEditor } from "./DataQueryEditor";
+import { DataQueryBindingsDialog } from "./DataQueryBindingsDialog";
 import { DataQueryTester } from "./DataQueryTester";
 import { DATA_QUERY_DEFINITION_PROBLEM_MESSAGE_KEYS } from "./data-query-problem-messages";
 
@@ -87,6 +88,7 @@ function DataSourcesSession({ context }: { context: ResolvedWorkbenchContext }) 
   const [form, setForm] = useState<DataFormState | null>(null);
   const [requestConnectionId, setRequestConnectionId] = useState<string | null>(null);
   const [queryEditor, setQueryEditor] = useState<{ connectionId: string; queryId: string | null } | null>(null);
+  const [bindingsQueryId, setBindingsQueryId] = useState<string | null>(null);
   const [problems, setProblems] = useState<DataConnectionProblem[]>([]);
   const [status, setStatus] = useState<StatusMessage | null>(null);
   const [focusTarget, setFocusTarget] = useState<FocusTarget | null>(null);
@@ -188,6 +190,15 @@ function DataSourcesSession({ context }: { context: ResolvedWorkbenchContext }) 
       );
     }
   }, [context.snapshot.dataSources.connections, context.snapshot.dataSources.queries, queryEditor]);
+
+  useEffect(() => {
+    if (!bindingsQueryId) {
+      return;
+    }
+    if (!context.snapshot.dataSources.queries[bindingsQueryId]) {
+      setBindingsQueryId(null);
+    }
+  }, [bindingsQueryId, context.snapshot]);
 
   function openCreate() {
     setRequestConnectionId(null);
@@ -372,9 +383,27 @@ function DataSourcesSession({ context }: { context: ResolvedWorkbenchContext }) 
   function openQuery(connectionId: string, queryId: string | null) {
     setForm(null);
     setRequestConnectionId(null);
+    setBindingsQueryId(null);
     setProblems([]);
     setStatus(null);
     setQueryEditor({ connectionId, queryId });
+  }
+
+  function openBindings(queryId: string) {
+    setForm(null);
+    setRequestConnectionId(null);
+    setQueryEditor(null);
+    setProblems([]);
+    setStatus(null);
+    setBindingsQueryId(queryId);
+  }
+
+  function closeBindings() {
+    const queryId = bindingsQueryId;
+    setBindingsQueryId(null);
+    if (queryId) {
+      setFocusTarget({ kind: "query", queryId });
+    }
   }
 
   function closeQueryEditor() {
@@ -443,7 +472,7 @@ function DataSourcesSession({ context }: { context: ResolvedWorkbenchContext }) 
         <h2>{t("dataSources.panel.label")}</h2>
         <span>{t("dataSources.panel.count", { visibleCount: visibleConnections.length, totalCount: model.totalCount })}</span>
       </div>
-      <button ref={newButtonRef} type="button" inert={queryEditor ? true : undefined} onClick={() => requestClose(openCreate)}>{t("dataSources.new")}</button>
+      <button ref={newButtonRef} type="button" inert={queryEditor || bindingsQueryId ? true : undefined} onClick={() => requestClose(openCreate)}>{t("dataSources.new")}</button>
       <label className="ek-workbench__field ek-workbench__field--search">
         <span>{t("dataSources.search.label")}</span>
         <input
@@ -452,7 +481,7 @@ function DataSourcesSession({ context }: { context: ResolvedWorkbenchContext }) 
           placeholder={t("dataSources.search.placeholder")}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          inert={queryEditor ? true : undefined}
+          inert={queryEditor || bindingsQueryId ? true : undefined}
         />
       </label>
       {form ? (
@@ -504,7 +533,7 @@ function DataSourcesSession({ context }: { context: ResolvedWorkbenchContext }) 
       ) : visibleConnections.length === 0 ? (
         <p className="ek-workbench__empty" role="status">{t("dataSources.noMatches")}</p>
       ) : (
-        <ul className="ek-workbench__connection-list" aria-label={t("dataSources.list.label")} inert={queryEditor ? true : undefined}>
+        <ul className="ek-workbench__connection-list" aria-label={t("dataSources.list.label")} inert={queryEditor || bindingsQueryId ? true : undefined}>
           {visibleConnections.map((connection) => (
             <ConnectionRow
               key={connection.id}
@@ -544,6 +573,7 @@ function DataSourcesSession({ context }: { context: ResolvedWorkbenchContext }) 
               onDelete={() => requestClose(() => deleteConnection(connection))}
               onNewQuery={() => openQuery(connection.id, null)}
               onEditQuery={(query) => openQuery(connection.id, query.id)}
+              onManageBindings={(query) => openBindings(query.id)}
               onDuplicateQuery={duplicateQuery}
               onDeleteQuery={deleteQuery}
             />
@@ -558,6 +588,14 @@ function DataSourcesSession({ context }: { context: ResolvedWorkbenchContext }) 
           queryId={queryEditor.queryId}
           onClose={closeQueryEditor}
           onSaved={handleQuerySaved}
+        />
+      ) : null}
+      {bindingsQueryId ? (
+        <DataQueryBindingsDialog
+          key={bindingsQueryId}
+          context={context}
+          queryId={bindingsQueryId}
+          onClose={closeBindings}
         />
       ) : null}
     </div>
@@ -577,6 +615,7 @@ function ConnectionRow({
   onDelete,
   onNewQuery,
   onEditQuery,
+  onManageBindings,
   onDuplicateQuery,
   onDeleteQuery
 }: {
@@ -592,6 +631,7 @@ function ConnectionRow({
   onDelete(): void;
   onNewQuery(): void;
   onEditQuery(query: DataQueryListItem): void;
+  onManageBindings(query: DataQueryListItem): void;
   onDuplicateQuery(query: DataQueryListItem): void;
   onDeleteQuery(query: DataQueryListItem): void;
 }) {
@@ -664,6 +704,11 @@ function ConnectionRow({
                     aria-label={t("dataSources.queries.editAria", { name: query.name })}
                     onClick={() => onEditQuery(query)}
                   >{t("dataSources.queries.edit")}</button>
+                  <button
+                    type="button"
+                    aria-label={t("dataBinding.queryDialog.openAria", { name: query.name })}
+                    onClick={() => onManageBindings(query)}
+                  >{t("dataBinding.queryDialog.open")}</button>
                   <button
                     type="button"
                     aria-label={t("dataSources.queries.duplicateAria", { name: query.name })}

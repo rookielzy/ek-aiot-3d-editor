@@ -64,6 +64,7 @@ export type {
   CreateImportedGlbTargetsCommand,
   DeleteCameraViewCommand,
   DeleteDataConnectionCommand,
+  DeleteDataObjectBindingCommand,
   DeleteDataQueryCommand,
   DeleteNodesCommand,
   DeleteObjectsCommand,
@@ -83,6 +84,7 @@ export type {
   SelectNodesCommand,
   SelectObjectCommand,
   SelectObjectsCommand,
+  SetDataObjectBindingCommand,
   LegacySceneEnvironmentPatch,
   SceneEnvironmentPatch,
   SetDefaultCameraViewCommand,
@@ -115,6 +117,19 @@ export type {
   SaveDataQueryOptions
 } from "./data-sources/query-commands";
 export type {
+  DataObjectBindingCommand,
+  DataObjectBindingCommandBuildResult,
+  DataObjectBindingParametersResult
+} from "./data-sources/bindings";
+export {
+  DATA_DETAIL_DEFAULT_PRECISION,
+  DATA_DETAIL_MAX_PRECISION,
+  buildDeleteDataObjectBindingCommand,
+  buildSaveDataObjectBindingCommand,
+  resolveDataObjectBindingParameters,
+  validateDataObjectBindingInput
+} from "./data-sources/bindings";
+export type {
   DataMappingProblem,
   DataMappingProblemCode,
   DataMappedEntity,
@@ -144,6 +159,19 @@ export type {
   ValidateDataQueryDefinitionOptions
 } from "./data-sources/query-validation";
 export type {
+  DataObjectDataState,
+  DataObjectDataSubscriber,
+  DataObjectDetailFieldModel,
+  DataObjectDetailModel,
+  DataObjectRuntimeProblem,
+  DataObjectRuntimeState,
+  DataObjectRuntimeStatus,
+  DataPreviewState
+} from "./data-sources/object-data";
+export {
+  buildDataObjectDetailModel
+} from "./data-sources/object-data";
+export type {
   DataQueryDraftExecutionOptions,
   DataQueryResponse,
   DataQueryRunHandle,
@@ -159,6 +187,11 @@ export type {
   EditorDataService
 } from "./data-sources/service";
 export type {
+  DataBindingDetailField,
+  DataBindingDetailFieldInput,
+  DataBindingProblem,
+  DataBindingProblemCode,
+  DataBindingProblemField,
   DataConnection,
   DataConnectionAuth,
   DataConnectionAuthBearer,
@@ -176,6 +209,8 @@ export type {
   DataMappedValueType,
   DataMappingMode,
   DataObjectBinding,
+  DataObjectBindingInput,
+  DataObjectBindingValidationResult,
   DataObservedAtMapping,
   DataPath,
   DataPathPrimitive,

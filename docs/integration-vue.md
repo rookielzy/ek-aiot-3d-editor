@@ -83,6 +83,8 @@ const { editor } = useEditor({ executor });
 
 请求描述只携带非秘密公共头和 `credentialRef`；认证秘密由宿主执行器在发送时解析。响应正文、耗时、generation、取消和诊断只留在当前会话，不写入 Snapshot、history 或项目包。Vue 数据工作区 UI 保持现状，不因启用数据服务而新增请求表单。已保存查询与映射通过框架无关的 `snapshot.dataSources.queries`、`mapDataQueryBody()` 和 `validateDataQueryMapping()` 使用；React 新增的 query 编辑界面不会改变 Vue Workbench 的行为。
 
+对象绑定同样完全属于 core contract：`snapshot.dataSources.bindings` 保存查询、设备、参数覆盖、启停和详情字段配置；`buildDataObjectDetailModel()`、`startPreview()`、`refreshPreview()`、`stopPreview()` 和 `getObjectDataState()` 都不依赖 React。Vue Workbench 本阶段不新增绑定或详情界面，宿主可以在不改 core contract 的前提下消费这些 API；React 的 Device data 表单、预览工具条和详情卡不会进入 Vue package。
+
 宿主扩展区域为 `toolbar`、`leftPanel`、兼容 `sidePanel`、`viewportOverlay`、`rightPanel` 和 `status`。`leftPanel` 优先于 `sidePanel`；`show-default-toolbar="false"` 同时隐藏默认顶部及视口工具，但不隐藏宿主 `toolbar` slot。切换 locale、导航或抽屉只改变 session UI，不替换 editor/runtime、selection、history 或 canvas。
 
 ## 双语 Workbench UI

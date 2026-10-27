@@ -2,13 +2,13 @@
 
 Core owns the editor contract: scene snapshots, commands, history, asset references, runtime projection, serialization, restore, and disposal.
 
-This package is experimental `0.x`. It is suitable for validating the current snapshot-first contract, but it does not promise 1.0 API stability, Le5le-style low-code features, cloud asset libraries, marketplace behavior, data binding, or hosted runtime publishing. Release process details live in the repository release guide.
+This package is experimental `0.x`. It is suitable for validating the current snapshot-first contract, but it does not promise 1.0 API stability, Le5le-style low-code features, cloud asset libraries, marketplace behavior, continuous data scheduling or data-driven appearance, or hosted runtime publishing. Release process details live in the repository release guide.
 
 Use `createEditor()` to create a framework-neutral editor, dispatch commands, subscribe to snapshots, mount a runtime into a DOM container, and serialize or restore state.
 
 ## Snapshot Contract
 
-Snapshots are portable JSON-compatible records. The current v9 schema stores a canonical `SceneNode` / `NodeId` graph, authored camera views, source-based environment lighting/background state, and a `dataSources` domain for HTTP connections plus saved query definitions, device property mappings, and object-binding references. Version 1/2/3/4/5/6/7/8 snapshots restore through the migration path and are normalized into the current schema.
+Snapshots are portable JSON-compatible records. The current v9 schema stores a canonical `SceneNode` / `NodeId` graph, authored camera views, source-based environment lighting/background state, and a `dataSources` domain for HTTP connections, saved query definitions, device property mappings, and object bindings (query, device, parameter overrides, enabled state, ordered detail fields). Version 1/2/3/4/5/6/7/8 snapshots restore through the migration path and are normalized into the current schema.
 
 Runtime values are never saved. Hosts may register GLB, texture, HDR, or image assets with runtime `source` values, but snapshots only keep stable asset references.
 
@@ -41,9 +41,12 @@ All durable edits enter through commands so undo/redo remains framework-neutral:
 - `set-environment` stores source-based lighting/background/skybox intent without PMREM or loaded textures. Legacy v6-style `mode` patches are normalized for compatibility.
 - `add-light`, `update-light`, and `remove-light` store durable light authoring data and keep light nodes synchronized with light payloads.
 - `create-data-connection`, `update-data-connection`, `duplicate-data-connection`, and `delete-data-connection` store HTTP/HTTPS connection configuration under the v9 `dataSources` domain. Bearer authentication stores only a host credential reference; credentials stay in runtime.
-- `create-data-query`, `update-data-query`, `duplicate-data-query`, and `delete-data-query` store named query paths, typed parameters, and device property mappings as one undoable configuration change. Duplicate queries receive new IDs and connection-scoped unique names; queries referenced by bindings cannot be deleted.
+- `create-data-query`, `update-data-query`, `duplicate-data-query`, and `delete-data-query` store named query paths, typed parameters, and device property mappings as one undoable configuration change. Duplicate queries receive new IDs and connection-scoped unique names; queries referenced by bindings cannot be deleted, and referenced properties/parameters cannot be removed or retyped.
+- `set-data-object-binding` and `delete-data-object-binding` store one valid binding per object node. Targets are limited to whole object nodes; imported targets require an explicit owner, and group/light/camera targets are rejected. Deleting an object node removes its binding.
 
 `editor.getDataService()` builds and runs manual GET query drafts without a viewport. Pass `createEditor({ executor })` to give it a host-owned request executor; core sends a resolved URL, non-secret headers, a credential reference, timeout, and `AbortSignal`, then exposes status, raw text, parsed JSON, elapsed time, and diagnostics through a subscription. The service never calls global `fetch`, never writes request drafts or responses into snapshots/history, aborts on cancel, and rejects late responses after invalidation or disposal. `buildDataGetRequest()` is also exported for hosts that want to preview or validate a resolved draft before execution.
+
+The same service exposes manual object-data preview. `startPreview()` enables preview and refreshes once, `refreshPreview()` runs only while preview is enabled, and `stopPreview()` aborts in-flight work, clears every object runtime state, and keeps durable bindings. Each enabled binding resolves its own effective parameters and device by exact `entityId`; runtime states carry mapped fields, received/observed times, quality, and explicit problems. `buildDataObjectDetailModel()` derives ordered detail fields, label overrides, units, precision, and failure reasons from the snapshot plus runtime state without writing anything back. Configuration changes cancel and clear runtime for the affected objects while unrelated results stay current; affected objects require another explicit refresh. Results never add history or change the snapshot.
 
 `mapDataQueryBody()` turns an in-memory response body plus a saved `DataQueryMapping` into standard device samples with `connectionId`, `queryId`, `entityId`, property values, observed/received timestamps, and source quality. `validateDataQueryMapping()` exposes the same identity, path, transform, range, time, and quality rules for authoring. Array and single-object modes preserve string IDs, require explicit numeric conversion, isolate field failures, and treat duplicate entity IDs or invalid roots as whole-result failures. Samples, example JSON, and test overrides remain runtime-only.
 
@@ -63,4 +66,4 @@ Resolver, runtime, and project package diagnostics use a structured problem cont
 
 ## Deferred Runtime and UX Work
 
-GLB internal hierarchy editing, per-submesh material slot discovery, shadow controls, advanced light helper gizmos, cloud asset libraries, marketplace metadata, durable upload queues, data binding, Agent command proposal runtime, hosted publishing, and advanced decoder configuration remain follow-up work.
+GLB internal hierarchy editing, per-submesh material slot discovery, shadow controls, advanced light helper gizmos, cloud asset libraries, marketplace metadata, durable upload queues, continuous data preview scheduling and data-driven object appearance, Agent command proposal runtime, hosted publishing, and advanced decoder configuration remain follow-up work.

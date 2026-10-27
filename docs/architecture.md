@@ -81,7 +81,7 @@ Snapshot 保存：
 - material overrides
 - environment/background authoring intent
 - light definitions and their light node targets
-- `dataSources` 中的已保存连接、查询配置与设备属性映射，以及 query/binding 引用记录；host credentials、请求草稿、示例 JSON、执行器、原始响应和测试参数都留在 runtime
+- `dataSources` 中的已保存连接、查询配置与设备属性映射、对象绑定的查询/设备/参数覆盖/详情字段配置；host credentials、请求草稿、示例 JSON、执行器、原始响应、有效参数、预览状态和测试参数都留在 runtime
 - presentation state, including authored camera views and the default presentation view pointer
 - imported GLB target identity, owner hierarchy constraints, source descriptors, optional transform overrides, imported material slot descriptors, and JSON-compatible reimport remap metadata
 - authored problem metadata
@@ -97,6 +97,7 @@ Runtime 保存或派生：
 - renderer / camera / scene
 - editor camera navigation, OrbitControls state, camera helper output, and controls target object
 - data service run state: request descriptors, raw response text/JSON, elapsed timing, generations, cancellation, and recoverable request diagnostics
+- object data runtime: effective binding parameters, per-object runtime status/fields/timestamps/quality, preview enabled/refreshing/last-refresh flags, and derived detail models
 - resolver output
 - recoverable runtime problem
 - imported target match records linking durable imported nodes to loaded GLB descendants
@@ -110,6 +111,8 @@ Authored camera view 是 presentation resource，不是 runtime camera。Runtime
 Material projection 只消费 durable material assignment、imported slot descriptor 和 runtime target map。Object-level assignment 是 broad pass；material-slot assignment 是 narrower pass，只覆盖匹配 primitive mesh 或 material array index 的 projection-owned clone。Texture loader result、shared texture resource owner、slot resolver result、cloned material 和 projection problem 都属于 runtime projection，不能写回 Snapshot 或 `.ek3d`。
 
 Data service 与 viewport 独立：`editor.getDataService()` 在无 DOM/WebGL 环境也能读取运行态、订阅、执行草稿查询、取消和销毁。请求执行器由宿主通过 `createEditor({ executor })` 注入；core 只产生带 `credentialRef` 的请求描述，不读取或保存秘密，也不使用 global `fetch` 作为回退。运行结果、取消标记、timer 和 generation 都是 runtime-only；草稿修改、连接配置变化、undo/redo 或 dispose 会失效旧 generation，即使宿主执行器忽略 abort，晚到响应也不会提交为当前结果。已保存的 query 与 mapping 属于 durable `dataSources.queries`；只有经 command/history 的保存会写入 Snapshot，窗口内请求草稿、示例 JSON、测试覆盖和预览样本不会进入 Snapshot。
+
+对象数据预览也由同一个 core service 驱动：`startPreview()` 开启预览并立即刷新一次，`refreshPreview()` 只在预览开启时按当前 durable 绑定执行请求，`stopPreview()` 清空全部对象运行态并中止在途请求，但保留 binding 配置。每个启用的 binding 用自己的 `parameterOverrides` 解析有效参数并请求一次；响应按 query mapping 映射后以 `entityId` 精确匹配 binding 的 `deviceId`，不会在 React 侧另做匹配或取数。`buildDataObjectDetailModel()` 只消费 Snapshot 配置与传入的 runtime state，生成有序详情字段、标签覆盖、单位、精度、接收/采样时间和质量；缺失字段、缺失设备、HTTP/映射失败都保留明确 problem，不填充假值。任何影响 binding、其查询或其连接配置的 `dataSources` 事务会取消并清除对应对象的运行态，其他对象的当前结果保留；不会自动取数，受影响对象等待下一次显式刷新。结果更新不写 Snapshot/history。此任务不包含持续调度或共享预览上下文。
 
 ## Asset 解析边界
 

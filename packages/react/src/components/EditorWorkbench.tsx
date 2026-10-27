@@ -2,6 +2,8 @@ import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type R
 import { buildWorkbenchModel, resolveEditorShortcut, type Problem, type AssetResolverBridge, type EditorRuntime, type EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
 import { useWorkbench, type ResolvedWorkbenchContext, type UseWorkbenchOptions } from "../hooks/use-workbench";
 import { EditorViewport } from "./EditorViewport";
+import { DataDetailCard } from "./DataDetailCard";
+import { DataPreviewControls } from "./DataPreviewControls";
 import { InspectorView } from "./InspectorView";
 import { WorkbenchLeftPanel, type WorkbenchPanelView } from "./WorkbenchLeftPanel";
 import { WorkbenchNavigation } from "./WorkbenchNavigation";
@@ -257,6 +259,8 @@ export function EditorWorkbench({
             onToggleMarqueeSelection={() => setMarqueeSelectionEnabled((enabled) => !enabled)}
           />
         ) : null}
+        <DataPreviewControls context={workbench} />
+        <DataDetailCard context={workbench} />
       </section>
       <aside id={`${panelId}-left`} hidden={leftCollapsed} className="ek-workbench__side-panel" aria-label={t("reactWorkbench.shell.projectPanel.label")}>
         {renderLeftPanel ? renderLeftPanel(workbench) : <WorkbenchLeftPanel context={workbench} activeView={activeView} />}
@@ -281,6 +285,7 @@ export function EditorWorkbench({
             setActiveLightId={workbench.setActiveLightId}
             setActiveCameraViewId={workbench.setActiveCameraViewId}
             camera={workbench.camera}
+            dataContext={workbench}
             i18n={workbench.i18n}
             onReplaceAsset={(assetId, file) => {
               void workbench.replaceAsset({ assetId, source: file, label: file.name, mimeType: file.type });

@@ -45,7 +45,10 @@ export function applyUpdateDataQuery(snapshot: SceneSnapshot, command: UpdateDat
   const validation = validateDataQueryDefinition(command.query, {
     queryId: command.queryId,
     connection: snapshot.dataSources.connections[existing.connectionId] ?? null,
-    existingQueries: Object.values(snapshot.dataSources.queries)
+    existingQueries: Object.values(snapshot.dataSources.queries),
+    existingQuery: existing,
+    referencingBindings: Object.values(snapshot.dataSources.bindings)
+      .filter((binding) => binding.queryId === command.queryId)
   });
   if (!validation.ok || !validation.value) {
     throw new Error(formatProblems(validation.problems));

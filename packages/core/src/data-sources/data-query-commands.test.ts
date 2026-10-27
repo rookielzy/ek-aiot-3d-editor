@@ -207,7 +207,14 @@ describe("durable query authoring", () => {
       dataSources: {
         ...serialized.dataSources,
         bindings: {
-          "object-a": { objectNodeId: "object-a", queryId }
+          "object-a": {
+            objectNodeId: "object-a",
+            queryId,
+            parameterOverrides: {},
+            deviceId: "pump-01",
+            enabled: true,
+            details: [{ key: "temperature", label: null, precision: null }]
+          }
         }
       }
     });

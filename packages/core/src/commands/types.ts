@@ -14,7 +14,7 @@ import type { LightDefinition, LightKind } from "../lights/types";
 import type { MaterialAssignmentTarget, MaterialPatch } from "../materials/types";
 import type { EditorClipboardPayload } from "../clipboard/types";
 import type { JsonValue, NodeId, SceneSnapshot, Transform } from "../snapshot/types";
-import type { DataConnectionDraft, DataConnectionId, DataConnectionInput, DataQueryDefinition, DataQueryId, DataQueryInput } from "../data-sources/types";
+import type { DataConnectionDraft, DataConnectionId, DataConnectionInput, DataObjectBinding, DataQueryDefinition, DataQueryId, DataQueryInput } from "../data-sources/types";
 
 export type Command =
   | BatchCommand
@@ -58,7 +58,9 @@ export type SingleCommand =
   | CreateDataQueryCommand
   | UpdateDataQueryCommand
   | DuplicateDataQueryCommand
-  | DeleteDataQueryCommand;
+  | DeleteDataQueryCommand
+  | SetDataObjectBindingCommand
+  | DeleteDataObjectBindingCommand;
 
 export interface ImportGlbCommand {
   type: "import-glb";
@@ -323,6 +325,16 @@ export interface DuplicateDataQueryCommand {
 export interface DeleteDataQueryCommand {
   type: "delete-data-query";
   queryId: DataQueryId;
+}
+
+export interface SetDataObjectBindingCommand {
+  type: "set-data-object-binding";
+  binding: DataObjectBinding;
+}
+
+export interface DeleteDataObjectBindingCommand {
+  type: "delete-data-object-binding";
+  objectNodeId: NodeId;
 }
 
 export interface BatchCommand {

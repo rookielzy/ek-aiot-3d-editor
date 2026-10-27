@@ -9,6 +9,7 @@ import { applyCreateCameraView, applyDeleteCameraView, applySetDefaultCameraView
 import { applyCreateGroup } from "./create-group";
 import { applyCreateImportedGlbTargets } from "./create-imported-glb-targets";
 import { applyCreateDataConnection, applyDeleteDataConnection, applyDuplicateDataConnection, applyUpdateDataConnection } from "./data-connection-commands";
+import { applyDeleteDataObjectBinding, applySetDataObjectBinding } from "./data-object-binding-commands";
 import { applyCreateDataQuery, applyDeleteDataQuery, applyDuplicateDataQuery, applyUpdateDataQuery } from "./data-query-commands";
 import { applyDeleteNodes } from "./delete-nodes";
 import { applyDeleteObjects } from "./delete-objects";
@@ -188,6 +189,10 @@ export class CommandDispatcher {
         return applyDuplicateDataQuery(snapshot, command);
       case "delete-data-query":
         return applyDeleteDataQuery(snapshot, command);
+      case "set-data-object-binding":
+        return applySetDataObjectBinding(snapshot, command);
+      case "delete-data-object-binding":
+        return applyDeleteDataObjectBinding(snapshot, command);
       default:
         return assertNever(command);
     }

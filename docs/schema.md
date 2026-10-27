@@ -474,7 +474,7 @@ Snapshot 中的 `problems` 是 authored problem state。resolver、loader、PMRE
 
 ## Data Sources
 
-v9 新增顶层 `dataSources`，用于保存 HTTP JSON 数据源配置。当前切片落地连接配置、已保存查询与设备属性映射；绑定仍只建立稳定引用边界，后续任务在同一 v9 schema 内扩展，不提升版本。
+v9 新增顶层 `dataSources`，用于保存 HTTP JSON 数据源配置。当前切片落地连接配置、已保存查询、设备属性映射与对象绑定配置；绑定保存查询/设备/参数覆盖/详情字段引用，实时数据本身仍是 runtime-only。后续任务在同一 v9 schema 内扩展，不提升版本。
 
 ```ts
 type DataConnectionAuth =
@@ -557,9 +557,19 @@ interface DataQuery {
   mapping: DataQueryMapping;
 }
 
+interface DataBindingDetailField {
+  key: string;
+  label: string | null;
+  precision: number | null;
+}
+
 interface DataObjectBinding {
   objectNodeId: string;
   queryId: string;
+  parameterOverrides: Readonly<Record<string, DataParameterValue>>;
+  deviceId: string;
+  enabled: boolean;
+  details: readonly DataBindingDetailField[];
 }
 
 interface SceneDataSources {
@@ -584,9 +594,15 @@ Validation 规则：
 - mapping 至少包含一个属性；属性键在 query 内唯一，来源路径只能是对象键/非负数组索引，禁止通配、递归、脚本和原型链访问。
 - 属性类型、可空性、单位、可选范围/枚举与转换共同校验：range 仅适用于数字属性的 min/max 约束；allowed 是非空、无重复且类型匹配属性类型的值列表。转换输出必须符合声明类型。数组模式每行一个设备；单对象模式的身份可来自字段、参数或固定值。重复设备 ID 使整次映射失败，单字段错误按属性隔离。
 - 时间格式支持带明确时区的 ISO 与 Unix 秒/毫秒；ISO 日历日期必须真实存在，Unix 换算后的毫秒值必须有限且在 JavaScript Date 可表示范围内（包含正负 `8_640_000_000_000_000` 毫秒边界）。源时间超前接收时间超过 30 秒视为无效。source quality 只由明确映射产生，HTTP 成功不推断 `good`。
-- 每个 binding 的 key 必须是现有 object node ID，`queryId` 必须指向现有 query。
+- 每个 binding 的 key 必须是现有 object node ID，目标只允许整 object node；imported target 必须显式改绑 owner，group/light/camera 拒绝绑定。`queryId` 必须指向现有 query。
+- binding 的 `deviceId` 保存时去空白且不能为空；`enabled` 必须是布尔值。`parameterOverrides` 只能包含 query 已定义的参数，并且值类型必须匹配；未覆盖的参数继续使用 query 默认值。
+- `details` 至少包含一个字段，字段 `key` 必须由该 query 的 mapping 映射且不能重复；数字字段的 `precision` 是 `0..6` 的整数或 `null`，`null` 表示使用默认 2 位小数；`label` 去空白后为空则显式保存为 `null`。
+- Snapshot 中的 binding 必须已经规范化（显式 `label`/`precision`、不含未知字段），恢复不会补全。`validateDataObjectBindingInput()` 与保存 command 共用同一校验。
+- 已保存 query 的编辑不能删除/重命名/改变类型 binding 引用的属性，也不能删除或改变 binding 覆盖参数的类型；这些 guard 让 durable 引用始终可解析。
 
 连接变更通过 `create-data-connection`、`update-data-connection`、`duplicate-data-connection`、`delete-data-connection` command 进入 command/history；一次保存对应一次可撤销编辑。失败会保持 Snapshot/history 原子不变。复制连接生成新 ID 和唯一名称，不复制 query。存在 query/binding 引用时拒绝删除 connection；引用统计由 `countDataConnectionReferences` 提供。
+
+对象绑定通过 `set-data-object-binding`、`delete-data-object-binding` command 进入 command/history；一次保存或解除对应一次可撤销编辑。删除 object node 会同步移除其 binding。binding 的运行态数据（原始响应、解析值、有效参数、预览开关、时间和问题）不属于 Snapshot，由 `editor.getDataService()` 单独暴露。
 
 查询变更通过 `create-data-query`、`update-data-query`、`duplicate-data-query`、`delete-data-query` command 进入 command/history。查询配置与映射在同一 command 中保存，只增加一次编辑历史；复制查询生成新 ID 和同一 connection 内的唯一名称；存在 binding 引用时拒绝删除查询。`buildDataQueryList()` 与 `countDataQueryReferences()` 提供列表和引用统计。
 

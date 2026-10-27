@@ -1,7 +1,8 @@
-import type { SceneSnapshot } from "../snapshot/types";
+import type { SceneSnapshot, SceneNode } from "../snapshot/types";
 import { isPlainRecord } from "../snapshot/json";
+import { validateDataObjectBindingInput } from "./bindings";
 import { validateDataQueryDefinition } from "./query-validation";
-import type { DataConnection, DataQuery } from "./types";
+import type { DataConnection, DataQuery, SceneDataSources } from "./types";
 import {
   DEFAULT_DATA_CONNECTION_TIMEOUT_MS,
   isDataConnectionNameTaken
@@ -92,9 +93,16 @@ export function validateDataSources(value: unknown, nodes: unknown, errors: stri
         errors.push(`Data query ${queryId} must use a matching non-empty id.`);
       }
       const connectionId = typeof query.connectionId === "string" ? query.connectionId : "";
+      const referencingBindings = isPlainRecord(value.bindings) && typeof queryId === "string"
+        ? Object.values(value.bindings).filter((binding) =>
+            isPlainRecord(binding) && binding.queryId === queryId
+          ) as never
+        : [];
       const result = validateDataQueryDefinition(query, {
         queryId,
         existingQueries,
+        existingQuery: query as never,
+        referencingBindings,
         connection: validConnections.get(connectionId) ?? null
       });
       for (const problem of result.problems) {
@@ -116,6 +124,7 @@ export function validateDataSources(value: unknown, nodes: unknown, errors: stri
   }
 
   if (bindings) {
+    const bindingNodes = isPlainRecord(nodes) ? nodes as Record<string, SceneNode> : {};
     for (const [objectNodeId, binding] of Object.entries(bindings)) {
       if (!isPlainRecord(binding)) {
         errors.push(`Data binding ${objectNodeId} must be a plain object.`);
@@ -131,21 +140,40 @@ export function validateDataSources(value: unknown, nodes: unknown, errors: stri
       if (!isPlainRecord(node) || node.kind !== "object") {
         errors.push(`Data binding ${objectNodeId} target must be an existing object node.`);
       }
+
+      const result = validateDataObjectBindingInput({
+        dataSources: value as unknown as SceneDataSources,
+        nodes: bindingNodes
+      }, binding);
+      for (const problem of result.problems) {
+        errors.push(`Data binding ${objectNodeId} ${problem.code}: ${problem.message}`);
+      }
+      if (result.value && !matchesNormalizedValue(binding, result.value, true)) {
+        errors.push(`Data binding ${objectNodeId} must contain normalized binding fields.`);
+      }
     }
   }
 }
 
-function matchesNormalizedValue(value: unknown, normalized: unknown): boolean {
+function matchesNormalizedValue(value: unknown, normalized: unknown, strict = false): boolean {
   if (value === normalized) {
     return true;
   }
   if (Array.isArray(normalized)) {
     return Array.isArray(value) && value.length === normalized.length &&
-      normalized.every((entry, index) => matchesNormalizedValue(value[index], entry));
+      normalized.every((entry, index) => matchesNormalizedValue(value[index], entry, strict));
   }
   if (isPlainRecord(normalized)) {
-    return isPlainRecord(value) && Object.entries(normalized).every(([key, entry]) =>
-      Object.prototype.hasOwnProperty.call(value, key) && matchesNormalizedValue(value[key], entry)
+    if (!isPlainRecord(value)) {
+      return false;
+    }
+    const normalizedKeys = Object.keys(normalized);
+    if (strict && normalizedKeys.length !== Object.keys(value).length) {
+      return false;
+    }
+    return normalizedKeys.every((key) =>
+      Object.prototype.hasOwnProperty.call(value, key) &&
+      matchesNormalizedValue(value[key], normalized[key], strict)
     );
   }
   return false;

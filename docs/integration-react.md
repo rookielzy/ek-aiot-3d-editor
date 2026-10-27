@@ -110,6 +110,14 @@ executor 收到 `credentialRef` 而不是秘密；认证头、来源校验、重
 
 查询编辑器把导入的响应或示例 JSON 按保存的字段映射预览为标准设备属性。查询名称、路径、参数和映射作为一次 command 提交；示例 JSON、临时参数覆盖和预览样本只存在会话内。结构合法但尚未测试的查询可以在离线状态保存，字段错误显示在对应结果上。
 
+### 对象绑定与详情预览
+
+选中单一 object node 后，Object inspector 的 “Device data” 区块可以保存该对象的绑定：查询、手动设备 ID 或当前结果里的设备候选、每个参数的绑定覆盖、启停状态，以及有序的详情字段（展开标签、数字小数位）。Data 工作区每个查询的 “Bindings” 对话框复用同一个表单，并固定查询。绑定保存/解除各对应一次可撤销 command；一个 object 只有一个查询上下文，`details` 至少一个字段。imported target 只显示原因和 “Select owner …” 显式动作，不会静默改绑 owner；group/light/camera 和多选也显示对应原因。
+
+设备候选通过 core data service 执行当前已保存查询，并使用此 binding 的参数覆盖；测试覆盖、默认值和绑定覆盖互不串用。候选为空时仍可手填设备 ID 并等待后续数据。每次预览请求只由视口工具条上的 “Start data preview”/“Refresh data” 触发，打开预览不会自动持续轮询；“Stop data preview” 清空运行态并关闭详情卡，但保留 durable binding。修改连接/查询/binding 会取消并清除受影响对象的运行态，其他对象保留当前结果；受影响对象需要下一次显式刷新，旧数据不会作为当前值继续显示。停用的 binding 不显示详情卡。
+
+详情卡随 NodeId 选择显示，内容来自 core 的 `buildDataObjectDetailModel()`：对象、查询、设备、字段顺序、标签覆盖、单位、精度、接收/采样时间、source quality，以及缺失字段、缺失设备、HTTP/映射失败等明确问题。运行态字段、设备匹配和格式化不在 React 组件内实现；React 只订阅 `editor.getDataService()` 暴露的对象数据状态并渲染。每次预览结果更新都不写 `Snapshot`、`.ek3d` 或 command history。
+
 ## 双语 Workbench UI
 
 默认 Workbench UI 内置 `en` 和 `zh-CN` 字典，默认语言是 English，不需要 `i18next`、`react-i18next`、FormatJS 或其他第三方 i18n runtime。宿主只需要继续从 package root 和公开 CSS 子路径导入：
