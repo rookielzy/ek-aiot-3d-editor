@@ -81,3 +81,14 @@ React Data 工作区新增双语查询配置对话框：请求与保存分离，
 - 从 `packages/core` 运行 `pnpm typecheck`：通过。
 - `git diff --check`：通过。
 - 根目录 `bun run check` 无法执行：环境未安装 Bun；当前仓库使用 pnpm/Vitest，根 `package.json` 也未配置 `check` 脚本。
+
+2026-10-27：修复 React review 的四个 P2 问题。查询编辑器区分完整响应的根路径建议与设备内的相对字段建议，后者随根路径/数组或单对象模式更新并聚合设备行字段；成功应用示例时失效旧请求，防止晚到响应覆盖示例内容和来源；数据面板按宿主 editor 身份重建会话，清除旧窗口、草稿和样本，同一 editor 的重新渲染仍保留草稿；属性切换为 string/boolean 时清除隐藏的数字范围，预览与保存恢复可用。新增 6 个 DOM 回归用例并补充 React patch changeset，未修改 core、Vue 或其他工作区改动。
+
+本轮 React 修复验证：
+
+- 从 `packages/react` 运行 `pnpm exec vitest run --root ../.. packages/react/test/workbench-query-mapping-regressions.test.tsx --maxWorkers 1`：修复前 6 failed，分别复现四类问题。
+- 从 `packages/react` 运行 `pnpm exec vitest run --root ../.. packages/react/test/workbench-query-mapping-regressions.test.tsx packages/react/test/workbench-query-mapping.test.tsx --maxWorkers 1`：2 files / 12 tests passed。
+- 从 `packages/react` 运行 `pnpm exec vitest run --root ../.. --maxWorkers 2`：126 files / 1123 tests passed。
+- 从 `packages/react` 运行 `pnpm typecheck`：通过。
+- `git diff --check`：通过；新增测试和 changeset 另经 `git diff --no-index --check` 检查通过。
+- 根目录 `bun run check` 仍因未安装 Bun 无法执行，使用仓库现有 pnpm/Vitest 命令验证。

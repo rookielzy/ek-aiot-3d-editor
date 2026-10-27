@@ -13,6 +13,8 @@ import {
   buildSaveDataQueryCommand,
   formatDataPath,
   mapDataQueryBody,
+  parseDataPath,
+  resolveDataPath,
   validateDataQueryMapping,
   type DataMappedField,
   type DataMappingProblem,
@@ -174,6 +176,7 @@ export function DataQueryEditor({
   const keepEditingRef = useRef<HTMLButtonElement>(null);
   const t = context.i18n.t;
   const discardId = useId();
+  const rootSuggestionListId = useId();
   const suggestionListId = useId();
 
   const service = context.editor.getDataService?.() ?? null;
@@ -215,7 +218,13 @@ export function DataQueryEditor({
       : null,
     [sample, mapping, connectionId, queryId]
   );
-  const suggestions = useMemo(() => collectPathSuggestions(sample?.body), [sample?.body]);
+  const rootSuggestions = useMemo(() => collectPathSuggestions(sample?.body), [sample?.body]);
+  const suggestions = useMemo(() => {
+    const path = parseDataPath(form.rootPath);
+    const root = sample && path ? resolveDataPath(sample.body, path) : undefined;
+    const items = form.mode === "array" ? Array.isArray(root) ? root.slice(0, 20) : [] : [root];
+    return [...new Set(items.flatMap(collectPathSuggestions))].slice(0, 120);
+  }, [sample, form.rootPath, form.mode]);
   const dirty = serializeQueryForm(form) !== form.baseline;
 
   useEffect(() => {
@@ -280,7 +289,11 @@ export function DataQueryEditor({
     const transformKind = (type === "number" || current.transformKind === "raw" || current.transformKind === "map")
       ? current.transformKind
       : "raw";
-    updateProperty(index, { type, transformKind });
+    updateProperty(index, {
+      type,
+      transformKind,
+      ...(type !== "number" ? { rangeMin: "", rangeMax: "" } : {})
+    });
   }
 
   function changePropertyTransform(index: number, transformKind: QueryPropertyForm["transformKind"]): void {
@@ -368,6 +381,8 @@ export function DataQueryEditor({
       setSampleError("dataSources.sample.invalidJson");
       return;
     }
+    service?.invalidateQueryRuns();
+    setRunId(null);
     setSampleError(null);
     setSample({
       source: "example",
@@ -479,7 +494,6 @@ export function DataQueryEditor({
               <span>{t("dataSources.request.path")}</span>
               <input
                 type="text"
-                list={suggestionListId}
                 aria-label={t("dataSources.request.path")}
                 placeholder={t("dataSources.request.pathPlaceholder")}
                 value={form.path}
@@ -522,7 +536,7 @@ export function DataQueryEditor({
               value={form.rootPath}
               onChange={(value) => updateForm({ rootPath: value })}
               hint={t("dataSources.mapping.rootHint")}
-              suggestionListId={suggestionListId}
+              suggestionListId={rootSuggestionListId}
             />
 
             <div className="ek-workbench__query-inline">
@@ -809,6 +823,9 @@ export function DataQueryEditor({
           </div>
         </div>
       ) : null}
+      <datalist id={rootSuggestionListId}>
+        {rootSuggestions.map((suggestion) => <option key={suggestion} value={suggestion} />)}
+      </datalist>
       <datalist id={suggestionListId}>
         {suggestions.map((suggestion) => <option key={suggestion} value={suggestion} />)}
       </datalist>

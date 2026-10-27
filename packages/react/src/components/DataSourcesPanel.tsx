@@ -73,6 +73,16 @@ const PROBLEM_MESSAGE_KEYS = {
 } satisfies Record<DataConnectionProblemCode, WorkbenchMessageKey>;
 
 export function DataSourcesPanel({ context }: { context: ResolvedWorkbenchContext }) {
+  // Drafts and response samples belong to the editor that opened the panel.
+  const [session, setSession] = useState({ editor: context.editor, key: 0 });
+  if (session.editor !== context.editor) {
+    setSession({ editor: context.editor, key: session.key + 1 });
+    return null;
+  }
+  return <DataSourcesSession key={session.key} context={context} />;
+}
+
+function DataSourcesSession({ context }: { context: ResolvedWorkbenchContext }) {
   const [query, setQuery] = useState("");
   const [form, setForm] = useState<DataFormState | null>(null);
   const [requestConnectionId, setRequestConnectionId] = useState<string | null>(null);
