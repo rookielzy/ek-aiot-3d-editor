@@ -72,4 +72,3 @@ React 新增共享 Device data 表单（Object Inspector 与查询 Bindings 对�
 - Spec 轴：7 项验收与 core/React/Vue 职责行均有实现与测试，无缺失功能或范围蔓延；Vue i18n 仅为跨 adapter 字典 parity，delete-nodes 清理与 query 校验属于规格引用边界。
 - Standards 轴：未发现硬性规范违规；判断性建议保留现状（binding 过滤的小重复、validation 层对未知输入的 cast、内部 React 组件不新增 package-root 导出）。
 - 审查后修复：非数字详情字段拒绝 precision 并补充公开测试；移除 `DataQueryEditor` 冗余 message-key alias 并更新精度错误文案。实现期间同时修复连接配置变化后候选仍显示为当前结果、候选映射错误未本地化两个缺口。
-
