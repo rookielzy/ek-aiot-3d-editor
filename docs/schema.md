@@ -580,9 +580,10 @@ Validation 规则：
 - bearer auth 的 `credentialRef` 必须非空。凭证是否存在、是否可用属于宿主能力，不是 Snapshot 校验错误；缺失凭证仍可恢复、编辑和保存。
 - 每个 query 的 `id` 必须和 map key 一致，`connectionId` 必须指向现有 connection；query 名称在同一 connection 内大小写不敏感去重，跨 connection 可同名。
 - query `path` 只能是相对于连接 `baseUrl` 的路径；参数名、类型、默认值、路径编码、穿越防护和占位符完整性复用 `buildDataGetRequest()` 的规则。
+- Snapshot 中的 query 必须已经规范化，并显式保存映射默认字段（例如 scale 的 `offset: 0`、单侧 range 的另一侧 `null`）。草稿可通过 `validateDataQueryDefinition()` 取得规范化结果后交给保存 command；恢复不会隐式补全缺失字段。JSON 对象字段顺序不影响校验。
 - mapping 至少包含一个属性；属性键在 query 内唯一，来源路径只能是对象键/非负数组索引，禁止通配、递归、脚本和原型链访问。
 - 属性类型、可空性、单位、可选范围/枚举与转换共同校验：range 仅适用于数字属性的 min/max 约束；allowed 是非空、无重复且类型匹配属性类型的值列表。转换输出必须符合声明类型。数组模式每行一个设备；单对象模式的身份可来自字段、参数或固定值。重复设备 ID 使整次映射失败，单字段错误按属性隔离。
-- 时间格式支持带明确时区的 ISO 与 Unix 秒/毫秒；源时间超前接收时间超过 30 秒视为无效。source quality 只由明确映射产生，HTTP 成功不推断 `good`。
+- 时间格式支持带明确时区的 ISO 与 Unix 秒/毫秒；ISO 日历日期必须真实存在，Unix 换算后的毫秒值必须有限且在 JavaScript Date 可表示范围内（包含正负 `8_640_000_000_000_000` 毫秒边界）。源时间超前接收时间超过 30 秒视为无效。source quality 只由明确映射产生，HTTP 成功不推断 `good`。
 - 每个 binding 的 key 必须是现有 object node ID，`queryId` 必须指向现有 query。
 
 连接变更通过 `create-data-connection`、`update-data-connection`、`duplicate-data-connection`、`delete-data-connection` command 进入 command/history；一次保存对应一次可撤销编辑。失败会保持 Snapshot/history 原子不变。复制连接生成新 ID 和唯一名称，不复制 query。存在 query/binding 引用时拒绝删除 connection；引用统计由 `countDataConnectionReferences` 提供。

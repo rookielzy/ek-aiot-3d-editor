@@ -875,13 +875,18 @@ function parseObservedAt(raw: JsonValue, format: DataTimeFormat): number | null 
     if (typeof raw !== "string" || !ISO_WITH_ZONE.test(raw)) {
       return null;
     }
+    // Date.parse normalizes impossible calendar days before applying the timezone.
+    if (new Date(`${raw.slice(0, 10)}T00:00:00Z`).getUTCDate() !== Number(raw.slice(8, 10))) {
+      return null;
+    }
     const parsed = Date.parse(raw);
     return Number.isFinite(parsed) ? parsed : null;
   }
   if (typeof raw !== "number" || !Number.isFinite(raw)) {
     return null;
   }
-  return format === "unix-seconds" ? raw * 1000 : raw;
+  const parsed = format === "unix-seconds" ? raw * 1000 : raw;
+  return Number.isFinite(new Date(parsed).getTime()) ? parsed : null;
 }
 
 function resolveQuality(

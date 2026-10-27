@@ -44,6 +44,7 @@ export function validateDataSources(value: unknown, nodes: unknown, errors: stri
     errors.push("Snapshot dataSources.bindings must be a plain object map.");
   }
 
+  const validConnections = new Map<string, DataConnection>();
   if (connections) {
     const existing: DataConnectionNameEntry[] = [];
     for (const [connectionId, connection] of Object.entries(connections)) {
@@ -70,6 +71,9 @@ export function validateDataSources(value: unknown, nodes: unknown, errors: stri
       for (const problem of result.problems) {
         errors.push(`Data connection ${connectionId} ${problem.code}: ${problem.message}`);
       }
+      if (result.value) {
+        validConnections.set(connectionId, { id: connectionId, ...result.value });
+      }
       if (typeof connection.name === "string") {
         existing.push({ id: connectionId, name: connection.name });
       }
@@ -88,14 +92,17 @@ export function validateDataSources(value: unknown, nodes: unknown, errors: stri
         errors.push(`Data query ${queryId} must use a matching non-empty id.`);
       }
       const connectionId = typeof query.connectionId === "string" ? query.connectionId : "";
-      const connection = connections && connectionId ? connections[connectionId] : undefined;
       const result = validateDataQueryDefinition(query, {
         queryId,
         existingQueries,
-        connection: isPlainRecord(connection) ? connection as unknown as DataConnection : null
+        connection: validConnections.get(connectionId) ?? null
       });
       for (const problem of result.problems) {
         errors.push(`Data query ${queryId} ${problem.code}: ${problem.message}`);
+      }
+      // Draft validation supplies defaults; stored queries must already contain them.
+      if (result.value && !matchesNormalizedValue(query, result.value)) {
+        errors.push(`Data query ${queryId} must contain normalized fields and explicit mapping defaults.`);
       }
       if (typeof query.name === "string") {
         existingQueries.push({
@@ -126,6 +133,22 @@ export function validateDataSources(value: unknown, nodes: unknown, errors: stri
       }
     }
   }
+}
+
+function matchesNormalizedValue(value: unknown, normalized: unknown): boolean {
+  if (value === normalized) {
+    return true;
+  }
+  if (Array.isArray(normalized)) {
+    return Array.isArray(value) && value.length === normalized.length &&
+      normalized.every((entry, index) => matchesNormalizedValue(value[index], entry));
+  }
+  if (isPlainRecord(normalized)) {
+    return isPlainRecord(value) && Object.entries(normalized).every(([key, entry]) =>
+      Object.prototype.hasOwnProperty.call(value, key) && matchesNormalizedValue(value[key], entry)
+    );
+  }
+  return false;
 }
 
 export function validateDataConnectionDraft(

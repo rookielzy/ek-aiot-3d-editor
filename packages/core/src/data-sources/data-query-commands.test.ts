@@ -4,8 +4,11 @@ import {
   buildDuplicateDataQueryCommand,
   buildSaveDataQueryCommand,
   createEditor,
+  mapDataQueryBody,
   parseDataPath,
+  validateDataQueryDefinition,
   validateSceneSnapshot,
+  validateSerializedSceneSnapshot,
   type DataPropertyMapping,
   type DataQueryDefinition,
   type DataQueryMapping
@@ -226,6 +229,116 @@ describe("durable query authoring", () => {
     const copyId = Object.keys(editor.getSnapshot().dataSources.queries).find((id) => id !== queryId)!;
     expect(editor.getSnapshot().dataSources.bindings["object-a"].queryId).toBe(queryId);
     expect(buildDeleteDataQueryCommand(editor.getSnapshot(), copyId).ok).toBe(true);
+    editor.dispose();
+  });
+
+  it.each([
+    { auth: null },
+    { auth: { kind: "bearer" } },
+    { headers: null },
+    { baseUrl: "invalid" }
+  ])("reports invalid referenced connections without throwing: %j", (patch) => {
+    const editor = createEditor();
+    createConnection(editor, "Plant API");
+    const snapshot = editor.serialize();
+    const invalid = {
+      ...snapshot,
+      dataSources: {
+        ...snapshot.dataSources,
+        connections: {
+          "connection-a": { ...snapshot.dataSources.connections["connection-a"], ...patch }
+        },
+        queries: { "query-a": { id: "query-a", ...queryDefinition() } }
+      }
+    };
+
+    const result = validateSceneSnapshot(invalid);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContainEqual(expect.stringContaining("Data connection connection-a"));
+    expect(result.errors).toContainEqual(expect.stringContaining("Data query query-a connection-not-found"));
+    expect(validateSerializedSceneSnapshot(invalid).ok).toBe(false);
+    editor.dispose();
+  });
+
+  it.each([
+    { label: "scale offset", transform: { kind: "scale", factor: 0.1 }, range: { min: 0, max: null } },
+    { label: "range maximum", transform: { kind: "scale", factor: 0.1, offset: 0 }, range: { min: 0 } }
+  ])("requires stored queries to contain the $label supplied during authoring", ({ transform, range }) => {
+    const editor = createEditor();
+    createConnection(editor, "Plant API");
+    const definition = {
+      ...queryDefinition(),
+      mapping: {
+        ...baseMapping(),
+        properties: [{
+          ...property("temperature", "tempRaw", "number", { kind: "raw" }),
+          transform,
+          range
+        }]
+      }
+    };
+    const snapshot = editor.serialize();
+    const incomplete = {
+      ...snapshot,
+      dataSources: {
+        ...snapshot.dataSources,
+        queries: { "query-a": { id: "query-a", ...definition } }
+      }
+    };
+
+    expect(validateSceneSnapshot(incomplete)).toMatchObject({
+      ok: false,
+      errors: expect.arrayContaining([expect.stringContaining("explicit mapping defaults")])
+    });
+    expect(validateSerializedSceneSnapshot(incomplete).ok).toBe(false);
+
+    const validation = validateDataQueryDefinition(definition, {
+      connection: snapshot.dataSources.connections["connection-a"]
+    });
+    if (!validation.value) throw new Error("Expected a normalized query definition.");
+    const command = buildSaveDataQueryCommand(editor.getSnapshot(), { id: "query-a", ...validation.value });
+    if (!command.ok) throw new Error("Expected a save command.");
+    expect(editor.dispatch(command.command).ok).toBe(true);
+    const restored = createEditor({ snapshot: JSON.parse(JSON.stringify(editor.serialize())) });
+    const mapping = restored.getSnapshot().dataSources.queries["query-a"].mapping;
+
+    expect(mapping.properties[0]).toMatchObject({
+      transform: { kind: "scale", factor: 0.1, offset: 0 },
+      range: { min: 0, max: null }
+    });
+    expect(mapDataQueryBody(mapping, {
+      data: { items: [{ deviceCode: "001", tempRaw: 426 }] }
+    }, { connectionId: "connection-a", queryId: "query-a", receivedAt: 0 }).samples).toContainEqual(
+      expect.objectContaining({ propertyKey: "temperature", value: 42.6 })
+    );
+    restored.dispose();
+    editor.dispose();
+  });
+
+  it("accepts stored query fields regardless of JSON object key order", () => {
+    const editor = createEditor();
+    createConnection(editor, "Plant API");
+    const snapshot = editor.serialize();
+    const definition = queryDefinition();
+
+    expect(validateSceneSnapshot({
+      ...snapshot,
+      dataSources: {
+        ...snapshot.dataSources,
+        queries: {
+          "query-a": {
+            id: "query-a",
+            ...definition,
+            mapping: {
+              ...definition.mapping,
+              properties: definition.mapping.properties.map((property) =>
+                Object.fromEntries(Object.entries(property).reverse())
+              )
+            }
+          }
+        }
+      }
+    }).ok).toBe(true);
     editor.dispose();
   });
 

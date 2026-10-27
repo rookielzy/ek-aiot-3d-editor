@@ -70,3 +70,14 @@ React Data 工作区新增双语查询配置对话框：请求与保存分离，
 - `git diff --check`：退出码 0；仅 Git 对既有 CRLF/LF 文件给出提示。
 
 环境差异：Windows 下根 `pnpm typecheck` 的 `pnpm -r --filter './packages/*'` 仍未匹配包（既有问题），因此按明确包名完成类型检查；jsdom 与浏览器全量测试未并行运行。
+
+2026-10-27：修复对 `12f028b` 的 core review 中四个 P2 问题：ISO 不存在的日历日期不再被自动归一化；Unix 秒/毫秒在换算后校验有限性和 Date 可表示范围；Snapshot 查询校验只使用已校验的连接值，坏连接返回诊断而不抛异常；存储查询必须与规范化定义一致，拒绝缺少 scale offset、range 边界等默认字段的配置，保存 command 仍负责规范化。删除未使用的重复 `isParameterValueOfType()`，补充 schema 说明和 core patch changeset。新增 30 个公开 API 回归用例，覆盖错误隔离、闰日/时区、Unix 时间边界、坏连接、缺失默认值、规范化保存后的 JSON 往返与字段顺序无关性。
+
+本轮验证：
+
+- 修复前，从 `packages/core` 运行 `pnpm exec vitest run --root ../.. packages/core/src/data-sources/mapping.test.ts packages/core/src/data-sources/data-query-commands.test.ts --maxWorkers 2`：18 failed / 33 passed，复现原缺陷；修复后同命令 51 passed（随后将缺失 offset/range 的测试拆分为两个独立用例，纳入下列全量结果）。
+- 从 `packages/core` 运行 `pnpm exec vitest run --root ../.. --maxWorkers 4`：124 files / 1116 tests passed；1 项现有 React 查询编辑测试超过 10000ms 限制，新增 30 个回归用例全部通过。
+- 从 `packages/react` 单独运行 `pnpm exec vitest run --root ../.. packages/react/test/workbench-query-mapping.test.tsx --maxWorkers 1`：1 file / 6 tests passed，保留原有 10000ms 限制。
+- 从 `packages/core` 运行 `pnpm typecheck`：通过。
+- `git diff --check`：通过。
+- 根目录 `bun run check` 无法执行：环境未安装 Bun；当前仓库使用 pnpm/Vitest，根 `package.json` 也未配置 `check` 脚本。

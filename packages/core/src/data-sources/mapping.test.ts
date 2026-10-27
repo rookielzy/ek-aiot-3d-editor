@@ -265,6 +265,83 @@ describe("query mapping engine", () => {
     expect(field(future.entities[0], "temperature")).toMatchObject({ value: 42.6, status: "ok" });
   });
 
+  it.each([
+    "2026-02-30T00:00:00Z",
+    "2026-02-29T00:00:00+08:00",
+    "1900-02-29T00:00:00Z",
+    "2024-02-30T00:00:00-08:00",
+    "2026-04-31T00:00:00Z",
+    "2026-13-01T00:00:00Z"
+  ])("diagnoses invalid ISO calendar date %s without losing valid fields", (sampledAt) => {
+    const result = success(mapDataQueryBody(baseMapping(), {
+      data: { items: [{ deviceCode: "001", tempRaw: 426, run: 1, sampledAt, quality: "ok" }] }
+    }, context()));
+
+    expect(result.entities[0]).toMatchObject({
+      observedAt: null,
+      observedAtProblem: { code: "observed-at-invalid" },
+      sourceQuality: "good",
+      qualityProblem: null
+    });
+    expect(result.samples).toContainEqual(expect.objectContaining({
+      propertyKey: "temperature", value: 42.6, observedAt: null
+    }));
+  });
+
+  it.each([
+    ["2024-02-29T00:30:00+08:00", "2024-02-28T16:30:00Z"],
+    ["2000-02-29T23:30:00-08:00", "2000-03-01T07:30:00Z"],
+    ["0000-02-29T00:00:00Z", "0000-02-29T00:00:00Z"]
+  ])("accepts valid leap day %s and applies its timezone", (sampledAt, utc) => {
+    const result = success(mapDataQueryBody(baseMapping(), {
+      data: { items: [{ deviceCode: "001", tempRaw: 426, sampledAt }] }
+    }, context()));
+
+    expect(result.entities[0]).toMatchObject({ observedAt: Date.parse(utc), observedAtProblem: null });
+  });
+
+  it.each([
+    { format: "unix-seconds", sampledAt: -1e308 },
+    { format: "unix-seconds", sampledAt: 1e308 },
+    { format: "unix-seconds", sampledAt: -8_640_000_000_001 },
+    { format: "unix-seconds", sampledAt: 8_640_000_000_001 },
+    { format: "unix-milliseconds", sampledAt: -1e30 },
+    { format: "unix-milliseconds", sampledAt: 1e30 },
+    { format: "unix-milliseconds", sampledAt: -8_640_000_000_000_001 },
+    { format: "unix-milliseconds", sampledAt: 8_640_000_000_000_001 }
+  ] as const)("diagnoses out-of-range $format time $sampledAt", ({ format, sampledAt }) => {
+    const result = success(mapDataQueryBody(baseMapping({
+      observedAt: { path: path("sampledAt"), format }
+    }), {
+      data: { items: [{ deviceCode: "001", tempRaw: 426, sampledAt }] }
+    }, context()));
+
+    expect(result.entities[0]).toMatchObject({
+      observedAt: null,
+      observedAtProblem: { code: "observed-at-invalid" }
+    });
+    expect(result.samples).toContainEqual(expect.objectContaining({
+      propertyKey: "temperature", value: 42.6, observedAt: null
+    }));
+  });
+
+  it.each([
+    { format: "unix-seconds", sampledAt: -8_640_000_000_000, expected: -8_640_000_000_000_000 },
+    { format: "unix-seconds", sampledAt: 8_640_000_000_000, expected: 8_640_000_000_000_000 },
+    { format: "unix-milliseconds", sampledAt: -8_640_000_000_000_000, expected: -8_640_000_000_000_000 },
+    { format: "unix-milliseconds", sampledAt: 8_640_000_000_000_000, expected: 8_640_000_000_000_000 },
+    { format: "unix-seconds", sampledAt: 0, expected: 0 },
+    { format: "unix-milliseconds", sampledAt: 0, expected: 0 }
+  ] as const)("accepts representable $format time $sampledAt", ({ format, sampledAt, expected }) => {
+    const result = success(mapDataQueryBody(baseMapping({
+      observedAt: { path: path("sampledAt"), format }
+    }), {
+      data: { items: [{ deviceCode: "001", tempRaw: 426, sampledAt }] }
+    }, { ...context(), receivedAt: 8_640_000_000_000_000 }));
+
+    expect(result.entities[0]).toMatchObject({ observedAt: expected, observedAtProblem: null });
+  });
+
   it("accepts empty device arrays and keeps the mapping untouched", () => {
     const result = success(mapDataQueryBody(baseMapping(), { data: { items: [] } }, context()));
     expect(result).toMatchObject({ ok: true, entities: [], samples: [], errors: [], problems: [] });

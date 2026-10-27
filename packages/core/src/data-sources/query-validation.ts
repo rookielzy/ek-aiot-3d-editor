@@ -214,16 +214,3 @@ function mapRequestProblemCode(code: DataQueryProblemCode): DataQueryDefinitionP
       return code.startsWith("path-") ? "path-invalid" : "parameter-invalid";
   }
 }
-
-function isParameterValueOfType(value: unknown, type: DataParameterType): value is DataParameterValue {
-  switch (type) {
-    case "string":
-      return typeof value === "string";
-    case "number":
-      return typeof value === "number" && Number.isFinite(value);
-    case "boolean":
-      return typeof value === "boolean";
-    default:
-      return false;
-  }
-}
