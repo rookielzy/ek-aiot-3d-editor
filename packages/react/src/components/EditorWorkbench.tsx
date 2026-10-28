@@ -122,6 +122,7 @@ export function EditorWorkbench({
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [dataLocate, setDataLocate] = useState<{ connectionId: string; queryId: string } | null>(null);
+  const [dataFieldFocus, setDataFieldFocus] = useState<{ nodeId: string; propertyKey: string } | null>(null);
   const panels = useWorkbenchPanelWidths(rootRef);
   const [marqueeSelectionEnabled, setMarqueeSelectionEnabled] = useState(false);
   const resolvedInteractions = useMemo(() => {
@@ -200,6 +201,9 @@ export function EditorWorkbench({
       nodeIds: [target.nodeId],
       primaryNodeId: target.nodeId
     });
+    setDataFieldFocus(target.kind === "data-field"
+      ? { nodeId: target.nodeId, propertyKey: target.propertyKey }
+      : null);
   }
 
   return (
@@ -278,7 +282,12 @@ export function EditorWorkbench({
           />
         ) : null}
         <DataPreviewControls context={workbench} />
-        <DataDetailCard context={workbench} />
+        <DataDetailCard
+          context={workbench}
+          focusFieldKey={dataFieldFocus?.nodeId === workbench.selection.nodeId
+            ? dataFieldFocus.propertyKey
+            : null}
+        />
       </section>
       <aside id={`${panelId}-left`} hidden={leftCollapsed} className="ek-workbench__side-panel" aria-label={t("reactWorkbench.shell.projectPanel.label")}>
         {renderLeftPanel ? renderLeftPanel(workbench) : (

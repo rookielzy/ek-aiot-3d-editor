@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   buildDataObjectDetailModel,
   type DataMappingProblem,
-  type DataObjectContextState,
   type DataObjectRuntimeProblem,
   type DataObjectRuntimeStatus,
   type DataQuality
@@ -13,6 +12,7 @@ import {
   DATA_MAPPING_PROBLEM_MESSAGE_KEYS,
   DATA_QUERY_PROBLEM_MESSAGE_KEYS
 } from "./data-query-problem-messages";
+import { formatDataParameters } from "./data-context-format";
 
 const STATUS_MESSAGE_KEYS = {
   inactive: "dataBinding.card.status.inactive",
@@ -31,10 +31,17 @@ const QUALITY_MESSAGE_KEYS = {
   unknown: "dataSources.mapping.quality.unknown"
 } satisfies Record<DataQuality, WorkbenchMessageKey>;
 
-export function DataDetailCard({ context }: { context: ResolvedWorkbenchContext }) {
+export function DataDetailCard({
+  context,
+  focusFieldKey
+}: {
+  context: ResolvedWorkbenchContext;
+  focusFieldKey?: string | null;
+}) {
   const service = context.editor.getDataService?.() ?? null;
   const dataState = context.dataState;
   const [closedNodeId, setClosedNodeId] = useState<string | null>(null);
+  const cardRef = useRef<HTMLElement>(null);
   const t = context.i18n.t;
 
   const selection = context.selection;
@@ -45,6 +52,15 @@ export function DataDetailCard({ context }: { context: ResolvedWorkbenchContext 
   useEffect(() => {
     setClosedNodeId(null);
   }, [dataState.preview.enabled, nodeId, service]);
+
+  useEffect(() => {
+    if (!focusFieldKey) {
+      return;
+    }
+    const field = [...cardRef.current?.querySelectorAll<HTMLElement>("[data-field-key]") ?? []]
+      .find((candidate) => candidate.dataset.fieldKey === focusFieldKey);
+    field?.scrollIntoView?.({ block: "nearest" });
+  }, [focusFieldKey, nodeId]);
 
   if (
     !service ||
@@ -81,6 +97,7 @@ export function DataDetailCard({ context }: { context: ResolvedWorkbenchContext 
 
   return (
     <section
+      ref={cardRef}
       className="ek-workbench__detail-card"
       role="region"
       aria-label={t("dataBinding.card.label")}
@@ -112,7 +129,7 @@ export function DataDetailCard({ context }: { context: ResolvedWorkbenchContext 
       <p className="ek-workbench__detail-card-context">
         {t("dataBinding.card.sharedContext", {
           count: contextState?.objectNodeIds.length ?? 1,
-          parameters: formatContextParameters(contextState, t("dataBinding.preview.noParameters"))
+          parameters: formatDataParameters(contextState?.parameters, t("dataBinding.preview.noParameters"))
         })}
       </p>
 
@@ -123,7 +140,13 @@ export function DataDetailCard({ context }: { context: ResolvedWorkbenchContext 
       {!loading && runtime && model.fields.length > 0 ? (
         <dl className="ek-workbench__detail-card-fields">
           {model.fields.map((field) => (
-            <div key={field.key} data-status={field.status} data-history={field.historyValue !== null ? "true" : undefined}>
+            <div
+              key={field.key}
+              data-status={field.status}
+              data-field-key={field.key}
+              data-focused={field.key === focusFieldKey ? "true" : undefined}
+              data-history={field.historyValue !== null ? "true" : undefined}
+            >
               <dt>
                 {field.label}
                 {field.unit ? <small> · {field.unit}</small> : null}
@@ -212,16 +235,6 @@ export function DataDetailCard({ context }: { context: ResolvedWorkbenchContext 
       </div>
     </section>
   );
-}
-
-function formatContextParameters(
-  context: DataObjectContextState | null,
-  emptyLabel: string
-): string {
-  const entries = Object.entries(context?.parameters ?? {});
-  return entries.length === 0
-    ? emptyLabel
-    : entries.map(([key, value]) => `${key}=${String(value)}`).join(" · ");
 }
 
 function formatMappingProblem(

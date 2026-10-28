@@ -5,6 +5,7 @@ import type {
 } from "@ek-aiot/3d-editor-core";
 import type { WorkbenchMessageKey } from "../i18n/workbench-i18n";
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
+import { formatDataParameters } from "./data-context-format";
 
 type PreviewStatusKey =
   | "dataBinding.preview.off"
@@ -73,7 +74,7 @@ export function DataPreviewControls({ context }: { context: ResolvedWorkbenchCon
             {contexts.map((item) => (
               <li key={item.key} data-phase={item.phase}>
                 <strong>{item.queryName}</strong>
-                <span>{formatParameters(item, t("dataBinding.preview.noParameters"))}</span>
+                <span>{formatDataParameters(item.parameters, t("dataBinding.preview.noParameters"))}</span>
                 <small>{t("dataBinding.preview.contextSummary", {
                   count: item.objectNodeIds.length
                 })}</small>
@@ -131,22 +132,15 @@ function isExpired(state: DataObjectRuntimeState): boolean {
     !state.freshness.fresh;
 }
 
-function formatParameters(
-  context: DataObjectContextState,
-  emptyLabel: string
-): string {
-  const entries = Object.entries(context.parameters);
-  return entries.length === 0
-    ? emptyLabel
-    : entries.map(([key, value]) => `${key}=${String(value)}`).join(" · ");
-}
-
 function phaseLabel(
   context: DataObjectContextState,
   workbench: ResolvedWorkbenchContext
 ): string {
   if (context.paused) {
     return workbench.i18n.t("dataBinding.preview.paused");
+  }
+  if (context.phase === "waiting" && context.nextRefreshAt === null) {
+    return workbench.i18n.t("dataBinding.preview.phase.awaitingRetry");
   }
   if (context.nextRefreshAt !== null) {
     return workbench.i18n.t("dataBinding.preview.nextRefresh", {

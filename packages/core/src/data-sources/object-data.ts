@@ -40,6 +40,8 @@ export interface DataObjectHistorySnapshot {
   entityId: string;
   displayName: string | null;
   fields: readonly DataMappedField[];
+  /** Receive time of the value retained for each field key. */
+  fieldReceivedAt: Readonly<Record<string, number>>;
   observedAt: number | null;
   receivedAt: number;
   sourceQuality: DataQuality | null;
@@ -191,7 +193,9 @@ export function buildDataObjectDetailModel(
       problems,
       historyValue,
       historyDisplayValue: historyValue === null ? null : formatDetailValue(historyValue, precision),
-      historyReceivedAt: historyValue === null ? null : state?.history?.receivedAt ?? null
+      historyReceivedAt: historyValue === null
+        ? null
+        : state?.history?.fieldReceivedAt[detail.key] ?? state?.history?.receivedAt ?? null
     };
   });
 

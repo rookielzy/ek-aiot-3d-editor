@@ -2287,6 +2287,12 @@ button.ek-workbench__status-chip { cursor: pointer; font: inherit; }
   gap: 0.1rem;
 }
 
+.ek-workbench__detail-card-fields > div[data-focused="true"] {
+  border-radius: var(--ek-workbench-radius-sm, 4px);
+  outline: 2px solid var(--ek-workbench-accent);
+  outline-offset: 2px;
+}
+
 .ek-workbench__detail-card-fields dt,
 .ek-workbench__detail-card-meta dt {
   color: var(--ek-workbench-muted);

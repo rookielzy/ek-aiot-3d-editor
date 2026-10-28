@@ -17,7 +17,8 @@ export function useEditor(options: UseEditorOptions = {}): UseEditorResult {
   const editor = markRaw(options.editor ?? createEditor({
     snapshot: options.snapshot,
     credentials: options.credentials,
-    executor: options.executor
+    executor: options.executor,
+    authRevision: options.authRevision
   }));
   const snapshot = shallowRef(editor.getSnapshot());
   const unsubscribe = editor.subscribe((nextSnapshot) => {

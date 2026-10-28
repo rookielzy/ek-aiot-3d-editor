@@ -1082,6 +1082,7 @@ const EN_WORKBENCH_MESSAGES = {
   "dataBinding.preview.phase.queued": "Queued",
   "dataBinding.preview.phase.requesting": "Requesting",
   "dataBinding.preview.phase.waiting": "Waiting",
+  "dataBinding.preview.phase.awaitingRetry": "Awaiting retry",
   "dataBinding.preview.phase.paused": "Paused",
 
   "dataBinding.card.label": "Device details",
@@ -2216,6 +2217,7 @@ const ZH_CN_WORKBENCH_MESSAGES = {
   "dataBinding.preview.phase.queued": "排队中",
   "dataBinding.preview.phase.requesting": "请求中",
   "dataBinding.preview.phase.waiting": "等待中",
+  "dataBinding.preview.phase.awaitingRetry": "等待重试",
   "dataBinding.preview.phase.paused": "已暂停",
 
   "dataBinding.card.label": "设备详情",

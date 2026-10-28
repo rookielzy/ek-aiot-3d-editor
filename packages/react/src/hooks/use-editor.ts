@@ -6,15 +6,17 @@ export interface UseEditorOptions extends EditorOptions {
 }
 
 export function useEditor(options: UseEditorOptions = {}): Editor {
-  // Credentials and executors are constructor options; replacing their arrays or
+  // Host capabilities are constructor options; replacing their arrays or
   // functions must not replace authored state or a mounted runtime.
   const [initialCredentials] = useState(options.credentials);
   const [initialExecutor] = useState(() => options.executor);
+  const [initialAuthRevision] = useState(options.authRevision);
   return useMemo(() => options.editor ?? createEditor({
     snapshot: options.snapshot,
     credentials: initialCredentials,
-    executor: initialExecutor
-  }), [options.editor, options.snapshot, initialCredentials, initialExecutor]);
+    executor: initialExecutor,
+    authRevision: initialAuthRevision
+  }), [options.editor, options.snapshot, initialCredentials, initialExecutor, initialAuthRevision]);
 }
 
 export function useEditorSnapshot(editor: Editor): SceneSnapshot {

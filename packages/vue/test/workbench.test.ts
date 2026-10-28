@@ -7,6 +7,8 @@ import {
   AssetResolverBridge,
   attachGlbImportManifestMetadata,
   buildAssetWorkspaceModel,
+  buildSaveDataObjectBindingCommand,
+  buildSaveDataQueryCommand,
   createGlbImportManifest,
   createEditor,
   filterAssetWorkspaceItems,
@@ -2058,6 +2060,84 @@ describe("Vue EditorWorkbench", () => {
     expect(editor.getSnapshot().selection.nodeId).toBeNull();
 
     wrapper.unmount();
+  });
+
+  it("aggregates core data preview problems without React-owned state", async () => {
+    const executor = vi.fn(async () => ({ status: 500, body: "{}" }));
+    const editor = markRaw(createEditor({ executor }));
+    expect(editor.dispatch({
+      type: "create-data-connection",
+      connection: {
+        id: "connection-a",
+        name: "Plant API",
+        baseUrl: "https://api.example.test/v1",
+        auth: { kind: "none" },
+        headers: {},
+        timeoutMs: 10_000
+      }
+    }).ok).toBe(true);
+    const query = buildSaveDataQueryCommand(editor.getSnapshot(), {
+      connectionId: "connection-a",
+      name: "Pump status",
+      path: "/pumps",
+      parameters: [],
+      mapping: {
+        mode: "array",
+        root: [],
+        identity: { kind: "path", path: [{ kind: "key", key: "deviceCode" }], valueType: "string" },
+        displayName: null,
+        properties: [{
+          key: "temperature",
+          label: "Temperature",
+          type: "number",
+          nullable: false,
+          unit: null,
+          source: [{ kind: "key", key: "temp" }],
+          transform: { kind: "number" },
+          range: null,
+          allowed: null
+        }],
+        observedAt: null,
+        sourceQuality: null
+      }
+    });
+    if (!query.ok) throw new Error(query.problems.map((problem) => problem.message).join("\n"));
+    expect(editor.dispatch(query.command).ok).toBe(true);
+    const queryId = Object.keys(editor.getSnapshot().dataSources.queries)[0];
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
+    const binding = buildSaveDataObjectBindingCommand(editor.getSnapshot(), {
+      objectNodeId: "object-a",
+      queryId,
+      parameterOverrides: {},
+      deviceId: "pump-1",
+      enabled: true,
+      details: [{ key: "temperature" }]
+    });
+    if (!binding.ok) throw new Error(binding.problems.map((problem) => problem.message).join("\n"));
+    expect(editor.dispatch(binding.command).ok).toBe(true);
+
+    let workbench!: ReturnType<typeof useWorkbench>;
+    const Harness = defineComponent({
+      setup() {
+        workbench = useWorkbench({ editor });
+        return () => null;
+      }
+    });
+    const wrapper = mount(Harness);
+
+    await editor.getDataService().startPreview();
+    await flushPromises();
+    expect(workbench.context.value.dataState.preview.enabled).toBe(true);
+    expect(workbench.model.value.status.dataProblemCount).toBeGreaterThan(0);
+    expect(workbench.model.value.problems.items.some((problem) => problem.data)).toBe(true);
+
+    editor.getDataService().stopPreview();
+    await flushPromises();
+    expect(workbench.model.value.status.dataProblemCount).toBe(0);
+    expect(workbench.model.value.problems.items.some((problem) => problem.data)).toBe(false);
+
+    wrapper.unmount();
+    editor.dispose();
   });
 });
 

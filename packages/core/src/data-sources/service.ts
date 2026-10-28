@@ -14,7 +14,6 @@ import type {
   DataObjectContextState,
   DataObjectDataState,
   DataObjectDataSubscriber,
-  DataObjectFreshness,
   DataObjectHistorySnapshot,
   DataObjectRuntimeProblem,
   DataObjectRuntimeState,
@@ -25,8 +24,7 @@ import type {
   DataCredentialDescriptor,
   DataObjectBinding,
   DataParameterValue,
-  DataQuery,
-  SceneDataSources
+  DataQuery
 } from "./types";
 
 export interface DataRequestDescriptor {
@@ -199,7 +197,7 @@ type PreviewOutcome =
   | { kind: "paused"; status: number; problems: readonly DataObjectRuntimeProblem[] }
   | { kind: "fatal"; problems: readonly DataObjectRuntimeProblem[]; receivedAt: number | null };
 
-const MAX_PREVIEW_CONTEXTS = 4;
+const MAX_CONCURRENT_PREVIEW_REQUESTS = 4;
 
 export class CoreDataService implements EditorDataService {
   readonly #getSnapshot: CoreDataServiceOptions["getSnapshot"];
@@ -216,7 +214,6 @@ export class CoreDataService implements EditorDataService {
   #state: DataServiceState;
   #objectState: DataObjectDataState;
   #objectStates: Record<string, DataObjectRuntimeState> = {};
-  #dataSources: SceneDataSources;
   #dataSourcesKey: string;
   #runConnectionKey: string | undefined;
   #configRevision = 0;
@@ -232,7 +229,6 @@ export class CoreDataService implements EditorDataService {
     this.#executor = options.executor ?? null;
     this.#credentials = Object.freeze([...(options.credentials ?? [])]);
     this.#hostRevision = options.authRevision ?? 0;
-    this.#dataSources = this.#getSnapshot().dataSources;
     this.#dataSourcesKey = dataSourcesKey(this.#getSnapshot());
     this.#state = Object.freeze({
       executorAvailable: this.#executor !== null,
@@ -566,9 +562,8 @@ export class CoreDataService implements EditorDataService {
             refreshing: context.phase === "requesting",
             paused: context.paused,
             nextRefreshAt: context.nextRefreshAt,
-            freshness: emptyFreshness(queryMaxAge(query)),
             history
-          }, now);
+          }, now, queryMaxAge(query));
         }
       } else {
         this.#objectStates[binding.objectNodeId] = withContextState(previousState, context, now);
@@ -633,7 +628,7 @@ export class CoreDataService implements EditorDataService {
   }
 
   #pumpContextQueue(): void {
-    while (!this.#disposed && this.#activeContexts.size < MAX_PREVIEW_CONTEXTS) {
+    while (!this.#disposed && this.#activeContexts.size < MAX_CONCURRENT_PREVIEW_REQUESTS) {
       const key = this.#contextQueue.shift();
       if (key === undefined) {
         break;
@@ -791,24 +786,14 @@ export class CoreDataService implements EditorDataService {
       return {
         kind: "fatal",
         receivedAt,
-        problems: mapped.errors.map((problem) => ({
-          kind: "mapping",
-          code: problem.code,
-          message: problem.message,
-          ...(problem.propertyKey ? { propertyKey: problem.propertyKey } : {})
-        }))
+        problems: mappingRuntimeProblems(mapped.errors)
       };
     }
     if (mapped.entities.length === 0 && mapped.problems.length > 0) {
       return {
         kind: "fatal",
         receivedAt,
-        problems: mapped.problems.map((problem) => ({
-          kind: "mapping",
-          code: problem.code,
-          message: problem.message,
-          ...(problem.propertyKey ? { propertyKey: problem.propertyKey } : {})
-        }))
+        problems: mappingRuntimeProblems(mapped.problems)
       };
     }
     return {
@@ -889,14 +874,8 @@ export class CoreDataService implements EditorDataService {
     options: { history: DataObjectHistorySnapshot | null }
   ): void {
     const now = Date.now();
-    const relevantProblems = result.problems
-      .filter((problem) => problem.entityId === undefined || problem.entityId === binding.deviceId)
-      .map((problem): DataObjectRuntimeProblem => ({
-        kind: "mapping",
-        code: problem.code,
-        message: problem.message,
-        ...(problem.propertyKey ? { propertyKey: problem.propertyKey } : {})
-      }));
+    const relevantProblems = mappingRuntimeProblems(result.problems
+      .filter((problem) => problem.entityId === undefined || problem.entityId === binding.deviceId));
     if (result.entities.length === 0) {
       this.#objectStates[binding.objectNodeId] = createRuntimeState(binding, "empty", {
         contextKey: context.key,
@@ -1047,6 +1026,20 @@ export class CoreDataService implements EditorDataService {
 
   #cancelContext(context: PreviewContext): void {
     this.#contexts.delete(context.key);
+    this.#abortContext(context);
+    this.#pumpContextQueue();
+  }
+
+  #cancelAllContexts(): void {
+    this.#contextQueue.length = 0;
+    for (const context of [...this.#contexts.values()]) {
+      this.#abortContext(context);
+    }
+    this.#contexts.clear();
+    this.#activeContexts.clear();
+  }
+
+  #abortContext(context: PreviewContext): void {
     context.runToken += 1;
     this.#clearContextSchedule(context);
     if (context.controller) {
@@ -1058,21 +1051,6 @@ export class CoreDataService implements EditorDataService {
     if (index >= 0) {
       this.#contextQueue.splice(index, 1);
     }
-    this.#pumpContextQueue();
-  }
-
-  #cancelAllContexts(): void {
-    this.#contextQueue.length = 0;
-    for (const context of [...this.#contexts.values()]) {
-      context.runToken += 1;
-      this.#clearContextSchedule(context);
-      if (context.controller) {
-        context.controller.abort();
-        context.controller = null;
-      }
-    }
-    this.#contexts.clear();
-    this.#activeContexts.clear();
   }
 
   #clearContextSchedule(context: PreviewContext): void {
@@ -1388,8 +1366,6 @@ export class CoreDataService implements EditorDataService {
     if (nextKey === this.#dataSourcesKey) {
       return;
     }
-    const previousDataSources = this.#dataSources;
-    this.#dataSources = snapshot.dataSources;
     this.#dataSourcesKey = nextKey;
     this.#configRevision += 1;
     const invalidated = this.#state.run !== null &&
@@ -1411,13 +1387,11 @@ export class CoreDataService implements EditorDataService {
       );
       this.#publishObjectState();
     }
-    if (previousDataSources !== snapshot.dataSources) {
-      this.#publish({
-        executorAvailable: this.#executor !== null,
-        configRevision: this.#configRevision,
-        run: invalidated ? null : this.#state.run
-      });
-    }
+    this.#publish({
+      executorAvailable: this.#executor !== null,
+      configRevision: this.#configRevision,
+      run: invalidated ? null : this.#state.run
+    });
   }
 
   #publish(state: DataServiceState): void {
@@ -1501,6 +1475,7 @@ function withContextState(
     ...state,
     contextKey: context.key,
     phase: context.phase,
+    refreshing: context.phase === "requesting",
     paused: context.paused,
     nextRefreshAt: context.nextRefreshAt
   }, now, context.query.updatePolicy.maxAgeMs);
@@ -1570,6 +1545,17 @@ function createRuntimeState(
   });
 }
 
+function mappingRuntimeProblems(
+  problems: readonly DataMappingProblem[]
+): DataObjectRuntimeProblem[] {
+  return problems.map((problem) => ({
+    kind: "mapping",
+    code: problem.code,
+    message: problem.message,
+    ...(problem.propertyKey ? { propertyKey: problem.propertyKey } : {})
+  }));
+}
+
 function errorBindingState(
   binding: DataObjectBinding,
   problems: readonly DataObjectRuntimeProblem[],
@@ -1577,19 +1563,8 @@ function errorBindingState(
 ): DataObjectRuntimeState {
   return createRuntimeState(binding, "error", {
     phase: "idle",
-    freshness: emptyFreshness(maxAgeMs),
     problems
   }, Date.now(), maxAgeMs);
-}
-
-function emptyFreshness(maxAgeMs: number): DataObjectFreshness {
-  return Object.freeze({
-    fresh: false,
-    maxAgeMs,
-    receivedAgeMs: null,
-    observedAgeMs: null,
-    expiresAt: null
-  });
 }
 
 function queryMaxAge(query: DataQuery | undefined): number {
@@ -1607,6 +1582,7 @@ function historyFromState(state: DataObjectRuntimeState | null): DataObjectHisto
     entityId: state.entityId ?? state.deviceId,
     displayName: state.displayName,
     fields: mergeHistoryFields(state.fields, state.history?.fields ?? []),
+    fieldReceivedAt: fieldHistoryTimestamps(state.fields, state.receivedAt, state.history),
     observedAt: state.observedAt,
     receivedAt: state.receivedAt,
     sourceQuality: state.sourceQuality,
@@ -1626,12 +1602,32 @@ function mergeHistorySnapshot(
     entityId: entity.entityId,
     displayName: entity.displayName,
     fields: mergeHistoryFields(entity.fields, previous.fields),
+    fieldReceivedAt: fieldHistoryTimestamps(entity.fields, entity.receivedAt, previous),
     observedAt: entity.observedAt,
     receivedAt: entity.receivedAt,
     sourceQuality: entity.sourceQuality,
     observedAtProblem: entity.observedAtProblem,
     qualityProblem: entity.qualityProblem
   });
+}
+
+function fieldHistoryTimestamps(
+  current: readonly DataMappedEntity["fields"][number][],
+  currentReceivedAt: number,
+  previous: DataObjectHistorySnapshot | null
+): Readonly<Record<string, number>> {
+  const timestamps: Record<string, number> = {};
+  for (const field of current) {
+    if (field.status === "ok" && field.value !== null) {
+      timestamps[field.key] = currentReceivedAt;
+      continue;
+    }
+    const previousTime = previous?.fieldReceivedAt[field.key] ?? previous?.receivedAt;
+    if (previousTime !== undefined) {
+      timestamps[field.key] = previousTime;
+    }
+  }
+  return Object.freeze(timestamps);
 }
 
 function mergeHistoryFields(

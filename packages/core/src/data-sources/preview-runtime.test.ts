@@ -108,6 +108,10 @@ describe("shared preview runtime", () => {
 
     const starting = harness.service.startPreview();
     await flush();
+    expect(harness.service.getObjectDataState().objects["object-a"]).toMatchObject({
+      phase: "requesting",
+      refreshing: true
+    });
     const refreshing = harness.service.refreshPreview();
     await flush();
     expect(executor).toHaveBeenCalledTimes(1);
@@ -115,6 +119,7 @@ describe("shared preview runtime", () => {
     resolveResponse(jsonResponse(freshBody()));
     await Promise.all([starting, refreshing]);
     expect(executor).toHaveBeenCalledTimes(1);
+    expect(harness.service.getObjectDataState().objects["object-a"].refreshing).toBe(false);
     harness.editor.dispose();
   });
 
@@ -257,11 +262,19 @@ describe("shared preview runtime", () => {
     ]).toMatchObject({ retryBackoffMs: 3_000, phase: "waiting" });
     await vi.advanceTimersByTimeAsync(2_999);
     expect(attempts).toHaveLength(1);
+
+    response = { status: 503, body: "{}" };
     await vi.advanceTimersByTimeAsync(1);
     expect(attempts).toHaveLength(2);
+    expect(later.service.getObjectDataState().contexts[
+      Object.keys(later.service.getObjectDataState().contexts)[0]
+    ]).toMatchObject({ retryBackoffMs: 2_000, phase: "waiting" });
 
     response = { status: 400, body: "{}" };
-    await vi.advanceTimersByTimeAsync(3_000);
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(attempts).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(attempts).toHaveLength(3);
     const attemptsAfterFatal = attempts.length;
     await vi.advanceTimersByTimeAsync(20_000);
     expect(attempts).toHaveLength(attemptsAfterFatal);
@@ -277,6 +290,29 @@ describe("shared preview runtime", () => {
       phase: "waiting"
     });
     fatal.editor.dispose();
+  });
+
+  it("honors an HTTP-date Retry-After", async () => {
+    const retryAt = new Date(Date.now() + 4_000).toUTCString();
+    const executor = vi.fn<DataRequestExecutor>(async () => ({
+      status: 503,
+      headers: { "retry-after": retryAt },
+      body: "{}"
+    }));
+    const harness = createHarness(executor, [binding("object-a", "pump-01")], {
+      refreshIntervalMs: 1_000,
+      maxAgeMs: 5_000
+    });
+
+    await harness.service.startPreview();
+    expect(harness.service.getObjectDataState().contexts[
+      Object.keys(harness.service.getObjectDataState().contexts)[0]
+    ]).toMatchObject({ retryBackoffMs: 4_000 });
+    await vi.advanceTimersByTimeAsync(3_999);
+    expect(executor).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(executor).toHaveBeenCalledTimes(2);
+    harness.editor.dispose();
   });
 
   it("expires from receive and sample age without letting repeated old samples extend life", async () => {
@@ -346,6 +382,68 @@ describe("shared preview runtime", () => {
     harness.editor.dispose();
   });
 
+  it("stamps each retained history value with the time it was received", async () => {
+    const firstReceivedAt = Date.now();
+    let request = 0;
+    const executor = vi.fn<DataRequestExecutor>(async () => {
+      request += 1;
+      return jsonResponse(request === 1
+        ? freshBody()
+        : freshBody(undefined, undefined, { omitTemperature: true }));
+    });
+    const harness = createHarness(executor, [binding("object-a", "pump-01")]);
+    await harness.service.startPreview();
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    await harness.service.refreshPreview();
+    const model = buildDataObjectDetailModel(
+      harness.editor.getSnapshot(),
+      "object-a",
+      harness.service.getObjectDataState().objects["object-a"]
+    );
+    expect(model?.fields.find((field) => field.key === "temperature")).toMatchObject({
+      value: null,
+      historyValue: 42.6,
+      historyReceivedAt: firstReceivedAt
+    });
+    expect(model?.fields.find((field) => field.key === "temperature")?.historyReceivedAt)
+      .toBeLessThan(model?.historyReceivedAt ?? 0);
+    harness.editor.dispose();
+  });
+
+  it("aborts in-flight requests on stop and dispose and ignores their responses", async () => {
+    const pending: Array<{
+      signal: AbortSignal;
+      resolve(response: DataResponseDescriptor): void;
+    }> = [];
+    const executor = vi.fn<DataRequestExecutor>((request) =>
+      new Promise<DataResponseDescriptor>((resolve) => {
+        pending.push({ signal: request.signal, resolve });
+      }));
+    const harness = createHarness(executor, [binding("object-a", "pump-01")]);
+
+    const starting = harness.service.startPreview();
+    await flush();
+    expect(pending).toHaveLength(1);
+    expect(pending[0].signal.aborted).toBe(false);
+
+    harness.service.stopPreview();
+    expect(pending[0].signal.aborted).toBe(true);
+    await starting;
+    pending[0].resolve(jsonResponse(freshBody({ "pump-01": 999 })));
+    await flush();
+    expect(harness.service.getObjectDataState().objects).toEqual({});
+
+    const restarting = harness.service.startPreview();
+    await flush();
+    expect(pending).toHaveLength(2);
+    harness.editor.dispose();
+    expect(pending[1].signal.aborted).toBe(true);
+    pending[1].resolve(jsonResponse(freshBody({ "pump-01": 999 })));
+    await restarting;
+    expect(harness.service.getObjectDataState().objects).toEqual({});
+  });
+
   it("clears missing fields and devices immediately while keeping history separately", async () => {
     const responses = [
       jsonResponse(freshBody({ "pump-01": 426 })),
@@ -390,10 +488,11 @@ describe("shared preview runtime", () => {
   });
 
   it("isolates bad fields between devices and keeps problem locations stable", async () => {
-    const executor = vi.fn<DataRequestExecutor>(async () => jsonResponse(deviceBody([
+    let devices = [
       { deviceCode: "pump-01", tempRaw: "not-a-number", run: true, flowRaw: 12 },
       { deviceCode: "pump-02", tempRaw: 380, run: false, flowRaw: 8 }
-    ])));
+    ];
+    const executor = vi.fn<DataRequestExecutor>(async () => jsonResponse(deviceBody(devices)));
     const harness = createHarness(executor, [
       binding("object-a", "pump-01"),
       binding("object-b", "pump-02")
@@ -418,6 +517,18 @@ describe("shared preview runtime", () => {
     await harness.service.refreshPreview();
     const secondProblems = buildDataRuntimeProblems(harness.service.getObjectDataState());
     expect(secondProblems.map((problem) => problem.id)).toEqual(firstProblems.map((problem) => problem.id));
+
+    devices = [
+      { deviceCode: "pump-01", tempRaw: 426, run: true, flowRaw: 12 },
+      { deviceCode: "pump-02", tempRaw: 380, run: false, flowRaw: 8 }
+    ];
+    await harness.service.refreshPreview();
+    expect(harness.service.getObjectDataState().objects["object-a"].status).toBe("ready");
+    expect(buildDataRuntimeProblems(harness.service.getObjectDataState()).some((problem) =>
+      problem.target.kind === "data-field" &&
+      problem.target.nodeId === "object-a" &&
+      problem.target.propertyKey === "temperature"
+    )).toBe(false);
     harness.editor.dispose();
   });
 
@@ -617,12 +728,12 @@ function binding(
 function freshBody(
   temperatures: Record<string, number> = { "pump-01": 426, "pump-02": 380 },
   sampledAt = new Date(Date.now() - 1_000).toISOString(),
-  options: { omitFlow?: boolean } = {}
+  options: { omitFlow?: boolean; omitTemperature?: boolean } = {}
 ): Record<string, unknown> {
   return deviceBody(
     Object.entries(temperatures).map(([deviceCode, tempRaw]) => ({
       deviceCode,
-      tempRaw,
+      tempRaw: options.omitTemperature ? undefined : tempRaw,
       run: deviceCode === "pump-01",
       flowRaw: options.omitFlow ? undefined : 12
     })),
@@ -638,7 +749,7 @@ function deviceBody(
     items: devices.map((device, index) => ({
       deviceCode: device.deviceCode,
       name: `Device ${index + 1}`,
-      tempRaw: device.tempRaw,
+      ...(device.tempRaw !== undefined ? { tempRaw: device.tempRaw } : {}),
       run: device.run,
       ...(device.flowRaw !== undefined ? { flowRaw: device.flowRaw } : {}),
       sampledAt,

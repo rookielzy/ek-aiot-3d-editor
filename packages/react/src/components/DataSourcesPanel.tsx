@@ -220,19 +220,18 @@ function DataSourcesSession({
     if (!locate) {
       return;
     }
-    onLocateHandled?.();
+    // Keep the request pending until the open draft closes instead of
+    // silently dropping the user's Locate action.
     if (form || requestConnectionId || queryEditor || bindingsQueryId) {
       return;
     }
+    onLocateHandled?.();
     const connection = context.snapshot.dataSources.connections[locate.connectionId];
     const query = context.snapshot.dataSources.queries[locate.queryId];
     if (connection && query?.connectionId === connection.id) {
       openQuery(connection.id, query.id);
     }
-    // Locate requests are consumed once per identity; openQuery intentionally
-    // uses the panel's current draft guards above.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locate]);
+  }, [locate, form, requestConnectionId, queryEditor, bindingsQueryId]);
 
   function openCreate() {
     setRequestConnectionId(null);

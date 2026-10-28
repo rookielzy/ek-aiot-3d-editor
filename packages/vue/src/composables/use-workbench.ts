@@ -11,6 +11,7 @@ import {
   type AuthoredCameraViewInput,
   type AssetWorkspacePayloadSummary,
   type Command,
+  type DataObjectDataState,
   type Editor,
   type EditorWithGlbImport,
   type EditorAction,
@@ -120,6 +121,7 @@ export interface WorkbenchContext {
   editor: EditorWithGlbImport;
   model: WorkbenchModel;
   snapshot: SceneSnapshot;
+  dataState: DataObjectDataState;
   inspector: InspectorModel;
   selection: WorkbenchSelectionContext;
   history: HistoryState;
@@ -176,6 +178,7 @@ export interface ResolvedWorkbenchContext extends WorkbenchContext {
 export interface UseWorkbenchResult {
   editor: EditorWithGlbImport;
   snapshot: ShallowRef<SceneSnapshot>;
+  dataState: ShallowRef<DataObjectDataState>;
   inspector: ComputedRef<InspectorModel>;
   model: ComputedRef<WorkbenchModel>;
   runtimeProblems: ShallowRef<Problem[]>;
@@ -208,6 +211,18 @@ export interface UseWorkbenchResult {
   dispose(): void;
 }
 
+const EMPTY_OBJECT_DATA_STATE: DataObjectDataState = Object.freeze({
+  preview: Object.freeze({
+    enabled: false,
+    refreshing: false,
+    lastRefreshAt: null,
+    contextCount: 0,
+    pausedCount: 0
+  }),
+  contexts: Object.freeze({}),
+  objects: Object.freeze({})
+});
+
 export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchResult {
   const editorOption = isRefOption(options.editor) ? options.editor : undefined;
   const localeOption = isRefValue<WorkbenchLocale | undefined>(options.locale) ? options.locale : undefined;
@@ -220,6 +235,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   const currentEditor = shallowRef<EditorWithGlbImport>(markRaw(initialEditor));
   const ownsCurrentEditor = ref(editorOption ? !editorOption.value : !options.editor);
   const snapshot = shallowRef(currentEditor.value.getSnapshot());
+  const dataState = shallowRef<DataObjectDataState>(readObjectDataState(currentEditor.value));
   const snap = shallowRef<SnapSettings>(currentEditor.value.snap.get());
   const viewportHelperState = shallowRef<ViewportHelperStateSnapshot>(viewportHelperStore.get());
   const transformMode = ref<TransformMode>(currentEditor.value.transformMode.get());
@@ -229,6 +245,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   const assetWorkspaceVersion = shallowRef(getAssetWorkspaceVersion(currentEditor.value));
   const clipboardVersion = ref(0);
   let unsubscribeSnapshot: (() => void) | null = null;
+  let unsubscribeObjectData: (() => void) | null = null;
   let unsubscribeRuntime: (() => void) | null = null;
   let unsubscribeProblems: (() => void) | null = null;
   let unsubscribeAssetWorkspace: (() => void) | null = null;
@@ -244,6 +261,11 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
       snapshot.value = nextSnapshot;
     });
     snapshot.value = nextEditor.getSnapshot();
+    const dataService = nextEditor.getDataService?.() ?? null;
+    dataState.value = dataService?.getObjectDataState() ?? EMPTY_OBJECT_DATA_STATE;
+    unsubscribeObjectData = dataService?.subscribeObjectData((nextState) => {
+      dataState.value = nextState;
+    }) ?? null;
     unsubscribeRuntime = nextEditor.subscribeRuntime(() => {
       runtime.value = markRuntimeRaw(nextEditor.getRuntime());
       subscribeRuntimeProblems();
@@ -277,6 +299,8 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   function cleanupSubscriptions(): void {
     unsubscribeSnapshot?.();
     unsubscribeSnapshot = null;
+    unsubscribeObjectData?.();
+    unsubscribeObjectData = null;
     unsubscribeRuntime?.();
     unsubscribeRuntime = null;
     unsubscribeProblems?.();
@@ -451,6 +475,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
       runtimeProblems: runtimeProblems.value,
       assetPayloads: getAssetWorkspacePayloads(currentEditor.value),
       dataCredentials: currentEditor.value.getDataCredentials?.() ?? [],
+      dataState: dataState.value,
       history: currentEditor.value.getHistoryState(),
       snap: snap.value,
       viewportHelpers: viewportHelperState.value,
@@ -493,6 +518,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     editor: currentEditor.value,
     model: model.value,
     snapshot: snapshot.value,
+    dataState: dataState.value,
     inspector: inspector.value,
     selection: {
       count: model.value.selection.count,
@@ -601,6 +627,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
       return currentEditor.value;
     },
     snapshot,
+    dataState,
     inspector,
     model,
     runtimeProblems,
@@ -647,7 +674,12 @@ function resolveInitialEditor(options: UseWorkbenchOptions, editorOption: Ref<Ed
   if (options.editor && !isRefOption(options.editor)) {
     return options.editor;
   }
-  return createEditor({ snapshot: options.snapshot, credentials: options.credentials, executor: options.executor });
+  return createEditor({
+    snapshot: options.snapshot,
+    credentials: options.credentials,
+    executor: options.executor,
+    authRevision: options.authRevision
+  });
 }
 
 function defaultSnapIncrement(channel: SnapChannel): number {
@@ -659,6 +691,10 @@ function defaultSnapIncrement(channel: SnapChannel): number {
 
 function markRuntimeRaw(runtime: EditorRuntime | null): EditorRuntime | null {
   return runtime ? markRaw(runtime) : null;
+}
+
+function readObjectDataState(editor: Editor): DataObjectDataState {
+  return editor.getDataService?.().getObjectDataState() ?? EMPTY_OBJECT_DATA_STATE;
 }
 
 function getAssetWorkspacePayloads(editor: Editor): AssetWorkspacePayloadSummary[] {

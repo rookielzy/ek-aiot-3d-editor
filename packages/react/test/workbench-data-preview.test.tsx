@@ -7,6 +7,7 @@ import {
   createEditor,
   type DataBindingDetailFieldInput,
   type DataRequestExecutor,
+  type DataResponseDescriptor,
   type RendererLike
 } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
@@ -93,6 +94,34 @@ describe("React object data preview", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start data preview" }));
     expect(await screen.findByRole("region", { name: "Device details" })).toBeTruthy();
     expect(editor.getHistoryState()).toEqual(historyAfterValvePick);
+
+    view.unmount();
+    editor.dispose();
+  });
+
+  it("shows refreshing while keeping the current values until the next response", async () => {
+    let resolveRefresh!: (response: DataResponseDescriptor) => void;
+    const executor = vi.fn<DataRequestExecutor>(async () => jsonResponse(deviceBody(251)));
+    const editor = createPreviewEditor(executor, [{
+      objectNodeId: "object-a",
+      deviceId: "pump-1"
+    }]);
+    const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    fireEvent.click(screen.getByTitle("Pump object"));
+    fireEvent.click(screen.getByRole("button", { name: "Start data preview" }));
+    const card = await screen.findByRole("region", { name: "Device details" });
+    await waitFor(() => expect(detailValue(card, "Temperature")).toBe("25.1"));
+
+    executor.mockImplementation(() => new Promise((resolve) => {
+      resolveRefresh = resolve;
+    }));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh data" }));
+    await waitFor(() => expect(within(card).getByText("Refreshing...")).toBeTruthy());
+    expect(detailValue(card, "Temperature")).toBe("25.1");
+
+    resolveRefresh(jsonResponse(deviceBody(262)));
+    await waitFor(() => expect(detailValue(card, "Temperature")).toBe("26.2"));
+    expect(within(card).getByText("Current")).toBeTruthy();
 
     view.unmount();
     editor.dispose();
@@ -190,7 +219,9 @@ describe("React object data preview", () => {
     expect(fieldProblem).toBeTruthy();
     fireEvent.click(within(fieldProblem!).getByRole("button", { name: "Locate" }));
     await waitFor(() => expect(editor.getSnapshot().selection.nodeId).toBe("object-a"));
+    const pumpCard = await screen.findByRole("region", { name: "Device details" });
     await screen.findByRole("heading", { name: "Pump object" });
+    expect(pumpCard.querySelector('[data-field-key="flow"]')?.getAttribute("data-focused")).toBe("true");
 
     view.unmount();
     editor.dispose();

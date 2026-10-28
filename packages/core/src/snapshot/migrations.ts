@@ -1,5 +1,5 @@
 import { createEmptyCameraState, createEmptyPresentationState } from "../cameras/defaults";
-import { createEmptyDataSources } from "../data-sources/defaults";
+import { createDefaultDataQueryUpdatePolicy, createEmptyDataSources } from "../data-sources/defaults";
 import { createLegacyDefaultEnvironment, migrateLegacySceneEnvironment } from "../environment/migration";
 import { createDefaultLightShadow } from "../lights/defaults";
 import type { LegacyLightDefinition, LightDefinition } from "../lights/types";
@@ -25,8 +25,9 @@ import { assertValidSceneSnapshot, type ValidationResult } from "./validation";
 
 export function migrateSerializedSnapshot(serialized: SerializedSceneSnapshot): SceneSnapshot {
   if (serialized.version === SNAPSHOT_VERSION) {
-    assertValidSceneSnapshot(serialized);
-    return immutableClone(serialized);
+    const normalized = normalizeDataQueryPolicies(serialized);
+    assertValidSceneSnapshot(normalized);
+    return immutableClone(normalized);
   }
 
   if (serialized.version === 8) {
@@ -79,6 +80,35 @@ export function migrateSerializedSnapshot(serialized: SerializedSceneSnapshot): 
 
   const version = (serialized as { version?: unknown }).version;
   throw new Error(`Unsupported snapshot version: ${String(version)}.`);
+}
+
+/**
+ * Query update policies arrived while the v9 data-source contract was still
+ * unreleased. Fill the documented default so snapshots saved before that
+ * point remain loadable; new saves always persist the explicit policy.
+ */
+function normalizeDataQueryPolicies(serialized: SceneSnapshot): SceneSnapshot {
+  type QueryRecord = SceneSnapshot["dataSources"]["queries"];
+  type LegacyQuery = Omit<QueryRecord[string], "updatePolicy"> & Partial<Pick<QueryRecord[string], "updatePolicy">>;
+  const queries = serialized.dataSources.queries as unknown as Record<string, LegacyQuery>;
+  let changed = false;
+  const normalized = Object.fromEntries(Object.entries(queries).map(([queryId, query]) => {
+    if (query.updatePolicy !== undefined) {
+      return [queryId, query];
+    }
+    changed = true;
+    return [queryId, { ...query, updatePolicy: createDefaultDataQueryUpdatePolicy() }];
+  })) as unknown as QueryRecord;
+  if (!changed) {
+    return serialized;
+  }
+  return {
+    ...serialized,
+    dataSources: {
+      ...serialized.dataSources,
+      queries: normalized
+    }
+  };
 }
 
 export function migrateV8Snapshot(serialized: V8SceneSnapshot): SceneSnapshot {

@@ -56,6 +56,34 @@ describe("durable query authoring", () => {
     editor.dispose();
   });
 
+  it("restores v9 queries saved before update policies with the documented default", () => {
+    const editor = createEditor();
+    createConnection(editor, "Plant API");
+    const result = buildSaveDataQueryCommand(editor.getSnapshot(), queryDefinition());
+    if (!result.ok) throw new Error("Expected a query command.");
+    editor.dispatch(result.command);
+    const queryId = Object.keys(editor.getSnapshot().dataSources.queries)[0];
+    const serialized = editor.serialize();
+    const queryWithoutPolicy = {
+      ...serialized.dataSources.queries[queryId]
+    } as Record<string, unknown>;
+    delete queryWithoutPolicy.updatePolicy;
+
+    const restored = createEditor({
+      snapshot: {
+        ...serialized,
+        dataSources: {
+          ...serialized.dataSources,
+          queries: { [queryId]: queryWithoutPolicy }
+        }
+      } as unknown as typeof serialized
+    });
+    expect(restored.getSnapshot().dataSources.queries[queryId].updatePolicy)
+      .toEqual(createDefaultDataQueryUpdatePolicy());
+    restored.dispose();
+    editor.dispose();
+  });
+
   it("updates, duplicates, deletes, and restores queries with stable references", () => {
     const editor = createEditor();
     createConnection(editor, "Plant API");
