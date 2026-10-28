@@ -1,6 +1,7 @@
 import { createId } from "../snapshot/defaults";
 import { remapImportedGlbOwnerKey } from "../imported-targets/keys";
 import { cloneTransform } from "../snapshot/transforms";
+import { applyClipboardDataSources } from "../data-sources/clipboard";
 import type { LightDefinition } from "../lights/types";
 import type { MaterialAssignment, MaterialDefinition } from "../materials/types";
 import type { SceneImportedGlbNode, SceneNode, SceneObject, SceneSnapshot } from "../snapshot/types";
@@ -13,12 +14,12 @@ export function applyPasteObjects(snapshot: SceneSnapshot, command: PasteObjects
 
   switch (payload.kind) {
     case "ek-aiot-3d-editor-objects":
-      if (payload.version !== 1) {
+      if (payload.version !== 1 && payload.version !== 2) {
         throw new Error("Unsupported clipboard payload.");
       }
       return applyPasteObjectClipboard(snapshot, command);
     case "ek-aiot-3d-editor-nodes":
-      if (payload.version !== 2) {
+      if (payload.version !== 2 && payload.version !== 3) {
         throw new Error("Unsupported clipboard payload.");
       }
       return applyPasteNodeClipboard(snapshot, command);
@@ -72,7 +73,10 @@ function applyPasteObjectClipboard(snapshot: SceneSnapshot, command: PasteObject
     objects,
     nodes,
     rootNodeIds: [...snapshot.rootNodeIds, ...pastedRootIds],
-    materials
+    materials,
+    dataSources: payload.dataSources
+      ? applyClipboardDataSources(snapshot, payload.dataSources, idMap)
+      : snapshot.dataSources
   });
 
   return {
@@ -133,7 +137,10 @@ function applyPasteNodeClipboard(snapshot: SceneSnapshot, command: PasteObjectsC
     rootNodeIds: [...snapshot.rootNodeIds, ...pastedRootIds],
     objects,
     lights,
-    materials
+    materials,
+    dataSources: payload.dataSources
+      ? applyClipboardDataSources(snapshot, payload.dataSources, bindingObjectNodeIdMap(payload, nodeIdMap))
+      : snapshot.dataSources
   });
 
   return {
@@ -193,8 +200,7 @@ function buildNodeIdMap(
   sourceNodeIds: string[],
   objectIdMap: Record<string, string>,
   lightIdMap: Record<string, string>
-): Record<string, string> {
-  const idMap: Record<string, string> = {};
+): Record<string, string> {  const idMap: Record<string, string> = {};
   const usedIds = new Set(Object.keys(snapshot.nodes));
   for (const sourceNodeId of sourceNodeIds) {
     const preferredId = objectIdMap[sourceNodeId] ?? lightIdMap[sourceNodeId] ?? `copy:${sourceNodeId}`;
@@ -206,6 +212,23 @@ function buildNodeIdMap(
     idMap[sourceNodeId] = nodeId;
   }
   return idMap;
+}
+
+function bindingObjectNodeIdMap(
+  payload: { nodes: Record<string, SceneNode> },
+  nodeIdMap: Record<string, string>
+): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const [sourceNodeId, sourceNode] of Object.entries(payload.nodes)) {
+    if (sourceNode.kind !== "object") {
+      continue;
+    }
+    const targetNodeId = nodeIdMap[sourceNodeId];
+    if (targetNodeId) {
+      map[sourceNode.objectId] = targetNodeId;
+    }
+  }
+  return map;
 }
 
 function createUniqueId(

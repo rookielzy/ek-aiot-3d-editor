@@ -10,6 +10,7 @@ import {
 } from "react";
 import {
   buildDataGetRequest,
+  buildDataQueryReferenceModel,
   buildSaveDataQueryCommand,
   formatDataPath,
   mapDataQueryBody,
@@ -27,6 +28,8 @@ import {
   type DataQueryDefinitionProblem,
   type DataQueryMapping,
   type DataQueryParameterOverrides,
+  type DataQueryParameterUsage,
+  type DataQueryPropertyUsage,
   type DataQueryRunState,
   type DataServiceState,
   type DataTimeFormat,
@@ -160,6 +163,7 @@ export function DataQueryEditor({
   const discardRef = useRef<HTMLButtonElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const keepEditingRef = useRef<HTMLButtonElement>(null);
+  const pendingCloseRef = useRef<(() => void) | null>(null);
   const t = context.i18n.t;
   const discardId = useId();
   const rootSuggestionListId = useId();
@@ -215,6 +219,41 @@ export function DataQueryEditor({
     return [...new Set(items.flatMap(collectPathSuggestions))].slice(0, 120);
   }, [sample, form.rootPath, form.mode]);
   const dirty = serializeQueryForm(form) !== form.baseline;
+  const referenceModel = useMemo(
+    () => queryId ? buildDataQueryReferenceModel(context.snapshot, queryId) : null,
+    [context.snapshot, queryId]
+  );
+  const referenceCount = referenceModel?.bindings.length ?? 0;
+  const propertyUsage = useMemo(
+    () => new Map((referenceModel?.properties ?? []).map((usage) => [usage.propertyKey, usage])),
+    [referenceModel]
+  );
+  const parameterUsage = useMemo(
+    () => new Map((referenceModel?.parameters ?? []).map((usage) => [usage.parameterName, usage])),
+    [referenceModel]
+  );
+  const draftPropertyKeys = new Set(form.properties.map((property) => property.key.trim()).filter(Boolean));
+  const draftParameterNames = new Set(form.parameters.map((parameter) => parameter.name.trim()).filter(Boolean));
+  const missingUsedProperties = (referenceModel?.properties ?? [])
+    .filter((usage) => !draftPropertyKeys.has(usage.propertyKey));
+  const missingUsedParameters = (referenceModel?.parameters ?? [])
+    .filter((usage) => !draftParameterNames.has(usage.parameterName));
+  const storedPropertyTypes = new Map(
+    (storedQuery?.mapping.properties ?? []).map((property) => [property.key, property.type])
+  );
+  const storedParameterTypes = new Map(
+    (storedQuery?.parameters ?? []).map((parameter) => [parameter.name, parameter.type])
+  );
+  const typeChangedUsedProperties = (referenceModel?.properties ?? []).filter((usage) => {
+    const draft = form.properties.find((property) => property.key.trim() === usage.propertyKey);
+    const storedType = storedPropertyTypes.get(usage.propertyKey);
+    return draft !== undefined && storedType !== undefined && draft.type !== storedType;
+  });
+  const typeChangedUsedParameters = (referenceModel?.parameters ?? []).filter((usage) => {
+    const draft = form.parameters.find((parameter) => parameter.name.trim() === usage.parameterName);
+    const storedType = storedParameterTypes.get(usage.parameterName);
+    return draft !== undefined && storedType !== undefined && draft.type !== storedType;
+  });
 
   useEffect(() => {
     service?.invalidateQueryRuns();
@@ -401,16 +440,18 @@ export function DataQueryEditor({
     }
   }
 
-  function requestClose(): void {
+  function requestClose(action: () => void = onClose): void {
     if (dirty) {
+      pendingCloseRef.current = action;
       setDiscardOpen(true);
       return;
     }
-    onClose();
+    action();
   }
 
   function cancelDialog(): void {
     if (discardOpen) {
+      pendingCloseRef.current = null;
       setDiscardOpen(false);
       return;
     }
@@ -418,8 +459,22 @@ export function DataQueryEditor({
   }
 
   function discardChanges(): void {
+    const action = pendingCloseRef.current ?? onClose;
+    pendingCloseRef.current = null;
     setDiscardOpen(false);
-    onClose();
+    action();
+  }
+
+  function selectReferencedObject(objectNodeId: string): void {
+    requestClose(() => {
+      context.dispatch({
+        type: "select-nodes",
+        mode: "replace",
+        nodeIds: [objectNodeId],
+        primaryNodeId: objectNodeId
+      });
+      onClose();
+    });
   }
 
   function save(): void {
@@ -490,7 +545,7 @@ export function DataQueryEditor({
     >
       <div className="ek-workbench__query-editor-header" inert={discardOpen ? true : undefined}>
         <h3>{title}</h3>
-        <button ref={closeRef} type="button" onClick={requestClose}>{t("dataSources.queryEditor.close")}</button>
+        <button ref={closeRef} type="button" onClick={() => requestClose()}>{t("dataSources.queryEditor.close")}</button>
       </div>
 
       {!connection ? (
@@ -509,6 +564,53 @@ export function DataQueryEditor({
               onChange={(event) => updateForm({ name: event.target.value })}
             />
           </label>
+
+          {referenceModel && referenceCount > 0 ? (
+            <section
+              className="ek-workbench__query-references"
+              aria-label={referenceCountLabel(t, referenceCount)}
+            >
+              <h4>{referenceCountLabel(t, referenceCount)}</h4>
+              <p className="ek-workbench__request-hint">
+                {t("dataSources.queryEditor.referencesHint")}
+              </p>
+              <ul>
+                {referenceModel.bindings.map((binding) => (
+                  <li key={binding.objectNodeId}>
+                    <div>
+                      <strong>{binding.objectName}</strong>
+                      <small>{t("dataSources.queryEditor.referenceDevice", { deviceId: binding.deviceId })}</small>
+                    </div>
+                    <button
+                      type="button"
+                      aria-label={t("dataSources.queryEditor.selectReferenceAria", { name: binding.objectName })}
+                      onClick={() => selectReferencedObject(binding.objectNodeId)}
+                    >{t("dataSources.queryEditor.select")}</button>
+                  </li>
+                ))}
+              </ul>
+              {missingUsedProperties.map((usage) => (
+                <p key={`property:${usage.propertyKey}`} className="ek-workbench__request-warning" role="alert">
+                  {t("dataSources.queryEditor.usedPropertyMissing", { propertyKey: usage.propertyKey })}
+                </p>
+              ))}
+              {missingUsedParameters.map((usage) => (
+                <p key={`parameter:${usage.parameterName}`} className="ek-workbench__request-warning" role="alert">
+                  {t("dataSources.queryEditor.usedParameterMissing", { parameterName: usage.parameterName })}
+                </p>
+              ))}
+              {typeChangedUsedProperties.map((usage) => (
+                <p key={`property-type:${usage.propertyKey}`} className="ek-workbench__request-warning" role="alert">
+                  {t("dataSources.queryEditor.usedPropertyTypeChanged", { propertyKey: usage.propertyKey })}
+                </p>
+              ))}
+              {typeChangedUsedParameters.map((usage) => (
+                <p key={`parameter-type:${usage.parameterName}`} className="ek-workbench__request-warning" role="alert">
+                  {t("dataSources.queryEditor.usedParameterTypeChanged", { parameterName: usage.parameterName })}
+                </p>
+              ))}
+            </section>
+          ) : null}
 
           <form
             className="ek-workbench__query-section"
@@ -576,6 +678,7 @@ export function DataQueryEditor({
                   parameter={parameter}
                   index={index + 1}
                   i18n={context.i18n}
+                  usage={parameterUsage.get(parameter.name.trim()) ?? null}
                   onChange={(patch) => updateParameter(parameter.id, patch)}
                   onChangeType={(type) => changeParameterType(parameter.id, type)}
                   onRemove={() => removeParameter(parameter.id)}
@@ -698,6 +801,7 @@ export function DataQueryEditor({
                   index={index + 1}
                   i18n={context.i18n}
                   suggestionListId={suggestionListId}
+                  usage={propertyUsage.get(property.key.trim()) ?? null}
                   onChange={(patch) => updateProperty(index, patch)}
                   onChangeType={(type) => changePropertyType(index, type)}
                   onChangeTransform={(kind) => changePropertyTransform(index, kind)}
@@ -862,7 +966,7 @@ export function DataQueryEditor({
 
           <div className="ek-workbench__connection-form-actions">
             <button type="button" onClick={save}>{t("dataSources.queryEditor.save")}</button>
-            <button ref={cancelRef} type="button" onClick={requestClose}>{t("dataSources.queryEditor.cancel")}</button>
+            <button ref={cancelRef} type="button" onClick={() => requestClose()}>{t("dataSources.queryEditor.cancel")}</button>
           </div>
         </div>
       )}
@@ -915,6 +1019,7 @@ function ParameterRow({
   parameter,
   index,
   i18n,
+  usage,
   onChange,
   onChangeType,
   onRemove
@@ -922,6 +1027,7 @@ function ParameterRow({
   parameter: QueryParameterForm;
   index: number;
   i18n: WorkbenchI18n;
+  usage: DataQueryParameterUsage | null;
   onChange(patch: Partial<QueryParameterForm>): void;
   onChangeType(type: DataParameterType): void;
   onRemove(): void;
@@ -1010,6 +1116,13 @@ function ParameterRow({
         aria-label={t("dataSources.request.parameter.remove", { index })}
         onClick={onRemove}
       >{t("dataSources.request.parameter.label.remove")}</button>
+      {usage ? (
+        <p className="ek-workbench__query-usage" role="status">
+          {t("dataSources.queryEditor.parameterUsage", {
+            objects: usage.objects.map((object) => object.objectName).join(", ")
+          })}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -1019,6 +1132,7 @@ function PropertyRow({
   index,
   i18n,
   suggestionListId,
+  usage,
   onChange,
   onChangeType,
   onChangeTransform,
@@ -1031,6 +1145,7 @@ function PropertyRow({
   index: number;
   i18n: WorkbenchI18n;
   suggestionListId: string;
+  usage: DataQueryPropertyUsage | null;
   onChange(patch: Partial<QueryPropertyForm>): void;
   onChangeType(type: QueryPropertyForm["type"]): void;
   onChangeTransform(kind: QueryPropertyForm["transformKind"]): void;
@@ -1201,11 +1316,44 @@ function PropertyRow({
           <button type="button" onClick={onAddEntry}>{t("dataSources.mapping.map.add")}</button>
         </fieldset>
       ) : null}
+      {usage ? (
+        <p className="ek-workbench__query-usage" role="status">
+          {t("dataSources.queryEditor.propertyUsage", {
+            objects: formatPropertyUsage(usage, t)
+          })}
+        </p>
+      ) : null}
       <button type="button" aria-label={t("dataSources.mapping.property.remove", { index })} onClick={onRemove}>
         {t("dataSources.mapping.property.removeLabel")}
       </button>
     </div>
   );
+}
+
+function referenceCountLabel(t: WorkbenchI18n["t"], count: number): string {
+  return t(count === 1
+    ? "dataSources.queryEditor.references.one"
+    : "dataSources.queryEditor.references.other", { count });
+}
+
+function formatPropertyUsage(
+  usage: DataQueryPropertyUsage,
+  t: WorkbenchI18n["t"]
+): string {
+  const objects = new Map<string, { name: string; labels: string[] }>();
+  for (const entry of usage.objects) {
+    const current = objects.get(entry.objectNodeId) ?? { name: entry.objectName, labels: [] };
+    const label = entry.usage === "color"
+      ? t("dataSources.queryEditor.usage.color")
+      : t("dataSources.queryEditor.usage.detail");
+    if (!current.labels.includes(label)) {
+      current.labels.push(label);
+    }
+    objects.set(entry.objectNodeId, current);
+  }
+  return [...objects.values()]
+    .map((entry) => `${entry.name} (${entry.labels.join(", ")})`)
+    .join(", ");
 }
 
 function MapOutputInput({

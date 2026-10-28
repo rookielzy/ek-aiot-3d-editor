@@ -107,6 +107,14 @@ export type {
   FilterDataConnectionsOptions
 } from "./data-sources/workspace";
 export type {
+  DataBindingReference,
+  DataConnectionQueryReference,
+  DataConnectionReferenceModel,
+  DataQueryParameterUsage,
+  DataQueryPropertyUsage,
+  DataQueryReferenceModel
+} from "./data-sources/references";
+export type {
   DataConnectionCommand,
   DataConnectionCommandBuildResult,
   SaveDataConnectionOptions
@@ -547,6 +555,10 @@ export {
   countDataQueryReferences,
   filterDataConnectionItems
 } from "./data-sources/workspace";
+export {
+  buildDataConnectionReferenceModel,
+  buildDataQueryReferenceModel
+} from "./data-sources/references";
 export {
   buildDeleteDataConnectionCommand,
   buildDuplicateDataConnectionCommand,

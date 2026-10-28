@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { buildWorkbenchModel, resolveEditorShortcut, type Problem, type AssetResolverBridge, type EditorRuntime, type EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
+import { buildWorkbenchModel, resolveEditorShortcut, type EditorAction, type Problem, type AssetResolverBridge, type EditorRuntime, type EditorRuntimeOptions } from "@ek-aiot/3d-editor-core";
 import { useWorkbench, type ResolvedWorkbenchContext, type UseWorkbenchOptions } from "../hooks/use-workbench";
 import { EditorViewport } from "./EditorViewport";
 import { DataDetailCard } from "./DataDetailCard";
@@ -123,6 +123,7 @@ export function EditorWorkbench({
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [dataLocate, setDataLocate] = useState<{ connectionId: string; queryId: string } | null>(null);
   const [dataFieldFocus, setDataFieldFocus] = useState<{ nodeId: string; propertyKey: string } | null>(null);
+  const [objectOperationNotice, setObjectOperationNotice] = useState<string | null>(null);
   const panels = useWorkbenchPanelWidths(rootRef);
   const [marqueeSelectionEnabled, setMarqueeSelectionEnabled] = useState(false);
   const resolvedInteractions = useMemo(() => {
@@ -174,16 +175,45 @@ export function EditorWorkbench({
       if (resolution.preventDefault) {
         event.preventDefault();
       }
-      workbench.runAction(resolution.action);
+      runActionWithNotice(resolution.action);
     }
 
     root.addEventListener("keydown", onKeyDown);
     return () => {
       root.removeEventListener("keydown", onKeyDown);
     };
-  }, [workbench.editor]);
+  }, [workbench]);
 
   const t = workbench.i18n.t;
+
+  function runActionWithNotice(action: EditorAction): ReturnType<typeof workbench.runAction> {
+    if (action !== "duplicate" && action !== "paste") {
+      setObjectOperationNotice(null);
+      return workbench.runAction(action);
+    }
+    const before = workbench.snapshot;
+    const result = workbench.runAction(action);
+    if (!result) {
+      setObjectOperationNotice(null);
+      return result;
+    }
+    if (!result.ok) {
+      return result;
+    }
+    const newBindingNodeIds = Object.keys(result.snapshot.dataSources.bindings)
+      .filter((nodeId) => !before.dataSources.bindings[nodeId]);
+    const selectedBoundNodeIds = result.snapshot.selection.nodeIds
+      .filter((nodeId) => newBindingNodeIds.includes(nodeId));
+    const noticeNodeIds = selectedBoundNodeIds.length > 0 ? selectedBoundNodeIds : newBindingNodeIds;
+    const devices = [...new Set(noticeNodeIds.map((nodeId) =>
+      result.snapshot.dataSources.bindings[nodeId].deviceId
+    ))];
+    setObjectOperationNotice(devices.length > 0
+      ? t("reactWorkbench.nodeOperation.copyNotice", { devices: devices.join(", ") })
+      : null);
+    return result;
+  }
+  const actionContext = { ...workbench, runAction: runActionWithNotice };
   const rootClassName = className ? `ek-workbench ${className}` : "ek-workbench";
   const hasToolbar = showDefaultToolbar || toolbar;
   const renderLeftPanel = leftPanel ?? sidePanel;
@@ -234,7 +264,7 @@ export function EditorWorkbench({
               localeSwitcherDisabled={localeSwitcherDisabled}
             />
           ) : null}
-          {toolbar ? <div className="ek-workbench__toolbar-region">{toolbar(workbench)}</div> : null}
+          {toolbar ? <div className="ek-workbench__toolbar-region">{toolbar(actionContext)}</div> : null}
         </div>
       ) : null}
       <section className="ek-workbench__viewport-shell" aria-label={t("reactWorkbench.shell.viewport.label")}>
@@ -273,15 +303,25 @@ export function EditorWorkbench({
             }}>{t("reactWorkbench.shell.empty.action")}</button> : null}
           </div>
         ) : null}
-        {viewportOverlay ? <div className="ek-workbench__overlay">{viewportOverlay(workbench)}</div> : null}
+        {viewportOverlay ? <div className="ek-workbench__overlay">{viewportOverlay(actionContext)}</div> : null}
         {showDefaultToolbar ? (
           <WorkbenchViewportTools
-            context={workbench}
+            context={actionContext}
             marqueeSelectionEnabled={marqueeSelectionEnabled}
             onToggleMarqueeSelection={() => setMarqueeSelectionEnabled((enabled) => !enabled)}
           />
         ) : null}
         <DataPreviewControls context={workbench} />
+        {objectOperationNotice ? (
+          <div className="ek-workbench__object-operation-notice" role="status">
+            <span>{objectOperationNotice}</span>
+            <button
+              type="button"
+              aria-label={t("reactWorkbench.nodeOperation.dismiss")}
+              onClick={() => setObjectOperationNotice(null)}
+            >{t("reactWorkbench.nodeOperation.dismiss")}</button>
+          </div>
+        ) : null}
         <DataDetailCard
           context={workbench}
           focusField={dataFieldFocus?.nodeId === workbench.selection.nodeId
@@ -290,7 +330,7 @@ export function EditorWorkbench({
         />
       </section>
       <aside id={`${panelId}-left`} hidden={leftCollapsed} className="ek-workbench__side-panel" aria-label={t("reactWorkbench.shell.projectPanel.label")}>
-        {renderLeftPanel ? renderLeftPanel(workbench) : (
+        {renderLeftPanel ? renderLeftPanel(actionContext) : (
           <WorkbenchLeftPanel
             context={workbench}
             activeView={activeView}
@@ -311,7 +351,7 @@ export function EditorWorkbench({
         />
       ) : null}
       <aside id={`${panelId}-right`} hidden={rightCollapsed} className="ek-workbench__right-panel" aria-label={t("reactWorkbench.shell.inspectorPanel.label")}>
-        {rightPanel ? rightPanel(workbench) : (
+        {rightPanel ? rightPanel(actionContext) : (
           <InspectorView
             editor={workbench.editor}
             snapshot={workbench.snapshot}

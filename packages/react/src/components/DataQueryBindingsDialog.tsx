@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { buildDeleteDataObjectBindingCommand, type DataBindingProblem } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
 import { DataBindingForm } from "./DataBindingForm";
 
@@ -25,6 +26,8 @@ export function DataQueryBindingsDialog({ context, queryId, onClose }: DataQuery
   const pendingActionRef = useRef<(() => void) | null>(null);
   const [dirty, setDirty] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const [problems, setProblems] = useState<DataBindingProblem[]>([]);
   const titleId = useId();
   const t = context.i18n.t;
 
@@ -81,6 +84,42 @@ export function DataQueryBindingsDialog({ context, queryId, onClose }: DataQuery
   function selectObject(objectNodeId: string): void {
     if (objectNodeId === selectedObjectId) return;
     requestAction(() => setSelectedObjectId(objectNodeId));
+  }
+
+  function selectInScene(objectNodeId: string): void {
+    requestAction(() => {
+      context.dispatch({
+        type: "select-nodes",
+        mode: "replace",
+        nodeIds: [objectNodeId],
+        primaryNodeId: objectNodeId
+      });
+      onClose();
+    });
+  }
+
+  function unbind(objectNodeId: string, name: string): void {
+    requestAction(() => {
+      const result = buildDeleteDataObjectBindingCommand(context.snapshot, objectNodeId);
+      if (!result.ok) {
+        setProblems(result.problems);
+        return;
+      }
+      const dispatched = context.dispatch(result.command);
+      if (!dispatched.ok) {
+        setProblems([{
+          field: "binding",
+          code: "command-failed",
+          message: dispatched.error ?? ""
+        }]);
+        return;
+      }
+      setProblems([]);
+      if (objectNodeId === selectedObjectId) {
+        setDirty(false);
+      }
+      setStatus(t("dataBinding.queryDialog.unbound", { name }));
+    });
   }
 
   if (!query) {
@@ -142,12 +181,33 @@ export function DataQueryBindingsDialog({ context, queryId, onClose }: DataQuery
                           aria-label={t("dataBinding.queryDialog.edit", { name })}
                           onClick={() => selectObject(binding.objectNodeId)}
                         >{t("dataBinding.queryDialog.open")}</button>
+                        <button
+                          type="button"
+                          aria-label={t("dataBinding.queryDialog.selectAria", { name })}
+                          onClick={() => selectInScene(binding.objectNodeId)}
+                        >{t("dataBinding.queryDialog.select")}</button>
+                        <button
+                          type="button"
+                          aria-label={t("dataBinding.queryDialog.unbindAria", { name })}
+                          onClick={() => unbind(binding.objectNodeId, name)}
+                        >{t("dataBinding.queryDialog.unbind")}</button>
                       </li>
                     );
                   })}
                 </ul>
               </div>
             )}
+
+            {status ? <p className="ek-workbench__data-status" role="status">{status}</p> : null}
+            {problems.length > 0 ? (
+              <div className="ek-workbench__binding-problems" role="alert">
+                <ul>
+                  {problems.map((problem, index) => (
+                    <li key={`${problem.code}-${index}`}>{problem.message}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
 
             <label className="ek-workbench__field">
               <span>{t("dataBinding.queryDialog.object")}</span>

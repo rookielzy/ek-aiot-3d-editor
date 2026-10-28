@@ -35,7 +35,7 @@ describe("create clipboard payload", () => {
     const payload = createNodeClipboardPayload(editor.getSnapshot());
 
     expect(payload.kind).toBe("ek-aiot-3d-editor-nodes");
-    expect(payload.version).toBe(2);
+    expect(payload.version).toBe(3);
     expect(payload.rootNodeIds).toEqual(["group-a"]);
     expect(Object.keys(payload.nodes)).toEqual(["group-a", "object-a", "point-a"]);
     expect(payload.nodes["group-a"].children).toEqual(["object-a", "point-a"]);

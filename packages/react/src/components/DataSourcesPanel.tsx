@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } from "react";
 import {
+  buildDataConnectionReferenceModel,
   buildDeleteDataConnectionCommand,
   buildDeleteDataQueryCommand,
   buildDuplicateDataConnectionCommand,
@@ -126,6 +127,10 @@ function DataSourcesSession({
   const model = context.model.dataSources;
   const credentials = context.editor.getDataCredentials?.() ?? [];
   const visibleConnections = filterDataConnectionItems(model.connections, { query });
+  const boundObjectNames = new Map(visibleConnections.map((connection) => [
+    connection.id,
+    buildDataConnectionReferenceModel(context.snapshot, connection.id).bindings.map((binding) => binding.objectName)
+  ]));
   const formKey = form
     ? `${form.mode.kind}:${form.mode.kind === "edit" ? form.mode.connectionId : ""}`
     : null;
@@ -571,6 +576,7 @@ function DataSourcesSession({
             <ConnectionRow
               key={connection.id}
               connection={connection}
+              boundObjectNames={boundObjectNames.get(connection.id) ?? []}
               i18n={context.i18n}
               editButtonRef={(element) => {
                 if (element) {
@@ -637,6 +643,7 @@ function DataSourcesSession({
 
 function ConnectionRow({
   connection,
+  boundObjectNames,
   i18n,
   editButtonRef,
   requestButtonRef,
@@ -653,6 +660,7 @@ function ConnectionRow({
   onDeleteQuery
 }: {
   connection: DataConnectionListItem;
+  boundObjectNames: readonly string[];
   i18n: WorkbenchI18n;
   editButtonRef(element: HTMLButtonElement | null): void;
   requestButtonRef(element: HTMLButtonElement | null): void;
@@ -689,7 +697,12 @@ function ConnectionRow({
         {connection.headerCount > 0 ? <span>{t("dataSources.list.headers", { count: connection.headerCount })}</span> : null}
         <span>{connection.referenced ? t("dataSources.list.referenced") : t("dataSources.list.unreferenced")}</span>
       </div>
-      <small className="ek-workbench__connection-usage">{t("dataSources.list.queries", { count: connection.queryCount })}</small>
+      <small className="ek-workbench__connection-usage">{t("dataSources.list.queries", { count: connection.queryCount })} · {boundObjectLabel(t, connection.bindingCount)}</small>
+      {boundObjectNames.length > 0 ? (
+        <small className="ek-workbench__connection-usage">
+          {t("dataSources.list.appliedTo", { names: boundObjectNames.join(", ") })}
+        </small>
+      ) : null}
       <div className="ek-workbench__connection-actions">
         <button ref={editButtonRef} type="button" aria-label={t("dataSources.actions.editAria", { name: connection.name })} onClick={onEdit}>{t("dataSources.actions.edit")}</button>
         <button ref={requestButtonRef} type="button" aria-label={t("dataSources.actions.testAria", { name: connection.name })} onClick={onTest}>{t("dataSources.actions.test")}</button>
@@ -729,6 +742,7 @@ function ConnectionRow({
                       ? "dataSources.queries.mode.array"
                       : "dataSources.queries.mode.single")
                   })}</small>
+                  {query.bindingCount > 0 ? <small>{boundObjectLabel(t, query.bindingCount)}</small> : null}
                 </div>
                 <div className="ek-workbench__query-actions">
                   <button
@@ -1007,4 +1021,10 @@ function isFormDirty(form: DataFormState): boolean {
 
 function formatSeconds(milliseconds: number): string {
   return String(milliseconds / 1000);
+}
+
+function boundObjectLabel(t: WorkbenchI18n["t"], count: number): string {
+  return t(count === 1
+    ? "dataSources.list.boundObjects.one"
+    : "dataSources.list.boundObjects.other", { count });
 }

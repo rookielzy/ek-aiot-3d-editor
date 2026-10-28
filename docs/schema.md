@@ -628,7 +628,7 @@ Validation 规则：
 
 查询变更通过 `create-data-query`、`update-data-query`、`duplicate-data-query`、`delete-data-query` command 进入 command/history。查询配置、映射与更新策略在同一 command 中保存，只增加一次编辑历史；复制查询生成新 ID 和同一 connection 内的唯一名称；存在 binding 引用时拒绝删除查询。`buildDataQueryList()` 与 `countDataQueryReferences()` 提供列表和引用统计。
 
-Host credential descriptors（`ref`、`label`、`available`）通过 `createEditor({ credentials })` 注入，只存在运行态；它们不会写入 Snapshot、项目包或 clipboard。React 数据工作区的连接列表由 `buildDataSourcesWorkspaceModel` 从 Snapshot 与 host credentials 派生。
+Host credential descriptors（`ref`、`label`、`available`）通过 `createEditor({ credentials })` 注入，只存在运行态；它们不会写入 Snapshot、项目包或 clipboard。Snapshot 与 clipboard 只在连接上保留 `credentialRef` 字符串引用，不包含凭证内容。React 数据工作区的连接列表由 `buildDataSourcesWorkspaceModel` 从 Snapshot 与 host credentials 派生。
 
 已保存的查询配置、映射与更新策略属于 durable `DataQuery`，通过 command 写入 Snapshot，并随项目包和 `.ek3d` 保存。未保存的请求/映射草稿、示例 JSON、请求结果、临时参数覆盖、原始响应及其 JSON、耗时、取消状态和 generation 只属于 editor session，不进入 Snapshot、项目包、`.ek3d` 或 clipboard。`buildDataGetRequest()` 只接受相对于连接 `baseUrl` 的路径，拒绝绝对地址、协议相对地址、编码穿越和带 query/fragment 的路径；参数定义区分 `string`、finite `number` 和 `boolean`，默认值与临时覆盖分别解析，未提供、`""`、`0`、`false` 不会互相替代。宿主通过 `createEditor({ executor })` 注入请求执行器，收到 `method`、最终 URL、非秘密 headers、`credentialRef`、`timeoutMs` 和 `AbortSignal`，返回状态、允许的响应头、content type 与文本 body。没有 executor 时返回结构化运行态问题，不会回退到浏览器 `fetch`。`mapDataQueryBody()` 从映射配置和内存中的响应 body 产生带 `connectionId`、`queryId`、`entityId`、属性值、`observedAt`、`receivedAt` 与 `sourceQuality` 的标准样本；这些样本不写入 Snapshot。
 
@@ -688,8 +688,9 @@ Clipboard payload 是 transient JSON editor data，不属于 durable Snapshot：
 
 - v1 object clipboard：`kind: "ek-aiot-3d-editor-objects"`，保留旧 object-only copy/paste 行为。
 - v2 node clipboard：`kind: "ek-aiot-3d-editor-nodes"`，可携带 group/object/light node 子树、相关 object/light payload、material assignment、asset IDs。
+- v2 object clipboard / v3 node clipboard：在对应旧版本字段外增加可选 `dataSources`，只包含对象绑定以及绑定引用的已保存查询/连接配置。粘贴到同一或另一 editor 时，相同 ID 且定义相同的连接/查询直接复用；冲突 ID 生成新 ID 和连接作用域内唯一名称，并重写查询的连接引用与绑定的对象 NodeId，不覆盖目标 editor 的现有配置。
 
-两种 payload 都必须 JSON-compatible，不包含 browser/system clipboard 状态、`File`、`Blob`、object URL、Three.js runtime object、resolver 输出或 `.ek3d` asset payload bytes。`.ek3d` 项目包仍只保存 `scene.json` Snapshot 和 `assets/*` payload；clipboard payload 不会写入项目包。
+所有 payload 都必须 JSON-compatible，不包含 browser/system clipboard 状态、`File`、`Blob`、object URL、Three.js runtime object、resolver 输出或 `.ek3d` asset payload bytes。`dataSources` 只保留 durable 配置和连接上的 `credentialRef` 字符串引用，不包含凭证内容、请求草稿、示例 JSON、响应、测试值、executor 或运行态对象。`.ek3d` 项目包仍只保存 `scene.json` Snapshot 和 `assets/*` payload；clipboard payload 不会写入项目包。
 
 ## 序列化与恢复
 

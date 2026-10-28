@@ -36,7 +36,7 @@ All durable edits enter through commands so undo/redo remains framework-neutral:
 - `select-object`, `select-objects`, `set-transform`, `delete-objects`, `duplicate-objects`, `group-objects`, `ungroup-objects`, and `reparent-object` preserve object-only compatibility by resolving object payload IDs to object nodes.
 - `batch` records composite operations as one undoable history entry.
 - `register-asset` records stable GLB, texture, HDR, or image asset references.
-- `paste-objects` accepts legacy v1 object clipboard payloads and current v2 node clipboard payloads.
+- `paste-objects` accepts legacy v1 object and v2 node clipboard payloads, plus current v2 object and v3 node payloads that may carry durable data-source configuration.
 - `set-material` stores a small `MeshStandardMaterial` override subset with texture-slot references.
 - `set-environment` stores source-based lighting/background/skybox intent without PMREM or loaded textures. Legacy v6-style `mode` patches are normalized for compatibility.
 - `add-light`, `update-light`, and `remove-light` store durable light authoring data and keep light nodes synchronized with light payloads.
@@ -52,7 +52,7 @@ The same service exposes object-data preview with automatic GET polling. `startP
 
 `mapDataQueryBody()` turns an in-memory response body plus a saved `DataQueryMapping` into standard device samples with `connectionId`, `queryId`, `entityId`, property values, observed/received timestamps, and source quality. `validateDataQueryMapping()` exposes the same identity, path, transform, range, time, and quality rules for authoring. Array and single-object modes preserve string IDs, require explicit numeric conversion, isolate field failures, and treat duplicate entity IDs or invalid roots as whole-result failures. Samples, example JSON, and test overrides remain runtime-only.
 
-`editor.operations` exposes core-backed helpers for copy, paste, duplicate, delete, group, ungroup, select all, and clear selection. Default calls operate on node selection; calls with explicit object IDs keep object-only compatibility. Clipboard payloads are transient JSON editor data; v2 payloads can carry group/object/light node subtrees while v1 object payloads still paste into v4 editors. Clipboard data does not contain browser clipboard state, files, blobs, object URLs, loaded Three.js objects, resolver output, or project payload bytes.
+`editor.operations` exposes core-backed helpers for copy, paste, duplicate, delete, group, ungroup, select all, and clear selection. Default calls operate on node selection; calls with explicit object IDs keep object-only compatibility. Clipboard payloads are transient JSON editor data; current v2 object and v3 node payloads carry a durable `dataSources` fragment with bindings and the queries/connections they reference (including `credentialRef`, never credential contents), while legacy v1 object and v2 node payloads still paste without data configuration. Cross-editor paste reuses identical definitions, clones conflicting ids with unique names, rewrites query and connection references, and maps binding keys onto the pasted object node ids. Clipboard data does not contain browser clipboard state, files, blobs, object URLs, loaded Three.js objects, resolver output, project payload bytes, request drafts, samples, responses, test values, executors, or secrets.
 
 ## Inspector Helpers
 

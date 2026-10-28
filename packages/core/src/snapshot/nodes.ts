@@ -39,7 +39,7 @@ export function createCameraNodeId(cameraId: string, nodes: Record<string, Scene
   return candidate;
 }
 
-export function findObjectNodeId(snapshot: SceneSnapshot, objectId: string): string | null {
+export function findObjectNodeId(snapshot: Pick<SceneSnapshot, "nodes">, objectId: string): string | null {
   for (const node of Object.values(snapshot.nodes)) {
     if (node.kind === "object" && node.objectId === objectId) {
       return node.id;

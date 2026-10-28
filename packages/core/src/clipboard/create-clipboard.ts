@@ -3,6 +3,7 @@ import { cloneImportedGlbNode } from "../imported-targets/create";
 import { collectNodeSubtreeIds, collectObjectSubtreeIds, getTopLevelNodeIds } from "../snapshot/hierarchy";
 import { findObjectNodeId } from "../snapshot/nodes";
 import { cloneTransform } from "../snapshot/transforms";
+import { collectClipboardDataSources } from "../data-sources/clipboard";
 import type { LightDefinition } from "../lights/types";
 import type { SceneNode, SceneSnapshot } from "../snapshot/types";
 import { isJsonCompatible } from "../snapshot/validation";
@@ -39,11 +40,12 @@ export function createClipboardPayload(snapshot: SceneSnapshot, objectIds = getS
 
   const payload: EditorObjectClipboardPayload = {
     kind: "ek-aiot-3d-editor-objects",
-    version: 1,
+    version: 2,
     rootObjectIds: topLevelIds,
     objects,
     materials,
-    assetIds: [...assetIds]
+    assetIds: [...assetIds],
+    dataSources: collectClipboardDataSources(snapshot, [...copiedObjectIds])
   };
 
   return assertClipboardPayload(payload);
@@ -104,13 +106,14 @@ export function createNodeClipboardPayload(snapshot: SceneSnapshot, nodeIds = ge
 
   const payload: EditorNodeClipboardPayload = {
     kind: "ek-aiot-3d-editor-nodes",
-    version: 2,
+    version: 3,
     rootNodeIds: topLevelNodeIds.filter((nodeId) => copiedNodeIds.has(nodeId)),
     nodes,
     objects,
     lights,
     materials: collectMaterialClipboardState(snapshot, copiedObjectIds, { includeImportedSlots: true }),
-    assetIds: [...assetIds]
+    assetIds: [...assetIds],
+    dataSources: collectClipboardDataSources(snapshot, [...copiedObjectIds])
   };
 
   return assertClipboardPayload(payload);
