@@ -129,8 +129,8 @@ export function validateDataObjectBindingInput(
     });
   }
 
-  const deviceId = typeof input.deviceId === "string" ? input.deviceId.trim() : "";
-  if (!deviceId || /[\u0000-\u001f\u007f]/.test(deviceId)) {
+  const deviceId = typeof input.deviceId === "string" ? input.deviceId : "";
+  if (!deviceId.trim() || /[\u0000-\u001f\u007f]/.test(deviceId)) {
     problems.push({
       field: "device",
       code: "device-required",

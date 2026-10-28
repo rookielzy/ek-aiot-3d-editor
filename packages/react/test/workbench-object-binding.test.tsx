@@ -274,6 +274,78 @@ describe("React object binding authoring", () => {
     editor.dispose();
   });
 
+  it("can create a query when a connection is added after selecting the object", async () => {
+    const editor = createEditor();
+    seedObject(editor);
+    const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    fireEvent.click(screen.getByTitle("Pump object"));
+    fireEvent.change(screen.getByLabelText("Device ID"), { target: { value: "pump-draft" } });
+
+    act(() => seedConnection(editor));
+
+    const create = screen.getByRole("button", { name: "Create query" }) as HTMLButtonElement;
+    expect(create.disabled).toBe(false);
+    fireEvent.click(create);
+    const dialog = await screen.findByRole("dialog", { name: "Query configuration" });
+    expect(within(dialog).getByLabelText("Query name")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect((screen.getByLabelText("Device ID") as HTMLInputElement).value).toBe("pump-draft");
+    expect(editor.getSnapshot().selection.nodeId).toBe("object-a");
+
+    act(() => {
+      expect(editor.dispatch({ type: "delete-data-connection", connectionId: "connection-a" }).ok).toBe(true);
+      expect(editor.dispatch({
+        type: "create-data-connection",
+        connection: {
+          id: "connection-b",
+          name: "Replacement API",
+          baseUrl: "https://api.example.test/replacement",
+          auth: { kind: "none" },
+          headers: {},
+          timeoutMs: 10_000
+        }
+      }).ok).toBe(true);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create query" }));
+    const replacementDialog = await screen.findByRole("dialog", { name: "Query configuration" });
+    expect(within(replacementDialog).getByLabelText("Query name")).toBeTruthy();
+    expect(within(replacementDialog).queryByText("This connection no longer exists.")).toBeNull();
+
+    view.unmount();
+    editor.dispose();
+  });
+
+  it("allows devices to be loaded again after query creation cancels a pending candidate request", async () => {
+    const pending = Promise.withResolvers<{ status: number; body: string }>();
+    const requests: Parameters<DataRequestExecutor>[0][] = [];
+    const editor = createSeedEditor((request) => {
+      requests.push(request);
+      return requests.length === 1 ? pending.promise : {
+        status: 200,
+        body: JSON.stringify({ items: [{ deviceCode: "pump-1", name: "Pump 1", tempRaw: 251, run: 1 }] })
+      };
+    });
+    const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    fireEvent.click(screen.getByTitle("Pump object"));
+    fireEvent.click(screen.getByRole("button", { name: "Load devices" }));
+    expect(requests).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Create query" }));
+    const dialog = await screen.findByRole("dialog", { name: "Query configuration" });
+    expect(requests[0].signal.aborted).toBe(true);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    const load = await screen.findByRole("button", { name: "Load devices" });
+    expect((load as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(load);
+    expect(await screen.findByLabelText("Devices in current result")).toBeTruthy();
+    expect(requests).toHaveLength(2);
+    await act(async () => pending.resolve({ status: 200, body: JSON.stringify({ items: [] }) }));
+    expect(screen.getByRole("option", { name: "Pump 1 (pump-1)" })).toBeTruthy();
+
+    view.unmount();
+    editor.dispose();
+  });
+
   it("reuses the binding form from the query details dialog", async () => {
     const editor = createSeedEditor();
     const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
@@ -296,6 +368,69 @@ describe("React object binding authoring", () => {
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Close bindings" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Bindings for Pump status" })).toBeNull());
+
+    view.unmount();
+    editor.dispose();
+  });
+
+  it.each([
+    {
+      locale: "en" as const,
+      dialog: "Bindings for Pump status",
+      guard: "Discard binding changes?",
+      object: "Object",
+      device: "Device ID",
+      close: "Close bindings",
+      keep: "Keep editing",
+      discard: "Discard changes"
+    },
+    {
+      locale: "zh-CN" as const,
+      dialog: "Pump status 的绑定",
+      guard: "放弃绑定修改？",
+      object: "对象",
+      device: "设备 ID",
+      close: "关闭绑定",
+      keep: "继续编辑",
+      discard: "放弃修改"
+    }
+  ])("protects binding drafts when switching objects and closing in $locale", async (labels) => {
+    const editor = createSeedEditor();
+    expect(editor.dispatch({
+      type: "import-glb",
+      objectId: "object-b",
+      name: "Valve object",
+      asset: { id: "asset-b" }
+    }).ok).toBe(true);
+    const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} locale={labels.locale} />);
+    const navigation = within(screen.getByLabelText(labels.locale === "en" ? "Workspace views" : "工作区视图"));
+    fireEvent.click(navigation.getByRole("button", { name: labels.locale === "en" ? /^Data \d/ : /^数据 \d/ }));
+    fireEvent.click(screen.getByRole("button", {
+      name: labels.locale === "en" ? "Manage bindings for Pump status" : "管理 Pump status 的绑定"
+    }));
+    const dialog = await screen.findByRole("dialog", { name: labels.dialog });
+    fireEvent.change(within(dialog).getByLabelText(labels.device), { target: { value: "pump-draft" } });
+    fireEvent.change(within(dialog).getByLabelText(labels.object), { target: { value: "object-b" } });
+    const switchGuard = await within(dialog).findByRole("alertdialog", { name: labels.guard });
+    expect((within(dialog).getByLabelText(labels.object) as HTMLSelectElement).value).toBe("object-a");
+    expect(document.activeElement).toBe(within(switchGuard).getByRole("button", { name: labels.keep }));
+    fireEvent.click(within(switchGuard).getByRole("button", { name: labels.keep }));
+    expect((within(dialog).getByLabelText(labels.device) as HTMLInputElement).value).toBe("pump-draft");
+
+    fireEvent.change(within(dialog).getByLabelText(labels.object), { target: { value: "object-b" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: labels.discard }));
+    expect((within(dialog).getByLabelText(labels.object) as HTMLSelectElement).value).toBe("object-b");
+    expect((within(dialog).getByLabelText(labels.device) as HTMLInputElement).value).toBe("");
+
+    fireEvent.change(within(dialog).getByLabelText(labels.device), { target: { value: "valve-draft" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: labels.close }));
+    const closeGuard = await within(dialog).findByRole("alertdialog", { name: labels.guard });
+    fireEvent.click(within(closeGuard).getByRole("button", { name: labels.keep }));
+    expect((within(dialog).getByLabelText(labels.device) as HTMLInputElement).value).toBe("valve-draft");
+    fireEvent.click(within(dialog).getByRole("button", { name: labels.close }));
+    fireEvent.click(within(dialog).getByRole("button", { name: labels.discard }));
+    expect(screen.queryByRole("dialog", { name: labels.dialog })).toBeNull();
+    expect(editor.getSnapshot().dataSources.bindings).toEqual({});
 
     view.unmount();
     editor.dispose();

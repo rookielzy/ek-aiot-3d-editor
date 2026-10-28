@@ -7,7 +7,6 @@ import {
   type DataQueryProblem,
   type DataRequestSummary
 } from "./query";
-import { resolveDataObjectBindingParameters } from "./bindings";
 import { mapDataQueryBody } from "./mapping";
 import type {
   DataObjectDataState,
@@ -396,19 +395,6 @@ export class CoreDataService implements EditorDataService {
     const snapshot = this.#getSnapshot();
     const query = snapshot.dataSources.queries[binding.queryId];
     if (!query) {
-      return;
-    }
-    const parameters = resolveDataObjectBindingParameters(snapshot, binding);
-    if (!parameters.ok) {
-      this.#completeBinding(generation, binding, {
-        status: "error",
-        problems: parameters.problems.map((problem) => ({
-          kind: "parameters",
-          code: problem.code,
-          message: problem.message,
-          ...(problem.parameterName ? { parameterName: problem.parameterName } : {})
-        }))
-      });
       return;
     }
     const built = buildDataGetRequest(snapshot, {

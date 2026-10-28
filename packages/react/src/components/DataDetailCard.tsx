@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   buildDataObjectDetailModel,
   type DataMappingProblem,
@@ -34,20 +34,16 @@ export function DataDetailCard({ context }: { context: ResolvedWorkbenchContext 
   const service = context.editor.getDataService?.() ?? null;
   const dataState = useObjectDataState(context);
   const [closedNodeId, setClosedNodeId] = useState<string | null>(null);
-  const previouslyEnabled = useRef(dataState.preview.enabled);
   const t = context.i18n.t;
-
-  useEffect(() => {
-    if (dataState.preview.enabled && !previouslyEnabled.current) {
-      setClosedNodeId(null);
-    }
-    previouslyEnabled.current = dataState.preview.enabled;
-  }, [dataState.preview.enabled]);
 
   const selection = context.selection;
   const nodeId = selection.count === 1 ? selection.nodeId : null;
   const node = nodeId ? context.snapshot.nodes[nodeId] ?? null : null;
   const binding = nodeId ? context.snapshot.dataSources.bindings[nodeId] ?? null : null;
+
+  useEffect(() => {
+    setClosedNodeId(null);
+  }, [dataState.preview.enabled, nodeId, service]);
 
   if (
     !service ||

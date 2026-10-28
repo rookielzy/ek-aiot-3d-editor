@@ -245,11 +245,7 @@ function validateBindingReferences(
 
   const reportedProperties = new Set<string>();
   for (const binding of bindings) {
-    const details = Array.isArray(binding.details) ? binding.details : [];
-    for (const detail of details) {
-      if (!isPlainRecord(detail) || typeof detail.key !== "string") {
-        continue;
-      }
+    for (const detail of binding.details) {
       if (reportedProperties.has(detail.key)) {
         continue;
       }
@@ -269,8 +265,7 @@ function validateBindingReferences(
 
   const reportedParameters = new Set<string>();
   for (const binding of bindings) {
-    const overrides = isPlainRecord(binding.parameterOverrides) ? binding.parameterOverrides : {};
-    for (const name of Object.keys(overrides)) {
+    for (const name of Object.keys(binding.parameterOverrides)) {
       if (reportedParameters.has(name)) {
         continue;
       }
@@ -287,7 +282,7 @@ function validateBindingReferences(
       }
     }
 
-    const resolution = resolveDataQueryParameters(parameters, overrides, existingQuery.connectionId);
+    const resolution = resolveDataQueryParameters(parameters, binding.parameterOverrides, existingQuery.connectionId);
     for (const problem of resolution.problems) {
       if (problem.code !== "parameter-missing" && problem.code !== "parameter-type") {
         continue;

@@ -249,6 +249,28 @@ describe("durable object bindings", () => {
     editor.dispose();
   });
 
+  it.each([null, { properties: [null] }])("reports malformed query mappings referenced by bindings: %j", (mapping) => {
+    const editor = createEditor();
+    const { queryId } = createQuery(editor);
+    importObject(editor, "object-a");
+    saveBinding(editor, queryId);
+    const snapshot = editor.serialize();
+
+    expect(validateSceneSnapshot({
+      ...snapshot,
+      dataSources: {
+        ...snapshot.dataSources,
+        queries: {
+          [queryId]: { ...snapshot.dataSources.queries[queryId], mapping }
+        }
+      }
+    })).toMatchObject({
+      ok: false,
+      errors: expect.arrayContaining([expect.stringContaining("Data query")])
+    });
+    editor.dispose();
+  });
+
   it("rejects dangling and unnormalized bindings when restoring a snapshot", () => {
     const editor = createEditor();
     const { queryId } = createQuery(editor);

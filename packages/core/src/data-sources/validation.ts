@@ -2,7 +2,7 @@ import type { SceneSnapshot, SceneNode } from "../snapshot/types";
 import { isPlainRecord } from "../snapshot/json";
 import { validateDataObjectBindingInput } from "./bindings";
 import { validateDataQueryDefinition } from "./query-validation";
-import type { DataConnection, DataQuery, SceneDataSources } from "./types";
+import type { DataConnection, DataQuery } from "./types";
 import {
   DEFAULT_DATA_CONNECTION_TIMEOUT_MS,
   isDataConnectionNameTaken
@@ -81,7 +81,7 @@ export function validateDataSources(value: unknown, nodes: unknown, errors: stri
     }
   }
 
-  const knownQueries = new Set<string>();
+  const validQueries: Record<string, DataQuery> = {};
   if (queries) {
     const existingQueries: Pick<DataQuery, "id" | "name" | "connectionId">[] = [];
     for (const [queryId, query] of Object.entries(queries)) {
@@ -93,16 +93,9 @@ export function validateDataSources(value: unknown, nodes: unknown, errors: stri
         errors.push(`Data query ${queryId} must use a matching non-empty id.`);
       }
       const connectionId = typeof query.connectionId === "string" ? query.connectionId : "";
-      const referencingBindings = isPlainRecord(value.bindings) && typeof queryId === "string"
-        ? Object.values(value.bindings).filter((binding) =>
-            isPlainRecord(binding) && binding.queryId === queryId
-          ) as never
-        : [];
       const result = validateDataQueryDefinition(query, {
         queryId,
         existingQueries,
-        existingQuery: query as never,
-        referencingBindings,
         connection: validConnections.get(connectionId) ?? null
       });
       for (const problem of result.problems) {
@@ -119,7 +112,9 @@ export function validateDataSources(value: unknown, nodes: unknown, errors: stri
           connectionId
         });
       }
-      knownQueries.add(queryId);
+      if (result.value) {
+        validQueries[queryId] = { id: queryId, ...result.value };
+      }
     }
   }
 
@@ -133,7 +128,7 @@ export function validateDataSources(value: unknown, nodes: unknown, errors: stri
       if (binding.objectNodeId !== objectNodeId) {
         errors.push(`Data binding ${objectNodeId} must use a matching objectNodeId.`);
       }
-      if (typeof binding.queryId !== "string" || !knownQueries.has(binding.queryId)) {
+      if (typeof binding.queryId !== "string" || !validQueries[binding.queryId]) {
         errors.push(`Data binding ${objectNodeId} query ${String(binding.queryId)} must exist in dataSources.queries.`);
       }
       const node = isPlainRecord(nodes) ? nodes[objectNodeId] : undefined;
@@ -142,7 +137,11 @@ export function validateDataSources(value: unknown, nodes: unknown, errors: stri
       }
 
       const result = validateDataObjectBindingInput({
-        dataSources: value as unknown as SceneDataSources,
+        dataSources: {
+          connections: Object.fromEntries(validConnections),
+          queries: validQueries,
+          bindings: {}
+        },
         nodes: bindingNodes
       }, binding);
       for (const problem of result.problems) {

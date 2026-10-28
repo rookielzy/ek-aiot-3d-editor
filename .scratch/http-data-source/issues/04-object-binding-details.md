@@ -72,3 +72,20 @@ React 新增共享 Device data 表单（Object Inspector 与查询 Bindings 对�
 - Spec 轴：7 项验收与 core/React/Vue 职责行均有实现与测试，无缺失功能或范围蔓延；Vue i18n 仅为跨 adapter 字典 parity，delete-nodes 清理与 query 校验属于规格引用边界。
 - Standards 轴：未发现硬性规范违规；判断性建议保留现状（binding 过滤的小重复、validation 层对未知输入的 cast、内部 React 组件不新增 package-root 导出）。
 - 审查后修复：非数字详情字段拒绝 precision 并补充公开测试；移除 `DataQueryEditor` 冗余 message-key alias 并更新精度错误文案。实现期间同时修复连接配置变化后候选仍显示为当前结果、候选映射错误未本地化两个缺口。
+
+2026-10-28：按用户要求复审从 `6f08fea` 开始的实现，审查范围为 `6f08fea^...HEAD`（包含主要实现提交），并修复发现的问题：
+
+- Spec：绑定保存保留字符串设备 ID 的原始空格，确保候选身份与运行态精确匹配；快照校验只把已验证的查询传入绑定校验，损坏的查询映射返回结构化错误而不抛异常。
+- Spec：Inspector 在连接新增或替换后使用当前有效连接创建查询；查询窗口取消候选请求后恢复加载入口；详情卡关闭后切换选择再返回可重新打开；查询 Bindings 窗口关闭、Escape 或切换对象前保护未保存草稿，并提供中英文继续/放弃选择。
+- Standards：移除对象预览的重复参数预校验，统一由请求构建入口解析；引用检查消费已验证的类型化绑定，移除相应 shape 重检及快照校验中的不安全转换。
+- 回归覆盖公开 Editor 保存/恢复/设备匹配、非法快照诊断，以及 React 创建查询回流、候选取消、重新选择和双语草稿保护。
+
+本轮验证（测试均从对应 package 目录运行）：
+
+- `packages/core`：`pnpm exec vitest run --root ../.. packages/core --maxWorkers 2`，97 files / 834 tests passed。
+- `packages/core`：定向 `object-bindings.test.ts`、`object-data-runtime.test.ts`，2 files / 30 tests passed。
+- `packages/react`：`pnpm exec vitest run --root ../.. packages/react/test/workbench-object-binding.test.tsx packages/react/test/workbench-data-preview.test.tsx packages/react/test/workbench-i18n-parity.test.ts packages/react/test/i18n-string-audit.test.ts packages/react/test/workbench-query-mapping.test.tsx --maxWorkers 1 --testTimeout 30000 --reporter=dot`，5 files / 30 tests passed（首轮并行构建期间既有预览用例超时，最终回归仅在 CLI 放宽等待时间，未修改测试默认配置）。
+- core、React、Vue 的 `pnpm typecheck` 均通过；三个包的 build 均通过。Windows 默认 shell 无 `rm`，构建使用 `pnpm --config.script-shell="C:/Program Files/Git/bin/bash.exe" --filter <package-name> build`。
+- `packages/react`：`pnpm exec vitest run --root ../.. --config vitest.browser.config.ts packages/react/test/object-data-details.browser.test.tsx`，首轮 2 个 viewport 通过，`chromium-desktop-boundary` 会话连接超时；追加 `--project chromium-desktop-boundary` 单独重跑，1 file / 1 test passed，三个 viewport 的真实 GLB/同源 HTTP smoke 均完成。
+- `bun run check` 无法执行：当前环境未安装 Bun，且本仓库 `package.json` 没有 `check` 脚本；以上使用实际 pnpm 脚本验证。
+- `git diff --check`：通过。Standards 轴 1 项（P3，重复参数校验），Spec 轴 6 项（P2，设备身份、非法快照、创建查询、候选取消、详情卡重开及草稿丢失），均已修复。

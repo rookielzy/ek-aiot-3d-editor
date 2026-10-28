@@ -93,6 +93,32 @@ describe("React object data preview", () => {
     editor.dispose();
   });
 
+  it("reopens dismissed device details when the object is selected again without restarting preview", async () => {
+    const editor = createPreviewEditor(async () => jsonResponse(deviceBody(251)), [
+      { objectNodeId: "object-a", deviceId: "pump-1" },
+      { objectNodeId: "object-b", deviceId: "pump-2" }
+    ]);
+    const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    fireEvent.click(screen.getByTitle("Pump object"));
+    fireEvent.click(screen.getByRole("button", { name: "Start data preview" }));
+    const card = await screen.findByRole("region", { name: "Device details" });
+    await waitFor(() => expect(detailValue(card, "Temperature")).toBe("25.1"));
+    const current = editor.getDataService().getObjectDataState();
+
+    fireEvent.click(within(card).getByRole("button", { name: "Close device details" }));
+    expect(screen.queryByRole("region", { name: "Device details" })).toBeNull();
+    fireEvent.click(screen.getByTitle("Valve object"));
+    expect(await screen.findByRole("region", { name: "Device details" })).toBeTruthy();
+    fireEvent.click(screen.getByTitle("Pump object"));
+    const reopened = await screen.findByRole("region", { name: "Device details" });
+    expect(within(reopened).getByRole("heading", { name: "Pump object" })).toBeTruthy();
+    expect(detailValue(reopened, "Temperature")).toBe("25.1");
+    expect(editor.getDataService().getObjectDataState()).toBe(current);
+
+    view.unmount();
+    editor.dispose();
+  });
+
   it("marks partial results and shows the missing field reason without a fake value", async () => {
     const executor = vi.fn<DataRequestExecutor>(async () => {
       const body = deviceBody(251);

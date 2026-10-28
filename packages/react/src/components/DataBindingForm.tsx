@@ -34,6 +34,7 @@ export interface DataBindingFormProps {
   context: ResolvedWorkbenchContext;
   objectNodeId: string;
   fixedQueryId?: string | null;
+  onDirtyChange?(dirty: boolean): void;
 }
 
 interface DetailDraft {
@@ -87,7 +88,8 @@ const BINDING_PROBLEM_MESSAGE_KEYS = {
 export function DataBindingForm({
   context,
   objectNodeId,
-  fixedQueryId = null
+  fixedQueryId = null,
+  onDirtyChange
 }: DataBindingFormProps) {
   const snapshot = context.snapshot;
   const savedBinding = snapshot.dataSources.bindings[objectNodeId] ?? null;
@@ -116,6 +118,9 @@ export function DataBindingForm({
   const query = draft.queryId ? snapshot.dataSources.queries[draft.queryId] ?? null : null;
   const connection = query ? snapshot.dataSources.connections[query.connectionId] ?? null : null;
   const connections = Object.values(snapshot.dataSources.connections);
+  const queryConnectionId = connections.some((connection) => connection.id === newQueryConnectionId)
+    ? newQueryConnectionId
+    : connections[0]?.id ?? "";
   const queries = Object.values(snapshot.dataSources.queries);
   const service = context.editor.getDataService?.() ?? null;
   const signature = useMemo(
@@ -123,6 +128,10 @@ export function DataBindingForm({
     [draft.queryId, draft.overrides, query, connection]
   );
   const dirty = serializeDraft(draft) !== baseline;
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
 
   useEffect(() => {
     if (lastSavedSignatureRef.current === savedSignature) {
@@ -246,10 +255,14 @@ export function DataBindingForm({
     }, { overrides });
     candidateRunRef.current = handle.id;
     const result = await handle.result;
-    if (candidateRunRef.current !== handle.id || !result.current) {
+    if (candidateRunRef.current !== handle.id) {
       return;
     }
     candidateRunRef.current = null;
+    if (!result.current) {
+      setCandidates({ status: "idle", signature: requestSignature });
+      return;
+    }
     if (result.status !== "success" || !result.response) {
       setCandidates({
         status: "error",
@@ -436,7 +449,7 @@ export function DataBindingForm({
                   <span>{t("dataBinding.form.query.connection")}</span>
                   <select
                     aria-label={t("dataBinding.form.query.connection")}
-                    value={newQueryConnectionId}
+                    value={queryConnectionId}
                     onChange={(event) => setNewQueryConnectionId(event.target.value)}
                   >
                     {connections.map((connection) => (
@@ -447,7 +460,7 @@ export function DataBindingForm({
               ) : null}
               <button
                 type="button"
-                disabled={!newQueryConnectionId}
+                disabled={!queryConnectionId}
                 onClick={() => setQueryEditorOpen(true)}
               >{t("dataBinding.form.query.create")}</button>
             </div>
@@ -674,9 +687,9 @@ export function DataBindingForm({
       </form>
       {queryEditorOpen ? (
         <DataQueryEditor
-          key={`binding-query:${newQueryConnectionId}`}
+          key={`binding-query:${queryConnectionId}`}
           context={context}
-          connectionId={newQueryConnectionId}
+          connectionId={queryConnectionId}
           queryId={null}
           onClose={() => setQueryEditorOpen(false)}
           onSaved={handleQuerySaved}

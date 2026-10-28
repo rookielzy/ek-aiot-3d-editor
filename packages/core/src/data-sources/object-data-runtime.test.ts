@@ -179,6 +179,29 @@ describe("object data preview runtime", () => {
     editor.dispose();
   });
 
+  it("preserves whitespace in device identities when saving and matching a binding", async () => {
+    const { editor, service } = createBoundEditor(async () => jsonResponse({
+      items: [deviceRecord({ deviceCode: " pump-01 " })]
+    }));
+    const result = buildSaveDataObjectBindingCommand(editor.getSnapshot(), {
+      ...editor.getSnapshot().dataSources.bindings["object-a"],
+      deviceId: " pump-01 "
+    });
+    if (!result.ok) throw new Error("Expected a valid device identity.");
+    expect(editor.dispatch(result.command).ok).toBe(true);
+
+    await service.startPreview();
+    expect(service.getObjectDataState().objects["object-a"]).toMatchObject({
+      deviceId: " pump-01 ",
+      entityId: " pump-01 ",
+      status: "partial"
+    });
+    const restored = createEditor({ snapshot: editor.serialize() });
+    expect(restored.serialize()).toEqual(editor.serialize());
+    restored.dispose();
+    editor.dispose();
+  });
+
   it("finishes the refresh when the executor ignores abort after a timeout", async () => {
     let signal: AbortSignal | undefined;
     const executor: DataRequestExecutor = (request) => {
