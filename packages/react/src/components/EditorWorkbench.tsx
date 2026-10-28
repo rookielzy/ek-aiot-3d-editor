@@ -284,8 +284,8 @@ export function EditorWorkbench({
         <DataPreviewControls context={workbench} />
         <DataDetailCard
           context={workbench}
-          focusFieldKey={dataFieldFocus?.nodeId === workbench.selection.nodeId
-            ? dataFieldFocus.propertyKey
+          focusField={dataFieldFocus?.nodeId === workbench.selection.nodeId
+            ? dataFieldFocus
             : null}
         />
       </section>

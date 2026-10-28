@@ -457,7 +457,7 @@ export class CoreDataService implements EditorDataService {
     this.#reconcilingPreview = true;
     const snapshot = this.#getSnapshot();
     const now = Date.now();
-    const usedContexts = new Set<PreviewContext>();
+    const objectContexts = new Map<string, PreviewContext>();
     const createdContexts: PreviewContext[] = [];
     const seenObjects = new Set<string>();
     const bindings = Object.values(snapshot.dataSources.bindings)
@@ -540,7 +540,7 @@ export class CoreDataService implements EditorDataService {
         context.request = built.summary;
         context.parameters = { ...built.summary.parameters };
       }
-      usedContexts.add(context);
+      objectContexts.set(binding.objectNodeId, context);
 
       const signature = JSON.stringify(binding);
       const previousRef = context.bindings.get(binding.objectNodeId);
@@ -571,7 +571,12 @@ export class CoreDataService implements EditorDataService {
     }
 
     for (const context of [...this.#contexts.values()]) {
-      if (!usedContexts.has(context)) {
+      for (const objectNodeId of context.bindings.keys()) {
+        if (objectContexts.get(objectNodeId) !== context) {
+          context.bindings.delete(objectNodeId);
+        }
+      }
+      if (context.bindings.size === 0) {
         this.#cancelContext(context);
       }
     }
@@ -661,6 +666,9 @@ export class CoreDataService implements EditorDataService {
     this.#activeContexts.add(context.key);
     this.#syncContextObjects(context);
     this.#publishObjectState();
+    if (!this.#isCurrentRun(context, token)) {
+      return;
+    }
 
     context.timeoutTimer = setTimeout(() => {
       if (context.runToken !== token || context.phase !== "requesting") {
@@ -883,7 +891,7 @@ export class CoreDataService implements EditorDataService {
         paused: context.paused,
         nextRefreshAt: context.nextRefreshAt,
         receivedAt: result.receivedAt,
-        history: options.history ?? this.#objectStates[binding.objectNodeId]?.history ?? null,
+        history: options.history,
         problems: relevantProblems
       }, now, context.query.updatePolicy.maxAgeMs);
       return;
@@ -897,7 +905,7 @@ export class CoreDataService implements EditorDataService {
         paused: context.paused,
         nextRefreshAt: context.nextRefreshAt,
         receivedAt: result.receivedAt,
-        history: options.history ?? this.#objectStates[binding.objectNodeId]?.history ?? null,
+        history: options.history,
         problems: [{
           kind: "device",
           code: "device-missing",

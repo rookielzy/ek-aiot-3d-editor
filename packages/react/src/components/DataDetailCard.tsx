@@ -33,25 +33,27 @@ const QUALITY_MESSAGE_KEYS = {
 
 export function DataDetailCard({
   context,
-  focusFieldKey
+  focusField
 }: {
   context: ResolvedWorkbenchContext;
-  focusFieldKey?: string | null;
+  focusField?: { propertyKey: string } | null;
 }) {
   const service = context.editor.getDataService?.() ?? null;
   const dataState = context.dataState;
   const [closedNodeId, setClosedNodeId] = useState<string | null>(null);
   const cardRef = useRef<HTMLElement>(null);
   const t = context.i18n.t;
+  const focusFieldKey = focusField?.propertyKey;
 
   const selection = context.selection;
   const nodeId = selection.count === 1 ? selection.nodeId : null;
   const node = nodeId ? context.snapshot.nodes[nodeId] ?? null : null;
   const binding = nodeId ? context.snapshot.dataSources.bindings[nodeId] ?? null : null;
 
+  // Each locate request can reopen the card, including repeated requests for the same field.
   useEffect(() => {
     setClosedNodeId(null);
-  }, [dataState.preview.enabled, nodeId, service]);
+  }, [dataState.preview.enabled, nodeId, service, focusField]);
 
   useEffect(() => {
     if (!focusFieldKey) {
@@ -60,7 +62,7 @@ export function DataDetailCard({
     const field = [...cardRef.current?.querySelectorAll<HTMLElement>("[data-field-key]") ?? []]
       .find((candidate) => candidate.dataset.fieldKey === focusFieldKey);
     field?.scrollIntoView?.({ block: "nearest" });
-  }, [focusFieldKey, nodeId]);
+  }, [focusField, nodeId, closedNodeId]);
 
   if (
     !service ||

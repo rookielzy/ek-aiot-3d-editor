@@ -61,6 +61,69 @@ describe("shared preview runtime", () => {
     harness.editor.dispose();
   });
 
+  it("keeps a rebound object isolated from the old shared context's late response", async () => {
+    const pending: Array<(response: DataResponseDescriptor) => void> = [];
+    const executor = vi.fn<DataRequestExecutor>(() => new Promise((resolve) => {
+      pending.push(resolve);
+    }));
+    const harness = createHarness(executor, [
+      binding("object-a", "pump-01"),
+      binding("object-b", "pump-01")
+    ]);
+    const starting = harness.service.startPreview();
+    pending.shift()!(jsonResponse(freshBody({ "pump-01": 100 })));
+    await starting;
+
+    const refreshing = harness.service.refreshPreview();
+    const oldResponse = pending.shift()!;
+    const update = buildSaveDataObjectBindingCommand(harness.editor.getSnapshot(), {
+      ...harness.editor.getSnapshot().dataSources.bindings["object-b"],
+      parameterOverrides: { areaId: "B" }
+    });
+    if (!update.ok) throw new Error("Expected a valid binding update.");
+    expect(harness.editor.dispatch(update.command).ok).toBe(true);
+    pending.shift()!(jsonResponse(freshBody({ "pump-01": 200 })));
+    await flush();
+    expect(harness.service.getObjectDataState().objects["object-b"].fields[0].value).toBe(20);
+
+    oldResponse(jsonResponse(freshBody({ "pump-01": 110 })));
+    await refreshing;
+    const state = harness.service.getObjectDataState();
+    expect(state.objects["object-a"].fields[0].value).toBe(11);
+    expect(state.objects["object-b"].fields[0].value).toBe(20);
+    expect(state.contexts[state.objects["object-a"].contextKey].objectNodeIds).toEqual(["object-a"]);
+    expect(state.contexts[state.objects["object-b"].contextKey].parameters).toEqual({ areaId: "B" });
+    expect(state.contexts[state.objects["object-b"].contextKey].objectNodeIds).toEqual(["object-b"]);
+    harness.editor.dispose();
+  });
+
+  it.each(["disable", "remove"])("does not revive an object after %s while its shared context keeps polling", async (action) => {
+    const executor = vi.fn<DataRequestExecutor>(async () => jsonResponse(freshBody()));
+    const harness = createHarness(executor, [
+      binding("object-a", "pump-01"),
+      binding("object-b", "pump-02")
+    ], { refreshIntervalMs: 1_000, maxAgeMs: 5_000 });
+    await harness.service.startPreview();
+
+    const disable = buildSaveDataObjectBindingCommand(harness.editor.getSnapshot(), {
+      ...harness.editor.getSnapshot().dataSources.bindings["object-b"],
+      enabled: false
+    });
+    if (!disable.ok) throw new Error("Expected a valid binding update.");
+    expect(harness.editor.dispatch(action === "disable"
+      ? disable.command
+      : { type: "delete-data-object-binding", objectNodeId: "object-b" }).ok).toBe(true);
+    expect(harness.service.getObjectDataState().objects["object-b"]).toBeUndefined();
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    const state = harness.service.getObjectDataState();
+    expect(executor).toHaveBeenCalledTimes(2);
+    expect(state.objects["object-a"].status).toBe("ready");
+    expect(state.objects["object-b"]).toBeUndefined();
+    expect(Object.values(state.contexts)[0].objectNodeIds).toEqual(["object-a"]);
+    harness.editor.dispose();
+  });
+
   it("caps in-flight contexts at four and drains a deduplicated queue", async () => {
     const pending: Array<(response: DataResponseDescriptor) => void> = [];
     const executor = vi.fn<DataRequestExecutor>((_request: DataRequestDescriptor) =>
@@ -411,6 +474,33 @@ describe("shared preview runtime", () => {
     harness.editor.dispose();
   });
 
+  it.each(["missing-device", "empty"])("clears the previous device's history when rebinding a %s result", async (status) => {
+    const executor = vi.fn<DataRequestExecutor>(async () => jsonResponse(freshBody()));
+    const harness = createHarness(executor, [binding("object-a", "pump-01")]);
+    await harness.service.startPreview();
+    await harness.service.refreshPreview();
+    expect(harness.service.getObjectDataState().objects["object-a"].history?.fields[0].value).toBe(42.6);
+
+    if (status === "empty") {
+      executor.mockResolvedValue(jsonResponse({ items: [] }));
+      await harness.service.refreshPreview();
+    }
+    const update = buildSaveDataObjectBindingCommand(harness.editor.getSnapshot(), {
+      ...harness.editor.getSnapshot().dataSources.bindings["object-a"],
+      deviceId: "pump-missing"
+    });
+    if (!update.ok) throw new Error("Expected a valid binding update.");
+    expect(harness.editor.dispatch(update.command).ok).toBe(true);
+
+    const state = harness.service.getObjectDataState().objects["object-a"];
+    expect(state.status).toBe(status);
+    expect(state.history).toBeNull();
+    const model = buildDataObjectDetailModel(harness.editor.getSnapshot(), "object-a", state);
+    expect(model?.deviceId).toBe("pump-missing");
+    expect(model?.fields[0]).toMatchObject({ value: null, historyValue: null, historyReceivedAt: null });
+    harness.editor.dispose();
+  });
+
   it("aborts in-flight requests on stop and dispose and ignores their responses", async () => {
     const pending: Array<{
       signal: AbortSignal;
@@ -558,6 +648,28 @@ describe("shared preview runtime", () => {
     expect(harness.service.getObjectDataState().objects).toEqual({});
     await vi.advanceTimersByTimeAsync(20_000);
     expect(executor).toHaveBeenCalledTimes(1);
+    harness.editor.dispose();
+  });
+
+  it.each(["stop", "dispose"])("does not create requests or timers after a subscriber calls %s during request notification", async (action) => {
+    const executor = vi.fn<DataRequestExecutor>(async () => jsonResponse(freshBody()));
+    const harness = createHarness(executor, [binding("object-a", "pump-01")]);
+    const unsubscribe = harness.service.subscribeObjectData((state) => {
+      if (!Object.values(state.contexts).some((context) => context.phase === "requesting")) {
+        return;
+      }
+      if (action === "dispose") {
+        harness.editor.dispose();
+        return;
+      }
+      harness.service.stopPreview();
+    });
+
+    await harness.service.startPreview();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(executor).not.toHaveBeenCalled();
+    expect(harness.service.getObjectDataState().objects).toEqual({});
+    unsubscribe();
     harness.editor.dispose();
   });
 

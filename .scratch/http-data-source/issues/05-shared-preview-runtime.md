@@ -75,3 +75,20 @@ Decisions: D04, D05, D08, D13
 
 - Spec：补齐恢复兼容、字段级定位、Vue dataState 聚合、取消/abort、指数退避与 HTTP-date Retry-After、故障清除、独立历史接收时间、刷新中状态等测试缺口；实现中发现并修复 `refreshing` 被旧 patch 覆盖、历史值使用新响应时间两个真实缺陷。不可重试上下文仍以 `phase: "waiting"` 表示“等待修复”，UI 在无下一次刷新时间时显示 “Awaiting retry / 等待重试”。
 - Standards：更新 `docs/schema.md`、`docs/README.md`、`docs/architecture.md` 与 core README；移除重复的参数格式化、映射问题转换、取消实现与无效 `#dataSources` 字段；重命名并发上限；`Locate` 在有草稿时不再被静默消费；移除未使用的 `useObjectDataState`。保留判断项：`createRuntimeState` 的显式位置参数、两种序列化用途与详情卡始终提供重试入口。
+
+2026-10-28：修复对 `d302217`、`c468434`、`586a4f7` 再次审查发现的四个问题。
+
+- 每次协调绑定时按对象同步上下文引用，移除迁出、停用和已解绑的对象；仍服务其他对象的旧上下文不再覆盖新上下文结果或恢复已移除的运行态。
+- 映射空结果或缺设备时保留调用者显式传入的 `history: null`，改绑设备不再恢复旧设备的历史值。
+- 通知请求状态订阅者后重新检查 generation，订阅者同步停止或销毁 editor 时不再创建请求与 timeout。
+- 详情卡保留每次字段定位请求的身份，重复定位同一字段也会重新打开已关闭的卡片，并在字段重新挂载后滚动定位。
+
+新增 8 个回归用例，均先在原实现上失败、修复后通过：改绑区域后的旧响应隔离、共享对象停用/解绑后不复活、缺设备/空结果下改绑设备清空历史、订阅回调中停止/销毁后零请求与零 timer，以及连续两次关闭并定位同一字段。
+
+本轮验证（所有测试从包目录执行）：
+
+- 根目录 `pnpm --config.script-shell="C:/Program Files/Git/bin/bash.exe" build` 与同参数 `typecheck`：core、React、Vue 全部通过。
+- `packages/core` 中 `pnpm exec vitest run --root ../.. --maxWorkers 4`：131 files / 1209 tests passed。首次与构建、浏览器测试并行执行时，一个既有 React 用例超过 10 秒超时，随后一个刷新状态断言失败；两项原样单独复跑通过，其他验证结束后独立重跑全套全部通过，未放宽超时或断言。
+- `packages/react` 中 `pnpm exec vitest run --root ../.. --config D:/code/ek-aiot-3d-editor/vitest.browser.config.ts packages/react/test/http-data-source.browser.test.tsx packages/react/test/object-data-details.browser.test.tsx packages/react/test/query-editor-focus.browser.test.tsx`：三个 Chromium viewport 共 9 file-instance / 12 tests passed。
+- `git diff --check`：通过，仅既有 CRLF/LF 提示。
+- 已尝试 `bun run check`，当前环境没有 `bun` 命令，且根 package.json 未定义 `check` 脚本；使用本仓库既有 pnpm 构建、类型检查和测试完成验证。

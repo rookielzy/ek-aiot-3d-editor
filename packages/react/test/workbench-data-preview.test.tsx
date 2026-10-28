@@ -227,6 +227,45 @@ describe("React object data preview", () => {
     editor.dispose();
   });
 
+  it("reopens dismissed details each time the same field problem is located", async () => {
+    const editor = createPreviewEditor(async () => jsonResponse({
+      items: [{
+        deviceCode: "pump-1",
+        name: "Pump 1",
+        tempRaw: 251,
+        run: 1,
+        quality: "ok",
+        sampledAt: new Date().toISOString()
+      }]
+    }), [{
+      objectNodeId: "object-a",
+      deviceId: "pump-1",
+      details: [{ key: "temperature" }, { key: "flow" }]
+    }]);
+    const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    fireEvent.click(screen.getByTitle("Pump object"));
+    fireEvent.click(screen.getByRole("button", { name: "Start data preview" }));
+    const card = await screen.findByRole("region", { name: "Device details" });
+    await waitFor(() => expect(within(card).getByText("Some fields are unavailable")).toBeTruthy());
+
+    for (const attempt of [1, 2]) {
+      fireEvent.click(screen.getByRole("button", { name: "Close device details" }));
+      expect(screen.queryByRole("region", { name: "Device details" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Problem details" }));
+      const drawer = screen.getByRole("region", { name: "Problem details" });
+      const fieldProblem = [...drawer.querySelectorAll("li")]
+        .find((item) => item.textContent?.includes("Data field"));
+      expect(fieldProblem, `field problem for locate attempt ${attempt}`).toBeTruthy();
+      fireEvent.click(within(fieldProblem!).getByRole("button", { name: "Locate" }));
+      const reopened = await screen.findByRole("region", { name: "Device details" });
+      expect(editor.getSnapshot().selection.nodeId).toBe("object-a");
+      expect(reopened.querySelector('[data-field-key="flow"]')?.getAttribute("data-focused")).toBe("true");
+    }
+
+    view.unmount();
+    editor.dispose();
+  });
+
   it("reports a device that is absent from the current result", async () => {
     const executor = vi.fn<DataRequestExecutor>(async () => jsonResponse(deviceBody(251)));
     const editor = createPreviewEditor(executor, [{
