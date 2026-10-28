@@ -15,10 +15,11 @@ export interface TransformInspectorProps {
   editor: Editor;
   snapshot: SceneSnapshot;
   section: InspectorSection;
+  locked?: boolean;
   i18n?: InspectorI18n;
 }
 
-export function TransformInspector({ editor, snapshot, section, i18n = DEFAULT_INSPECTOR_I18N }: TransformInspectorProps) {
+export function TransformInspector({ editor, snapshot, section, locked = false, i18n = DEFAULT_INSPECTOR_I18N }: TransformInspectorProps) {
   const targetKey = snapshot.selection.nodeId ?? "none";
   const [problem, setProblem, clearField] = useInspectorProblem(section.fields, targetKey);
   const problemId = useId();
@@ -50,6 +51,7 @@ export function TransformInspector({ editor, snapshot, section, i18n = DEFAULT_I
         <h2>{renderSectionTitle(i18n, section)}</h2>
       </header>
       {section.empty ? <p className="ek-inspector-empty">{renderSectionReason(i18n, section)}</p> : null}
+      {locked ? <p className="ek-inspector-warning" role="status">{i18n.t("reactWorkbench.inspector.previewLocked")}</p> : null}
       {!section.empty ? (["position", "rotation", "scale"] as const).map((vector) => {
         const fields = section.fields.filter((field) => field.id.startsWith(`${vector}.`));
         if (!fields.length) return null;
@@ -64,7 +66,7 @@ export function TransformInspector({ editor, snapshot, section, i18n = DEFAULT_I
                     key={`${targetKey}:${field.id}`}
                     aria-label={renderFieldLabel(i18n, field)}
                     value={displayValue(field.id, field.value)}
-                    disabled={field.disabled}
+                    disabled={field.disabled || locked}
                     step={vector === "rotation" ? 1 : field.step ?? 0.01}
                     aria-invalid={problem?.fieldId === field.id ? true : undefined}
                     aria-describedby={problem?.fieldId === field.id ? problemId : undefined}

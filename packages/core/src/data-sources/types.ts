@@ -197,6 +197,29 @@ export interface DataBindingDetailField {
   precision: number | null;
 }
 
+export type DataColorOperator = "eq" | "ne" | "gt" | "gte" | "lt" | "lte" | "between";
+
+/**
+ * One ordered color rule. `max` is only meaningful for `between`, where both
+ * bounds are inclusive.
+ */
+export interface DataColorRule {
+  operator: DataColorOperator;
+  value: DataParameterValue;
+  max: number | null;
+  /** Normalized `#rrggbb` color. */
+  color: string;
+}
+
+/**
+ * One mapped property drives the binding's status color. The first matching
+ * rule wins; no match restores the authored material color.
+ */
+export interface DataBindingColor {
+  propertyKey: string;
+  rules: readonly DataColorRule[];
+}
+
 /**
  * Reference and authoring portion of an object binding. Bindings are keyed by
  * object NodeId; one object owns at most one query context.
@@ -208,6 +231,19 @@ export interface DataObjectBinding {
   deviceId: string;
   enabled: boolean;
   details: readonly DataBindingDetailField[];
+  color: DataBindingColor | null;
+}
+
+export interface DataBindingColorInput {
+  propertyKey: string;
+  rules?: readonly DataColorRuleInput[] | null;
+}
+
+export interface DataColorRuleInput {
+  operator: DataColorOperator;
+  value: DataParameterValue;
+  max?: number | null;
+  color: string;
 }
 
 export interface DataObjectBindingInput {
@@ -217,6 +253,7 @@ export interface DataObjectBindingInput {
   deviceId: string;
   enabled?: boolean;
   details?: readonly DataBindingDetailFieldInput[] | null;
+  color?: DataBindingColorInput | null;
 }
 
 export interface DataBindingDetailFieldInput {
@@ -225,11 +262,23 @@ export interface DataBindingDetailFieldInput {
   precision?: number | null;
 }
 
-export type DataBindingProblemField = "object" | "query" | "parameters" | "device" | "details" | "binding";
+export type DataBindingProblemField =
+  | "object"
+  | "query"
+  | "parameters"
+  | "device"
+  | "details"
+  | "colors"
+  | "binding";
 
 export type DataBindingProblemCode =
   | "binding-invalid"
   | "binding-not-found"
+  | "color-invalid"
+  | "color-operator"
+  | "color-property-unknown"
+  | "color-rules-required"
+  | "color-value"
   | "command-failed"
   | "device-required"
   | "detail-duplicate"

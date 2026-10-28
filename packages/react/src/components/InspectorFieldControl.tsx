@@ -10,14 +10,15 @@ interface InspectorFieldControlProps {
   field: InspectorFieldDescriptor;
   invalid?: boolean;
   descriptionId?: string;
+  disabled?: boolean;
   i18n: InspectorI18n;
   onCommit(value: string): boolean;
   onReset(): void;
   commitUnchanged?: boolean;
 }
 
-export function InspectorFieldControl({ field, invalid, descriptionId, i18n, onCommit, onReset, commitUnchanged }: InspectorFieldControlProps) {
-  const props = { "aria-label": renderFieldLabel(i18n, field), "aria-invalid": invalid || undefined, "aria-describedby": descriptionId, disabled: field.disabled };
+export function InspectorFieldControl({ field, invalid, descriptionId, disabled, i18n, onCommit, onReset, commitUnchanged }: InspectorFieldControlProps) {
+  const props = { "aria-label": renderFieldLabel(i18n, field), "aria-invalid": invalid || undefined, "aria-describedby": descriptionId, disabled: field.disabled || disabled };
   if (field.kind === "number") return <InspectorNumberInput {...props} commitUnchanged={commitUnchanged} value={String(field.value)} min={field.min} max={field.max} step={field.step ?? 0.01} onReset={onReset} onCommit={(value) => onCommit(value.trim() === "" ? "NaN" : value)} />;
   if (field.kind === "text") return <InspectorTextInput {...props} value={String(field.value)} onCommit={onCommit} onReset={onReset} />;
   if (field.kind === "color") return <InspectorColorInput {...props} value={String(field.value)} i18n={i18n} onCommit={onCommit} onReset={onReset} />;

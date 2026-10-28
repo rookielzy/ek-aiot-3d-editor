@@ -51,3 +51,18 @@ Decisions: D09, D10, D12, D13
 ## Comments
 
 2026-10-26：按用户认可的原型流程整理为正式规划任务。Status 表示定义就绪，不代表实现、验证或用户已授权开始执行。
+
+2026-10-28：实现完成。core 新增 durable `color` 规则校验/迁移、`evaluateDataColorRules()`、`CoreDataColorService` 与投影拥有的 `DataColorProjector`；React 增加有序规则/色板/能力提示/草稿试用/预览编辑锁定；Vue 仅补齐 i18n 键，无新增界面。实现与审查修复后验证：
+
+- `pnpm test`：135 files / 1236 tests passed（含新增 color-rules 4、projector 7、color-preview 13、React color form 3）。
+- `pnpm test:browser`：30 file-instance / 123 tests passed（Chromium 三个 viewport）。新增真实 GLB/WebGL 用例在同一 GLB 材质实例上验证：仅绑定对象变色、另一对象与共享 authored 材质不变、重投影保留颜色、停止恢复原材质、试用结束恢复。
+- 根目录 `pnpm --config.script-shell="C:/Program Files/Git/bin/bash.exe" build` 与同参数 `typecheck`：core、React、Vue 全部通过。
+- `git diff --check`：通过，仅 Git 对既有 CRLF/LF 文件给出提示。
+
+代码审查（`code-review` skill，Standards/Spec 双轴，范围 HEAD → 工作区）后修复：
+
+- 补齐 `.changeset/runtime-data-colors.md`（core/react minor、vue patch）、React/Vue 集成文档和预览锁定说明。
+- core 在试用目标节点被删除时结束试用；`import-glb` command 在全局预览中先停止预览再继续，消除与 import API 的语义分叉；修正 core README 对 target change 的过度表述（React 表单负责换目标结束）。
+- React 规则表单增加可选色板 swatch（`aria-pressed` + `Use color #…` 标签）；浏览器用例改为缓存真实 GLB 并 clone 共享材质，真正验证共享材质隔离。
+- 移除未使用的 `getCapabilities()`/`appliedCount` 与 `"inactive"` 状态，复用统一 `emptyDataColorCapability()`，并合并颜色未生效返回分支。
+- 保留判断项：换目标结束试用仍由 React 表单生命周期负责（core 负责目标删除/配置/预览/生命周期）；能力诊断在保存 binding 或试用时显示；`createObjectState` 的显式位置参数暂不重组。

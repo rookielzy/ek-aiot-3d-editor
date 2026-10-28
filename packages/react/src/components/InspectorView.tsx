@@ -99,8 +99,8 @@ export function InspectorView({ editor, snapshot, inspector, setActiveLightId, s
             </div>
           </dl>
         </header>
-        {!selection.light && !selection.cameraView ? <TransformInspector key={`transform:${selection.nodeId}`} editor={editor} snapshot={snapshot} section={inspector.transform} i18n={i18n} /> : null}
-        {!selection.light && !selection.cameraView ? <MaterialInspector key={`material:${selection.nodeId}`} editor={editor} snapshot={snapshot} section={inspector.material} i18n={i18n} /> : null}
+        {!selection.light && !selection.cameraView ? <TransformInspector key={`transform:${selection.nodeId}`} editor={editor} snapshot={snapshot} section={inspector.transform} locked={dataContext?.dataState.preview.enabled} i18n={i18n} /> : null}
+        {!selection.light && !selection.cameraView ? <MaterialInspector key={`material:${selection.nodeId}`} editor={editor} snapshot={snapshot} section={inspector.material} locked={dataContext?.dataState.preview.enabled} i18n={i18n} /> : null}
         {dataContext ? <DataBindingInspector context={dataContext} /> : null}
         {showSelectedLight ? lightInspector : null}
         {showSelectedCamera ? cameraInspector : null}

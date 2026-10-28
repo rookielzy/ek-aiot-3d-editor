@@ -25,7 +25,7 @@ import { assertValidSceneSnapshot, type ValidationResult } from "./validation";
 
 export function migrateSerializedSnapshot(serialized: SerializedSceneSnapshot): SceneSnapshot {
   if (serialized.version === SNAPSHOT_VERSION) {
-    const normalized = normalizeDataQueryPolicies(serialized);
+    const normalized = normalizeDataObjectBindingColors(normalizeDataQueryPolicies(serialized));
     assertValidSceneSnapshot(normalized);
     return immutableClone(normalized);
   }
@@ -107,6 +107,34 @@ function normalizeDataQueryPolicies(serialized: SceneSnapshot): SceneSnapshot {
     dataSources: {
       ...serialized.dataSources,
       queries: normalized
+    }
+  };
+}
+
+/**
+ * Status colors arrived while the v9 data-source contract was still
+ * unreleased. Treat stored bindings without the field as having no color.
+ */
+function normalizeDataObjectBindingColors(serialized: SceneSnapshot): SceneSnapshot {
+  type BindingRecord = SceneSnapshot["dataSources"]["bindings"];
+  type LegacyBinding = Omit<BindingRecord[string], "color"> & Partial<Pick<BindingRecord[string], "color">>;
+  const bindings = serialized.dataSources.bindings as unknown as Record<string, LegacyBinding>;
+  let changed = false;
+  const normalized = Object.fromEntries(Object.entries(bindings).map(([objectNodeId, binding]) => {
+    if (binding.color !== undefined) {
+      return [objectNodeId, binding];
+    }
+    changed = true;
+    return [objectNodeId, { ...binding, color: null }];
+  })) as unknown as BindingRecord;
+  if (!changed) {
+    return serialized;
+  }
+  return {
+    ...serialized,
+    dataSources: {
+      ...serialized.dataSources,
+      bindings: normalized
     }
   };
 }

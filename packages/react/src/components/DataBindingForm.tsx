@@ -9,13 +9,21 @@ import {
 import {
   buildDeleteDataObjectBindingCommand,
   buildSaveDataObjectBindingCommand,
+  dataColorOperatorsForType,
   DATA_DETAIL_MAX_PRECISION,
   mapDataQueryBody,
+  normalizeDataColorHex,
+  type DataBindingColor,
   type DataBindingProblem,
   type DataBindingProblemCode,
+  type DataColorObjectCapability,
+  type DataColorOperator,
+  type DataColorRule,
+  type DataColorTrialProblemCode,
   type DataMappedEntity,
   type DataObjectBindingInput,
   type DataParameterValue,
+  type DataPropertyMapping,
   type DataQuery,
   type DataQueryProblem
 } from "@ek-aiot/3d-editor-core";
@@ -48,12 +56,25 @@ interface OverrideDraft {
   text: string;
 }
 
+interface ColorRuleDraft {
+  operator: DataColorOperator;
+  value: string;
+  max: string;
+  color: string;
+}
+
+interface ColorDraft {
+  propertyKey: string;
+  rules: ColorRuleDraft[];
+}
+
 interface BindingDraft {
   queryId: string;
   overrides: Record<string, OverrideDraft>;
   deviceId: string;
   enabled: boolean;
   details: DetailDraft[];
+  color: ColorDraft | null;
 }
 
 type CandidateState =
@@ -70,6 +91,11 @@ interface StatusMessage {
 const BINDING_PROBLEM_MESSAGE_KEYS = {
   "binding-invalid": "dataBinding.problem.bindingInvalid",
   "binding-not-found": "dataBinding.problem.bindingNotFound",
+  "color-invalid": "dataBinding.problem.colorInvalid",
+  "color-operator": "dataBinding.problem.colorOperator",
+  "color-property-unknown": "dataBinding.problem.colorPropertyUnknown",
+  "color-rules-required": "dataBinding.problem.colorRulesRequired",
+  "color-value": "dataBinding.problem.colorValue",
   "command-failed": "dataBinding.problem.commandFailed",
   "device-required": "dataBinding.problem.deviceRequired",
   "detail-duplicate": "dataBinding.problem.detailDuplicate",
@@ -84,6 +110,14 @@ const BINDING_PROBLEM_MESSAGE_KEYS = {
   "target-not-found": "dataBinding.problem.targetNotFound",
   "target-unsupported": "dataBinding.problem.targetUnsupported"
 } satisfies Record<DataBindingProblemCode, WorkbenchMessageKey>;
+
+const COLOR_TRIAL_PROBLEM_MESSAGE_KEYS = {
+  "color-required": "dataBinding.colors.trial.problem.color-required",
+  "preview-active": "dataBinding.colors.trial.problem.preview-active",
+  "target-not-found": "dataBinding.colors.trial.problem.target-not-found"
+} satisfies Record<DataColorTrialProblemCode, WorkbenchMessageKey>;
+
+const COLOR_PALETTE = ["#22c55e", "#f59e0b", "#ef4444", "#3b82f6", "#a855f7"] as const;
 
 export function DataBindingForm({
   context,
@@ -110,6 +144,7 @@ export function DataBindingForm({
     () => Object.values(snapshot.dataSources.connections)[0]?.id ?? ""
   );
   const [queryEditorOpen, setQueryEditorOpen] = useState(false);
+  const [trialProblem, setTrialProblem] = useState<WorkbenchMessageKey | null>(null);
   const candidateRunRef = useRef<string | null>(null);
   const lastSavedSignatureRef = useRef(savedSignature);
   const id = useId();
@@ -162,11 +197,36 @@ export function DataBindingForm({
     }
   }, [service]);
 
+  useEffect(() => () => {
+    const colorService = context.editor.getDataColorService?.();
+    if (colorService?.getTrial()?.objectNodeId === objectNodeId) {
+      colorService.endTrial();
+    }
+  }, [context.editor, objectNodeId]);
+
   const candidatesStale = candidates.status === "ready" && candidates.signature !== signature;
   const currentCandidates = candidates.status === "ready" && !candidatesStale ? candidates.entities : [];
   const unavailableProperties = query
     ? query.mapping.properties.filter((property) => !draft.details.some((detail) => detail.key === property.key))
     : [];
+  const colorProperties = query?.mapping.properties ?? [];
+  const colorProperty = draft.color
+    ? colorProperties.find((property) => property.key === draft.color?.propertyKey) ?? null
+    : null;
+  const dataColorService = context.editor.getDataColorService?.() ?? null;
+  const colorCapability = context.dataColorState.objects[objectNodeId]?.capabilities ?? null;
+  const trialActive = context.dataColorState.trial?.objectNodeId === objectNodeId;
+  const previewEnabled = context.dataState.preview.enabled;
+  const trialEntity = currentCandidates.find((entity) => entity.entityId === draft.deviceId) ?? null;
+  const trialField = draft.color && trialEntity
+    ? trialEntity.fields.find((field) => field.key === draft.color?.propertyKey) ?? null
+    : null;
+  const trialValue = trialField?.status === "ok" ? trialField.value : null;
+  const trialHint = previewEnabled
+    ? "dataBinding.colors.trial.previewActive" as const
+    : trialValue === null
+      ? "dataBinding.colors.trial.noValue" as const
+      : null;
 
   function updateDraft(patch: Partial<BindingDraft>): void {
     setProblems([]);
@@ -175,13 +235,15 @@ export function DataBindingForm({
 
   function changeQuery(queryId: string): void {
     const nextQuery = queryId ? snapshot.dataSources.queries[queryId] ?? null : null;
+    endTrialForThisObject();
     setProblems([]);
     setCandidates({ status: "idle", signature: "" });
     setDraft((current) => ({
       ...current,
       queryId,
       overrides: draftOverridesForQuery(current.overrides, nextQuery),
-      details: detailsForQuery(current.details, nextQuery)
+      details: detailsForQuery(current.details, nextQuery),
+      color: colorForQuery(current.color, nextQuery)
     }));
   }
 
@@ -238,6 +300,113 @@ export function DataBindingForm({
       ...current,
       details: current.details.filter((detail) => detail.key !== key)
     }));
+  }
+
+  function endTrialForThisObject(): void {
+    if (dataColorService?.getTrial()?.objectNodeId === objectNodeId) {
+      dataColorService.endTrial();
+    }
+    setTrialProblem(null);
+  }
+
+  function toggleColor(enabled: boolean): void {
+    endTrialForThisObject();
+    setProblems([]);
+    setDraft((current) => ({
+      ...current,
+      color: enabled && query ? createDefaultColorDraft(query.mapping.properties) : null
+    }));
+  }
+
+  function changeColorProperty(propertyKey: string): void {
+    const property = colorProperties.find((candidate) => candidate.key === propertyKey) ?? null;
+    endTrialForThisObject();
+    setProblems([]);
+    setDraft((current) => ({
+      ...current,
+      color: property
+        ? { propertyKey, rules: [createDefaultColorRule(property, 0)] }
+        : null
+    }));
+  }
+
+  function updateColorRule(index: number, patch: Partial<ColorRuleDraft>): void {
+    endTrialForThisObject();
+    setProblems([]);
+    setDraft((current) => current.color
+      ? {
+          ...current,
+          color: {
+            ...current.color,
+            rules: current.color.rules.map((rule, ruleIndex) =>
+              ruleIndex === index ? { ...rule, ...patch } : rule)
+          }
+        }
+      : current);
+  }
+
+  function addColorRule(): void {
+    if (!colorProperty || !draft.color) {
+      return;
+    }
+    endTrialForThisObject();
+    setProblems([]);
+    setDraft((current) => current.color
+      ? {
+          ...current,
+          color: {
+            ...current.color,
+            rules: [...current.color.rules, createDefaultColorRule(colorProperty, current.color.rules.length)]
+          }
+        }
+      : current);
+  }
+
+  function moveColorRule(index: number, direction: -1 | 1): void {
+    endTrialForThisObject();
+    setProblems([]);
+    setDraft((current) => {
+      if (!current.color) {
+        return current;
+      }
+      const target = index + direction;
+      if (target < 0 || target >= current.color.rules.length) {
+        return current;
+      }
+      const rules = [...current.color.rules];
+      [rules[index], rules[target]] = [rules[target], rules[index]];
+      return { ...current, color: { ...current.color, rules } };
+    });
+  }
+
+  function removeColorRule(index: number): void {
+    endTrialForThisObject();
+    setProblems([]);
+    setDraft((current) => current.color
+      ? { ...current, color: { ...current.color, rules: current.color.rules.filter((_, ruleIndex) => ruleIndex !== index) } }
+      : current);
+  }
+
+  function startDraftTrial(): void {
+    if (!dataColorService || !draft.color || trialValue === null) {
+      return;
+    }
+    setTrialProblem(null);
+    const result = dataColorService.startTrial({
+      objectNodeId,
+      color: collectColor(draft, query),
+      value: trialValue,
+      source: "test"
+    });
+    if (!result.ok) {
+      const problem = result.problems[0];
+      setTrialProblem(problem ? COLOR_TRIAL_PROBLEM_MESSAGE_KEYS[problem.code] : "dataBinding.colors.trial.failed");
+    }
+  }
+
+  function endDraftTrial(): void {
+    dataColorService?.endTrial();
+    setTrialProblem(null);
   }
 
   async function loadCandidates(): Promise<void> {
@@ -314,6 +483,7 @@ export function DataBindingForm({
 
   function saveBinding(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
+    endTrialForThisObject();
     if (!query) {
       setProblems([{
         field: "query",
@@ -332,7 +502,8 @@ export function DataBindingForm({
         key: detail.key,
         label: detail.label.trim() || null,
         precision: detail.precision.trim() === "" ? null : Number(detail.precision)
-      }))
+      })),
+      color: collectColor(draft, query)
     };
     const result = buildSaveDataObjectBindingCommand(snapshot, input);
     if (!result.ok) {
@@ -361,6 +532,7 @@ export function DataBindingForm({
   }
 
   function resetDraft(): void {
+    endTrialForThisObject();
     const next = createDraft(snapshot, objectNodeId, fixedQueryId);
     setDraft(next);
     setBaseline(serializeDraft(next));
@@ -370,6 +542,7 @@ export function DataBindingForm({
   }
 
   function removeBinding(): void {
+    endTrialForThisObject();
     const result = buildDeleteDataObjectBindingCommand(snapshot, objectNodeId);
     if (!result.ok) {
       setProblems(result.problems);
@@ -393,13 +566,15 @@ export function DataBindingForm({
   }
 
   function handleQuerySaved(savedQueryId: string): void {
+    endTrialForThisObject();
     const freshSnapshot = context.editor.getSnapshot();
     const savedQuery = freshSnapshot.dataSources.queries[savedQueryId] ?? null;
     setDraft((current) => ({
       ...current,
       queryId: savedQueryId,
       overrides: draftOverridesForQuery({}, savedQuery),
-      details: detailsForQuery([], savedQuery)
+      details: detailsForQuery([], savedQuery),
+      color: colorForQuery(current.color, savedQuery)
     }));
     setProblems([]);
     setCandidates({ status: "idle", signature: "" });
@@ -647,6 +822,195 @@ export function DataBindingForm({
           ) : null}
         </fieldset>
 
+        <fieldset className="ek-workbench__binding-colors">
+          <legend>{t("dataBinding.form.colors")}</legend>
+          <label className="ek-workbench__request-check">
+            <input
+              type="checkbox"
+              aria-label={t("dataBinding.form.colors.enable")}
+              checked={draft.color !== null}
+              onChange={(event) => toggleColor(event.target.checked)}
+            />
+            <span>{t("dataBinding.form.colors.enable")}</span>
+          </label>
+          {draft.color ? (
+            <>
+              <p className="ek-workbench__binding-hint">{t("dataBinding.form.colors.hint")}</p>
+              <label className="ek-workbench__field">
+                <span>{t("dataBinding.form.colors.property")}</span>
+                <select
+                  aria-label={t("dataBinding.form.colors.property")}
+                  value={draft.color.propertyKey}
+                  onChange={(event) => changeColorProperty(event.target.value)}
+                >
+                  <option value="">{t("dataBinding.form.colors.propertyPlaceholder")}</option>
+                  {colorProperties.map((property) => (
+                    <option key={property.key} value={property.key}>{property.label}</option>
+                  ))}
+                </select>
+              </label>
+              <div
+                className="ek-workbench__binding-color-rules"
+                role="group"
+                aria-label={t("dataBinding.form.colors.rules")}
+              >
+                {draft.color.rules.length === 0 ? (
+                  <small>{t("dataBinding.problem.colorRulesRequired")}</small>
+                ) : draft.color.rules.map((rule, index) => {
+                  const rulePropertyType = colorProperty?.type ?? "string";
+                  const operators = dataColorOperatorsForType(rulePropertyType);
+                  const label = t("dataBinding.form.colors.rule", { index: index + 1 });
+                  return (
+                    <div
+                      key={index}
+                      className="ek-workbench__binding-color-rule"
+                      role="group"
+                      aria-label={label}
+                    >
+                      <span className="ek-workbench__binding-color-order" aria-hidden="true">{index + 1}</span>
+                      <label className="ek-workbench__field">
+                        <span>{t("dataBinding.form.colors.operator")}</span>
+                        <select
+                          aria-label={`${label} · ${t("dataBinding.form.colors.operator")}`}
+                          value={rule.operator}
+                          onChange={(event) => updateColorRule(index, {
+                            operator: event.target.value as DataColorOperator
+                          })}
+                        >
+                          {operators.map((operator) => (
+                            <option key={operator} value={operator}>
+                              {t(`dataBinding.color.operator.${operator}`)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="ek-workbench__field">
+                        <span>{t("dataBinding.form.colors.value")}</span>
+                        {rulePropertyType === "boolean" ? (
+                          <select
+                            aria-label={`${label} · ${t("dataBinding.form.colors.value")}`}
+                            value={rule.value === "false" ? "false" : "true"}
+                            onChange={(event) => updateColorRule(index, { value: event.target.value })}
+                          >
+                            <option value="true">{t("dataSources.request.boolean.true")}</option>
+                            <option value="false">{t("dataSources.request.boolean.false")}</option>
+                          </select>
+                        ) : (
+                          <input
+                            type={rulePropertyType === "number" ? "number" : "text"}
+                            step={rulePropertyType === "number" ? "any" : undefined}
+                            aria-label={`${label} · ${t("dataBinding.form.colors.value")}`}
+                            value={rule.value}
+                            onChange={(event) => updateColorRule(index, { value: event.target.value })}
+                          />
+                        )}
+                      </label>
+                      {rule.operator === "between" ? (
+                        <label className="ek-workbench__field">
+                          <span>{t("dataBinding.form.colors.max")}</span>
+                          <input
+                            type="number"
+                            step="any"
+                            aria-label={`${label} · ${t("dataBinding.form.colors.max")}`}
+                            value={rule.max}
+                            onChange={(event) => updateColorRule(index, { max: event.target.value })}
+                          />
+                        </label>
+                      ) : null}
+                      <label className="ek-workbench__field ek-workbench__binding-color-swatch">
+                        <span>{t("dataBinding.form.colors.color")}</span>
+                        <input
+                          type="color"
+                          aria-label={`${label} · ${t("dataBinding.form.colors.color")}`}
+                          value={normalizeDataColorHex(rule.color) ?? "#22c55e"}
+                          onChange={(event) => updateColorRule(index, { color: event.target.value })}
+                        />
+                      </label>
+                      <div
+                        className="ek-workbench__binding-color-palette"
+                        role="group"
+                        aria-label={t("dataBinding.form.colors.palette")}
+                      >
+                        {COLOR_PALETTE.map((swatch) => (
+                          <button
+                            key={swatch}
+                            type="button"
+                            className="ek-workbench__binding-color-chip"
+                            style={{ backgroundColor: swatch }}
+                            aria-label={t("dataBinding.form.colors.swatch", { color: swatch })}
+                            aria-pressed={normalizeDataColorHex(rule.color) === swatch}
+                            onClick={() => updateColorRule(index, { color: swatch })}
+                          />
+                        ))}
+                      </div>
+                      <div className="ek-workbench__binding-color-actions">
+                        <button
+                          type="button"
+                          aria-label={t("dataBinding.form.colors.moveUpAria", { index: index + 1 })}
+                          disabled={index === 0}
+                          onClick={() => moveColorRule(index, -1)}
+                        >{t("dataBinding.form.colors.moveUp")}</button>
+                        <button
+                          type="button"
+                          aria-label={t("dataBinding.form.colors.moveDownAria", { index: index + 1 })}
+                          disabled={index === draft.color!.rules.length - 1}
+                          onClick={() => moveColorRule(index, 1)}
+                        >{t("dataBinding.form.colors.moveDown")}</button>
+                        <button
+                          type="button"
+                          aria-label={t("dataBinding.form.colors.removeAria", { index: index + 1 })}
+                          onClick={() => removeColorRule(index)}
+                        >{t("dataBinding.form.colors.remove")}</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <button type="button" onClick={addColorRule}>{t("dataBinding.form.colors.addRule")}</button>
+              <small className="ek-workbench__binding-hint">{t("dataBinding.form.colors.default")}</small>
+              {colorCapability ? (
+                <div
+                  className="ek-workbench__binding-color-capability"
+                  data-status={colorCapability.status}
+                  role="status"
+                >
+                  <span>{colorCapabilityLabel(colorCapability, t)}</span>
+                  {colorCapability.problems.length > 0 ? (
+                    <ul>
+                      {colorCapability.problems.map((problem, index) => (
+                        <li key={`${problem.meshName}-${problem.slotIndex}-${index}`}>
+                          {t("dataBinding.colors.capability.problem", {
+                            materialType: problem.materialType,
+                            meshName: problem.meshName
+                          })}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ) : null}
+              <div className="ek-workbench__binding-color-trial">
+                {trialActive ? (
+                  <>
+                    <span role="status">{t("dataBinding.colors.trial.active")}</span>
+                    <button type="button" onClick={endDraftTrial}>{t("dataBinding.colors.trial.end")}</button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      disabled={!dataColorService || trialHint !== null}
+                      onClick={startDraftTrial}
+                    >{t("dataBinding.colors.trial.start")}</button>
+                    {trialHint ? <small>{t(trialHint)}</small> : null}
+                  </>
+                )}
+                {trialProblem ? <small role="alert">{t(trialProblem)}</small> : null}
+              </div>
+            </>
+          ) : null}
+        </fieldset>
+
         <label className="ek-workbench__request-check">
           <input
             type="checkbox"
@@ -733,8 +1097,66 @@ function createDraft(
           key: property.key,
           label: "",
           precision: ""
-        }))
+        })),
+    color: saved?.color
+      ? {
+          propertyKey: saved.color.propertyKey,
+          rules: saved.color.rules.map((rule) => ({
+            operator: rule.operator,
+            value: String(rule.value),
+            max: rule.max === null ? "" : String(rule.max),
+            color: rule.color
+          }))
+        }
+      : null
   };
+}
+
+function createDefaultColorDraft(properties: readonly DataPropertyMapping[]): ColorDraft | null {
+  const property = properties[0];
+  return property
+    ? { propertyKey: property.key, rules: [createDefaultColorRule(property, 0)] }
+    : null;
+}
+
+function createDefaultColorRule(property: DataPropertyMapping, index: number): ColorRuleDraft {
+  return {
+    operator: property.type === "number" ? "gte" : "eq",
+    value: property.type === "boolean" ? "true" : property.type === "number" ? "0" : "",
+    max: "",
+    color: COLOR_PALETTE[index % COLOR_PALETTE.length]!
+  };
+}
+
+function collectColor(draft: BindingDraft, query: DataQuery | null): DataBindingColor | null {
+  if (!draft.color) {
+    return null;
+  }
+  const property = query?.mapping.properties.find((candidate) => candidate.key === draft.color?.propertyKey) ?? null;
+  const type = property?.type ?? "string";
+  return {
+    propertyKey: draft.color.propertyKey,
+    rules: draft.color.rules.map((rule): DataColorRule => ({
+      operator: rule.operator,
+      value: parseColorRuleValue(type, rule.value),
+      max: rule.operator === "between" ? parseColorRuleNumber(rule.max) : null,
+      color: rule.color
+    }))
+  };
+}
+
+function parseColorRuleValue(type: "number" | "string" | "boolean", text: string): DataParameterValue {
+  if (type === "boolean") {
+    return text === "true";
+  }
+  if (type === "number") {
+    return parseColorRuleNumber(text);
+  }
+  return text;
+}
+
+function parseColorRuleNumber(text: string): number {
+  return text.trim() === "" ? Number.NaN : Number(text);
 }
 
 function draftOverridesForQuery(
@@ -746,6 +1168,15 @@ function draftOverridesForQuery(
     overrides[parameter.name] = current[parameter.name] ?? { enabled: false, text: "" };
   }
   return overrides;
+}
+
+function colorForQuery(color: ColorDraft | null, query: DataQuery | null): ColorDraft | null {
+  if (!color) {
+    return null;
+  }
+  return query?.mapping.properties.some((property) => property.key === color.propertyKey)
+    ? color
+    : null;
 }
 
 function detailsForQuery(details: readonly DetailDraft[], query: DataQuery | null): DetailDraft[] {
@@ -790,8 +1221,38 @@ function serializeDraft(draft: BindingDraft): string {
       key: detail.key,
       label: detail.label,
       precision: detail.precision
-    }))
+    })),
+    color: draft.color
+      ? {
+          propertyKey: draft.color.propertyKey,
+          rules: draft.color.rules.map((rule) => ({
+            operator: rule.operator,
+            value: rule.value,
+            max: rule.max,
+            color: rule.color
+          }))
+        }
+      : null
   });
+}
+
+function colorCapabilityLabel(
+  capability: DataColorObjectCapability,
+  t: WorkbenchI18n["t"]
+): string {
+  switch (capability.status) {
+    case "unavailable":
+      return t("dataBinding.colors.capability.unavailable");
+    case "unsupported":
+      return t("dataBinding.colors.capability.unsupported");
+    case "partial":
+      return t("dataBinding.colors.capability.partial", {
+        count: capability.slotCount - capability.supportedSlotCount,
+        total: capability.slotCount
+      });
+    default:
+      return t("dataBinding.colors.capability.applied");
+  }
 }
 
 function formatParameterValue(value: DataParameterValue): string {

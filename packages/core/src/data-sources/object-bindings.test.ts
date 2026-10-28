@@ -33,7 +33,8 @@ describe("durable object bindings", () => {
       details: [
         { key: "running", label: "Running state", precision: null },
         { key: "temperature", label: null, precision: 1 }
-      ]
+      ],
+      color: null
     });
     expect(editor.getSnapshot().dataSources.queries[queryId].parameters).toEqual([
       { name: "areaId", type: "string", defaultValue: "A" }

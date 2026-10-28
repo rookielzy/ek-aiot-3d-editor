@@ -311,22 +311,21 @@ function validateBindingReferences(
   const nextProperties = new Map(mapping.properties.map((property) => [property.key, property]));
 
   const reportedProperties = new Set<string>();
-  for (const binding of bindings) {
-    for (const detail of binding.details) {
-      if (reportedProperties.has(detail.key)) {
-        continue;
-      }
-      const previous = previousProperties.get(detail.key);
-      const next = nextProperties.get(detail.key);
-      if (!next || (previous && previous.type !== next.type)) {
-        reportedProperties.add(detail.key);
-        problems.push({
-          field: "mapping",
-          code: "binding-property-in-use",
-          propertyKey: detail.key,
-          message: `Property ${detail.key} is used by an object binding. Remove the binding or keep a compatible property.`
-        });
-      }
+  const bindingPropertyKeys = new Set(bindings.flatMap((binding) => [
+    ...binding.details.map((detail) => detail.key),
+    ...(binding.color ? [binding.color.propertyKey] : [])
+  ]));
+  for (const propertyKey of bindingPropertyKeys) {
+    const previous = previousProperties.get(propertyKey);
+    const next = nextProperties.get(propertyKey);
+    if (!next || (previous && previous.type !== next.type)) {
+      reportedProperties.add(propertyKey);
+      problems.push({
+        field: "mapping",
+        code: "binding-property-in-use",
+        propertyKey,
+        message: `Property ${propertyKey} is used by an object binding. Remove the binding or keep a compatible property.`
+      });
     }
   }
 

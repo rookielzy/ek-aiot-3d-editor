@@ -6,6 +6,7 @@ import {
   type AuthoredCameraView,
   type AuthoredCameraViewInput,
   type Editor,
+  type DataColorState,
   type DataObjectDataState,
   type EditorWithGlbImport,
   type EditorAction,
@@ -52,6 +53,7 @@ import {
 import { useEditor } from "./use-editor";
 import { readWorkbenchLocale, writeWorkbenchLocale } from "../i18n/workbench-locale-storage";
 import { useInspector } from "./use-inspector";
+import { useEditorDataColorState } from "./use-object-data-color-state";
 import { useEditorObjectDataState } from "./use-object-data-state";
 
 export interface UseWorkbenchOptions extends EditorOptions {
@@ -122,6 +124,7 @@ export interface WorkbenchContext {
   model: WorkbenchModel;
   snapshot: SceneSnapshot;
   dataState: DataObjectDataState;
+  dataColorState: DataColorState;
   inspector: InspectorModel;
   selection: WorkbenchSelectionContext;
   history: HistoryState;
@@ -246,6 +249,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   );
   const inspector = useInspector({ editor });
   const dataState = useEditorObjectDataState(editor);
+  const dataColorState = useEditorDataColorState(editor);
   const ownsEditor = !options.editor;
   const dispatch = useCallback((command: Command) => editor.dispatch(command), [editor]);
   const setTransformMode = useCallback((mode: TransformMode) => {
@@ -370,6 +374,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     model,
     snapshot: inspector.snapshot,
     dataState,
+    dataColorState,
     inspector: inspector.inspector,
     selection,
     history: historyState,

@@ -17,10 +17,11 @@ export interface MaterialInspectorProps {
   editor: Editor;
   snapshot: SceneSnapshot;
   section: MaterialInspectorSection;
+  locked?: boolean;
   i18n?: InspectorI18n;
 }
 
-export function MaterialInspector({ editor, snapshot, section, i18n = DEFAULT_INSPECTOR_I18N }: MaterialInspectorProps) {
+export function MaterialInspector({ editor, snapshot, section, locked = false, i18n = DEFAULT_INSPECTOR_I18N }: MaterialInspectorProps) {
   const id = useId();
   const selectableTargets = useMemo(() => section.targets.filter((target) => target.canSelect), [section.targets]);
   const defaultTargetKey = section.activeTargetKey ?? selectableTargets[0]?.key ?? null;
@@ -90,6 +91,7 @@ export function MaterialInspector({ editor, snapshot, section, i18n = DEFAULT_IN
         <h2>{renderSectionTitle(i18n, section)}</h2>
       </header>
       {section.empty ? <p className="ek-inspector-empty">{renderSectionReason(i18n, section)}</p> : null}
+      {locked ? <p className="ek-inspector-warning" role="status">{i18n.t("reactWorkbench.inspector.previewLocked")}</p> : null}
       {!section.empty ? (
         <>
           {section.targets.length > 1 ? (
@@ -137,7 +139,7 @@ export function MaterialInspector({ editor, snapshot, section, i18n = DEFAULT_IN
             {fields.map((field) => (
               <label key={field.id} className={field.kind === "checkbox" ? "ek-inspector-field ek-inspector-field--checkbox" : "ek-inspector-field"}>
                 <span>{renderFieldLabel(i18n, field)}</span>
-                <InspectorFieldControl key={`${effectiveTargetKey}:${field.id}`} commitUnchanged field={field} invalid={fieldProblem?.fieldId === field.id} descriptionId={fieldProblem?.fieldId === field.id ? `${id}-${problemId(field.id)}` : undefined} i18n={i18n}
+                <InspectorFieldControl key={`${effectiveTargetKey}:${field.id}`} commitUnchanged field={field} disabled={locked} invalid={fieldProblem?.fieldId === field.id} descriptionId={fieldProblem?.fieldId === field.id ? `${id}-${problemId(field.id)}` : undefined} i18n={i18n}
                   onCommit={(value) => commit(field.id as MaterialFieldId, value)} onReset={() => clearField(field.id)} />
                 {fieldProblem?.fieldId === field.id ? (
                   <small id={`${id}-${problemId(field.id)}`} className="ek-inspector-field-problem" role="alert">{renderProblemMessage(i18n, fieldProblem)}</small>

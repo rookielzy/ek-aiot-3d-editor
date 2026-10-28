@@ -15,6 +15,7 @@ import { planGlbImportRemap } from "../assets/import-remap";
 import { CommandDispatcher } from "../commands/dispatcher";
 import type { Command, CommandResult } from "../commands/types";
 import type { DataCredentialDescriptor } from "../data-sources/types";
+import { CoreDataColorService, type EditorDataColorService } from "../data-sources/color-preview";
 import { CoreDataService, type EditorDataService } from "../data-sources/service";
 import { CommandHistory, type HistoryState } from "../history/history";
 import { defaultArchiveAdapter } from "../project/archive-adapter";
@@ -56,11 +57,15 @@ export class CoreEditor implements EditorWithGlbImport {
   #resolver = new AssetResolverBridge(undefined, this.projectAssets);
   #dataCredentials: readonly DataCredentialDescriptor[] = [];
   #dataService: EditorDataService;
+  #dataColorService: CoreDataColorService;
+  #unsubscribePreviewLock: (() => void) | null = null;
   #disposed = false;
 
   constructor(options: EditorOptions = {}) {
     this.store = new EditorStore(options.snapshot ? restoreSnapshot(options.snapshot) : undefined);
-    this.dispatcher = new CommandDispatcher(this.store, this.history, this.assets);
+    this.dispatcher = new CommandDispatcher(this.store, this.history, this.assets, {
+      guard: (command) => this.#dataEditGuard(command)
+    });
     this.operations = createAdvancedEditorOperations(this, this.clipboard);
     this.#dataCredentials = Object.freeze([...(options.credentials ?? [])]);
     this.#dataService = new CoreDataService({
@@ -69,6 +74,14 @@ export class CoreEditor implements EditorWithGlbImport {
       executor: options.executor ?? null,
       credentials: this.#dataCredentials,
       authRevision: options.authRevision
+    });
+    this.#dataColorService = new CoreDataColorService({
+      getSnapshot: () => this.store.getSnapshot(),
+      subscribeSnapshot: (listener) => this.store.subscribe(() => listener()),
+      dataService: this.#dataService
+    });
+    this.#unsubscribePreviewLock = this.#dataService.subscribeObjectData((state) => {
+      this.#runtime?.setTransformEnabled?.(!state.preview.enabled);
     });
   }
 
@@ -118,6 +131,7 @@ export class CoreEditor implements EditorWithGlbImport {
   }
 
   undo(): CommandResult {
+    this.#stopDataRuntime();
     const result = this.dispatcher.undo();
     if (result.ok) {
       this.#notifyAssetWorkspaceSubscribers();
@@ -126,6 +140,7 @@ export class CoreEditor implements EditorWithGlbImport {
   }
 
   redo(): CommandResult {
+    this.#stopDataRuntime();
     const result = this.dispatcher.redo();
     if (result.ok) {
       this.#notifyAssetWorkspaceSubscribers();
@@ -142,6 +157,7 @@ export class CoreEditor implements EditorWithGlbImport {
   }
 
   restore(snapshot: SerializedSceneSnapshot): SceneSnapshot {
+    this.#stopDataRuntime();
     const restored = restoreSnapshot(snapshot);
     this.history.clear();
     this.projectAssets.clear();
@@ -173,6 +189,10 @@ export class CoreEditor implements EditorWithGlbImport {
     return this.#dataService;
   }
 
+  getDataColorService(): EditorDataColorService {
+    return this.#dataColorService;
+  }
+
   getAssetWorkspacePayloads(): ProjectAssetPayloadSummary[] {
     this.#assertActive();
     return this.projectAssets.summaries();
@@ -195,6 +215,7 @@ export class CoreEditor implements EditorWithGlbImport {
 
   importProject(packageBytes: Uint8Array, options: ProjectImportOptions = {}): ProjectImportResult {
     this.#assertActive();
+    this.#stopDataRuntime();
     const previousAssets = [...this.projectAssets.entries()].map(([, asset]) => asset);
     const result = importProjectAssets(packageBytes, this.projectAssets, {
       ...options,
@@ -230,6 +251,9 @@ export class CoreEditor implements EditorWithGlbImport {
   async importGlbAsset(options: ImportGlbAssetOptions): Promise<ImportGlbAssetResult> {
     this.#assertActive();
     const commit = options.commit ?? true;
+    if (commit) {
+      this.#stopDataRuntime();
+    }
     const kind = options.asset.kind ?? "glb";
     if (kind !== "glb") {
       const diagnostic = createSourceInvalidDiagnostic("import-glb requires a GLB asset.");
@@ -330,6 +354,9 @@ export class CoreEditor implements EditorWithGlbImport {
   async reimportGlbAsset(options: ReimportGlbAssetOptions): Promise<ReimportGlbAssetResult> {
     this.#assertActive();
     const commit = options.commit ?? true;
+    if (commit) {
+      this.#stopDataRuntime();
+    }
     const snapshot = this.store.getSnapshot();
     const asset = snapshot.assets[options.assetId];
     if (!asset || asset.kind !== "glb") {
@@ -483,6 +510,7 @@ export class CoreEditor implements EditorWithGlbImport {
 
   async replaceAsset(input: ReplaceAssetInput): Promise<ReplaceAssetResult> {
     this.#assertActive();
+    this.#stopDataRuntime();
     const result = await replaceProjectAsset(this.store.getSnapshot(), this.projectAssets, input);
     if (result.ok) {
       this.#notifyAssetWorkspaceSubscribers();
@@ -503,6 +531,8 @@ export class CoreEditor implements EditorWithGlbImport {
 
   mountRuntime(options: MountRuntimeOptions): EditorRuntime {
     this.#assertActive();
+    this.#dataColorService.setSink(null);
+    this.#dataColorService.endTrial();
     if (this.#runtime) {
       this.#runtime.dispose();
       this.#runtime = null;
@@ -520,6 +550,12 @@ export class CoreEditor implements EditorWithGlbImport {
       viewportHelpers: this.viewportHelpers,
       transformMode: this.transformMode
     });
+    const runtime = this.#runtime;
+    this.#dataColorService.setSink({
+      setDataColors: (assignments) => runtime.setDataColors?.(assignments) ?? [],
+      subscribeProjection: (subscriber) => runtime.subscribeProjection?.(subscriber) ?? (() => {})
+    });
+    runtime.setTransformEnabled?.(!this.#dataService.getObjectDataState().preview.enabled);
     this.#notifyRuntimeSubscribers();
     return this.#runtime;
   }
@@ -534,6 +570,9 @@ export class CoreEditor implements EditorWithGlbImport {
     }
 
     this.#disposed = true;
+    this.#unsubscribePreviewLock?.();
+    this.#unsubscribePreviewLock = null;
+    this.#dataColorService.dispose();
     this.#dataService.dispose();
     this.#runtime?.dispose();
     this.#runtime = null;
@@ -558,6 +597,27 @@ export class CoreEditor implements EditorWithGlbImport {
     if (this.#disposed) {
       throw new Error("Editor has been disposed.");
     }
+  }
+
+  #stopDataRuntime(): void {
+    if (this.#disposed) {
+      return;
+    }
+    this.#dataColorService.endTrial();
+    this.#dataService.stopPreview();
+  }
+
+  #dataEditGuard(command: Command): string | null {
+    if (!this.#dataService.getObjectDataState().preview.enabled) {
+      return null;
+    }
+    if (command.type === "import-glb") {
+      this.#stopDataRuntime();
+      return null;
+    }
+    return isCommandAllowedDuringPreview(command)
+      ? null
+      : "data-preview-locked: Stop data preview before changing scene transforms or materials.";
   }
 
   #notifyRuntimeSubscribers(): void {
@@ -605,6 +665,30 @@ export class CoreEditor implements EditorWithGlbImport {
       ...(command.asset.metadata ? { metadata: command.asset.metadata } : {})
     });
   }
+}
+
+const DATA_PREVIEW_COMMANDS = new Set<Command["type"]>([
+  "select-node",
+  "select-nodes",
+  "select-object",
+  "select-objects",
+  "create-data-connection",
+  "update-data-connection",
+  "duplicate-data-connection",
+  "delete-data-connection",
+  "create-data-query",
+  "update-data-query",
+  "duplicate-data-query",
+  "delete-data-query",
+  "set-data-object-binding",
+  "delete-data-object-binding"
+]);
+
+function isCommandAllowedDuringPreview(command: Command): boolean {
+  if (command.type === "batch") {
+    return command.commands.every(isCommandAllowedDuringPreview);
+  }
+  return DATA_PREVIEW_COMMANDS.has(command.type);
 }
 
 function isProjectAssetSource(source: AssetInput["source"]): source is ProjectAssetSourceInput {

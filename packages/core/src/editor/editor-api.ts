@@ -4,6 +4,7 @@ import type { GlbImportRemapPlan } from "../assets/import-remap";
 import type { WorkbenchAssetImportOptions, WorkbenchAssetImportResult } from "../assets/workspace-import";
 import type { Command, CommandResult } from "../commands/types";
 import type { DataCredentialDescriptor } from "../data-sources/types";
+import type { EditorDataColorService } from "../data-sources/color-preview";
 import type { DataRequestExecutor, EditorDataService } from "../data-sources/service";
 import type { AdvancedEditorOperations, EditorClipboard } from "./operations";
 import type { MarqueeSelectionSubscriber, ReadonlyEditorMarqueeSelectionState } from "./marquee-selection-state";
@@ -88,6 +89,7 @@ export interface Editor {
   registerAsset(asset: Parameters<import("../assets/registry").AssetRegistry["register"]>[0]): AssetReference;
   getDataCredentials?(): readonly DataCredentialDescriptor[];
   getDataService?(): EditorDataService;
+  getDataColorService?(): EditorDataColorService;
   getAssetWorkspacePayloads?(): ProjectAssetPayloadSummary[];
   getAssetWorkspaceVersion?(): number;
   subscribeAssetWorkspace?(subscriber: AssetWorkspaceSubscriber): () => void;

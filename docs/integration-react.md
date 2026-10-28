@@ -118,6 +118,8 @@ executor 收到 `credentialRef` 而不是秘密；认证头、来源校验、重
 
 详情卡随 NodeId 选择显示，内容来自 core 的 `buildDataObjectDetailModel()`：对象、查询、设备、字段顺序、标签覆盖、单位、精度、接收/采样时间、source quality，以及缺失字段、缺失设备、HTTP/映射失败等明确问题。运行态字段、设备匹配和格式化不在 React 组件内实现；React 只订阅 `editor.getDataService()` 暴露的对象数据状态并渲染。每次预览结果更新都不写 `Snapshot`、`.ek3d` 或 command history。
 
+状态颜色通过 `editor.getDataColorService()` 暴露。`WorkbenchContext.dataColorState` 包含规则求值后的颜色、未生效原因、材质能力诊断和草稿试用状态；React 只渲染这些状态，并调用 `startTrial()`/`endTrial()` 或提交 binding 的 `color` 配置，不直接访问 Three.js 材质。颜色覆盖、恢复、克隆释放和异步重投影都在 core runtime 内完成。全局预览期间变换与基础材质控件禁用，core 对绕过 UI 的受限命令返回 `data-preview-locked`。
+
 ## 双语 Workbench UI
 
 默认 Workbench UI 内置 `en` 和 `zh-CN` 字典，默认语言是 English，不需要 `i18next`、`react-i18next`、FormatJS 或其他第三方 i18n runtime。宿主只需要继续从 package root 和公开 CSS 子路径导入：
@@ -265,6 +267,8 @@ interface WorkbenchContext {
   snap: SnapSettings;
   viewportHelperState: ViewportHelperStateSnapshot;
   transformMode: TransformMode;
+  dataState: DataObjectDataState;
+  dataColorState: DataColorState;
   setActiveLightId(value: string | null): void;
   setActiveCameraViewId(value: string | null): void;
   setTransformMode(mode: TransformMode): void;

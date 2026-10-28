@@ -4,14 +4,20 @@ import type {
   DeleteDataObjectBindingCommand,
   SetDataObjectBindingCommand
 } from "../commands/types";
+import { normalizeDataColorHex, isDataColorOperatorAllowed } from "./color-rules";
 import { resolveDataQueryParameters } from "./query";
 import type {
+  DataBindingColor,
   DataBindingDetailField,
   DataBindingProblem,
+  DataColorOperator,
+  DataColorRule,
+  DataMappedValueType,
   DataObjectBinding,
   DataObjectBindingInput,
   DataObjectBindingValidationResult,
   DataParameterValue,
+  DataPropertyMapping,
   DataQuery
 } from "./types";
 
@@ -149,6 +155,7 @@ export function validateDataObjectBindingInput(
 
   const overrides = normalizeOverrides(input.parameterOverrides, query, problems);
   const details = normalizeDetails(input.details, query, problems);
+  const color = query ? normalizeColor(input.color, query, problems) : null;
 
   if (query && Array.isArray(query.parameters) && problems.length === 0) {
     const resolution = resolveDataQueryParameters(query.parameters, overrides, query.connectionId);
@@ -190,7 +197,8 @@ export function validateDataObjectBindingInput(
       parameterOverrides: overrides,
       deviceId,
       enabled: enabled as boolean,
-      details
+      details,
+      color
     }
   };
 }
@@ -415,6 +423,139 @@ function normalizeDetails(
     details.push({ key, label, precision });
   }
   return details;
+}
+
+const DATA_COLOR_OPERATORS = new Set<DataColorOperator>(["eq", "ne", "gt", "gte", "lt", "lte", "between"]);
+
+function normalizeColor(
+  input: unknown,
+  query: DataQuery,
+  problems: DataBindingProblem[]
+): DataBindingColor | null {
+  if (input === undefined || input === null) {
+    return null;
+  }
+  if (!isPlainRecord(input)) {
+    problems.push({
+      field: "colors",
+      code: "color-invalid",
+      message: "Status color must be a plain object."
+    });
+    return null;
+  }
+
+  const propertyKey = typeof input.propertyKey === "string" ? input.propertyKey.trim() : "";
+  const properties: readonly DataPropertyMapping[] =
+    isPlainRecord(query.mapping) && Array.isArray(query.mapping.properties)
+      ? query.mapping.properties
+      : [];
+  const property = propertyKey
+    ? properties.find((candidate): candidate is DataPropertyMapping =>
+        isPlainRecord(candidate) && candidate.key === propertyKey)
+    : undefined;
+  if (!property) {
+    problems.push({
+      field: "colors",
+      code: "color-property-unknown",
+      propertyKey: propertyKey || undefined,
+      message: propertyKey
+        ? `Color property ${propertyKey} is not mapped by this query.`
+        : "Choose a mapped property for the status color."
+    });
+    return null;
+  }
+
+  if (!Array.isArray(input.rules) || input.rules.length === 0) {
+    problems.push({
+      field: "colors",
+      code: "color-rules-required",
+      propertyKey,
+      message: "Add at least one color rule."
+    });
+    return null;
+  }
+
+  const rules: DataColorRule[] = [];
+  for (const raw of input.rules) {
+    if (!isPlainRecord(raw)) {
+      problems.push({
+        field: "colors",
+        code: "color-invalid",
+        propertyKey,
+        message: "Each color rule must be a plain object."
+      });
+      return null;
+    }
+    const operator = raw.operator;
+    if (
+      typeof operator !== "string" ||
+      !DATA_COLOR_OPERATORS.has(operator as DataColorOperator) ||
+      !isDataColorOperatorAllowed(operator as DataColorOperator, property.type as DataMappedValueType)
+    ) {
+      problems.push({
+        field: "colors",
+        code: "color-operator",
+        propertyKey,
+        message: `Color operator ${String(operator)} cannot compare a ${property.type} property.`
+      });
+      return null;
+    }
+    const color = normalizeDataColorHex(raw.color);
+    if (!color) {
+      problems.push({
+        field: "colors",
+        code: "color-value",
+        propertyKey,
+        message: "Color rules require a #rrggbb color."
+      });
+      return null;
+    }
+    if (!isValueOfType(raw.value, property.type as "string" | "number" | "boolean")) {
+      problems.push({
+        field: "colors",
+        code: "color-value",
+        propertyKey,
+        message: `Color rule values must be ${property.type} values.`
+      });
+      return null;
+    }
+
+    let max: number | null = null;
+    if (operator === "between") {
+      if (
+        typeof raw.value !== "number" ||
+        typeof raw.max !== "number" ||
+        !Number.isFinite(raw.max) ||
+        raw.value > raw.max
+      ) {
+        problems.push({
+          field: "colors",
+          code: "color-value",
+          propertyKey,
+          message: "An interval color rule requires two finite numbers with the lower bound first."
+        });
+        return null;
+      }
+      max = raw.max;
+    } else if (raw.max !== undefined && raw.max !== null) {
+      problems.push({
+        field: "colors",
+        code: "color-value",
+        propertyKey,
+        message: "Only interval color rules define an upper bound."
+      });
+      return null;
+    }
+
+    rules.push({
+      operator: operator as DataColorOperator,
+      value: raw.value,
+      max,
+      color
+    });
+  }
+
+  return { propertyKey, rules };
 }
 
 function isValueOfType(value: unknown, type: "string" | "number" | "boolean"): value is DataParameterValue {

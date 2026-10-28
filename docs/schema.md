@@ -567,6 +567,20 @@ interface DataBindingDetailField {
   precision: number | null;
 }
 
+type DataColorOperator = "eq" | "ne" | "gt" | "gte" | "lt" | "lte" | "between";
+
+interface DataColorRule {
+  operator: DataColorOperator;
+  value: DataParameterValue;
+  max: number | null;
+  color: string;
+}
+
+interface DataBindingColor {
+  propertyKey: string;
+  rules: readonly DataColorRule[];
+}
+
 interface DataObjectBinding {
   objectNodeId: string;
   queryId: string;
@@ -574,6 +588,7 @@ interface DataObjectBinding {
   deviceId: string;
   enabled: boolean;
   details: readonly DataBindingDetailField[];
+  color: DataBindingColor | null;
 }
 
 interface SceneDataSources {
@@ -603,12 +618,13 @@ Validation 规则：
 - 每个 binding 的 key 必须是现有 object node ID，目标只允许整 object node；imported target 必须显式改绑 owner，group/light/camera 拒绝绑定。`queryId` 必须指向现有 query。
 - binding 的 `deviceId` 保存时去空白且不能为空；`enabled` 必须是布尔值。`parameterOverrides` 只能包含 query 已定义的参数，并且值类型必须匹配；未覆盖的参数继续使用 query 默认值。
 - `details` 至少包含一个字段，字段 `key` 必须由该 query 的 mapping 映射且不能重复；数字字段的 `precision` 是 `0..6` 的整数或 `null`，`null` 表示使用默认 2 位小数；`label` 去空白后为空则显式保存为 `null`。
-- Snapshot 中的 binding 必须已经规范化（显式 `label`/`precision`、不含未知字段），恢复不会补全。`validateDataObjectBindingInput()` 与保存 command 共用同一校验。
+- `color` 可为 `null`；启用时 `propertyKey` 必须是 query 映射的属性。boolean/string 只允许 `eq`/`ne`，number 只允许 `gt`/`gte`/`lt`/`lte`/`between`；规则值必须匹配属性类型，`between` 的两个有限数字边界都包含在内且下界不大于上界，其他运算符显式保存 `max: null`。`rules` 至少一条，按数组顺序求值、首条命中生效；颜色规范化为小写 `#rrggbb`。无值、错误、过期、bad/uncertain 或无规则命中时不应用数据颜色，恢复作者材质；unknown 质量仍可使用有效值。材质不支持状态颜色只产生运行态能力诊断，不阻止保存 binding。
+- Snapshot 中的 binding 必须已经规范化（显式 `label`/`precision`/`color`、不含未知字段），恢复不会补全。`validateDataObjectBindingInput()` 与保存 command 共用同一校验。为兼容同一未发布 v9 迭代中早于状态颜色的 Snapshot，恢复时缺失 `color` 的 binding 会补为 `null`；后续保存会持久化补全后的值。
 - 已保存 query 的编辑不能删除/重命名/改变类型 binding 引用的属性，也不能删除或改变 binding 覆盖参数的类型；这些 guard 让 durable 引用始终可解析。
 
 连接变更通过 `create-data-connection`、`update-data-connection`、`duplicate-data-connection`、`delete-data-connection` command 进入 command/history；一次保存对应一次可撤销编辑。失败会保持 Snapshot/history 原子不变。复制连接生成新 ID 和唯一名称，不复制 query。存在 query/binding 引用时拒绝删除 connection；引用统计由 `countDataConnectionReferences` 提供。
 
-对象绑定通过 `set-data-object-binding`、`delete-data-object-binding` command 进入 command/history；一次保存或解除对应一次可撤销编辑。删除 object node 会同步移除其 binding。binding 的运行态数据（原始响应、解析值、有效参数、预览开关、共享上下文、刷新阶段、时间、新鲜度、历史值和问题）不属于 Snapshot，由 `editor.getDataService()` 单独暴露。预览开启时，相同 query、有效参数、连接/查询配置与宿主认证 revision 的多个 binding 共用一个上下文，每周期只发一次 GET；对象和设备身份不参与列表查询共享键。执行器替换、认证 revision 变化、配置变化、停止与 dispose 会使旧 generation 失效，晚到响应不会提交。
+对象绑定通过 `set-data-object-binding`、`delete-data-object-binding` command 进入 command/history；一次保存或解除对应一次可撤销编辑。删除 object node 会同步移除其 binding。binding 的运行态数据（原始响应、解析值、有效参数、预览开关、共享上下文、刷新阶段、时间、新鲜度、历史值和问题）不属于 Snapshot，由 `editor.getDataService()` 单独暴露。`editor.getDataColorService()` 单独暴露规则求值后的应用颜色、材质能力诊断和草稿试用；颜色覆盖使用投影拥有的 `MeshStandardMaterial` 克隆，停止、失败、过期、停用、解除、试用结束、重投影与销毁都恢复最新作者材质并释放克隆，不 dispose loader 纹理或其他对象材质。预览开启时，相同 query、有效参数、连接/查询配置与宿主认证 revision 的多个 binding 共用一个上下文，每周期只发一次 GET；对象和设备身份不参与列表查询共享键。执行器替换、认证 revision 变化、配置变化、停止与 dispose 会使旧 generation 失效，晚到响应不会提交。
 
 查询变更通过 `create-data-query`、`update-data-query`、`duplicate-data-query`、`delete-data-query` command 进入 command/history。查询配置、映射与更新策略在同一 command 中保存，只增加一次编辑历史；复制查询生成新 ID 和同一 connection 内的唯一名称；存在 binding 引用时拒绝删除查询。`buildDataQueryList()` 与 `countDataQueryReferences()` 提供列表和引用统计。
 

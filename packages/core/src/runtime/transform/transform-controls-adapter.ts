@@ -67,6 +67,7 @@ export class TransformControlsAdapter {
   #attachedNodeId: string | null = null;
   #dragNodeId: string | null = null;
   #cameraEnabledBeforeDrag: boolean | null = null;
+  #enabled = true;
   #disposed = false;
 
   #handleChange = () => {
@@ -111,6 +112,10 @@ export class TransformControlsAdapter {
     if (this.#disposed) {
       return;
     }
+    if (!this.#enabled) {
+      this.#detach();
+      return;
+    }
 
     const nodeId = snapshot.selection.nodeId;
     const target = nodeId ? this.#objects.getTarget(nodeId) : undefined;
@@ -129,6 +134,16 @@ export class TransformControlsAdapter {
       this.#controls.attach(object);
       this.#attachedNodeId = nodeId;
       this.#onChange();
+    }
+  }
+
+  setEnabled(enabled: boolean): void {
+    if (this.#disposed || this.#enabled === enabled) {
+      return;
+    }
+    this.#enabled = enabled;
+    if (!enabled) {
+      this.#detach();
     }
   }
 

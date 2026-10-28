@@ -34,15 +34,28 @@ import { applyUngroupObjects } from "./ungroup-objects";
 import { applyUpdateLight } from "./update-light";
 import type { Command, CommandResult, SingleCommand } from "./types";
 
+export interface CommandDispatcherOptions {
+  guard?(command: Command): string | null;
+}
+
 export class CommandDispatcher {
+  readonly #guard: CommandDispatcherOptions["guard"];
+
   constructor(
     private readonly store: EditorStore,
     private readonly history: CommandHistory,
-    private readonly assets: AssetRegistry
-  ) {}
+    private readonly assets: AssetRegistry,
+    options: CommandDispatcherOptions = {}
+  ) {
+    this.#guard = options.guard;
+  }
 
   dispatch(command: Command): CommandResult {
     const before = this.store.getSnapshot();
+    const guardError = this.#guard?.(command) ?? null;
+    if (guardError) {
+      return { ok: false, snapshot: before, error: guardError };
+    }
     const beforeAssets = new Map(this.assets.entries());
 
     try {

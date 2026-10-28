@@ -17,6 +17,11 @@ import type { Unsubscribe } from "../editor/subscription";
 import { normalizeMarqueeSelectionRect, type EditorMarqueeSelectionState, type MarqueeSelectionPoint, type MarqueeSelectionRect } from "../editor/marquee-selection-state";
 import type { EditorSnapState } from "../editor/snap-state";
 import { IDLE_VIEWPORT_SNAP_FEEDBACK, type EditorViewportHelperState, type ViewportHelperStateSnapshot } from "../editor/viewport-helper-state";
+import {
+  DataColorProjector,
+  type DataColorAssignment,
+  type DataColorObjectCapability
+} from "./data-color-projector";
 import { RuntimeSelectionVisuals } from "./selection-visuals";
 import { RuntimeMarqueeSelection } from "./marquee-selection";
 import type { RuntimeNodeTarget } from "./three-object-map";
@@ -98,9 +103,14 @@ export interface EditorRuntime {
   frameAll(options?: RuntimeCameraFrameOptions): boolean;
   captureCameraView(input?: Pick<AuthoredCameraViewInput, "id" | "name" | "metadata">): RuntimeCameraViewCaptureResult;
   applyCameraView(view: AuthoredCameraView): void;
+  setDataColors?(assignments: readonly DataColorAssignment[]): readonly DataColorObjectCapability[];
+  subscribeProjection?(subscriber: RuntimeProjectionSubscriber): Unsubscribe;
+  setTransformEnabled?(enabled: boolean): void;
   dispose(): void;
   readonly disposed: boolean;
 }
+
+export type RuntimeProjectionSubscriber = () => void;
 
 export interface RuntimeProblemSnapshot {
   version: number;
@@ -122,6 +132,8 @@ export class ThreeEditorRuntime implements EditorRuntime {
   readonly camera = new PerspectiveCamera(50, 1, 0.1, 1000);
   readonly projector: SceneProjector;
   readonly picker: ObjectPicker;
+  #dataColors: DataColorProjector;
+  #projectionSubscribers = new Set<RuntimeProjectionSubscriber>();
   #container: HTMLElement;
   #store: EditorStore;
   #renderer: RendererLike;
@@ -264,6 +276,7 @@ export class ThreeEditorRuntime implements EditorRuntime {
       pmrem: options.pmremFactory?.(this.#renderer) ?? createPmremAdapter(this.#renderer)
     });
     this.picker = new ObjectPicker(this.camera, this.projector.objects, options.dispatcher);
+    this.#dataColors = new DataColorProjector({ objects: this.projector.objects });
     this.#transformController = new TransformController(this.projector.objects, options.dispatcher);
     this.camera.position.set(0, 2, 5);
     this.camera.lookAt(0, 0, 0);
@@ -282,11 +295,15 @@ export class ThreeEditorRuntime implements EditorRuntime {
     const generation = this.#beginProject();
     this.#cancelMarquee();
     this.#pointerStart = null;
+    // Authored materials must be clean before the material projector reads them;
+    // current status colors are re-applied once the new projection settles.
+    this.#dataColors.restoreAll();
     this.projector.setRendererShadowMapAvailable(Boolean(this.#renderer.shadowMap));
     await this.projector.project(snapshot);
     if (this.#disposed || generation !== this.#projectGeneration) {
       return;
     }
+    this.#dataColors.reapply();
     this.#syncRendererShadowMap();
     this.#clearStaleViewportHelperTargets();
     this.#syncSelectionVisuals();
@@ -295,6 +312,32 @@ export class ThreeEditorRuntime implements EditorRuntime {
     this.#transformControls?.sync(snapshot);
     this.invalidateRender();
     this.#publishProblems();
+    this.#notifyProjection();
+  }
+
+  setDataColors(assignments: readonly DataColorAssignment[]): readonly DataColorObjectCapability[] {
+    this.#assertActive();
+    const capabilities = this.#dataColors.set(assignments);
+    this.invalidateRender();
+    return capabilities;
+  }
+
+  subscribeProjection(subscriber: RuntimeProjectionSubscriber): Unsubscribe {
+    this.#assertActive();
+    this.#projectionSubscribers.add(subscriber);
+    return () => {
+      this.#projectionSubscribers.delete(subscriber);
+    };
+  }
+
+  setTransformEnabled(enabled: boolean): void {
+    if (this.#disposed) {
+      return;
+    }
+    this.#transformControls?.setEnabled(enabled);
+    if (enabled) {
+      this.#transformControls?.sync(this.#store.getSnapshot());
+    }
   }
 
   pickNode(nodeId: string | null, mode: SelectionMode = "replace"): CommandResult {
@@ -435,6 +478,8 @@ export class ThreeEditorRuntime implements EditorRuntime {
     this.#unmountInteractions();
     this.#unsubscribe?.();
     this.#unsubscribe = null;
+    this.#dataColors.dispose();
+    this.#projectionSubscribers.clear();
     this.projector.dispose();
     this.#renderer.dispose();
     this.#renderer.domElement.remove();
@@ -461,6 +506,16 @@ export class ThreeEditorRuntime implements EditorRuntime {
     const snapshot = { version: this.#problemVersion, problems: this.getProblems() };
     for (const subscriber of [...this.#problemSubscribers]) {
       subscriber(snapshot);
+    }
+  }
+
+  #notifyProjection(): void {
+    for (const subscriber of [...this.#projectionSubscribers]) {
+      try {
+        subscriber();
+      } catch {
+        // Projection observers must not change the completed projection.
+      }
     }
   }
 

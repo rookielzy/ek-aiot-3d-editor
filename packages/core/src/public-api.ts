@@ -193,12 +193,43 @@ export type {
   DataServiceSubscriber,
   EditorDataService
 } from "./data-sources/service";
+export {
+  dataColorOperatorsForType,
+  evaluateDataColorRules,
+  matchesDataColorRule,
+  normalizeDataColorHex
+} from "./data-sources/color-rules";
+export type { DataColorMatch } from "./data-sources/color-rules";
 export type {
+  DataColorAssignment,
+  DataColorCapabilityProblem,
+  DataColorCapabilityStatus,
+  DataColorInactiveReason,
+  DataColorObjectCapability,
+  DataColorObjectState,
+  DataColorObjectStatus,
+  DataColorSink,
+  DataColorSource,
+  DataColorState,
+  DataColorSubscriber,
+  DataColorTrialInput,
+  DataColorTrialProblem,
+  DataColorTrialProblemCode,
+  DataColorTrialResult,
+  DataColorTrialState,
+  EditorDataColorService
+} from "./data-sources/color-preview";
+export type {
+  DataBindingColor,
+  DataBindingColorInput,
   DataBindingDetailField,
   DataBindingDetailFieldInput,
   DataBindingProblem,
   DataBindingProblemCode,
   DataBindingProblemField,
+  DataColorOperator,
+  DataColorRule,
+  DataColorRuleInput,
   DataConnection,
   DataConnectionAuth,
   DataConnectionAuthBearer,
