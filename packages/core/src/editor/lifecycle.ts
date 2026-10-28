@@ -67,7 +67,8 @@ export class CoreEditor implements EditorWithGlbImport {
       getSnapshot: () => this.store.getSnapshot(),
       subscribeSnapshot: (listener) => this.store.subscribe(() => listener()),
       executor: options.executor ?? null,
-      credentials: this.#dataCredentials
+      credentials: this.#dataCredentials,
+      authRevision: options.authRevision
     });
   }
 

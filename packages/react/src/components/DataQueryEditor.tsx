@@ -539,6 +539,34 @@ export function DataQueryEditor({
               {requestUrlPreview(context, connectionId, form, parameterDrafts, overrides)}
             </div>
 
+            <div className="ek-workbench__query-inline">
+              <label className="ek-workbench__field">
+                <span>{t("dataSources.queryEditor.refreshInterval")}</span>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  inputMode="numeric"
+                  aria-label={t("dataSources.queryEditor.refreshInterval")}
+                  value={form.refreshIntervalSeconds}
+                  onChange={(event) => updateRequestForm({ refreshIntervalSeconds: event.target.value })}
+                />
+              </label>
+              <label className="ek-workbench__field">
+                <span>{t("dataSources.queryEditor.maxAge")}</span>
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  inputMode="numeric"
+                  aria-label={t("dataSources.queryEditor.maxAge")}
+                  value={form.maxAgeSeconds}
+                  onChange={(event) => updateRequestForm({ maxAgeSeconds: event.target.value })}
+                />
+              </label>
+            </div>
+            <p className="ek-workbench__request-hint">{t("dataSources.queryEditor.updatePolicyHint")}</p>
+
             <fieldset className="ek-workbench__request-parameters">
               <legend>{t("dataSources.request.parameters")}</legend>
               {form.parameters.length === 0 ? <small>{t("dataSources.request.parameters.empty")}</small> : null}

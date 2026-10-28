@@ -1344,12 +1344,12 @@ describe("Vue EditorWorkbench", () => {
     expect(chips[6].attributes("data-tone")).toBe("warning");
     expect(chips[7].attributes("data-tone")).toBe("warning");
     expect(chips[7].text()).toContain("Problems 1");
-    expect(chips[8].text()).toContain("Authored 0 · Runtime 1 · Project 0");
+    expect(chips[8].text()).toContain("Authored 0 · Runtime 1 · Data 0 · Project 0");
 
     await wrapper.find(".ek-workbench__locale-switcher select").setValue("zh-CN");
     await nextTick();
     expect(wrapper.get('[aria-label="编辑器状态"]').text()).toContain("问题 1");
-    expect(wrapper.get('[aria-label="编辑器状态"]').text()).toContain("作者 0 · 运行时 1 · 项目 0");
+    expect(wrapper.get('[aria-label="编辑器状态"]').text()).toContain("作者 0 · 运行时 1 · 数据 0 · 项目 0");
     wrapper.unmount();
   });
 

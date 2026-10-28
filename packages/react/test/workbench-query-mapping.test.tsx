@@ -44,6 +44,10 @@ describe("React query authoring and mapping preview", () => {
 
     expect(screen.getByRole("dialog", { name: "Query configuration" })).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Query name"), { target: { value: "Pump status" } });
+    expect((screen.getByLabelText("Refresh interval (seconds)") as HTMLInputElement).value).toBe("5");
+    expect((screen.getByLabelText("Expire after (seconds)") as HTMLInputElement).value).toBe("15");
+    fireEvent.change(screen.getByLabelText("Refresh interval (seconds)"), { target: { value: "10" } });
+    fireEvent.change(screen.getByLabelText("Expire after (seconds)"), { target: { value: "30" } });
     fireEvent.change(screen.getByLabelText("Request path"), { target: { value: "/pumps" } });
     fireEvent.change(screen.getByLabelText("Data root path"), { target: { value: "data.items" } });
     fireEvent.change(screen.getByLabelText("Device ID path"), { target: { value: "deviceCode" } });
@@ -102,6 +106,7 @@ describe("React query authoring and mapping preview", () => {
     expect(query).toMatchObject({
       name: "Pump status",
       path: "/pumps",
+      updatePolicy: { refreshIntervalMs: 10_000, maxAgeMs: 30_000 },
       mapping: {
         mode: "array",
         identity: { kind: "path", valueType: "string" }

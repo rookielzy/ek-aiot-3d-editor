@@ -2,13 +2,13 @@ import { useEffect, useState } from "react";
 import {
   buildDataObjectDetailModel,
   type DataMappingProblem,
+  type DataObjectContextState,
   type DataObjectRuntimeProblem,
   type DataObjectRuntimeStatus,
   type DataQuality
 } from "@ek-aiot/3d-editor-core";
 import type { WorkbenchMessageKey } from "../i18n/workbench-i18n";
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
-import { useObjectDataState } from "../hooks/use-object-data-state";
 import {
   DATA_MAPPING_PROBLEM_MESSAGE_KEYS,
   DATA_QUERY_PROBLEM_MESSAGE_KEYS
@@ -20,6 +20,7 @@ const STATUS_MESSAGE_KEYS = {
   ready: "dataBinding.card.status.ready",
   partial: "dataBinding.card.status.partial",
   "missing-device": "dataBinding.card.status.missingDevice",
+  empty: "dataBinding.card.status.empty",
   error: "dataBinding.card.status.error"
 } satisfies Record<DataObjectRuntimeStatus, WorkbenchMessageKey>;
 
@@ -32,7 +33,7 @@ const QUALITY_MESSAGE_KEYS = {
 
 export function DataDetailCard({ context }: { context: ResolvedWorkbenchContext }) {
   const service = context.editor.getDataService?.() ?? null;
-  const dataState = useObjectDataState(context);
+  const dataState = context.dataState;
   const [closedNodeId, setClosedNodeId] = useState<string | null>(null);
   const t = context.i18n.t;
 
@@ -64,12 +65,27 @@ export function DataDetailCard({ context }: { context: ResolvedWorkbenchContext 
   }
 
   const loading = model.status === "loading";
+  const contextState = model.contextKey ? dataState.contexts[model.contextKey] ?? null : null;
+  const expired = (model.status === "ready" || model.status === "partial") &&
+    model.receivedAt !== null &&
+    !model.freshness.fresh;
+  const statusKey = model.paused
+    ? "dataBinding.card.status.authPaused"
+    : model.refreshing && !loading
+      ? "dataBinding.card.status.refreshing"
+      : expired
+        ? "dataBinding.card.status.expired"
+        : runtime
+          ? STATUS_MESSAGE_KEYS[model.status]
+          : "dataBinding.preview.idle";
+
   return (
     <section
       className="ek-workbench__detail-card"
       role="region"
       aria-label={t("dataBinding.card.label")}
       data-status={model.status}
+      data-freshness={expired ? "expired" : "current"}
     >
       <header className="ek-workbench__detail-card-header">
         <div>
@@ -87,11 +103,18 @@ export function DataDetailCard({ context }: { context: ResolvedWorkbenchContext 
       </header>
 
       <div className="ek-workbench__detail-card-status">
-        <span data-status={model.status}>
-          {t(runtime ? STATUS_MESSAGE_KEYS[model.status] : "dataBinding.preview.idle")}
+        <span data-status={model.paused ? "paused" : expired ? "expired" : model.status}>
+          {t(statusKey)}
         </span>
         <small>{model.queryName}</small>
       </div>
+
+      <p className="ek-workbench__detail-card-context">
+        {t("dataBinding.card.sharedContext", {
+          count: contextState?.objectNodeIds.length ?? 1,
+          parameters: formatContextParameters(contextState, t("dataBinding.preview.noParameters"))
+        })}
+      </p>
 
       {loading ? (
         <p className="ek-workbench__detail-card-loading">{t("dataBinding.card.status.loading")}</p>
@@ -100,7 +123,7 @@ export function DataDetailCard({ context }: { context: ResolvedWorkbenchContext 
       {!loading && runtime && model.fields.length > 0 ? (
         <dl className="ek-workbench__detail-card-fields">
           {model.fields.map((field) => (
-            <div key={field.key} data-status={field.status}>
+            <div key={field.key} data-status={field.status} data-history={field.historyValue !== null ? "true" : undefined}>
               <dt>
                 {field.label}
                 {field.unit ? <small> · {field.unit}</small> : null}
@@ -112,6 +135,14 @@ export function DataDetailCard({ context }: { context: ResolvedWorkbenchContext 
                     {formatMappingProblem(context, problem)}
                   </small>
                 ))}
+                {field.historyValue !== null ? (
+                  <small className="ek-workbench__detail-card-history">
+                    {t("dataBinding.card.lastValue", {
+                      value: field.historyDisplayValue ?? "",
+                      time: formatTimestamp(field.historyReceivedAt, context.i18n.locale, t("dataBinding.card.unknown"))
+                    })}
+                  </small>
+                ) : null}
               </dd>
             </div>
           ))}
@@ -143,6 +174,21 @@ export function DataDetailCard({ context }: { context: ResolvedWorkbenchContext 
       {model.qualityProblem ? (
         <p className="ek-workbench__detail-card-note">{formatMappingProblem(context, model.qualityProblem)}</p>
       ) : null}
+      {model.paused ? (
+        <p className="ek-workbench__detail-card-note" data-state="paused">
+          {t("dataBinding.card.authPausedDetail", { status: model.paused.status })}
+        </p>
+      ) : null}
+      {expired ? (
+        <p className="ek-workbench__detail-card-note" data-state="expired">
+          {t("dataBinding.card.expiredDetail", {
+            maxAgeSeconds: Math.max(0, Math.round(model.freshness.maxAgeMs / 1000))
+          })}
+        </p>
+      ) : null}
+      {model.status === "error" || model.status === "missing-device" ? (
+        <p className="ek-workbench__detail-card-note">{t("dataBinding.card.retryHint")}</p>
+      ) : null}
 
       {model.problems.length > 0 ? (
         <ul className="ek-workbench__detail-card-problems" aria-label={t("dataBinding.card.problems")}>
@@ -156,8 +202,26 @@ export function DataDetailCard({ context }: { context: ResolvedWorkbenchContext 
       {!runtime ? (
         <p className="ek-workbench__detail-card-note">{t("dataBinding.preview.needsRefresh")}</p>
       ) : null}
+
+      <div className="ek-workbench__detail-card-actions">
+        <button
+          type="button"
+          disabled={dataState.preview.refreshing}
+          onClick={() => { void service.refreshPreview(); }}
+        >{t("dataBinding.card.retry")}</button>
+      </div>
     </section>
   );
+}
+
+function formatContextParameters(
+  context: DataObjectContextState | null,
+  emptyLabel: string
+): string {
+  const entries = Object.entries(context?.parameters ?? {});
+  return entries.length === 0
+    ? emptyLabel
+    : entries.map(([key, value]) => `${key}=${String(value)}`).join(" · ");
 }
 
 function formatMappingProblem(

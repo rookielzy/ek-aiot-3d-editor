@@ -5,6 +5,7 @@ import {
   buildDuplicateDataConnectionCommand,
   buildSaveDataConnectionCommand,
   buildWorkbenchModel,
+  createDefaultDataQueryUpdatePolicy,
   createEditor,
   createEmptySnapshot,
   filterDataConnectionItems,
@@ -221,7 +222,8 @@ describe("data source connections", () => {
               }],
               observedAt: null,
               sourceQuality: null
-            }
+            },
+            updatePolicy: createDefaultDataQueryUpdatePolicy()
           }
         }
       }

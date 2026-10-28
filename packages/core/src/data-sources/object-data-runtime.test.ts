@@ -94,7 +94,14 @@ describe("object data preview runtime", () => {
 
     service.stopPreview();
     expect(service.getObjectDataState()).toEqual({
-      preview: { enabled: false, refreshing: false, lastRefreshAt: null },
+      preview: {
+        enabled: false,
+        refreshing: false,
+        lastRefreshAt: null,
+        contextCount: 0,
+        pausedCount: 0
+      },
+      contexts: {},
       objects: {}
     });
     expect(editor.serialize()).toEqual(snapshotBefore);
@@ -116,7 +123,7 @@ describe("object data preview runtime", () => {
       displayName: "Pump 1",
       status: "partial",
       sourceQuality: "good",
-      observedAt: Date.parse("2026-10-26T08:00:00.000Z"),
+      observedAt: Date.parse(SAMPLE_AT),
       receivedAt: state.receivedAt
     });
     expect(model?.fields).toEqual([
@@ -129,7 +136,10 @@ describe("object data preview runtime", () => {
         value: 42.6,
         displayValue: "42.6",
         status: "ok",
-        problems: []
+        problems: [],
+        historyValue: null,
+        historyDisplayValue: null,
+        historyReceivedAt: null
       },
       {
         key: "running",
@@ -140,7 +150,10 @@ describe("object data preview runtime", () => {
         value: true,
         displayValue: "true",
         status: "ok",
-        problems: []
+        problems: [],
+        historyValue: null,
+        historyDisplayValue: null,
+        historyReceivedAt: null
       },
       {
         key: "flow",
@@ -151,7 +164,10 @@ describe("object data preview runtime", () => {
         value: null,
         displayValue: null,
         status: "missing",
-        problems: [expect.objectContaining({ code: "property-missing" })]
+        problems: [expect.objectContaining({ code: "property-missing" })],
+        historyValue: null,
+        historyDisplayValue: null,
+        historyReceivedAt: null
       }
     ]);
     expect(model?.status).toBe("partial");
@@ -289,7 +305,7 @@ describe("object data preview runtime", () => {
     editor.dispose();
   });
 
-  it("clears runtime data when binding configuration changes and waits for an explicit refresh", async () => {
+  it("reuses the shared context when a binding selects another device and waits for an explicit refresh only for new requests", async () => {
     let requests = 0;
     const executor: DataRequestExecutor = async () => {
       requests += 1;
@@ -318,7 +334,11 @@ describe("object data preview runtime", () => {
 
     const state = service.getObjectDataState();
     expect(state.preview).toMatchObject({ enabled: true, refreshing: false });
-    expect(state.objects["object-a"]).toBeUndefined();
+    expect(state.objects["object-a"]).toMatchObject({
+      deviceId: "pump-02",
+      entityId: "pump-02",
+      status: "partial"
+    });
     expect(state.objects["object-disabled"]).toMatchObject({
       deviceId: "pump-02",
       status: "ready"
@@ -410,7 +430,7 @@ function deviceBody() {
         tempRaw: 426,
         run: true,
         quality: "ok",
-        sampledAt: "2026-10-26T08:00:00.000Z"
+        sampledAt: SAMPLE_AT
       }),
       deviceRecord({
         deviceCode: "pump-02",
@@ -418,11 +438,13 @@ function deviceBody() {
         tempRaw: 380,
         run: false,
         quality: "degraded",
-        sampledAt: "2026-10-26T07:59:00.000Z"
+        sampledAt: SAMPLE_AT
       })
     ]
   };
 }
+
+const SAMPLE_AT = new Date(Date.now() - 1_000).toISOString();
 
 function deviceRecord(patch: Record<string, unknown>): Record<string, unknown> {
   return {
@@ -431,7 +453,7 @@ function deviceRecord(patch: Record<string, unknown>): Record<string, unknown> {
     tempRaw: 426,
     run: true,
     quality: "ok",
-    sampledAt: "2026-10-26T08:00:00.000Z",
+    sampledAt: SAMPLE_AT,
     ...patch
   };
 }

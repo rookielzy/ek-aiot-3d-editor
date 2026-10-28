@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildSaveDataObjectBindingCommand,
   buildSaveDataQueryCommand,
+  createDefaultDataQueryUpdatePolicy,
   createEditor,
   resolveDataObjectBindingParameters,
   validateSceneSnapshot,
@@ -430,7 +431,8 @@ function queryDefinition(
       properties: [temperatureProperty(), runningProperty()],
       observedAt: null,
       sourceQuality: null
-    }
+    },
+    updatePolicy: createDefaultDataQueryUpdatePolicy()
   };
 }
 

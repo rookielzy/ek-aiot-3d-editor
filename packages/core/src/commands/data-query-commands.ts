@@ -125,7 +125,8 @@ function cloneQueryDefinition(query: DataQuery): DataQueryDefinition {
     name: query.name,
     path: query.path,
     parameters: query.parameters,
-    mapping: query.mapping
+    mapping: query.mapping,
+    updatePolicy: query.updatePolicy
   })) as DataQueryDefinition;
 }
 

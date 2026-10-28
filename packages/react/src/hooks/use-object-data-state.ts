@@ -1,14 +1,21 @@
 import { useCallback, useSyncExternalStore } from "react";
-import type { DataObjectDataState } from "@ek-aiot/3d-editor-core";
+import type { DataObjectDataState, Editor } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext } from "./use-workbench";
 
-const EMPTY_OBJECT_DATA_STATE: DataObjectDataState = Object.freeze({
-  preview: Object.freeze({ enabled: false, refreshing: false, lastRefreshAt: null }),
+export const EMPTY_OBJECT_DATA_STATE: DataObjectDataState = Object.freeze({
+  preview: Object.freeze({
+    enabled: false,
+    refreshing: false,
+    lastRefreshAt: null,
+    contextCount: 0,
+    pausedCount: 0
+  }),
+  contexts: Object.freeze({}),
   objects: Object.freeze({})
 });
 
-export function useObjectDataState(context: ResolvedWorkbenchContext): DataObjectDataState {
-  const service = context.editor.getDataService?.() ?? null;
+export function useEditorObjectDataState(editor: Editor): DataObjectDataState {
+  const service = editor.getDataService?.() ?? null;
   const subscribe = useCallback(
     (listener: () => void) => service?.subscribeObjectData(listener) ?? (() => {}),
     [service]
@@ -18,4 +25,8 @@ export function useObjectDataState(context: ResolvedWorkbenchContext): DataObjec
     [service]
   );
   return useSyncExternalStore(subscribe, getState, getState);
+}
+
+export function useObjectDataState(context: ResolvedWorkbenchContext): DataObjectDataState {
+  return useEditorObjectDataState(context.editor);
 }

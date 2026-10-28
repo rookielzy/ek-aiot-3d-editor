@@ -73,17 +73,33 @@ const PROBLEM_MESSAGE_KEYS = {
   "timeout-invalid": "dataSources.problem.timeoutInvalid"
 } satisfies Record<DataConnectionProblemCode, WorkbenchMessageKey>;
 
-export function DataSourcesPanel({ context }: { context: ResolvedWorkbenchContext }) {
+export function DataSourcesPanel({
+  context,
+  locate,
+  onLocateHandled
+}: {
+  context: ResolvedWorkbenchContext;
+  locate?: { connectionId: string; queryId: string } | null;
+  onLocateHandled?(): void;
+}) {
   // Drafts and response samples belong to the editor that opened the panel.
   const [session, setSession] = useState({ editor: context.editor, key: 0 });
   if (session.editor !== context.editor) {
     setSession({ editor: context.editor, key: session.key + 1 });
     return null;
   }
-  return <DataSourcesSession key={session.key} context={context} />;
+  return <DataSourcesSession key={session.key} context={context} locate={locate} onLocateHandled={onLocateHandled} />;
 }
 
-function DataSourcesSession({ context }: { context: ResolvedWorkbenchContext }) {
+function DataSourcesSession({
+  context,
+  locate,
+  onLocateHandled
+}: {
+  context: ResolvedWorkbenchContext;
+  locate?: { connectionId: string; queryId: string } | null;
+  onLocateHandled?(): void;
+}) {
   const [query, setQuery] = useState("");
   const [form, setForm] = useState<DataFormState | null>(null);
   const [requestConnectionId, setRequestConnectionId] = useState<string | null>(null);
@@ -199,6 +215,24 @@ function DataSourcesSession({ context }: { context: ResolvedWorkbenchContext }) 
       setBindingsQueryId(null);
     }
   }, [bindingsQueryId, context.snapshot]);
+
+  useEffect(() => {
+    if (!locate) {
+      return;
+    }
+    onLocateHandled?.();
+    if (form || requestConnectionId || queryEditor || bindingsQueryId) {
+      return;
+    }
+    const connection = context.snapshot.dataSources.connections[locate.connectionId];
+    const query = context.snapshot.dataSources.queries[locate.queryId];
+    if (connection && query?.connectionId === connection.id) {
+      openQuery(connection.id, query.id);
+    }
+    // Locate requests are consumed once per identity; openQuery intentionally
+    // uses the panel's current draft guards above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locate]);
 
   function openCreate() {
     setRequestConnectionId(null);

@@ -4,6 +4,8 @@ import {
   type AssetWorkspacePayloadSummary
 } from "../assets/workspace";
 import { buildDataSourcesWorkspaceModel, type DataSourcesWorkspaceModel } from "../data-sources/workspace";
+import { buildDataRuntimeProblems } from "../data-sources/runtime-problems";
+import type { DataObjectDataState } from "../data-sources/object-data";
 import type { DataCredentialDescriptor } from "../data-sources/types";
 import { buildInspectorModel } from "../inspector/selection";
 import type { InspectorModel, InspectorProblemItem } from "../inspector/types";
@@ -32,6 +34,7 @@ export interface BuildWorkbenchModelOptions {
   assetPayloads?: readonly AssetWorkspacePayloadSummary[];
   assetWorkspace?: AssetWorkspaceModel;
   dataCredentials?: readonly DataCredentialDescriptor[];
+  dataState?: DataObjectDataState;
   dirty?: boolean;
 }
 
@@ -98,12 +101,14 @@ export interface WorkbenchMissingAssetItem {
 
 export interface WorkbenchProblemItem extends InspectorProblemItem {
   project: boolean;
+  data: boolean;
 }
 
 export interface WorkbenchProblemsModel {
   items: WorkbenchProblemItem[];
   authoredCount: number;
   runtimeCount: number;
+  dataCount: number;
   projectCount: number;
   totalCount: number;
   bySeverity: Record<ProblemSeverity, number>;
@@ -154,6 +159,7 @@ export interface WorkbenchStatusModel {
   problemCount: number;
   authoredProblemCount: number;
   runtimeProblemCount: number;
+  dataProblemCount: number;
   projectProblemCount: number;
   snapFeedback: ViewportSnapFeedbackState;
   snapFeedbackLabel: string;
@@ -207,7 +213,8 @@ export function buildWorkbenchModel(snapshot: SceneSnapshot, options: BuildWorkb
   const transformMode = options.transformMode ?? "translate";
   const runtimeReady = options.runtimeReady ?? false;
   const projectProblems = options.projectProblems ?? [];
-  const problems = buildWorkbenchProblems(inspector, projectProblems);
+  const dataProblems = options.dataState ? buildDataRuntimeProblems(options.dataState) : [];
+  const problems = buildWorkbenchProblems(inspector, dataProblems, projectProblems);
   const selection = buildWorkbenchSelection(snapshot, inspector);
   const hierarchy = buildWorkbenchHierarchy(snapshot, inspector, problems.items);
   const assetWorkspace = options.assetWorkspace ?? buildAssetWorkspaceModel(snapshot, {
@@ -249,14 +256,21 @@ export function buildWorkbenchModel(snapshot: SceneSnapshot, options: BuildWorkb
 
 function buildWorkbenchProblems(
   inspector: InspectorModel,
+  dataProblems: readonly Problem[],
   projectProblems: readonly (ProjectProblem | Problem)[]
 ): WorkbenchProblemsModel {
   const inspectorItems = inspector.problems.problems.map((problem): WorkbenchProblemItem => ({
     ...problem,
-    project: false
+    project: false,
+    data: false
+  }));
+  const dataItems = dataProblems.map((problem): WorkbenchProblemItem => ({
+    ...toProblemItem(problem),
+    project: false,
+    data: true
   }));
   const projectItems = projectProblems.map(toProjectProblemItem);
-  const items = [...inspectorItems, ...projectItems];
+  const items = [...inspectorItems, ...dataItems, ...projectItems];
   const bySeverity: Record<ProblemSeverity, number> = { info: 0, warning: 0, error: 0 };
 
   for (const item of items) {
@@ -267,9 +281,31 @@ function buildWorkbenchProblems(
     items,
     authoredCount: inspectorItems.filter((problem) => !problem.runtime).length,
     runtimeCount: inspectorItems.filter((problem) => problem.runtime).length,
+    dataCount: dataItems.length,
     projectCount: projectItems.length,
     totalCount: items.length,
     bySeverity
+  };
+}
+
+function toProblemItem(problem: Problem): InspectorProblemItem {
+  return {
+    id: problem.id,
+    severity: problem.severity,
+    code: problem.code,
+    source: problem.source,
+    target: problem.target,
+    title: problem.display?.title ?? problem.message,
+    titleDescriptor: problem.display?.titleDescriptor,
+    detail: problem.display?.detail ?? problem.message,
+    detailDescriptor: problem.display?.detailDescriptor,
+    assetId: problem.assetId,
+    objectId: problem.objectId,
+    recoverability: problem.recoverability,
+    acknowledged: false,
+    actionLabel: problem.display?.actionLabel,
+    actionLabelDescriptor: problem.display?.actionLabelDescriptor,
+    runtime: true
   };
 }
 
@@ -299,7 +335,8 @@ function toProjectProblemItem(problem: ProjectProblem | Problem): WorkbenchProbl
         })
       : undefined),
     runtime: false,
-    project: true
+    project: true,
+    data: false
   };
 }
 
@@ -548,6 +585,7 @@ function buildWorkbenchStatus(
     problemCount: problems.totalCount,
     authoredProblemCount: problems.authoredCount,
     runtimeProblemCount: problems.runtimeCount,
+    dataProblemCount: problems.dataCount,
     projectProblemCount: problems.projectCount,
     snapFeedback,
     snapFeedbackLabel: formatSnapFeedbackLabel(snapFeedback),
@@ -661,6 +699,8 @@ function problemMatchesNode(
     const object = snapshot.objects[node.objectId];
     return problem.objectId === node.objectId ||
       (problem.target.kind === "object" && problem.target.objectId === node.objectId) ||
+      (problem.target.kind === "data-object" && problem.target.nodeId === node.id) ||
+      (problem.target.kind === "data-field" && problem.target.nodeId === node.id) ||
       (object ? problemMatchesAsset(object.asset.id, problem) : false);
   }
   if (node.kind === "light") {

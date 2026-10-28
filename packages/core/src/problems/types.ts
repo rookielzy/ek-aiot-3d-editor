@@ -2,7 +2,7 @@ import type { JsonValue } from "../snapshot/types";
 import type { MessageDescriptor } from "../i18n/messages";
 
 export type ProblemSeverity = "info" | "warning" | "error";
-export type ProblemSource = "validation" | "command" | "asset-resolver" | "runtime";
+export type ProblemSource = "validation" | "command" | "asset-resolver" | "runtime" | "data";
 export type ProblemRecoverability = "automatic" | "user-action" | "not-recoverable";
 
 export type ProblemTarget =
@@ -15,6 +15,9 @@ export type ProblemTarget =
   | { kind: "light"; lightId: string }
   | { kind: "imported-target"; objectId: string; nodeId: string; importKey: string }
   | { kind: "imported-material-slot"; objectId: string; nodeId: string; importKey: string; slotId: string }
+  | { kind: "data-query"; connectionId: string; queryId: string }
+  | { kind: "data-object"; nodeId: string; queryId: string }
+  | { kind: "data-field"; nodeId: string; queryId: string; propertyKey: string }
   | { kind: "command"; commandType: string };
 
 export interface ProblemDisplay {

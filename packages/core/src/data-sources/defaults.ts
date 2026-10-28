@@ -1,6 +1,25 @@
-import type { DataConnection, DataConnectionId, DataConnectionNameEntry, DataQuery, DataQueryId, SceneDataSources } from "./types";
+import type {
+  DataConnection,
+  DataConnectionId,
+  DataConnectionNameEntry,
+  DataQuery,
+  DataQueryId,
+  DataQueryUpdatePolicy,
+  SceneDataSources
+} from "./types";
 
 export const DEFAULT_DATA_CONNECTION_TIMEOUT_MS = 10_000;
+export const MIN_DATA_QUERY_REFRESH_INTERVAL_MS = 1_000;
+export const DEFAULT_DATA_QUERY_REFRESH_INTERVAL_MS = 5_000;
+export const DEFAULT_DATA_QUERY_MAX_AGE_MS = 15_000;
+export const MAX_DATA_QUERY_RETRY_BACKOFF_MS = 60_000;
+
+export function createDefaultDataQueryUpdatePolicy(): DataQueryUpdatePolicy {
+  return {
+    refreshIntervalMs: DEFAULT_DATA_QUERY_REFRESH_INTERVAL_MS,
+    maxAgeMs: DEFAULT_DATA_QUERY_MAX_AGE_MS
+  };
+}
 
 let nextConnectionId = 0;
 let nextQueryId = 0;

@@ -55,6 +55,7 @@
       {{ t("reactWorkbench.status.problemBreakdown", {
         authoredCount: status.authoredProblemCount,
         runtimeCount: status.runtimeProblemCount,
+        dataCount: status.dataProblemCount,
         projectCount: status.projectProblemCount
       }) }}
       </span>

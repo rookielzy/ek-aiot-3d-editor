@@ -23,7 +23,8 @@ export const DATA_QUERY_DEFINITION_PROBLEM_MESSAGE_KEYS = {
   "parameter-type": "dataSources.queryProblem.parameterType",
   "path-invalid": "dataSources.queryProblem.pathInvalid",
   "query-in-use": "dataSources.queryProblem.queryInUse",
-  "query-not-found": "dataSources.queryProblem.queryNotFound"
+  "query-not-found": "dataSources.queryProblem.queryNotFound",
+  "update-policy-invalid": "dataSources.queryProblem.updatePolicyInvalid"
 } satisfies Record<DataQueryDefinitionProblemCode, WorkbenchMessageKey>;
 
 export const DATA_MAPPING_PROBLEM_MESSAGE_KEYS = {

@@ -27,6 +27,17 @@ export function dataSourceHttpFixturePlugin(): Plugin {
 
         requestCount += 1;
         response.statusCode = 200;
+        if (url.pathname === "/__fixtures__/http-data-source/devices") {
+          response.end(JSON.stringify({
+            source: "same-origin-fixture",
+            requestCount,
+            items: [
+              { deviceCode: "pump-1", name: "Pump 1", reading: requestCount },
+              { deviceCode: "pump-2", name: "Pump 2", reading: requestCount }
+            ]
+          }));
+          return;
+        }
         response.end(JSON.stringify({
           source: "same-origin-fixture",
           requestCount,

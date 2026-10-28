@@ -1,16 +1,25 @@
 import { useEffect, useRef, useState } from "react";
-import type { MessageDescriptor } from "@ek-aiot/3d-editor-core";
+import type { MessageDescriptor, ProblemTarget } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
 import { renderProblemSource, renderSeverity } from "./inspector-i18n";
+
+export type DataProblemTarget = Extract<ProblemTarget, { kind: "data-query" | "data-object" | "data-field" }>;
 
 interface WorkbenchProblemsDrawerProps {
   context: ResolvedWorkbenchContext;
   id: string;
   open: boolean;
   onClose(): void;
+  onLocateDataTarget?(target: DataProblemTarget): void;
 }
 
-export function WorkbenchProblemsDrawer({ context, id, open, onClose }: WorkbenchProblemsDrawerProps) {
+export function WorkbenchProblemsDrawer({
+  context,
+  id,
+  open,
+  onClose,
+  onLocateDataTarget
+}: WorkbenchProblemsDrawerProps) {
   const closeRef = useRef<HTMLButtonElement>(null);
   useEffect(() => { if (open) closeRef.current?.focus(); }, [open]);
   const t = context.i18n.t;
@@ -67,6 +76,15 @@ export function WorkbenchProblemsDrawer({ context, id, open, onClose }: Workbenc
             <small>{renderSeverity(context.i18n, problem.severity)} · {renderProblemSource(context.i18n, problem.source)}</small>
             <span>{t("reactWorkbench.problems.target")} · {t(`reactWorkbench.problems.target.${problem.target.kind}`)} · {Object.entries(problem.target).filter(([key]) => key !== "kind").map(([, value]) => value).join(" · ")}</span>
             {problem.detail || problem.detailDescriptor ? <span>{problem.detailDescriptor ? t(problem.detailDescriptor) : problem.detail}</span> : null}
+            {isDataTarget(problem.target) && onLocateDataTarget ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onLocateDataTarget(problem.target as DataProblemTarget);
+                  onClose();
+                }}
+              >{t("reactWorkbench.problems.locate")}</button>
+            ) : null}
             {problem.assetId && problem.recoverability === "user-action" ? (
               <label className="ek-workbench__file-action">
                 <span>{problem.actionLabelDescriptor ? t(problem.actionLabelDescriptor) : problem.actionLabel ?? t("reactWorkbench.inspector.problems.replaceAsset.label")}</span>
@@ -83,4 +101,8 @@ export function WorkbenchProblemsDrawer({ context, id, open, onClose }: Workbenc
       <div role="status">{Object.entries(feedback).map(([assetId, message]) => <p key={assetId}>{assetId} · <span>{t(message)}</span></p>)}</div>
     </section>
   );
+}
+
+function isDataTarget(target: ProblemTarget): target is DataProblemTarget {
+  return target.kind === "data-query" || target.kind === "data-object" || target.kind === "data-field";
 }

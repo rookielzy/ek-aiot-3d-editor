@@ -118,6 +118,15 @@ export interface DataQueryMapping {
 }
 
 /**
+ * Durable GET polling policy. `refreshIntervalMs` is the delay after a
+ * completed request; `maxAgeMs` bounds both receive age and source sample age.
+ */
+export interface DataQueryUpdatePolicy {
+  refreshIntervalMs: number;
+  maxAgeMs: number;
+}
+
+/**
  * Reference portion of a durable query. Query authoring extends this record;
  * the snapshot contract keeps the connection link stable from v9 onward.
  */
@@ -128,6 +137,7 @@ export interface DataQuery {
   path: string;
   parameters: readonly DataQueryParameterDraft[];
   mapping: DataQueryMapping;
+  updatePolicy: DataQueryUpdatePolicy;
 }
 
 export type DataQueryDefinition = Omit<DataQuery, "id">;
@@ -136,7 +146,14 @@ export interface DataQueryInput extends DataQueryDefinition {
   id?: DataQueryId;
 }
 
-export type DataQueryField = "name" | "connection" | "path" | "parameters" | "mapping" | "query";
+export type DataQueryField =
+  | "name"
+  | "connection"
+  | "path"
+  | "parameters"
+  | "mapping"
+  | "updatePolicy"
+  | "query";
 
 export type DataQueryDefinitionProblemCode =
   | "binding-parameter-in-use"
@@ -153,7 +170,8 @@ export type DataQueryDefinitionProblemCode =
   | "parameter-type"
   | "path-invalid"
   | "query-in-use"
-  | "query-not-found";
+  | "query-not-found"
+  | "update-policy-invalid";
 
 export interface DataQueryDefinitionProblem {
   field: DataQueryField;

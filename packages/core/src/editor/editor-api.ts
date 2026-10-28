@@ -23,6 +23,7 @@ export interface EditorOptions {
   snapshot?: SerializedSceneSnapshot;
   credentials?: readonly DataCredentialDescriptor[];
   executor?: DataRequestExecutor | null;
+  authRevision?: number;
 }
 
 export interface MountRuntimeOptions extends Omit<EditorRuntimeOptions, "store" | "dispatcher"> {}

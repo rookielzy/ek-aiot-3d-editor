@@ -1,5 +1,7 @@
 import type { JsonValue } from "../snapshot/json";
 import type { SceneSnapshot } from "../snapshot/types";
+import { MAX_DATA_QUERY_RETRY_BACKOFF_MS } from "./defaults";
+import { mapDataQueryBody, type DataMappedEntity, type DataMappingProblem } from "./mapping";
 import {
   buildDataGetRequest,
   type DataQueryDraft,
@@ -7,14 +9,25 @@ import {
   type DataQueryProblem,
   type DataRequestSummary
 } from "./query";
-import { mapDataQueryBody } from "./mapping";
 import type {
+  DataAuthenticationPause,
+  DataObjectContextState,
   DataObjectDataState,
   DataObjectDataSubscriber,
+  DataObjectFreshness,
+  DataObjectHistorySnapshot,
   DataObjectRuntimeProblem,
-  DataObjectRuntimeState
+  DataObjectRuntimeState,
+  DataRequestPhase
 } from "./object-data";
-import type { DataCredentialDescriptor, DataObjectBinding, SceneDataSources } from "./types";
+import type {
+  DataConnection,
+  DataCredentialDescriptor,
+  DataObjectBinding,
+  DataParameterValue,
+  DataQuery,
+  SceneDataSources
+} from "./types";
 
 export interface DataRequestDescriptor {
   method: "GET";
@@ -93,6 +106,12 @@ export interface DataServiceState {
 
 export type DataServiceSubscriber = (state: DataServiceState) => void;
 
+export interface DataHostCapabilities {
+  executor?: DataRequestExecutor | null;
+  credentials?: readonly DataCredentialDescriptor[];
+  authRevision?: number;
+}
+
 export interface EditorDataService {
   getState(): DataServiceState;
   subscribe(subscriber: DataServiceSubscriber): () => void;
@@ -105,6 +124,8 @@ export interface EditorDataService {
   stopPreview(): void;
   refreshPreview(): Promise<void>;
   getCredentials(): readonly DataCredentialDescriptor[];
+  getAuthRevision(): number;
+  setHostCapabilities(capabilities: DataHostCapabilities): void;
   readonly disposed: boolean;
   dispose(): void;
 }
@@ -114,6 +135,7 @@ export interface CoreDataServiceOptions {
   subscribeSnapshot?(listener: () => void): () => void;
   executor?: DataRequestExecutor | null;
   credentials?: readonly DataCredentialDescriptor[];
+  authRevision?: number;
 }
 
 interface ActiveRun {
@@ -128,13 +150,6 @@ interface ActiveRun {
   resolve(result: DataQueryRunResult): void;
 }
 
-interface BindingRun {
-  objectNodeId: string;
-  controller: AbortController;
-  timer: ReturnType<typeof setTimeout> | null;
-  settled: boolean;
-}
-
 interface RunOutcome {
   status: Exclude<DataQueryRunStatus, "running" | "stale">;
   request?: DataRequestSummary | null;
@@ -142,13 +157,62 @@ interface RunOutcome {
   problems?: DataQueryProblem[];
 }
 
+interface PreviewBindingRef {
+  objectNodeId: string;
+  signature: string;
+  binding: DataObjectBinding;
+}
+
+interface PreviewMappedResult {
+  entities: readonly DataMappedEntity[];
+  problems: readonly DataMappingProblem[];
+  receivedAt: number;
+}
+
+interface PreviewContext {
+  key: string;
+  query: DataQuery;
+  connectionId: string;
+  queryName: string;
+  parameters: Record<string, DataParameterValue>;
+  authRevision: number;
+  request: DataRequestSummary;
+  bindings: Map<string, PreviewBindingRef>;
+  phase: DataRequestPhase;
+  paused: DataAuthenticationPause | null;
+  controller: AbortController | null;
+  timeoutTimer: ReturnType<typeof setTimeout> | null;
+  pollTimer: ReturnType<typeof setTimeout> | null;
+  expiryTimer: ReturnType<typeof setTimeout> | null;
+  runToken: number;
+  lastAttemptAt: number | null;
+  lastCompletedAt: number | null;
+  nextRefreshAt: number | null;
+  retryBackoffMs: number | null;
+  failureCount: number;
+  lastResult: PreviewMappedResult | null;
+}
+
+type PreviewOutcome =
+  | { kind: "success"; result: PreviewMappedResult }
+  | { kind: "retry"; problems: readonly DataObjectRuntimeProblem[]; receivedAt: number; retryAfterMs: number | null }
+  | { kind: "paused"; status: number; problems: readonly DataObjectRuntimeProblem[] }
+  | { kind: "fatal"; problems: readonly DataObjectRuntimeProblem[]; receivedAt: number | null };
+
+const MAX_PREVIEW_CONTEXTS = 4;
+
 export class CoreDataService implements EditorDataService {
   readonly #getSnapshot: CoreDataServiceOptions["getSnapshot"];
-  readonly #executor: DataRequestExecutor | null;
-  readonly #credentials: readonly DataCredentialDescriptor[];
   readonly #subscribers = new Set<DataServiceSubscriber>();
   readonly #objectSubscribers = new Set<DataObjectDataSubscriber>();
   readonly #unsubscribeSnapshot: (() => void) | null;
+  readonly #contexts = new Map<string, PreviewContext>();
+  readonly #contextQueue: string[] = [];
+  readonly #activeContexts = new Set<string>();
+  readonly #refreshWaiters: Array<() => void> = [];
+  #executor: DataRequestExecutor | null;
+  #credentials: readonly DataCredentialDescriptor[];
+  #hostRevision: number;
   #state: DataServiceState;
   #objectState: DataObjectDataState;
   #objectStates: Record<string, DataObjectRuntimeState> = {};
@@ -159,17 +223,15 @@ export class CoreDataService implements EditorDataService {
   #current: ActiveRun | null = null;
   #nextRunId = 0;
   #previewEnabled = false;
-  #previewRefreshing = false;
   #previewLastRefreshAt: number | null = null;
-  #previewGeneration = 0;
-  #previewRefresh: Promise<void> | null = null;
-  readonly #bindingRuns = new Map<string, BindingRun>();
+  #reconcilingPreview = false;
   #disposed = false;
 
   constructor(options: CoreDataServiceOptions) {
     this.#getSnapshot = options.getSnapshot;
     this.#executor = options.executor ?? null;
     this.#credentials = Object.freeze([...(options.credentials ?? [])]);
+    this.#hostRevision = options.authRevision ?? 0;
     this.#dataSources = this.#getSnapshot().dataSources;
     this.#dataSourcesKey = dataSourcesKey(this.#getSnapshot());
     this.#state = Object.freeze({
@@ -177,7 +239,7 @@ export class CoreDataService implements EditorDataService {
       configRevision: 0,
       run: null
     });
-    this.#objectState = freezeObjectDataState(false, false, null, {});
+    this.#objectState = freezeObjectDataState(false, false, null, {}, {});
     this.#unsubscribeSnapshot = options.subscribeSnapshot?.(() => this.#refreshConfigRevision()) ?? null;
   }
 
@@ -201,6 +263,54 @@ export class CoreDataService implements EditorDataService {
 
   getCredentials(): readonly DataCredentialDescriptor[] {
     return this.#credentials;
+  }
+
+  getAuthRevision(): number {
+    return this.#hostRevision;
+  }
+
+  setHostCapabilities(capabilities: DataHostCapabilities): void {
+    if (this.#disposed) {
+      return;
+    }
+    let changed = false;
+    if (Object.prototype.hasOwnProperty.call(capabilities, "executor")) {
+      const next = capabilities.executor ?? null;
+      if (next !== this.#executor) {
+        this.#executor = next;
+        changed = true;
+      }
+    }
+    if (capabilities.credentials !== undefined) {
+      const next = Object.freeze([...capabilities.credentials]);
+      if (!sameCredentials(next, this.#credentials)) {
+        this.#credentials = next;
+        changed = true;
+      }
+    }
+    const nextRevision = Math.max(
+      this.#hostRevision + (changed ? 1 : 0),
+      capabilities.authRevision ?? 0
+    );
+    if (!changed && nextRevision === this.#hostRevision) {
+      return;
+    }
+    this.#hostRevision = nextRevision;
+
+    this.#invalidateActive();
+    this.#cancelAllContexts();
+    this.#objectStates = {};
+    this.#previewLastRefreshAt = null;
+    if (this.#previewEnabled) {
+      void this.#reconcilePreview("host");
+    } else {
+      this.#publishObjectState();
+    }
+    this.#publish({
+      executorAvailable: this.#executor !== null,
+      configRevision: this.#configRevision,
+      run: null
+    });
   }
 
   executeQueryDraft(draft: DataQueryDraft, options: DataQueryDraftExecutionOptions = {}): DataQueryRunHandle {
@@ -299,11 +409,8 @@ export class CoreDataService implements EditorDataService {
     if (this.#disposed) {
       return Promise.resolve();
     }
-    if (!this.#previewEnabled) {
-      this.#previewEnabled = true;
-      this.#publishObjectState();
-    }
-    return this.refreshPreview();
+    this.#previewEnabled = true;
+    return this.#reconcilePreview("start");
   }
 
   stopPreview(): void {
@@ -311,12 +418,10 @@ export class CoreDataService implements EditorDataService {
       return;
     }
     this.#previewEnabled = false;
-    this.#previewRefreshing = false;
     this.#previewLastRefreshAt = null;
-    this.#previewRefresh = null;
-    this.#previewGeneration += 1;
-    this.#cancelBindingRuns();
+    this.#cancelAllContexts();
     this.#objectStates = {};
+    this.#resolveRefreshWaiters();
     this.#publishObjectState();
   }
 
@@ -324,11 +429,7 @@ export class CoreDataService implements EditorDataService {
     if (this.#disposed || !this.#previewEnabled) {
       return Promise.resolve();
     }
-    if (this.#previewRefresh) {
-      return this.#previewRefresh;
-    }
-    this.#previewRefresh = this.#runObjectRefresh();
-    return this.#previewRefresh;
+    return this.#reconcilePreview("refresh");
   }
 
   dispose(): void {
@@ -337,12 +438,11 @@ export class CoreDataService implements EditorDataService {
     }
     this.#disposed = true;
     this.#previewEnabled = false;
-    this.#previewRefreshing = false;
-    this.#previewRefresh = null;
-    this.#previewGeneration += 1;
-    this.#cancelBindingRuns();
+    this.#previewLastRefreshAt = null;
+    this.#cancelAllContexts();
     this.#objectStates = {};
-    this.#objectState = freezeObjectDataState(false, false, null, {});
+    this.#objectState = freezeObjectDataState(false, false, null, {}, {});
+    this.#resolveRefreshWaiters();
     this.#unsubscribeSnapshot?.();
     this.#invalidateActive();
     this.#subscribers.clear();
@@ -354,115 +454,235 @@ export class CoreDataService implements EditorDataService {
     });
   }
 
-  async #runObjectRefresh(): Promise<void> {
-    const generation = ++this.#previewGeneration;
+  #reconcilePreview(trigger: "start" | "refresh" | "config" | "host"): Promise<void> {
+    if (this.#disposed || !this.#previewEnabled) {
+      return Promise.resolve();
+    }
+    this.#reconcilingPreview = true;
     const snapshot = this.#getSnapshot();
-    const bindings = Object.values(snapshot.dataSources.bindings).filter((binding) => binding.enabled);
-    this.#cancelBindingRuns();
+    const now = Date.now();
+    const usedContexts = new Set<PreviewContext>();
+    const createdContexts: PreviewContext[] = [];
+    const seenObjects = new Set<string>();
+    const bindings = Object.values(snapshot.dataSources.bindings)
+      .filter((binding) => binding.enabled)
+      .sort((left, right) => left.objectNodeId.localeCompare(right.objectNodeId));
 
-    const states: Record<string, DataObjectRuntimeState> = {};
     for (const binding of bindings) {
+      seenObjects.add(binding.objectNodeId);
+      const previousState = this.#objectStates[binding.objectNodeId] ?? null;
       const query = snapshot.dataSources.queries[binding.queryId];
-      states[binding.objectNodeId] = createRuntimeState(binding, query ? "loading" : "error", {
-        problems: query
-          ? []
-          : [{
-              kind: "binding",
-              code: "query-missing",
-              message: `Query ${binding.queryId} does not exist.`
-            }]
-      });
-    }
-    this.#objectStates = states;
-    this.#previewRefreshing = true;
-    this.#publishObjectState();
-
-    await Promise.all(bindings.map((binding) => this.#refreshBinding(binding, generation)));
-
-    if (this.#disposed || generation !== this.#previewGeneration) {
-      return;
-    }
-    this.#previewRefreshing = false;
-    this.#previewLastRefreshAt = Date.now();
-    this.#previewRefresh = null;
-    this.#publishObjectState();
-  }
-
-  async #refreshBinding(binding: DataObjectBinding, generation: number): Promise<void> {
-    if (this.#disposed || generation !== this.#previewGeneration) {
-      return;
-    }
-    const snapshot = this.#getSnapshot();
-    const query = snapshot.dataSources.queries[binding.queryId];
-    if (!query) {
-      return;
-    }
-    const built = buildDataGetRequest(snapshot, {
-      connectionId: query.connectionId,
-      path: query.path,
-      parameters: query.parameters
-    }, { overrides: binding.parameterOverrides });
-    if (!built.ok) {
-      this.#completeBinding(generation, binding, {
-        status: "error",
-        problems: built.problems.map((problem) => ({
+      if (!query) {
+        this.#objectStates[binding.objectNodeId] = errorBindingState(binding, [{
+          kind: "binding",
+          code: "query-missing",
+          message: `Query ${binding.queryId} does not exist.`
+        }], queryMaxAge(query));
+        continue;
+      }
+      const built = buildDataGetRequest(snapshot, query, { overrides: binding.parameterOverrides });
+      if (!built.ok) {
+        this.#objectStates[binding.objectNodeId] = errorBindingState(binding, built.problems.map((problem) => ({
           kind: problem.field === "parameters" ? "parameters" : "request",
           code: problem.code,
           message: problem.message,
           ...(problem.parameterName ? { parameterName: problem.parameterName } : {}),
           ...(problem.status !== undefined ? { status: problem.status } : {})
-        }))
-      });
-      return;
-    }
-    if (!this.#executor) {
-      this.#completeBinding(generation, binding, {
-        status: "error",
-        problems: [{
+        })), queryMaxAge(query));
+        continue;
+      }
+      if (!this.#executor) {
+        this.#objectStates[binding.objectNodeId] = errorBindingState(binding, [{
           kind: "request",
           code: "executor-unavailable",
           message: "No host request executor is configured."
-        }]
-      });
-      return;
-    }
-    const credentialProblem = this.#credentialProblem(query.connectionId, built.summary.credentialRef);
-    if (credentialProblem) {
-      this.#completeBinding(generation, binding, {
-        status: "error",
-        problems: [{
+        }], queryMaxAge(query));
+        continue;
+      }
+      const credentialProblem = this.#credentialProblem(query.connectionId, built.summary.credentialRef);
+      if (credentialProblem) {
+        this.#objectStates[binding.objectNodeId] = errorBindingState(binding, [{
           kind: "request",
           code: credentialProblem.code,
           message: credentialProblem.message
-        }]
+        }], queryMaxAge(query));
+        continue;
+      }
+
+      const connection = snapshot.dataSources.connections[query.connectionId];
+      const key = previewContextKey(query, connection, built.summary, this.#hostRevision);
+      let context = this.#contexts.get(key);
+      if (!context) {
+        context = {
+          key,
+          query,
+          connectionId: query.connectionId,
+          queryName: query.name,
+          parameters: { ...built.summary.parameters },
+          authRevision: this.#hostRevision,
+          request: built.summary,
+          bindings: new Map(),
+          phase: "idle",
+          paused: null,
+          controller: null,
+          timeoutTimer: null,
+          pollTimer: null,
+          expiryTimer: null,
+          runToken: 0,
+          lastAttemptAt: null,
+          lastCompletedAt: null,
+          nextRefreshAt: null,
+          retryBackoffMs: null,
+          failureCount: 0,
+          lastResult: null
+        };
+        this.#contexts.set(key, context);
+        createdContexts.push(context);
+      } else {
+        context.query = query;
+        context.queryName = query.name;
+        context.request = built.summary;
+        context.parameters = { ...built.summary.parameters };
+      }
+      usedContexts.add(context);
+
+      const signature = JSON.stringify(binding);
+      const previousRef = context.bindings.get(binding.objectNodeId);
+      const signatureChanged = !previousRef || previousRef.signature !== signature;
+      context.bindings.set(binding.objectNodeId, {
+        objectNodeId: binding.objectNodeId,
+        signature,
+        binding
       });
-      return;
+
+      if (signatureChanged || !previousState || previousState.contextKey !== key) {
+        const history = signatureChanged ? null : previousState?.history ?? null;
+        if (context.lastResult) {
+          this.#applyMappedResult(context, binding, context.lastResult, { history });
+        } else {
+          this.#objectStates[binding.objectNodeId] = createRuntimeState(binding, "loading", {
+            contextKey: context.key,
+            phase: context.phase,
+            refreshing: context.phase === "requesting",
+            paused: context.paused,
+            nextRefreshAt: context.nextRefreshAt,
+            freshness: emptyFreshness(queryMaxAge(query)),
+            history
+          }, now);
+        }
+      } else {
+        this.#objectStates[binding.objectNodeId] = withContextState(previousState, context, now);
+      }
     }
 
+    for (const context of [...this.#contexts.values()]) {
+      if (!usedContexts.has(context)) {
+        this.#cancelContext(context);
+      }
+    }
+    for (const objectNodeId of Object.keys(this.#objectStates)) {
+      if (!seenObjects.has(objectNodeId)) {
+        delete this.#objectStates[objectNodeId];
+      }
+    }
+
+    if (trigger === "start" || trigger === "refresh") {
+      for (const context of this.#contexts.values()) {
+        if (createdContexts.includes(context)) {
+          continue;
+        }
+        if (context.phase === "requesting") {
+          continue;
+        }
+        this.#enqueueContext(context);
+      }
+    }
+    for (const context of createdContexts) {
+      this.#enqueueContext(context);
+    }
+
+    this.#publishObjectState();
+    this.#reconcilingPreview = false;
+    if (trigger === "start" || trigger === "refresh") {
+      return this.#waitForRunningContexts();
+    }
+    this.#flushRefreshWaitersIfIdle();
+    return Promise.resolve();
+  }
+
+  #enqueueContext(context: PreviewContext): void {
+    if (this.#disposed || !this.#previewEnabled) {
+      return;
+    }
+    if (this.#contexts.get(context.key) !== context) {
+      return;
+    }
+    if (context.phase === "queued" || context.phase === "requesting") {
+      return;
+    }
+    this.#clearContextSchedule(context);
+    context.paused = null;
+    context.nextRefreshAt = null;
+    context.phase = "queued";
+    if (!this.#contextQueue.includes(context.key)) {
+      this.#contextQueue.push(context.key);
+    }
+    this.#syncContextObjects(context);
+    this.#publishObjectState();
+    this.#pumpContextQueue();
+  }
+
+  #pumpContextQueue(): void {
+    while (!this.#disposed && this.#activeContexts.size < MAX_PREVIEW_CONTEXTS) {
+      const key = this.#contextQueue.shift();
+      if (key === undefined) {
+        break;
+      }
+      const context = this.#contexts.get(key);
+      if (!context || context.phase !== "queued") {
+        continue;
+      }
+      void this.#runContext(context);
+    }
+    this.#flushRefreshWaitersIfIdle();
+  }
+
+  async #runContext(context: PreviewContext): Promise<void> {
+    if (
+      this.#disposed ||
+      !this.#previewEnabled ||
+      this.#contexts.get(context.key) !== context ||
+      context.phase !== "queued"
+    ) {
+      return;
+    }
+    const token = ++context.runToken;
     const controller = new AbortController();
-    const run: BindingRun = {
-      objectNodeId: binding.objectNodeId,
-      controller,
-      timer: null,
-      settled: false
-    };
-    this.#bindingRuns.set(binding.objectNodeId, run);
-    run.timer = setTimeout(() => {
-      if (run.settled) {
+    context.controller = controller;
+    context.phase = "requesting";
+    context.paused = null;
+    context.nextRefreshAt = null;
+    context.lastAttemptAt = Date.now();
+    this.#activeContexts.add(context.key);
+    this.#syncContextObjects(context);
+    this.#publishObjectState();
+
+    context.timeoutTimer = setTimeout(() => {
+      if (context.runToken !== token || context.phase !== "requesting") {
         return;
       }
-      run.settled = true;
       controller.abort();
-      this.#finishBindingRun(run);
-      this.#completeBinding(generation, binding, {
-        status: "error",
+      this.#completeContext(context, token, {
+        kind: "retry",
+        receivedAt: Date.now(),
+        retryAfterMs: null,
         problems: [{
           kind: "request",
           code: "request-timeout",
-          message: `The request exceeded ${built.summary.timeoutMs} ms.`
+          message: `The request exceeded ${context.request.timeoutMs} ms.`
         }]
       });
-    }, built.summary.timeoutMs);
+    }, context.request.timeoutMs);
 
     let descriptor: DataResponseDescriptor | null;
     try {
@@ -474,24 +694,24 @@ export class CoreDataService implements EditorDataService {
         controller.signal.addEventListener("abort", () => resolve(null), { once: true });
       });
       descriptor = await Promise.race([
-        this.#executor({
+        this.#executor!({
           method: "GET",
-          url: built.summary.url,
-          headers: built.summary.headers,
-          credentialRef: built.summary.credentialRef,
-          timeoutMs: built.summary.timeoutMs,
+          url: context.request.url,
+          headers: context.request.headers,
+          credentialRef: context.request.credentialRef,
+          timeoutMs: context.request.timeoutMs,
           signal: controller.signal
         }),
         aborted
       ]);
     } catch (error) {
-      if (run.settled || this.#disposed || generation !== this.#previewGeneration) {
+      if (!this.#isCurrentRun(context, token)) {
         return;
       }
-      run.settled = true;
-      this.#finishBindingRun(run);
-      this.#completeBinding(generation, binding, {
-        status: "error",
+      this.#completeContext(context, token, {
+        kind: "retry",
+        receivedAt: Date.now(),
+        retryAfterMs: null,
         problems: [{
           kind: "request",
           code: "request-failed",
@@ -500,74 +720,76 @@ export class CoreDataService implements EditorDataService {
       });
       return;
     }
-    if (descriptor === null || run.settled || this.#disposed || generation !== this.#previewGeneration) {
+    if (descriptor === null || !this.#isCurrentRun(context, token)) {
       return;
     }
-    run.settled = true;
-    this.#finishBindingRun(run);
+    this.#completeContext(context, token, this.#interpretResponse(context, descriptor));
+  }
 
+  #interpretResponse(context: PreviewContext, descriptor: DataResponseDescriptor): PreviewOutcome {
     const receivedAt = Date.now();
     const response = normalizeResponse(descriptor, receivedAt);
     if (!response.ok) {
-      this.#completeBinding(generation, binding, {
-        status: "error",
+      return {
+        kind: "fatal",
         receivedAt,
+        problems: [{ kind: "request", code: "response-invalid", message: response.message }]
+      };
+    }
+    const value = response.value;
+    if (value.status === 401 || value.status === 403) {
+      return {
+        kind: "paused",
+        status: value.status,
         problems: [{
           kind: "request",
-          code: "response-invalid",
-          message: response.message
+          code: "response-auth",
+          status: value.status,
+          message: `The service returned HTTP ${value.status}. Fix credentials, then retry.`
         }]
-      });
-      return;
+      };
     }
-    if (!response.value.ok) {
-      this.#completeBinding(generation, binding, {
-        status: "error",
-        receivedAt,
-        problems: [{
-          kind: "request",
-          code: "response-http",
-          status: response.value.status,
-          message: `The service returned HTTP ${response.value.status}.`
-        }]
-      });
-      return;
+    if (!value.ok) {
+      const problem: DataObjectRuntimeProblem = {
+        kind: "request",
+        code: "response-http",
+        status: value.status,
+        message: `The service returned HTTP ${value.status}.`
+      };
+      if (isRetryableStatus(value.status)) {
+        return {
+          kind: "retry",
+          receivedAt,
+          retryAfterMs: parseRetryAfter(value.headers, receivedAt),
+          problems: [problem]
+        };
+      }
+      return { kind: "fatal", receivedAt, problems: [problem] };
     }
-    if (response.value.bodyKind === "text") {
-      this.#completeBinding(generation, binding, {
-        status: "error",
+    if (value.bodyKind === "text") {
+      return {
+        kind: "fatal",
         receivedAt,
-        problems: [{
-          kind: "request",
-          code: "response-json-invalid",
-          message: "The response body is not valid JSON."
-        }]
-      });
-      return;
+        problems: [{ kind: "request", code: "response-json-invalid", message: "The response body is not valid JSON." }]
+      };
     }
-    if (response.value.bodyKind === "empty" || response.value.json === undefined) {
-      this.#completeBinding(generation, binding, {
-        status: "error",
-        receivedAt,
-        problems: [{
-          kind: "mapping",
-          code: "response-empty",
-          message: "The response body is empty."
-        }]
-      });
-      return;
+    if (value.bodyKind === "empty" || value.json === undefined) {
+      return {
+        kind: "success",
+        result: { entities: [], problems: [], receivedAt }
+      };
     }
 
-    const mapped = mapDataQueryBody(query.mapping, response.value.json, {
-      connectionId: query.connectionId,
-      queryId: query.id,
-      executionId: `binding-${generation}-${binding.objectNodeId}`,
+    const mapped = mapDataQueryBody(context.query.mapping, value.json, {
+      connectionId: context.query.connectionId,
+      queryId: context.query.id,
+      executionId: `preview-${context.runToken}-${Date.now()}`,
       receivedAt,
-      parameters: built.summary.parameters
+      parameters: context.request.parameters
     });
     if (!mapped.ok) {
-      this.#completeBinding(generation, binding, {
-        status: "error",
+      return {
+        kind: "fatal",
         receivedAt,
         problems: mapped.errors.map((problem) => ({
           kind: "mapping",
@@ -575,121 +797,376 @@ export class CoreDataService implements EditorDataService {
           message: problem.message,
           ...(problem.propertyKey ? { propertyKey: problem.propertyKey } : {})
         }))
-      });
-      return;
+      };
     }
-
-    const mappingProblems = mapped.problems.map((problem) => ({
-      kind: "mapping" as const,
-      code: problem.code,
-      message: problem.message,
-      ...(problem.propertyKey ? { propertyKey: problem.propertyKey } : {})
-    }));
-    if (mapped.entities.length === 0 && mappingProblems.length > 0) {
-      this.#completeBinding(generation, binding, {
-        status: "error",
+    if (mapped.entities.length === 0 && mapped.problems.length > 0) {
+      return {
+        kind: "fatal",
         receivedAt,
-        problems: mappingProblems
-      });
+        problems: mapped.problems.map((problem) => ({
+          kind: "mapping",
+          code: problem.code,
+          message: problem.message,
+          ...(problem.propertyKey ? { propertyKey: problem.propertyKey } : {})
+        }))
+      };
+    }
+    return {
+      kind: "success",
+      result: {
+        entities: mapped.entities,
+        problems: mapped.problems,
+        receivedAt
+      }
+    };
+  }
+
+  #completeContext(context: PreviewContext, token: number, outcome: PreviewOutcome): void {
+    if (!this.#isCurrentRun(context, token)) {
+      return;
+    }
+    const now = Date.now();
+    if (context.timeoutTimer !== null) {
+      clearTimeout(context.timeoutTimer);
+      context.timeoutTimer = null;
+    }
+    context.controller = null;
+    context.runToken += 1;
+    this.#activeContexts.delete(context.key);
+    context.lastCompletedAt = now;
+    this.#previewLastRefreshAt = now;
+
+    if (outcome.kind === "success") {
+      context.lastResult = outcome.result;
+      context.failureCount = 0;
+      context.retryBackoffMs = null;
+      context.paused = null;
+      context.phase = "waiting";
+      for (const ref of context.bindings.values()) {
+        const previous = this.#objectStates[ref.objectNodeId] ?? null;
+        this.#applyMappedResult(context, ref.binding, outcome.result, {
+          history: historyFromState(previous)
+        });
+      }
+      this.#scheduleNextPoll(context, context.query.updatePolicy.refreshIntervalMs);
+    } else if (outcome.kind === "retry") {
+      context.lastResult = null;
+      context.failureCount += 1;
+      const backoff = Math.min(
+        MAX_DATA_QUERY_RETRY_BACKOFF_MS,
+        context.query.updatePolicy.refreshIntervalMs * 2 ** Math.min(context.failureCount - 1, 16)
+      );
+      const delay = Math.max(backoff, outcome.retryAfterMs ?? 0);
+      context.retryBackoffMs = delay;
+      context.paused = null;
+      context.phase = "waiting";
+      this.#failContextBindings(context, outcome.problems, outcome.receivedAt, "waiting", null);
+      this.#scheduleNextPoll(context, delay);
+    } else if (outcome.kind === "paused") {
+      context.lastResult = null;
+      context.failureCount = 0;
+      context.retryBackoffMs = null;
+      context.paused = { kind: "authentication", status: outcome.status };
+      context.phase = "paused";
+      this.#failContextBindings(context, outcome.problems, null, "paused", context.paused);
+    } else {
+      context.lastResult = null;
+      context.failureCount = 0;
+      context.retryBackoffMs = null;
+      context.paused = null;
+      context.phase = "waiting";
+      this.#failContextBindings(context, outcome.problems, outcome.receivedAt, "waiting", null);
+    }
+
+    this.#publishObjectState();
+    this.#pumpContextQueue();
+  }
+
+  #applyMappedResult(
+    context: PreviewContext,
+    binding: DataObjectBinding,
+    result: PreviewMappedResult,
+    options: { history: DataObjectHistorySnapshot | null }
+  ): void {
+    const now = Date.now();
+    const relevantProblems = result.problems
+      .filter((problem) => problem.entityId === undefined || problem.entityId === binding.deviceId)
+      .map((problem): DataObjectRuntimeProblem => ({
+        kind: "mapping",
+        code: problem.code,
+        message: problem.message,
+        ...(problem.propertyKey ? { propertyKey: problem.propertyKey } : {})
+      }));
+    if (result.entities.length === 0) {
+      this.#objectStates[binding.objectNodeId] = createRuntimeState(binding, "empty", {
+        contextKey: context.key,
+        phase: context.phase,
+        paused: context.paused,
+        nextRefreshAt: context.nextRefreshAt,
+        receivedAt: result.receivedAt,
+        history: options.history ?? this.#objectStates[binding.objectNodeId]?.history ?? null,
+        problems: relevantProblems
+      }, now, context.query.updatePolicy.maxAgeMs);
       return;
     }
 
-    const entity = mapped.entities.find((candidate) => candidate.entityId === binding.deviceId) ?? null;
+    const entity = result.entities.find((candidate) => candidate.entityId === binding.deviceId) ?? null;
     if (!entity) {
-      this.#completeBinding(generation, binding, {
-        status: "missing-device",
-        receivedAt,
+      this.#objectStates[binding.objectNodeId] = createRuntimeState(binding, "missing-device", {
+        contextKey: context.key,
+        phase: context.phase,
+        paused: context.paused,
+        nextRefreshAt: context.nextRefreshAt,
+        receivedAt: result.receivedAt,
+        history: options.history ?? this.#objectStates[binding.objectNodeId]?.history ?? null,
         problems: [{
           kind: "device",
           code: "device-missing",
           message: `Device ${binding.deviceId} is not present in the current result.`
-        }, ...mappingProblems]
-      });
+        }, ...relevantProblems]
+      }, now, context.query.updatePolicy.maxAgeMs);
       return;
     }
 
     const allDetailsValid = binding.details.every((detail) =>
       entity.fields.find((field) => field.key === detail.key)?.status === "ok"
     );
-    this.#completeBinding(generation, binding, {
-      status: allDetailsValid ? "ready" : "partial",
-      receivedAt,
-      entityId: entity.entityId,
-      displayName: entity.displayName,
-      fields: entity.fields,
-      observedAt: entity.observedAt,
-      sourceQuality: entity.sourceQuality,
-      observedAtProblem: entity.observedAtProblem,
-      qualityProblem: entity.qualityProblem
-    });
+    this.#objectStates[binding.objectNodeId] = createRuntimeState(
+      binding,
+      allDetailsValid ? "ready" : "partial",
+      {
+        contextKey: context.key,
+        phase: context.phase,
+        paused: context.paused,
+        nextRefreshAt: context.nextRefreshAt,
+        receivedAt: result.receivedAt,
+        history: mergeHistorySnapshot(entity, options.history),
+        entityId: entity.entityId,
+        displayName: entity.displayName,
+        fields: entity.fields,
+        observedAt: entity.observedAt,
+        sourceQuality: entity.sourceQuality,
+        observedAtProblem: entity.observedAtProblem,
+        qualityProblem: entity.qualityProblem,
+        problems: relevantProblems
+      },
+      now,
+      context.query.updatePolicy.maxAgeMs
+    );
   }
 
-  #completeBinding(
-    generation: number,
-    binding: DataObjectBinding,
-    patch: Partial<DataObjectRuntimeState> & { status: DataObjectRuntimeState["status"] }
+  #failContextBindings(
+    context: PreviewContext,
+    problems: readonly DataObjectRuntimeProblem[],
+    receivedAt: number | null,
+    phase: DataRequestPhase,
+    paused: DataAuthenticationPause | null
   ): void {
-    if (this.#disposed || generation !== this.#previewGeneration) {
-      return;
-    }
-    const current = this.#objectStates[binding.objectNodeId];
-    if (!current) {
-      return;
-    }
-    const problems = (patch.problems ?? current.problems) as readonly DataObjectRuntimeProblem[];
-    const next = createRuntimeState(binding, patch.status, {
-      ...current,
-      ...patch,
-      problems
-    });
-    this.#objectStates = {
-      ...this.#objectStates,
-      [binding.objectNodeId]: next
-    };
-    this.#publishObjectState();
-  }
-
-  #finishBindingRun(run: BindingRun): void {
-    if (run.timer !== null) {
-      clearTimeout(run.timer);
-      run.timer = null;
-    }
-    if (this.#bindingRuns.get(run.objectNodeId) === run) {
-      this.#bindingRuns.delete(run.objectNodeId);
+    const now = Date.now();
+    for (const ref of context.bindings.values()) {
+      const previous = this.#objectStates[ref.objectNodeId] ?? null;
+      this.#objectStates[ref.objectNodeId] = createRuntimeState(ref.binding, "error", {
+        contextKey: context.key,
+        phase,
+        paused,
+        nextRefreshAt: context.nextRefreshAt,
+        receivedAt,
+        history: historyFromState(previous),
+        problems
+      }, now, context.query.updatePolicy.maxAgeMs);
     }
   }
 
-  #cancelBindingRun(objectNodeId: string): void {
-    const run = this.#bindingRuns.get(objectNodeId);
-    if (!run) {
-      return;
-    }
-    run.settled = true;
-    if (run.timer !== null) {
-      clearTimeout(run.timer);
-    }
-    run.controller.abort();
-    this.#bindingRuns.delete(objectNodeId);
-  }
-
-  #cancelBindingRuns(): void {
-    for (const run of this.#bindingRuns.values()) {
-      run.settled = true;
-      if (run.timer !== null) {
-        clearTimeout(run.timer);
+  #scheduleNextPoll(context: PreviewContext, delay: number): void {
+    this.#clearPollTimer(context);
+    const now = Date.now();
+    context.nextRefreshAt = now + delay;
+    context.pollTimer = setTimeout(() => {
+      context.pollTimer = null;
+      if (this.#contexts.get(context.key) !== context || this.#disposed || !this.#previewEnabled) {
+        return;
       }
-      run.controller.abort();
+      if (context.phase !== "waiting") {
+        return;
+      }
+      this.#enqueueContext(context);
+    }, clampDelay(delay));
+  }
+
+  #syncContextObjects(context: PreviewContext): void {
+    const now = Date.now();
+    for (const ref of context.bindings.values()) {
+      const state = this.#objectStates[ref.objectNodeId];
+      if (!state) {
+        continue;
+      }
+      this.#objectStates[ref.objectNodeId] = withContextState(state, context, now);
     }
-    this.#bindingRuns.clear();
+    this.#scheduleContextExpiry(context);
+  }
+
+  #scheduleContextExpiry(context: PreviewContext): void {
+    if (context.expiryTimer !== null) {
+      clearTimeout(context.expiryTimer);
+      context.expiryTimer = null;
+    }
+    const now = Date.now();
+    let nextExpiry: number | null = null;
+    for (const objectNodeId of context.bindings.keys()) {
+      const state = this.#objectStates[objectNodeId];
+      const expiry = state?.freshness.expiresAt ?? null;
+      if (
+        expiry !== null &&
+        state?.freshness.fresh &&
+        expiry > now &&
+        (nextExpiry === null || expiry < nextExpiry)
+      ) {
+        nextExpiry = expiry;
+      }
+    }
+    if (nextExpiry === null || this.#disposed) {
+      return;
+    }
+    context.expiryTimer = setTimeout(() => {
+      context.expiryTimer = null;
+      if (this.#contexts.get(context.key) !== context || this.#disposed) {
+        return;
+      }
+      this.#syncContextObjects(context);
+      this.#publishObjectState();
+    }, clampDelay(nextExpiry - now));
+  }
+
+  #isCurrentRun(context: PreviewContext, token: number): boolean {
+    return !this.#disposed &&
+      this.#previewEnabled &&
+      this.#contexts.get(context.key) === context &&
+      context.runToken === token &&
+      context.phase === "requesting";
+  }
+
+  #cancelContext(context: PreviewContext): void {
+    this.#contexts.delete(context.key);
+    context.runToken += 1;
+    this.#clearContextSchedule(context);
+    if (context.controller) {
+      context.controller.abort();
+      context.controller = null;
+    }
+    this.#activeContexts.delete(context.key);
+    const index = this.#contextQueue.indexOf(context.key);
+    if (index >= 0) {
+      this.#contextQueue.splice(index, 1);
+    }
+    this.#pumpContextQueue();
+  }
+
+  #cancelAllContexts(): void {
+    this.#contextQueue.length = 0;
+    for (const context of [...this.#contexts.values()]) {
+      context.runToken += 1;
+      this.#clearContextSchedule(context);
+      if (context.controller) {
+        context.controller.abort();
+        context.controller = null;
+      }
+    }
+    this.#contexts.clear();
+    this.#activeContexts.clear();
+  }
+
+  #clearContextSchedule(context: PreviewContext): void {
+    if (context.timeoutTimer !== null) {
+      clearTimeout(context.timeoutTimer);
+      context.timeoutTimer = null;
+    }
+    this.#clearPollTimer(context);
+    if (context.expiryTimer !== null) {
+      clearTimeout(context.expiryTimer);
+      context.expiryTimer = null;
+    }
+  }
+
+  #clearPollTimer(context: PreviewContext): void {
+    if (context.pollTimer !== null) {
+      clearTimeout(context.pollTimer);
+      context.pollTimer = null;
+    }
+  }
+
+  #waitForRunningContexts(): Promise<void> {
+    if (!this.#hasQueuedOrRunningContexts()) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      this.#refreshWaiters.push(resolve);
+    });
+  }
+
+  #hasQueuedOrRunningContexts(): boolean {
+    if (this.#contextQueue.length > 0 || this.#activeContexts.size > 0) {
+      return true;
+    }
+    for (const context of this.#contexts.values()) {
+      if (context.phase === "queued" || context.phase === "requesting") {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  #flushRefreshWaitersIfIdle(): void {
+    if (this.#reconcilingPreview || this.#hasQueuedOrRunningContexts()) {
+      return;
+    }
+    this.#resolveRefreshWaiters();
+  }
+
+  #resolveRefreshWaiters(): void {
+    const waiters = this.#refreshWaiters.splice(0);
+    for (const resolve of waiters) {
+      resolve();
+    }
   }
 
   #publishObjectState(): void {
+    const now = Date.now();
+    const contexts: Record<string, DataObjectContextState> = {};
+    for (const context of this.#contexts.values()) {
+      contexts[context.key] = Object.freeze({
+        key: context.key,
+        queryId: context.query.id,
+        connectionId: context.connectionId,
+        queryName: context.queryName,
+        parameters: Object.freeze({ ...context.parameters }),
+        objectNodeIds: Object.freeze([...context.bindings.keys()]),
+        phase: context.phase,
+        paused: context.paused,
+        nextRefreshAt: context.nextRefreshAt,
+        retryBackoffMs: context.retryBackoffMs,
+        lastAttemptAt: context.lastAttemptAt,
+        lastCompletedAt: context.lastCompletedAt,
+        authRevision: context.authRevision
+      });
+    }
+    const refreshedObjects: Record<string, DataObjectRuntimeState> = {};
+    for (const [objectNodeId, state] of Object.entries(this.#objectStates)) {
+      const context = this.#contexts.get(state.contextKey);
+      refreshedObjects[objectNodeId] = context
+        ? withContextState(state, context, now)
+        : state;
+    }
+    this.#objectStates = refreshedObjects;
     this.#objectState = freezeObjectDataState(
       this.#previewEnabled,
-      this.#previewRefreshing,
+      this.#hasQueuedOrRunningContexts(),
       this.#previewLastRefreshAt,
+      contexts,
       this.#objectStates
     );
+    for (const context of this.#contexts.values()) {
+      this.#scheduleContextExpiry(context);
+    }
     for (const subscriber of [...this.#objectSubscribers]) {
       this.#notifyObjectSubscriber(subscriber);
     }
@@ -921,22 +1398,26 @@ export class CoreDataService implements EditorDataService {
       this.#invalidateActive();
     }
     if (this.#previewEnabled) {
-      const affected = collectAffectedObjectIds(previousDataSources, snapshot.dataSources);
-      if (affected.size > 0) {
-        for (const objectNodeId of affected) {
-          this.#cancelBindingRun(objectNodeId);
-        }
-        this.#objectStates = Object.fromEntries(
-          Object.entries(this.#objectStates).filter(([objectNodeId]) => !affected.has(objectNodeId))
-        );
-        this.#publishObjectState();
-      }
+      void this.#reconcilePreview("config");
+    } else {
+      const state = this.#objectStates;
+      this.#objectStates = Object.fromEntries(
+        Object.entries(state).filter(([, runtime]) => {
+          const binding = snapshot.dataSources.bindings[runtime.objectNodeId];
+          return Boolean(binding?.enabled) &&
+            binding?.queryId === runtime.queryId &&
+            binding?.deviceId === runtime.deviceId;
+        })
+      );
+      this.#publishObjectState();
     }
-    this.#publish({
-      executorAvailable: this.#executor !== null,
-      configRevision: this.#configRevision,
-      run: invalidated ? null : this.#state.run
-    });
+    if (previousDataSources !== snapshot.dataSources) {
+      this.#publish({
+        executorAvailable: this.#executor !== null,
+        configRevision: this.#configRevision,
+        run: invalidated ? null : this.#state.run
+      });
+    }
   }
 
   #publish(state: DataServiceState): void {
@@ -955,90 +1436,262 @@ export class CoreDataService implements EditorDataService {
   }
 }
 
+function previewContextKey(
+  query: DataQuery,
+  connection: DataConnection | undefined,
+  request: DataRequestSummary,
+  authRevision: number
+): string {
+  return stableJson({
+    queryId: query.id,
+    connectionId: query.connectionId,
+    query: {
+      path: query.path,
+      parameters: query.parameters,
+      mapping: query.mapping,
+      updatePolicy: query.updatePolicy
+    },
+    connection: connection
+      ? {
+          baseUrl: connection.baseUrl,
+          auth: connection.auth,
+          headers: connection.headers,
+          timeoutMs: connection.timeoutMs
+        }
+      : null,
+    parameters: request.parameters,
+    authRevision
+  });
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJson).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, entry]) => entry !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right));
+    return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+function sameCredentials(
+  left: readonly DataCredentialDescriptor[],
+  right: readonly DataCredentialDescriptor[]
+): boolean {
+  return left.length === right.length && left.every((credential, index) =>
+    credential.ref === right[index]?.ref &&
+    credential.label === right[index]?.label &&
+    credential.available === right[index]?.available
+  );
+}
+
 function dataSourcesKey(snapshot: Pick<SceneSnapshot, "dataSources">): string {
   return JSON.stringify(snapshot.dataSources);
 }
 
-function collectAffectedObjectIds(
-  previous: SceneDataSources,
-  next: SceneDataSources
-): Set<string> {
-  const affected = new Set<string>();
-  const changedQueries = changedIds(previous.queries, next.queries);
-  const changedConnections = changedIds(previous.connections, next.connections);
-  const objectNodeIds = new Set([
-    ...Object.keys(previous.bindings),
-    ...Object.keys(next.bindings)
-  ]);
-  for (const objectNodeId of objectNodeIds) {
-    const before = previous.bindings[objectNodeId];
-    const after = next.bindings[objectNodeId];
-    if (JSON.stringify(before) !== JSON.stringify(after)) {
-      affected.add(objectNodeId);
-      continue;
-    }
-    if (!after) {
-      continue;
-    }
-    const previousQuery = previous.queries[after.queryId];
-    const nextQuery = next.queries[after.queryId];
-    if (
-      changedQueries.has(after.queryId) ||
-      (previousQuery ? changedConnections.has(previousQuery.connectionId) : false) ||
-      (nextQuery ? changedConnections.has(nextQuery.connectionId) : false)
-    ) {
-      affected.add(objectNodeId);
-    }
-  }
-  return affected;
-}
-
-function changedIds(
-  previous: Readonly<Record<string, unknown>>,
-  next: Readonly<Record<string, unknown>>
-): Set<string> {
-  const changed = new Set<string>();
-  for (const id of new Set([...Object.keys(previous), ...Object.keys(next)])) {
-    if (JSON.stringify(previous[id]) !== JSON.stringify(next[id])) {
-      changed.add(id);
-    }
-  }
-  return changed;
+function withContextState(
+  state: DataObjectRuntimeState,
+  context: PreviewContext,
+  now: number
+): DataObjectRuntimeState {
+  return createRuntimeState(state, state.status, {
+    ...state,
+    contextKey: context.key,
+    phase: context.phase,
+    paused: context.paused,
+    nextRefreshAt: context.nextRefreshAt
+  }, now, context.query.updatePolicy.maxAgeMs);
 }
 
 function createRuntimeState(
-  binding: DataObjectBinding,
+  binding: Pick<DataObjectBinding, "objectNodeId" | "queryId" | "deviceId" | "enabled">,
   status: DataObjectRuntimeState["status"],
-  patch: Partial<DataObjectRuntimeState> = {}
+  patch: Partial<DataObjectRuntimeState> = {},
+  now = Date.now(),
+  maxAgeMs = patch.freshness?.maxAgeMs ?? 0
 ): DataObjectRuntimeState {
+  const receivedAt = patch.receivedAt ?? null;
+  const observedAt = patch.observedAt ?? null;
+  const observedAtProblem = patch.observedAtProblem ?? null;
+  const hasCurrentValues = status === "ready" || status === "partial";
+  const receivedAgeMs = receivedAt === null ? null : Math.max(0, now - receivedAt);
+  const observedAgeMs = observedAt === null ? null : Math.max(0, now - observedAt);
+  const expiryCandidates: number[] = [];
+  if (hasCurrentValues && receivedAt !== null && maxAgeMs > 0) {
+    expiryCandidates.push(receivedAt + maxAgeMs);
+  }
+  if (
+    hasCurrentValues &&
+    observedAt !== null &&
+    observedAtProblem === null &&
+    maxAgeMs > 0
+  ) {
+    expiryCandidates.push(observedAt + maxAgeMs);
+  }
+  const expiresAt = expiryCandidates.length > 0 ? Math.min(...expiryCandidates) : null;
+  const fresh = hasCurrentValues &&
+    receivedAt !== null &&
+    maxAgeMs > 0 &&
+    receivedAgeMs !== null &&
+    receivedAgeMs < maxAgeMs &&
+    (observedAt === null || observedAtProblem !== null || (observedAgeMs !== null && observedAgeMs < maxAgeMs));
+
   return Object.freeze({
     objectNodeId: binding.objectNodeId,
     queryId: binding.queryId,
     deviceId: binding.deviceId,
     enabled: binding.enabled,
     status,
+    contextKey: patch.contextKey ?? "",
+    phase: patch.phase ?? "idle",
+    refreshing: patch.refreshing ?? patch.phase === "requesting",
+    paused: patch.paused ?? null,
+    nextRefreshAt: patch.nextRefreshAt ?? null,
+    freshness: Object.freeze({
+      fresh,
+      maxAgeMs,
+      receivedAgeMs,
+      observedAgeMs,
+      expiresAt
+    }),
+    history: patch.history ?? null,
     entityId: patch.entityId ?? null,
     displayName: patch.displayName ?? null,
     fields: Object.freeze([...(patch.fields ?? [])]),
-    observedAt: patch.observedAt ?? null,
-    receivedAt: patch.receivedAt ?? null,
+    observedAt,
+    receivedAt,
     sourceQuality: patch.sourceQuality ?? null,
-    observedAtProblem: patch.observedAtProblem ?? null,
+    observedAtProblem,
     qualityProblem: patch.qualityProblem ?? null,
     problems: Object.freeze([...(patch.problems ?? [])])
   });
+}
+
+function errorBindingState(
+  binding: DataObjectBinding,
+  problems: readonly DataObjectRuntimeProblem[],
+  maxAgeMs: number
+): DataObjectRuntimeState {
+  return createRuntimeState(binding, "error", {
+    phase: "idle",
+    freshness: emptyFreshness(maxAgeMs),
+    problems
+  }, Date.now(), maxAgeMs);
+}
+
+function emptyFreshness(maxAgeMs: number): DataObjectFreshness {
+  return Object.freeze({
+    fresh: false,
+    maxAgeMs,
+    receivedAgeMs: null,
+    observedAgeMs: null,
+    expiresAt: null
+  });
+}
+
+function queryMaxAge(query: DataQuery | undefined): number {
+  return query?.updatePolicy.maxAgeMs ?? 0;
+}
+
+function historyFromState(state: DataObjectRuntimeState | null): DataObjectHistorySnapshot | null {
+  if (!state) {
+    return null;
+  }
+  if (state.fields.length === 0 || state.receivedAt === null) {
+    return state.history;
+  }
+  return Object.freeze({
+    entityId: state.entityId ?? state.deviceId,
+    displayName: state.displayName,
+    fields: mergeHistoryFields(state.fields, state.history?.fields ?? []),
+    observedAt: state.observedAt,
+    receivedAt: state.receivedAt,
+    sourceQuality: state.sourceQuality,
+    observedAtProblem: state.observedAtProblem,
+    qualityProblem: state.qualityProblem
+  });
+}
+
+function mergeHistorySnapshot(
+  entity: DataMappedEntity,
+  previous: DataObjectHistorySnapshot | null
+): DataObjectHistorySnapshot | null {
+  if (!previous) {
+    return null;
+  }
+  return Object.freeze({
+    entityId: entity.entityId,
+    displayName: entity.displayName,
+    fields: mergeHistoryFields(entity.fields, previous.fields),
+    observedAt: entity.observedAt,
+    receivedAt: entity.receivedAt,
+    sourceQuality: entity.sourceQuality,
+    observedAtProblem: entity.observedAtProblem,
+    qualityProblem: entity.qualityProblem
+  });
+}
+
+function mergeHistoryFields(
+  current: readonly DataMappedEntity["fields"][number][],
+  previous: readonly DataMappedEntity["fields"][number][]
+): readonly DataMappedEntity["fields"][number][] {
+  const previousByKey = new Map(previous.map((field) => [field.key, field]));
+  return Object.freeze(current.map((field) => {
+    if (field.status === "ok" && field.value !== null) {
+      return field;
+    }
+    return previousByKey.get(field.key) ?? field;
+  }));
 }
 
 function freezeObjectDataState(
   enabled: boolean,
   refreshing: boolean,
   lastRefreshAt: number | null,
+  contexts: Record<string, DataObjectContextState>,
   objects: Record<string, DataObjectRuntimeState>
 ): DataObjectDataState {
+  const frozenContexts = Object.freeze({ ...contexts });
+  const pausedCount = Object.values(frozenContexts).filter((context) => context.paused !== null).length;
   return Object.freeze({
-    preview: Object.freeze({ enabled, refreshing, lastRefreshAt }),
+    preview: Object.freeze({
+      enabled,
+      refreshing,
+      lastRefreshAt,
+      contextCount: Object.keys(frozenContexts).length,
+      pausedCount
+    }),
+    contexts: frozenContexts,
     objects: Object.freeze({ ...objects })
   });
+}
+
+function isRetryableStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+function parseRetryAfter(headers: Readonly<Record<string, string>>, now: number): number | null {
+  for (const [name, value] of Object.entries(headers)) {
+    if (name.toLowerCase() !== "retry-after") {
+      continue;
+    }
+    const trimmed = value.trim();
+    if (/^\d+$/.test(trimmed)) {
+      return Math.max(0, Number(trimmed) * 1000);
+    }
+    const date = Date.parse(trimmed);
+    if (Number.isFinite(date)) {
+      return Math.max(0, date - now);
+    }
+  }
+  return null;
+}
+
+function clampDelay(delay: number): number {
+  return Math.max(0, Math.min(delay, 2_147_483_647));
 }
 
 function disposedHandle(runId: string, connectionId: string, configRevision: number): DataQueryRunHandle {

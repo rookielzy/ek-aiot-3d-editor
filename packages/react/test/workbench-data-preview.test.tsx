@@ -54,16 +54,21 @@ describe("React object data preview", () => {
     expect(detailValue(card, "Sampled")).not.toBe("Unknown");
     expect(detailValue(card, "Source quality")).toBe("Good");
     expect(urls).toEqual([
-      "https://api.example.test/v1/pumps?areaId=A",
       "https://api.example.test/v1/pumps?areaId=A"
     ]);
+    const controls = screen.getByRole("group", { name: "Data preview" });
+    expect(within(controls).getByText("Enabled bindings: 2 · Shared requests: 1")).toBeTruthy();
+    expect(controls.textContent).toContain("Pump status");
+    expect(controls.textContent).toContain("areaId=A");
+    expect(controls.textContent).toContain("Objects: 2");
+    expect(card.textContent).toContain("Shared request · objects: 2 · areaId=A");
     expect(editor.getSnapshot()).toBe(snapshotBefore);
     expect(editor.getHistoryState()).toEqual(historyBefore);
 
     tempRaw = 262;
     fireEvent.click(screen.getByRole("button", { name: "Refresh data" }));
     await waitFor(() => expect(detailValue(card, "Temperature")).toBe("26.2"));
-    expect(urls).toHaveLength(4);
+    expect(urls).toHaveLength(2);
     expect(editor.getSnapshot()).toBe(snapshotBefore);
     expect(editor.getHistoryState()).toEqual(historyBefore);
 
@@ -88,6 +93,34 @@ describe("React object data preview", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start data preview" }));
     expect(await screen.findByRole("region", { name: "Device details" })).toBeTruthy();
     expect(editor.getHistoryState()).toEqual(historyAfterValvePick);
+
+    view.unmount();
+    editor.dispose();
+  });
+
+  it("reuses the shared context when the binding selects another device", async () => {
+    const executor = vi.fn<DataRequestExecutor>(async () => jsonResponse(deviceBody(251)));
+    const editor = createPreviewEditor(executor, [{
+      objectNodeId: "object-a",
+      deviceId: "pump-1"
+    }]);
+    const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    fireEvent.click(screen.getByTitle("Pump object"));
+    fireEvent.click(screen.getByRole("button", { name: "Start data preview" }));
+
+    const card = await screen.findByRole("region", { name: "Device details" });
+    await waitFor(() => expect(detailValue(card, "Temperature")).toBe("25.1"));
+    const callsAfterStart = executor.mock.calls.length;
+
+    fireEvent.change(screen.getByLabelText("Device ID"), { target: { value: "pump-2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save binding" }));
+    await screen.findByText("Binding updated. Undo to revert.");
+
+    await waitFor(() => expect(detailValue(card, "Temperature")).toBe("18.0"));
+    expect(card.textContent).toContain("pump-2");
+    expect(within(card).getByText("Current")).toBeTruthy();
+    expect(executor.mock.calls.length).toBe(callsAfterStart);
+    expect(editor.getHistoryState().undoCount).toBeGreaterThan(0);
 
     view.unmount();
     editor.dispose();
@@ -148,6 +181,17 @@ describe("React object data preview", () => {
     expect(previewStatus()).toBe("Partial");
     expect(editor.getHistoryState()).toEqual(historyBefore);
 
+    fireEvent.click(screen.getByTitle("Valve object"));
+    await waitFor(() => expect(editor.getSnapshot().selection.nodeId).toBe("object-b"));
+    fireEvent.click(screen.getByRole("button", { name: "Problem details" }));
+    const drawer = screen.getByRole("region", { name: "Problem details" });
+    const fieldProblem = [...drawer.querySelectorAll("li")]
+      .find((item) => item.textContent?.includes("Data field"));
+    expect(fieldProblem).toBeTruthy();
+    fireEvent.click(within(fieldProblem!).getByRole("button", { name: "Locate" }));
+    await waitFor(() => expect(editor.getSnapshot().selection.nodeId).toBe("object-a"));
+    await screen.findByRole("heading", { name: "Pump object" });
+
     view.unmount();
     editor.dispose();
   });
@@ -189,6 +233,127 @@ describe("React object data preview", () => {
     expect(detailValue(card, "Temperature")).toBe("—");
     expect(previewStatus()).toBe("Error");
 
+    fireEvent.click(screen.getByRole("button", { name: "Problem details" }));
+    const drawer = screen.getByRole("region", { name: "Problem details" });
+    expect(drawer.textContent).toContain("Data query");
+    fireEvent.click(within(drawer).getByRole("button", { name: "Locate" }));
+    const dialog = await screen.findByRole("dialog", { name: "Query configuration" });
+    expect(within(dialog).getByDisplayValue("Pump status")).toBeTruthy();
+
+    view.unmount();
+    editor.dispose();
+  });
+
+  it("pauses on authentication failures and only retries on demand", async () => {
+    let status = 403;
+    const executor = vi.fn<DataRequestExecutor>(async () => status === 403
+      ? { status: 403, body: "{}" }
+      : jsonResponse(deviceBody(251)));
+    const editor = createPreviewEditor(executor, [{
+      objectNodeId: "object-a",
+      deviceId: "pump-1"
+    }]);
+    const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    fireEvent.click(screen.getByTitle("Pump object"));
+    fireEvent.click(screen.getByRole("button", { name: "Start data preview" }));
+
+    const card = await screen.findByRole("region", { name: "Device details" });
+    await waitFor(() => expect(within(card).getByText("Authentication paused")).toBeTruthy());
+    expect(card.textContent).toContain("The service returned HTTP 403. Fix credentials, then retry.");
+    expect(detailValue(card, "Temperature")).toBe("—");
+    expect(previewStatus()).toBe("Authentication paused");
+    expect(executor).toHaveBeenCalledTimes(1);
+
+    status = 200;
+    fireEvent.click(within(card).getByRole("button", { name: "Retry now" }));
+    await waitFor(() => expect(detailValue(card, "Temperature")).toBe("25.1"));
+    expect(within(card).getByText("Current")).toBeTruthy();
+    expect(executor).toHaveBeenCalledTimes(2);
+
+    view.unmount();
+    editor.dispose();
+  });
+
+  it("shows expired values separately and marks the stale problem", async () => {
+    const staleSample = new Date(Date.now() - 5 * 60_000).toISOString();
+    const executor = vi.fn<DataRequestExecutor>(async () => jsonResponse(deviceBody(251, staleSample)));
+    const editor = createPreviewEditor(executor, [{
+      objectNodeId: "object-a",
+      deviceId: "pump-1"
+    }]);
+    const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    fireEvent.click(screen.getByTitle("Pump object"));
+    fireEvent.click(screen.getByRole("button", { name: "Start data preview" }));
+
+    const card = await screen.findByRole("region", { name: "Device details" });
+    await waitFor(() => expect(card.getAttribute("data-freshness")).toBe("expired"));
+    expect(within(card).getByText("Expired")).toBeTruthy();
+    expect(card.textContent).toContain("The last value was not refreshed within 120 s.");
+    expect(detailValue(card, "Temperature")).toBe("25.1");
+    expect(previewStatus()).toBe("Expired");
+
+    fireEvent.click(screen.getByRole("button", { name: "Problem details" }));
+    const drawer = screen.getByRole("region", { name: "Problem details" });
+    expect(drawer.textContent).toContain("Target · Data object");
+    expect(drawer.textContent).toContain("The last value was not refreshed within 120 s.");
+
+    view.unmount();
+    editor.dispose();
+  });
+
+  it("clears a field that disappears and keeps its last valid value marked as history", async () => {
+    let omitTemperature = false;
+    const executor = vi.fn<DataRequestExecutor>(async () => {
+      const body = deviceBody(251);
+      if (omitTemperature) {
+        delete (body.items[0] as Record<string, unknown>).tempRaw;
+      }
+      return jsonResponse(body);
+    });
+    const editor = createPreviewEditor(executor, [{
+      objectNodeId: "object-a",
+      deviceId: "pump-1"
+    }]);
+    const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    fireEvent.click(screen.getByTitle("Pump object"));
+    fireEvent.click(screen.getByRole("button", { name: "Start data preview" }));
+
+    const card = await screen.findByRole("region", { name: "Device details" });
+    await waitFor(() => expect(detailValue(card, "Temperature")).toBe("25.1"));
+
+    omitTemperature = true;
+    fireEvent.click(screen.getByRole("button", { name: "Refresh data" }));
+    await waitFor(() => expect(detailValue(card, "Temperature")).toBe("—"));
+    expect(card.textContent).toContain("Last value 25.1");
+    expect(within(card).getByText("Property temperature source field is missing.")).toBeTruthy();
+    expect(previewStatus()).toBe("Partial");
+
+    view.unmount();
+    editor.dispose();
+  });
+
+  it("removes current values for an empty result while keeping history", async () => {
+    let empty = false;
+    const executor = vi.fn<DataRequestExecutor>(async () =>
+      jsonResponse(empty ? { items: [] } : deviceBody(251)));
+    const editor = createPreviewEditor(executor, [{
+      objectNodeId: "object-a",
+      deviceId: "pump-1"
+    }]);
+    const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    fireEvent.click(screen.getByTitle("Pump object"));
+    fireEvent.click(screen.getByRole("button", { name: "Start data preview" }));
+
+    const card = await screen.findByRole("region", { name: "Device details" });
+    await waitFor(() => expect(detailValue(card, "Temperature")).toBe("25.1"));
+
+    empty = true;
+    fireEvent.click(screen.getByRole("button", { name: "Refresh data" }));
+    await waitFor(() => expect(within(card).getByText("No data in current result")).toBeTruthy());
+    expect(detailValue(card, "Temperature")).toBe("—");
+    expect(card.textContent).toContain("Last value 25.1");
+    expect(previewStatus()).toBe("No data");
+
     view.unmount();
     editor.dispose();
   });
@@ -204,7 +369,7 @@ describe("React object data preview", () => {
     fireEvent.click(screen.getByTitle("Pump object"));
 
     const controls = screen.getByRole("group", { name: "Data preview" });
-    expect(within(controls).getByText("0 enabled bindings")).toBeTruthy();
+    expect(within(controls).getByText("Enabled bindings: 0 · Shared requests: 0")).toBeTruthy();
     expect((within(controls).getByRole("button", { name: "Start data preview" }) as HTMLButtonElement).disabled)
       .toBe(true);
     expect(screen.queryByRole("region", { name: "Device details" })).toBeNull();
@@ -231,7 +396,7 @@ describe("React object data preview", () => {
     await screen.findByText("Binding updated. Undo to revert.");
     await waitFor(() => expect(screen.queryByRole("region", { name: "Device details" })).toBeNull());
     const controls = screen.getByRole("group", { name: "Data preview" });
-    expect(within(controls).getByText("0 enabled bindings")).toBeTruthy();
+    expect(within(controls).getByText("Enabled bindings: 0 · Shared requests: 0")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Remove binding" }));
     await screen.findByText("Binding removed. Undo to restore.");
@@ -239,41 +404,6 @@ describe("React object data preview", () => {
     fireEvent.click(screen.getByRole("button", { name: "Stop data preview" }));
     await waitFor(() => expect(screen.queryByRole("group", { name: "Data preview" })).toBeNull());
     expect(editor.getDataService().getObjectDataState().preview.enabled).toBe(false);
-
-    view.unmount();
-    editor.dispose();
-  });
-
-  it("clears runtime data when the binding changes and waits for the next explicit refresh", async () => {
-    const executor = vi.fn<DataRequestExecutor>(async () => jsonResponse(deviceBody(251)));
-    const editor = createPreviewEditor(executor, [{
-      objectNodeId: "object-a",
-      deviceId: "pump-1"
-    }]);
-    const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
-    fireEvent.click(screen.getByTitle("Pump object"));
-    fireEvent.click(screen.getByRole("button", { name: "Start data preview" }));
-
-    const card = await screen.findByRole("region", { name: "Device details" });
-    await waitFor(() => expect(detailValue(card, "Temperature")).toBe("25.1"));
-
-    fireEvent.change(screen.getByLabelText("Device ID"), { target: { value: "pump-2" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save binding" }));
-    await screen.findByText("Binding updated. Undo to revert.");
-
-    expect(within(card).queryByText("25.1")).toBeNull();
-    expect(within(card).getByText("Refresh")).toBeTruthy();
-    expect(within(card).getByText("Refresh to load device data.")).toBeTruthy();
-    expect(card.textContent).toContain("pump-2");
-    expect(previewStatus()).toBe("Refresh to load device data.");
-    const callsAfterSave = executor.mock.calls.length;
-    const historyAfterSave = editor.getHistoryState();
-
-    fireEvent.click(screen.getByRole("button", { name: "Refresh data" }));
-    await waitFor(() => expect(detailValue(card, "Temperature")).toBe("18.0"));
-    expect(within(card).getByText("Current")).toBeTruthy();
-    expect(executor.mock.calls.length).toBe(callsAfterSave + 1);
-    expect(editor.getHistoryState()).toEqual(historyAfterSave);
 
     view.unmount();
     editor.dispose();
@@ -354,7 +484,8 @@ function createPreviewEditor(
         path: [{ kind: "key", key: "quality" }],
         entries: [{ from: "ok", quality: "good" }, { from: "warn", quality: "uncertain" }]
       }
-    }
+    },
+    updatePolicy: { refreshIntervalMs: 60_000, maxAgeMs: 120_000 }
   });
   if (!query.ok) throw new Error(query.problems.map((problem) => problem.message).join("\n"));
   const saved = editor.dispatch(query.command);
@@ -385,7 +516,7 @@ function createPreviewEditor(
   return editor;
 }
 
-function deviceBody(tempRaw: number) {
+function deviceBody(tempRaw: number, sampledAt = new Date(Date.now() - 1_000).toISOString()) {
   return {
     items: [
       {
@@ -394,7 +525,7 @@ function deviceBody(tempRaw: number) {
         tempRaw,
         run: 1,
         flowRaw: 12,
-        sampledAt: "2026-10-27T02:00:00.000Z",
+        sampledAt,
         quality: "ok"
       },
       {
@@ -403,7 +534,7 @@ function deviceBody(tempRaw: number) {
         tempRaw: 180,
         run: 0,
         flowRaw: 8,
-        sampledAt: "2026-10-27T01:00:00.000Z",
+        sampledAt,
         quality: "warn"
       }
     ]

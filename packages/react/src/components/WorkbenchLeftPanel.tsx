@@ -24,6 +24,8 @@ import { problemToneFromCounts } from "./workbench-model-helpers";
 export interface WorkbenchLeftPanelProps {
   context: ResolvedWorkbenchContext;
   activeView: WorkbenchPanelView;
+  dataLocate?: { connectionId: string; queryId: string } | null;
+  onDataLocateHandled?(): void;
 }
 
 type LocalizedStatusMessage =
@@ -57,7 +59,12 @@ interface AssetQueueItem {
   diagnostics: WorkbenchAssetImportDiagnostic[];
 }
 
-export function WorkbenchLeftPanel({ context, activeView }: WorkbenchLeftPanelProps) {
+export function WorkbenchLeftPanel({
+  context,
+  activeView,
+  dataLocate,
+  onDataLocateHandled
+}: WorkbenchLeftPanelProps) {
   const [recoveryState, setRecoveryState] = useState<AssetRecoveryState>({});
   const [recoverySuccessState, setRecoverySuccessState] = useState<AssetRecoveryState>({});
   const maintenanceTokens = useRef<Record<string, symbol>>({});
@@ -415,7 +422,7 @@ export function WorkbenchLeftPanel({ context, activeView }: WorkbenchLeftPanelPr
         aria-label={t("dataSources.panel.label")}
         hidden={activeView !== "data"}
       >
-        <DataSourcesPanel context={context} />
+        <DataSourcesPanel context={context} locate={dataLocate} onLocateHandled={onDataLocateHandled} />
       </section>
 
       <section

@@ -3,6 +3,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import {
+  buildSaveDataObjectBindingCommand,
+  buildSaveDataQueryCommand,
   createEditor,
   type DataRequestExecutor,
   type RendererLike
@@ -80,6 +82,101 @@ describe("same-origin HTTP data source smoke", () => {
     expect(result.textContent).toContain("Config revision");
     expect(editor.getSnapshot().dataSources.queries).toEqual({});
     expect(JSON.stringify(editor.serialize())).not.toContain("same-origin-fixture");
+  });
+
+  it("serves two objects from one same-origin preview request", async () => {
+    const urls: string[] = [];
+    const executor: DataRequestExecutor = async (request) => {
+      urls.push(request.url);
+      const response = await fetch(request.url, {
+        method: request.method,
+        headers: request.headers,
+        signal: request.signal
+      });
+      return {
+        status: response.status,
+        contentType: response.headers.get("content-type"),
+        body: await response.text()
+      };
+    };
+    editor = createEditor({ executor });
+    const connection = editor.dispatch({
+      type: "create-data-connection",
+      connection: {
+        id: "connection-browser",
+        name: "Browser fixture",
+        baseUrl: `${window.location.origin}/__fixtures__/http-data-source`,
+        auth: { kind: "none" },
+        headers: {},
+        timeoutMs: 10_000
+      }
+    });
+    expect(connection.ok).toBe(true);
+    const query = buildSaveDataQueryCommand(editor.getSnapshot(), {
+      connectionId: "connection-browser",
+      name: "Fixture devices",
+      path: "/devices",
+      parameters: [],
+      mapping: {
+        mode: "array",
+        root: [{ kind: "key", key: "items" }],
+        identity: { kind: "path", path: [{ kind: "key", key: "deviceCode" }], valueType: "string" },
+        displayName: [{ kind: "key", key: "name" }],
+        properties: [{
+          key: "reading",
+          label: "Reading",
+          type: "number",
+          nullable: false,
+          unit: null,
+          source: [{ kind: "key", key: "reading" }],
+          transform: { kind: "number" },
+          range: null,
+          allowed: null
+        }]
+      },
+      updatePolicy: { refreshIntervalMs: 60_000, maxAgeMs: 120_000 }
+    });
+    if (!query.ok) throw new Error(query.problems.map((problem) => problem.message).join("\n"));
+    const saved = editor.dispatch(query.command);
+    expect(saved.ok).toBe(true);
+    const queryId = Object.keys(editor.getSnapshot().dataSources.queries)[0];
+    for (const [objectId, name] of [["object-a", "Pump object"], ["object-b", "Pump object 2"]] as const) {
+      const imported = editor.dispatch({
+        type: "import-glb",
+        objectId,
+        name,
+        asset: { id: `asset-${objectId}` }
+      });
+      expect(imported.ok).toBe(true);
+      const binding = buildSaveDataObjectBindingCommand(editor.getSnapshot(), {
+        objectNodeId: objectId,
+        queryId,
+        parameterOverrides: {},
+        deviceId: objectId === "object-a" ? "pump-1" : "pump-2",
+        enabled: true,
+        details: [{ key: "reading" }]
+      });
+      if (!binding.ok) throw new Error(binding.problems.map((problem) => problem.message).join("\n"));
+      expect(editor.dispatch(binding.command).ok).toBe(true);
+    }
+
+    await editor.getDataService().startPreview();
+
+    expect(urls).toEqual([`${window.location.origin}/__fixtures__/http-data-source/devices`]);
+    const state = editor.getDataService().getObjectDataState();
+    expect(state.preview.contextCount).toBe(1);
+    expect(state.objects["object-a"]?.status).toBe("ready");
+    expect(state.objects["object-b"]?.status).toBe("ready");
+    const firstReading = state.objects["object-a"]?.fields.find((field) => field.key === "reading");
+    const secondReading = state.objects["object-b"]?.fields.find((field) => field.key === "reading");
+    expect(firstReading?.status).toBe("ok");
+    expect(firstReading?.value).toBe(secondReading?.value);
+    expect(typeof firstReading?.value).toBe("number");
+    expect(JSON.stringify(editor.serialize())).not.toContain("same-origin-fixture");
+
+    editor.getDataService().stopPreview();
+    expect(editor.getDataService().getObjectDataState().objects).toEqual({});
+    expect(urls).toHaveLength(1);
   });
 });
 

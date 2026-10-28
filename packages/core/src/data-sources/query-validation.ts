@@ -1,5 +1,9 @@
 import { isPlainRecord } from "../snapshot/json";
 import type { SceneSnapshot } from "../snapshot/types";
+import {
+  createDefaultDataQueryUpdatePolicy,
+  MIN_DATA_QUERY_REFRESH_INTERVAL_MS
+} from "./defaults";
 import { validateDataQueryMapping } from "./mapping";
 import {
   buildDataGetRequest,
@@ -17,6 +21,7 @@ import type {
   DataQueryDefinitionProblem,
   DataQueryMapping,
   DataQueryParameterDraft,
+  DataQueryUpdatePolicy,
   DataQueryValidationResult
 } from "./types";
 
@@ -107,10 +112,13 @@ export function validateDataQueryDefinition(
     problems.push(problem);
   }
 
+  const updatePolicy = validateUpdatePolicy(input.updatePolicy, problems);
+
   if (
     problems.length === 0 &&
     parameters &&
     mapping.value &&
+    updatePolicy &&
     options.existingQuery &&
     options.referencingBindings &&
     options.referencingBindings.length > 0
@@ -118,7 +126,7 @@ export function validateDataQueryDefinition(
     validateBindingReferences(options.existingQuery, parameters, mapping.value, options.referencingBindings, problems);
   }
 
-  if (problems.length > 0 || !mapping.value || !parameters) {
+  if (problems.length > 0 || !mapping.value || !parameters || !updatePolicy) {
     return { ok: false, problems };
   }
 
@@ -130,9 +138,68 @@ export function validateDataQueryDefinition(
       name,
       path,
       parameters,
-      mapping: mapping.value
+      mapping: mapping.value,
+      updatePolicy
     }
   };
+}
+
+function validateUpdatePolicy(
+  input: unknown,
+  problems: DataQueryDefinitionProblem[]
+): DataQueryUpdatePolicy | null {
+  if (input === undefined) {
+    return createDefaultDataQueryUpdatePolicy();
+  }
+  if (!isPlainRecord(input)) {
+    problems.push({
+      field: "updatePolicy",
+      code: "update-policy-invalid",
+      message: "Query update policy must be a plain object."
+    });
+    return null;
+  }
+
+  const refreshIntervalMs = input.refreshIntervalMs;
+  const maxAgeMs = input.maxAgeMs;
+  if (
+    typeof refreshIntervalMs !== "number" ||
+    !Number.isSafeInteger(refreshIntervalMs) ||
+    refreshIntervalMs < MIN_DATA_QUERY_REFRESH_INTERVAL_MS
+  ) {
+    problems.push({
+      field: "updatePolicy",
+      code: "update-policy-invalid",
+      message: `Refresh interval must be a whole number of milliseconds of at least ${MIN_DATA_QUERY_REFRESH_INTERVAL_MS}.`
+    });
+  }
+  if (typeof maxAgeMs !== "number" || !Number.isSafeInteger(maxAgeMs) || maxAgeMs <= 0) {
+    problems.push({
+      field: "updatePolicy",
+      code: "update-policy-invalid",
+      message: "Maximum age must be a positive whole number of milliseconds."
+    });
+  }
+  if (
+    typeof refreshIntervalMs === "number" &&
+    Number.isSafeInteger(refreshIntervalMs) &&
+    refreshIntervalMs >= MIN_DATA_QUERY_REFRESH_INTERVAL_MS &&
+    typeof maxAgeMs === "number" &&
+    Number.isSafeInteger(maxAgeMs) &&
+    maxAgeMs > 0 &&
+    maxAgeMs < refreshIntervalMs
+  ) {
+    problems.push({
+      field: "updatePolicy",
+      code: "update-policy-invalid",
+      message: "Maximum age cannot be shorter than the refresh interval while polling."
+    });
+  }
+
+  if (problems.some((problem) => problem.field === "updatePolicy")) {
+    return null;
+  }
+  return { refreshIntervalMs: refreshIntervalMs as number, maxAgeMs: maxAgeMs as number };
 }
 
 function validateParameters(

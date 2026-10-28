@@ -1,4 +1,6 @@
 import {
+  DEFAULT_DATA_QUERY_MAX_AGE_MS,
+  DEFAULT_DATA_QUERY_REFRESH_INTERVAL_MS,
   formatDataPath,
   parseDataPath,
   resolveDataQueryParameters,
@@ -53,6 +55,8 @@ export interface QueryQualityEntryForm {
 export interface QueryFormState {
   name: string;
   path: string;
+  refreshIntervalSeconds: string;
+  maxAgeSeconds: string;
   parameters: QueryParameterForm[];
   mode: DataMappingMode;
   rootPath: string;
@@ -117,6 +121,8 @@ export function createQueryFormState(): QueryFormState {
   const form: QueryFormState = {
     name: "",
     path: "",
+    refreshIntervalSeconds: formatSeconds(DEFAULT_DATA_QUERY_REFRESH_INTERVAL_MS),
+    maxAgeSeconds: formatSeconds(DEFAULT_DATA_QUERY_MAX_AGE_MS),
     parameters: [],
     mode: "array",
     rootPath: "",
@@ -162,6 +168,8 @@ export function queryFormFromQuery(query: DataQuery): QueryFormState {
   const form: QueryFormState = {
     name: query.name,
     path: query.path,
+    refreshIntervalSeconds: formatSeconds(query.updatePolicy.refreshIntervalMs),
+    maxAgeSeconds: formatSeconds(query.updatePolicy.maxAgeMs),
     parameters: query.parameters.map((parameter) => ({
       ...createQueryParameterForm(),
       name: parameter.name,
@@ -271,7 +279,15 @@ export function buildQueryDefinitionFromForm(
     name: form.name,
     path: form.path,
     parameters: toQueryParameterDrafts(form.parameters),
-    mapping
+    mapping,
+    updatePolicy: buildUpdatePolicy(form)
+  };
+}
+
+function buildUpdatePolicy(form: QueryFormState): DataQueryDefinition["updatePolicy"] {
+  return {
+    refreshIntervalMs: secondsToMilliseconds(form.refreshIntervalSeconds),
+    maxAgeMs: secondsToMilliseconds(form.maxAgeSeconds)
   };
 }
 
@@ -279,6 +295,8 @@ export function serializeQueryForm(form: QueryFormState): string {
   return JSON.stringify({
     name: form.name,
     path: form.path,
+    refreshIntervalSeconds: form.refreshIntervalSeconds,
+    maxAgeSeconds: form.maxAgeSeconds,
     parameters: form.parameters.map((parameter) => ({
       name: parameter.name,
       type: parameter.type,
@@ -493,4 +511,16 @@ function isPathPrimitiveValue(value: unknown): value is DataPathPrimitive {
     typeof value === "string" ||
     typeof value === "boolean" ||
     (typeof value === "number" && Number.isFinite(value));
+}
+
+function formatSeconds(milliseconds: number): string {
+  return String(milliseconds / 1000);
+}
+
+function secondsToMilliseconds(text: string): number {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return Number.NaN;
+  }
+  return Number(trimmed) * 1000;
 }

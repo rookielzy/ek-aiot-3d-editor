@@ -159,18 +159,24 @@ export type {
   ValidateDataQueryDefinitionOptions
 } from "./data-sources/query-validation";
 export type {
+  DataAuthenticationPause,
+  DataObjectContextState,
   DataObjectDataState,
   DataObjectDataSubscriber,
   DataObjectDetailFieldModel,
   DataObjectDetailModel,
+  DataObjectFreshness,
+  DataObjectHistorySnapshot,
   DataObjectRuntimeProblem,
   DataObjectRuntimeState,
   DataObjectRuntimeStatus,
-  DataPreviewState
+  DataPreviewState,
+  DataRequestPhase
 } from "./data-sources/object-data";
 export {
   buildDataObjectDetailModel
 } from "./data-sources/object-data";
+export { buildDataRuntimeProblems } from "./data-sources/runtime-problems";
 export type {
   DataQueryDraftExecutionOptions,
   DataQueryResponse,
@@ -178,6 +184,7 @@ export type {
   DataQueryRunResult,
   DataQueryRunState,
   DataQueryRunStatus,
+  DataHostCapabilities,
   DataRequestDescriptor,
   DataRequestExecutor,
   DataResponseBodyKind,
@@ -230,6 +237,7 @@ export type {
   DataQueryInput,
   DataQueryMapping,
   DataQueryReferenceCounts,
+  DataQueryUpdatePolicy,
   DataQueryValidationResult,
   DataTimeFormat,
   DataValueMapEntry,
@@ -533,8 +541,13 @@ export {
 export { buildDataGetRequest, resolveDataQueryParameters, validateDataQueryParameterDefinitions } from "./data-sources/query";
 export {
   DEFAULT_DATA_CONNECTION_TIMEOUT_MS,
+  DEFAULT_DATA_QUERY_MAX_AGE_MS,
+  DEFAULT_DATA_QUERY_REFRESH_INTERVAL_MS,
+  MAX_DATA_QUERY_RETRY_BACKOFF_MS,
+  MIN_DATA_QUERY_REFRESH_INTERVAL_MS,
   createDataConnectionId,
   createDataQueryId,
+  createDefaultDataQueryUpdatePolicy,
   createEmptyDataSources,
   createUniqueDataConnectionName,
   createUniqueDataQueryName

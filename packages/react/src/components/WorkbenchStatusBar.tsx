@@ -1,13 +1,14 @@
 import { useId, useRef, useState } from "react";
-import { WorkbenchProblemsDrawer } from "./WorkbenchProblemsDrawer";
+import { WorkbenchProblemsDrawer, type DataProblemTarget } from "./WorkbenchProblemsDrawer";
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
 import { problemToneFromCounts } from "./workbench-model-helpers";
 
 export interface WorkbenchStatusBarProps {
   context: ResolvedWorkbenchContext;
+  onLocateDataTarget?(target: DataProblemTarget): void;
 }
 
-export function WorkbenchStatusBar({ context }: WorkbenchStatusBarProps) {
+export function WorkbenchStatusBar({ context, onLocateDataTarget }: WorkbenchStatusBarProps) {
   const [open, setOpen] = useState(false);
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
@@ -28,7 +29,7 @@ export function WorkbenchStatusBar({ context }: WorkbenchStatusBarProps) {
 
   return (
     <>
-      <WorkbenchProblemsDrawer context={context} id={id} open={open} onClose={() => { setOpen(false); trigger.current?.focus(); }} />
+      <WorkbenchProblemsDrawer context={context} id={id} open={open} onLocateDataTarget={onLocateDataTarget} onClose={() => { setOpen(false); trigger.current?.focus(); }} />
       <div className="ek-workbench__default-status">
         <span className="ek-workbench__status-chip" data-tone={status.selectionCount > 0 ? "active" : "neutral"}>
           <strong>{t("reactWorkbench.status.group.selection")}</strong>
@@ -83,6 +84,7 @@ export function WorkbenchStatusBar({ context }: WorkbenchStatusBarProps) {
               {t("reactWorkbench.status.problemBreakdown", {
                 authoredCount: status.authoredProblemCount,
                 runtimeCount: status.runtimeProblemCount,
+                dataCount: status.dataProblemCount,
                 projectCount: status.projectProblemCount
               })}
             </span>

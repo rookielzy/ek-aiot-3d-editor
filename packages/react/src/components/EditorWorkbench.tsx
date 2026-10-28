@@ -12,6 +12,7 @@ import { useWorkbenchPanelWidths } from "../hooks/use-workbench-panel-widths";
 import { WorkbenchStatusBar } from "./WorkbenchStatusBar";
 import { WorkbenchToolbar } from "./WorkbenchToolbar";
 import { WorkbenchViewportTools } from "./WorkbenchViewportTools";
+import type { DataProblemTarget } from "./WorkbenchProblemsDrawer";
 import { createWorkbenchRenderer } from "./workbench-renderer";
 import "./workbench.css";
 
@@ -104,6 +105,7 @@ export function EditorWorkbench({
     projectProblems,
     assetPayloads: session.assets.payloads,
     dataCredentials: session.editor.getDataCredentials?.() ?? [],
+    dataState: session.dataState,
     history: session.historyState,
     snap: session.snap,
     viewportHelpers: session.viewportHelperState,
@@ -119,6 +121,7 @@ export function EditorWorkbench({
   const [activeView, setActiveView] = useState<WorkbenchPanelView>("scene");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [dataLocate, setDataLocate] = useState<{ connectionId: string; queryId: string } | null>(null);
   const panels = useWorkbenchPanelWidths(rootRef);
   const [marqueeSelectionEnabled, setMarqueeSelectionEnabled] = useState(false);
   const resolvedInteractions = useMemo(() => {
@@ -183,6 +186,21 @@ export function EditorWorkbench({
   const rootClassName = className ? `ek-workbench ${className}` : "ek-workbench";
   const hasToolbar = showDefaultToolbar || toolbar;
   const renderLeftPanel = leftPanel ?? sidePanel;
+
+  function locateDataTarget(target: DataProblemTarget): void {
+    if (target.kind === "data-query") {
+      setActiveView("data");
+      setLeftCollapsed(false);
+      setDataLocate({ connectionId: target.connectionId, queryId: target.queryId });
+      return;
+    }
+    session.dispatch({
+      type: "select-nodes",
+      mode: "replace",
+      nodeIds: [target.nodeId],
+      primaryNodeId: target.nodeId
+    });
+  }
 
   return (
     <main ref={rootRef} className={rootClassName} style={{
@@ -263,7 +281,14 @@ export function EditorWorkbench({
         <DataDetailCard context={workbench} />
       </section>
       <aside id={`${panelId}-left`} hidden={leftCollapsed} className="ek-workbench__side-panel" aria-label={t("reactWorkbench.shell.projectPanel.label")}>
-        {renderLeftPanel ? renderLeftPanel(workbench) : <WorkbenchLeftPanel context={workbench} activeView={activeView} />}
+        {renderLeftPanel ? renderLeftPanel(workbench) : (
+          <WorkbenchLeftPanel
+            context={workbench}
+            activeView={activeView}
+            dataLocate={dataLocate}
+            onDataLocateHandled={() => setDataLocate(null)}
+          />
+        )}
       </aside>
       {panels.desktop && !leftCollapsed ? (
         <WorkbenchPanelResize
@@ -306,7 +331,9 @@ export function EditorWorkbench({
         />
       ) : null}
       <footer className="ek-workbench__status" aria-label={t("reactWorkbench.shell.status.label")}>
-        {status ? status(workbench) : <WorkbenchStatusBar context={workbench} />}
+        {status ? status(workbench) : (
+          <WorkbenchStatusBar context={workbench} onLocateDataTarget={locateDataTarget} />
+        )}
       </footer>
     </main>
   );

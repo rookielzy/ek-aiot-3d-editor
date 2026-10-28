@@ -3,6 +3,7 @@ import {
   buildDeleteDataQueryCommand,
   buildDuplicateDataQueryCommand,
   buildSaveDataQueryCommand,
+  createDefaultDataQueryUpdatePolicy,
   createEditor,
   mapDataQueryBody,
   parseDataPath,
@@ -408,7 +409,8 @@ function queryDefinition(connectionId = "connection-a"): DataQueryDefinition {
     name: "Pump status",
     path: "/pumps",
     parameters: [{ name: "areaId", type: "string", defaultValue: "A" }],
-    mapping: baseMapping()
+    mapping: baseMapping(),
+    updatePolicy: createDefaultDataQueryUpdatePolicy()
   };
 }
 
