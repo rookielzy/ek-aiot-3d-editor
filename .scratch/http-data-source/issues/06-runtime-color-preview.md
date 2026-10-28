@@ -66,3 +66,20 @@ Decisions: D09, D10, D12, D13
 - React 规则表单增加可选色板 swatch（`aria-pressed` + `Use color #…` 标签）；浏览器用例改为缓存真实 GLB 并 clone 共享材质，真正验证共享材质隔离。
 - 移除未使用的 `getCapabilities()`/`appliedCount` 与 `"inactive"` 状态，复用统一 `emptyDataColorCapability()`，并合并颜色未生效返回分支。
 - 保留判断项：换目标结束试用仍由 React 表单生命周期负责（core 负责目标删除/配置/预览/生命周期）；能力诊断在保存 binding 或试用时显示；`createObjectState` 的显式位置参数暂不重组。
+
+2026-10-28：修复提交 `8b14bc6` 的后续 code review 问题：
+
+- 颜色遍历在独立 object node 边界停止，保留当前 GLB 内 imported target 的覆盖；嵌套父子对象分别着色、停止与释放互不干扰。
+- authored 场景投影期间只保留最新颜色意图，完成后再应用，避免异步纹理加载期间的试用覆盖旧基线；加载期间结束试用也不会被晚到投影重新激活。
+- 配置的采样时间缺失、非法或超出未来容差时恢复 authored 材质；详情数值仍由数据服务独立提供，时间修复后重新着色。
+- 删除 React 颜色表单测试中不必要的全局 fetch stub；新增 core 回归测试，并扩展真实 GLB/WebGL 嵌套对象验证。
+
+验证记录（普通测试从 `packages/core`、浏览器测试从 `packages/react` 执行）：
+
+- 修复前，定向回归命令 `pnpm exec vitest run --root ../.. packages/core/src/data-sources/color-preview.test.ts packages/core/src/runtime/data-color-projector.test.ts -t 'nested object|observed-at-|trial starts during'`：6 项按预期失败，复现三个行为缺陷。
+- 修复后，`pnpm exec vitest run --root ../.. packages/core/src/data-sources/color-rules.test.ts packages/core/src/data-sources/color-preview.test.ts packages/core/src/runtime/data-color-projector.test.ts packages/react/test/workbench-data-colors.test.tsx`：4 files / 34 tests passed，含新增 7 项回归用例。
+- 全量 `pnpm exec vitest run --root ../.. --maxWorkers 2`：135 files / 1243 tests，133 files / 1240 tests passed；与完整浏览器套件并发时，两个既有 React 文件出现两项 10 秒超时及一项刷新状态等待失败。浏览器运行结束后，`pnpm exec vitest run --root ../.. --maxWorkers 1 packages/react/test/workbench-data-preview.test.tsx packages/react/test/workbench-object-binding.test.tsx`：2 files / 25 tests 全部通过，未修改这些用例或放宽超时。
+- `pnpm exec vitest run --root ../.. --config vitest.browser.config.ts`：30 file-instance / 123 tests passed，覆盖 Chromium 三个视口；本次真实 GLB 嵌套对象用例也已单独在三个视口通过。
+- 根目录 `pnpm --config.script-shell="C:/Program Files/Git/bin/bash.exe" build`、同参数 `typecheck`：core、React、Vue 全部通过。
+- 发布包验证：通过临时 Windows `pnpm.cmd` 兼容启动方式执行现有 `verifyRelease()`，三个包的打包、消费者安装、类型与 React/Vue 消费者构建全部通过；未修改发布脚本。
+- `git diff --check`：通过。当前环境未安装 Bun，无法执行 `bun run check`；仓库也未定义 `check` 脚本，因此使用上述现有 pnpm 构建、类型检查与发布验证。

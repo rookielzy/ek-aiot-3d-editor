@@ -186,6 +186,8 @@ describe("real GLB data color smoke", () => {
     expect(colorOf(runtime, "pump-b")).toBe("ffffff");
     expect(materialOf(runtime.getObject("pump-a"))).toBe(materialOf(runtime.getObject("pump-b")));
 
+    expect(editor.dispatch({ type: "reparent-node", nodeId: "pump-b", parentId: "pump-a" }).ok).toBe(true);
+    await runtime.project();
     const trial = editor.getDataColorService!().startTrial({
       objectNodeId: "pump-a",
       color: RED_RULE,
@@ -194,9 +196,30 @@ describe("real GLB data color smoke", () => {
     });
     expect(trial.ok).toBe(true);
     expect(colorOf(runtime, "pump-a")).toBe("ff0000");
+    expect(colorOf(runtime, "pump-b")).toBe("ffffff");
     editor.getDataColorService!().endTrial();
     expect(colorOf(runtime, "pump-a")).toBe("ffffff");
     expect(colorOf(runtime, "pump-b")).toBe("ffffff");
+
+    const childBinding = buildSaveDataObjectBindingCommand(editor.getSnapshot(), {
+      ...editor.getSnapshot().dataSources.bindings["pump-a"],
+      objectNodeId: "pump-b",
+      color: {
+        ...RED_RULE,
+        rules: [{ operator: "gte", value: 0, max: null, color: "#00ff00" }]
+      }
+    });
+    if (!childBinding.ok) throw new Error(childBinding.problems.map((problem) => problem.message).join("\n"));
+    expect(editor.dispatch(childBinding.command).ok).toBe(true);
+    await runtime.project();
+    await editor.getDataService!().startPreview();
+    expect(colorOf(runtime, "pump-a")).toBe("ff0000");
+    expect(colorOf(runtime, "pump-b")).toBe("00ff00");
+
+    editor.getDataService!().stopPreview();
+    expect(colorOf(runtime, "pump-a")).toBe("ffffff");
+    expect(colorOf(runtime, "pump-b")).toBe("ffffff");
+    expect(materialOf(runtime.getObject("pump-a"))).toBe(materialOf(runtime.getObject("pump-b")));
   }, 30000);
 });
 

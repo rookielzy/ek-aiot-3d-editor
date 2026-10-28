@@ -429,6 +429,10 @@ function evaluateBindingColor(
   if (runtime.status !== "ready" && runtime.status !== "partial") {
     return inactive("loading");
   }
+  // Fresh values can remain readable despite an invalid configured sample time.
+  if (runtime.observedAtProblem) {
+    return inactive("error");
+  }
   if (!runtime.freshness.fresh) {
     return inactive("stale");
   }

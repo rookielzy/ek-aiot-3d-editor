@@ -33,6 +33,7 @@ export class DataColorProjector {
   readonly #records = new Map<Mesh, MeshColorRecord>();
   #assignments = new Map<string, string | null>();
   #capabilities = new Map<string, DataColorObjectCapability>();
+  #projectionPending = false;
   #disposed = false;
 
   constructor(options: DataColorProjectorOptions) {
@@ -46,6 +47,11 @@ export class DataColorProjector {
     const next = new Map<string, string | null>();
     for (const assignment of assignments) {
       next.set(assignment.objectNodeId, assignment.color);
+    }
+
+    if (this.#projectionPending) {
+      this.#assignments = next;
+      return [...next.keys()].map(emptyDataColorCapability);
     }
 
     for (const objectNodeId of [...this.#assignedObjectIds()]) {
@@ -72,9 +78,11 @@ export class DataColorProjector {
 
   /**
    * Restores authored materials before a scene projection replaces them.
-   * Assignments stay configured so `reapply()` can re-evaluate after loading.
+   * Color updates stay pending until `reapply()` can read the completed
+   * authored projection, including any asynchronously loaded textures.
    */
   restoreAll(): void {
+    this.#projectionPending = true;
     for (const objectNodeId of [...this.#assignedObjectIds()]) {
       this.#restoreObject(objectNodeId);
     }
@@ -85,6 +93,7 @@ export class DataColorProjector {
     if (this.#disposed) {
       return [];
     }
+    this.#projectionPending = false;
     const capabilities: DataColorObjectCapability[] = [];
     for (const [objectNodeId, color] of this.#assignments) {
       this.#restoreObject(objectNodeId);
@@ -121,11 +130,18 @@ export class DataColorProjector {
     }
 
     const meshes: Mesh[] = [];
-    root.traverse((object) => {
+    const collectMeshes = (object: Object3D): void => {
+      // Scene children may be independent object nodes with their own bindings.
+      if (object !== root && this.#objects.getLinkedNodeIds(object).some((nodeId) =>
+        nodeId !== objectNodeId && this.#objects.getTarget(nodeId)?.kind === "object")) {
+        return;
+      }
       if (isMeshWithMaterial(object)) {
         meshes.push(object);
       }
-    });
+      object.children.forEach(collectMeshes);
+    };
+    collectMeshes(root);
 
     let slotCount = 0;
     let supportedSlotCount = 0;

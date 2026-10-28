@@ -49,6 +49,40 @@ describe("data color projector", () => {
     projector.dispose();
   });
 
+  it.each([false, true])("isolates nested object materials with a child binding: %s", (bindChild) => {
+    const shared = new MeshStandardMaterial({ color: "#ffffff" });
+    const meshA = new Mesh(new BoxGeometry(), shared);
+    const meshB = new Mesh(new BoxGeometry(), shared);
+    const rootA = new Group();
+    const rootB = new Group();
+    rootA.add(meshA, rootB);
+    rootB.add(meshB);
+    const map = new ThreeObjectMap();
+    registerObject(map, "object-a", rootA);
+    registerObject(map, "object-b", rootB);
+    map.set("imported-a", meshA, { kind: "imported", ownerObjectId: "object-a" });
+    const projector = new DataColorProjector({ objects: map });
+
+    const reports = projector.set([
+      { objectNodeId: "object-a", color: "#ff0000" },
+      ...(bindChild ? [{ objectNodeId: "object-b", color: "#00ff00" }] : [])
+    ]);
+
+    expect((meshA.material as MeshStandardMaterial).color.getHexString()).toBe("ff0000");
+    expect((meshB.material as MeshStandardMaterial).color.getHexString()).toBe(bindChild ? "00ff00" : "ffffff");
+    expect(reports.every((report) => report.meshCount === 1 && report.slotCount === 1)).toBe(true);
+    const disposeA = vi.spyOn(meshA.material as MeshStandardMaterial, "dispose");
+    const disposeB = bindChild ? vi.spyOn(meshB.material as MeshStandardMaterial, "dispose") : null;
+
+    projector.set([]);
+
+    expect(meshA.material).toBe(shared);
+    expect(meshB.material).toBe(shared);
+    expect(disposeA).toHaveBeenCalledTimes(1);
+    if (disposeB) expect(disposeB).toHaveBeenCalledTimes(1);
+    projector.dispose();
+  });
+
   it("reports partial material support and keeps unsupported slots authored", () => {
     const standard = new MeshStandardMaterial({ color: "#ffffff" });
     const basic = new MeshBasicMaterial({ color: "#00ff00" });

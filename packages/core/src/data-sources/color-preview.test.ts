@@ -1,7 +1,8 @@
-import { BoxGeometry, Mesh, MeshBasicMaterial, MeshStandardMaterial } from "three";
+import { BoxGeometry, Mesh, MeshBasicMaterial, MeshStandardMaterial, Texture } from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AssetResolverBridge } from "../assets/resolver";
 import type { RendererLike } from "../runtime/editor-runtime";
+import type { RuntimeTextureLoaderAdapter } from "../runtime/texture-loader-adapter";
 import {
   buildSaveDataObjectBindingCommand,
   buildSaveDataQueryCommand,
@@ -104,6 +105,7 @@ describe("data color preview", () => {
 
     // No quality mapping means unknown, which is a usable value.
     await saveColorBinding(harness.editor, harness.queryId, "object-a", RUNNING_COLOR);
+    await harness.runtime.project();
     response = jsonResponse(body());
     await harness.service.refreshPreview();
     expect(colorOf(harness.runtime, "object-a")).toBe("00ff00");
@@ -112,6 +114,93 @@ describe("data color preview", () => {
     await vi.advanceTimersByTimeAsync(UPDATE_POLICY.maxAgeMs);
     expect(colorOf(harness.runtime, "object-a")).toBe("ffffff");
     expect(harness.colorService.getState().objects["object-a"]).toMatchObject({ reason: "stale" });
+    harness.editor.dispose();
+  });
+
+  it.each([
+    { observedAt: undefined, code: "observed-at-missing" },
+    { observedAt: "bad-time", code: "observed-at-invalid" },
+    { observedAt: "2026-10-28T00:01:00.000Z", code: "observed-at-future" }
+  ])("restores authored colors for $code and reapplies them when time is repaired", async (example) => {
+    const validTime = new Date(Date.now() - 1_000).toISOString();
+    let observedAt: string | undefined = validTime;
+    const harness = await createHarness(async () => jsonResponse({
+      items: [{ deviceCode: "pump-01", tempRaw: 426, run: 1, observedAt }]
+    }), { objects: ["object-a"] });
+    const definition = queryDefinition();
+    const query = buildSaveDataQueryCommand(harness.editor.getSnapshot(), {
+      ...definition,
+      name: "Pump timestamp",
+      mapping: {
+        ...definition.mapping,
+        observedAt: { path: [{ kind: "key", key: "observedAt" }], format: "iso" }
+      }
+    });
+    if (!query.ok) throw new Error(query.problems.map((problem) => problem.message).join("\n"));
+    expect(harness.editor.dispatch(query.command).ok).toBe(true);
+    const queryId = Object.values(harness.editor.getSnapshot().dataSources.queries)
+      .find((candidate) => candidate.name === "Pump timestamp")!.id;
+    await saveColorBinding(harness.editor, queryId, "object-a", RUNNING_COLOR);
+    await harness.runtime.project();
+    await harness.service.startPreview();
+    expect(colorOf(harness.runtime, "object-a")).toBe("00ff00");
+
+    observedAt = example.observedAt;
+    await harness.service.refreshPreview();
+
+    expect(harness.service.getObjectDataState().objects["object-a"]).toMatchObject({
+      freshness: { fresh: true },
+      observedAtProblem: { code: example.code }
+    });
+    expect(colorOf(harness.runtime, "object-a")).toBe("ffffff");
+    expect(harness.colorService.getState().objects["object-a"]).toMatchObject({ color: null, reason: "error" });
+
+    observedAt = validTime;
+    await harness.service.refreshPreview();
+    expect(colorOf(harness.runtime, "object-a")).toBe("00ff00");
+    harness.editor.dispose();
+  });
+
+  it.each([false, true])("preserves authored materials when a trial starts during loading, then is cancelled: %s", async (cancelTrial) => {
+    let resolveTexture: (texture: Texture) => void = () => {};
+    const textureLoad = new Promise<Texture>((resolve) => { resolveTexture = resolve; });
+    const loadTexture = vi.fn(() => textureLoad);
+    const harness = await createHarness(async () => jsonResponse(body()), {
+      objects: ["object-a"],
+      textureLoader: { load: loadTexture }
+    });
+    expect(harness.editor.dispatch({ type: "register-asset", asset: { id: "texture-a", kind: "texture" } }).ok).toBe(true);
+    await harness.runtime.project();
+    const projected = new Promise<void>((resolve) => {
+      const unsubscribe = harness.runtime.subscribeProjection!(() => {
+        unsubscribe();
+        resolve();
+      });
+    });
+    expect(harness.editor.dispatch({
+      type: "set-material",
+      target: { kind: "object", objectId: "object-a" },
+      material: { color: "#0000ff", textures: { map: { assetId: "texture-a" } } }
+    }).ok).toBe(true);
+    await flush();
+    expect(loadTexture).toHaveBeenCalledTimes(1);
+
+    expect(harness.colorService.startTrial({
+      objectNodeId: "object-a", color: RUNNING_COLOR, value: true, source: "sample"
+    }).ok).toBe(true);
+    if (cancelTrial) harness.colorService.endTrial();
+    resolveTexture(new Texture());
+    await projected;
+    expect(colorOf(harness.runtime, "object-a")).toBe(cancelTrial ? "0000ff" : "00ff00");
+    const authoredTexture = materialOf(harness.runtime, "object-a").map;
+    expect(authoredTexture).not.toBeNull();
+    const disposeTexture = vi.spyOn(authoredTexture!, "dispose");
+
+    harness.colorService.endTrial();
+
+    expect(colorOf(harness.runtime, "object-a")).toBe("0000ff");
+    expect(materialOf(harness.runtime, "object-a").map).toBe(authoredTexture);
+    expect(disposeTexture).not.toHaveBeenCalled();
     harness.editor.dispose();
   });
 
@@ -426,6 +515,7 @@ async function createHarness(
     objects: string[];
     material?: () => MeshStandardMaterial;
     mesh?: () => Mesh;
+    textureLoader?: RuntimeTextureLoaderAdapter;
     deferRuntime?: boolean;
   }
 ): Promise<Harness> {
@@ -470,6 +560,7 @@ async function createHarness(
               options.material ? options.material() : new MeshStandardMaterial({ color: "#ffffff" })
             )
       },
+      textureLoader: options.textureLoader,
       rendererFactory: createFakeRenderer,
       interactions: false,
       scheduleFrame: () => 0,

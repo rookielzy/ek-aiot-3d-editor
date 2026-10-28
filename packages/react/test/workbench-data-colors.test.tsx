@@ -1,6 +1,6 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BoxGeometry, Mesh, MeshStandardMaterial } from "three";
 import {
   AssetResolverBridge,
@@ -15,11 +15,6 @@ import { EditorWorkbench } from "../src/components/EditorWorkbench";
 describe("React data color authoring", () => {
   beforeEach(() => {
     window.localStorage.removeItem("ek-aiot.workbench.locale");
-    vi.stubGlobal("fetch", vi.fn());
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
   });
 
   it("saves ordered color rules and reports material capability", async () => {
