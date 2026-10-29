@@ -200,7 +200,8 @@ function buildNodeIdMap(
   sourceNodeIds: string[],
   objectIdMap: Record<string, string>,
   lightIdMap: Record<string, string>
-): Record<string, string> {  const idMap: Record<string, string> = {};
+): Record<string, string> {
+  const idMap: Record<string, string> = {};
   const usedIds = new Set(Object.keys(snapshot.nodes));
   for (const sourceNodeId of sourceNodeIds) {
     const preferredId = objectIdMap[sourceNodeId] ?? lightIdMap[sourceNodeId] ?? `copy:${sourceNodeId}`;
