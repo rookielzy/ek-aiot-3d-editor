@@ -12,7 +12,7 @@ User stories: 1, 4, 5, 6, 27
 
 Decisions: D05, D06, D07, D08, D13
 
-当前只授权规格与任务整理；本任务尚未启动。实施时必须先完成 Blocked by 中的任务。
+实现、验证与代码审查已完成；实际命令和结果见 Comments。本任务开始前已满足 Blocked by。
 
 ## What to build
 
@@ -28,13 +28,13 @@ Decisions: D05, D06, D07, D08, D13
 
 ## Acceptance criteria
 
-- [ ] GET、只读 POST 的路径/query/body 参数编码与类型正确，0/false 不丢；POST 未确认只读时不执行。
-- [ ] POST 仅由测试、首次预览或显式刷新触发，禁止自动轮询与重试；GET 原有行为不退化。
-- [ ] 认证保留头不能被用户公共/查询头覆盖；UI/摘要/问题 metadata 不出现真实 token，配置仅留 credentialRef。
-- [ ] 缺凭证可保存配置，执行报可恢复问题；凭证 revision 改变后旧响应和缓存不可见。
-- [ ] 可选业务字段严格比较；HTTP 失败、业务失败、204、非 JSON、解析失败和响应超限有不同结果。
-- [ ] 多个连接/查询具有各自参数与状态，不硬编码 areaId、pump ID、code=0 或只有一个查询。
-- [ ] 受控本机 HTTP 夹具同时验证 GET/POST、头部由宿主注入、业务失败及参数 body 类型。
+- [x] GET、只读 POST 的路径/query/body 参数编码与类型正确，0/false 不丢；POST 未确认只读时不执行。
+- [x] POST 仅由测试、首次预览或显式刷新触发，禁止自动轮询与重试；GET 原有行为不退化。
+- [x] 认证保留头不能被用户公共/查询头覆盖；UI/摘要/问题 metadata 不出现真实 token，配置仅留 credentialRef。
+- [x] 缺凭证可保存配置，执行报可恢复问题；凭证 revision 改变后旧响应和缓存不可见。
+- [x] 可选业务字段严格比较；HTTP 失败、业务失败、204、非 JSON、解析失败和响应超限有不同结果。
+- [x] 多个连接/查询具有各自参数与状态，不硬编码 areaId、pump ID、code=0 或只有一个查询。
+- [x] 受控本机 HTTP 夹具同时验证 GET/POST、头部由宿主注入、业务失败及参数 body 类型。
 
 ## Testing
 
@@ -51,3 +51,7 @@ Decisions: D05, D06, D07, D08, D13
 ## Comments
 
 2026-10-26：按用户认可的原型流程整理为正式规划任务。Status 表示定义就绪，不代表实现、验证或用户已授权开始执行。
+
+2026-11-01：完成实现审查并修复审查发现的问题。`CoreDataService` 现在按连接及该连接下的查询配置生成手动请求 generation key；同一连接的查询路径、方法、头、参数或映射变化会使进行中的旧请求失效，晚到响应不会再以当前结果提交。查询成功条件在 `unknown` 边界统一校验，新增代码遵循早返回控制流。
+
+2026-11-01：验证结果：`pnpm --filter @ek-aiot/3d-editor-core typecheck`、`pnpm --filter @ek-aiot/3d-editor-react typecheck`、`pnpm --filter @ek-aiot/3d-editor-vue typecheck` 通过；`pnpm --filter @ek-aiot/3d-editor-core test` 通过（105 个文件、938 个测试）；HTTP 相关 core 测试通过（39/39）；HTTP 相关浏览器测试通过（3 个文件、12 个测试）。仓库根 `pnpm typecheck` 在 Windows 环境因现有脚本使用 Unix `rm` 无法执行，根 `pnpm test` 的完整 Workbench 套件出现一次超时/React `act` 警告；相关 HTTP focused suites 均通过。

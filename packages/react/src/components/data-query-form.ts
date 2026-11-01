@@ -1,4 +1,5 @@
 import type {
+  DataParameterLocationInput,
   DataParameterType,
   DataParameterValue,
   DataQueryParameterDraft,
@@ -9,13 +10,21 @@ export interface QueryParameterForm {
   id: string;
   name: string;
   type: DataParameterType;
+  location: DataParameterLocationInput;
   useDefault: boolean;
   defaultText: string;
   override: boolean;
   overrideText: string;
 }
 
+export interface QueryHeaderForm {
+  id: string;
+  name: string;
+  value: string;
+}
+
 let nextParameterId = 0;
+let nextHeaderId = 0;
 
 export function createQueryParameterForm(): QueryParameterForm {
   nextParameterId += 1;
@@ -23,11 +32,17 @@ export function createQueryParameterForm(): QueryParameterForm {
     id: `data-parameter-${nextParameterId}`,
     name: "",
     type: "string",
+    location: "auto",
     useDefault: true,
     defaultText: "",
     override: false,
     overrideText: ""
   };
+}
+
+export function createQueryHeaderForm(name = "", value = ""): QueryHeaderForm {
+  nextHeaderId += 1;
+  return { id: `data-query-header-${nextHeaderId}`, name, value };
 }
 
 export function toQueryParameterDrafts(
@@ -36,6 +51,7 @@ export function toQueryParameterDrafts(
   return parameters.map((parameter) => ({
     name: parameter.name.trim(),
     type: parameter.type,
+    location: parameter.location,
     ...(parameter.useDefault
       ? { defaultValue: parseParameterText(parameter.type, parameter.defaultText) }
       : {})

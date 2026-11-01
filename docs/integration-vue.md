@@ -60,7 +60,7 @@ if (!editor.getSnapshot().objects.box) {
 
 ## 数据服务与执行器
 
-core 的数据服务与 viewport 无关。宿主把 `DataRequestExecutor` 传给 `useEditor({ executor })` 或 `EditorWorkbench` 的 `executor` prop 后，可通过 `editor.getDataService()` 执行会话内手动 GET 草稿、取消请求并订阅运行态：
+core 的数据服务与 viewport 无关。宿主把 `DataRequestExecutor` 传给 `useEditor({ executor })` 或 `EditorWorkbench` 的 `executor` prop 后，可通过 `editor.getDataService()` 执行会话内手动 GET 或只读 POST 草稿、取消请求并订阅运行态：
 
 ```ts
 import type { DataRequestExecutor } from "@ek-aiot/3d-editor-core";
@@ -69,6 +69,7 @@ const executor: DataRequestExecutor = async (request) => {
   const response = await fetch(request.url, {
     method: request.method,
     headers: request.headers,
+    body: request.body === null ? undefined : JSON.stringify(request.body),
     signal: request.signal
   });
   return {
@@ -78,10 +79,10 @@ const executor: DataRequestExecutor = async (request) => {
   };
 };
 
-const { editor } = useEditor({ executor });
+const { editor } = useEditor({ executor, maxResponseBytes: 512 * 1024 });
 ```
 
-请求描述只携带非秘密公共头和 `credentialRef`；认证秘密由宿主执行器在发送时解析。响应正文、耗时、generation、取消和诊断只留在当前会话，不写入 Snapshot、history 或项目包。Vue 数据工作区 UI 保持现状，不因启用数据服务而新增请求表单。已保存查询与映射通过框架无关的 `snapshot.dataSources.queries`、`mapDataQueryBody()` 和 `validateDataQueryMapping()` 使用；React 新增的 query 编辑界面不会改变 Vue Workbench 的行为。
+请求描述只携带方法、只读确认、非秘密公共/查询头、typed JSON body、认证类型与 `credentialRef`；认证秘密由宿主执行器在发送时解析，Bearer/API key 均由宿主注入对应头。GET 与已确认只读的 POST 共用同一执行与响应判定路径；POST 只在手动测试、首次预览或显式刷新时执行，不自动轮询或重试。`maxResponseBytes` 设置响应硬上限（默认 1 MiB），超过时整次执行失败；`useEditor` 与 `useWorkbench` 都把它传给 core。响应正文、耗时、generation、取消和诊断只留在当前会话，不写入 Snapshot、history 或项目包。Vue 数据工作区 UI 保持现状，不因启用数据服务而新增请求表单。已保存查询与映射通过框架无关的 `snapshot.dataSources.queries`、`mapDataQueryBody()` 和 `validateDataQueryMapping()` 使用，查询定义中的方法、头、参数位置与成功条件同样可由 Vue 宿主直接构造；React 新增的 query 编辑界面不会改变 Vue Workbench 的行为。
 
 对象绑定同样完全属于 core contract：`snapshot.dataSources.bindings` 保存查询、设备、参数覆盖、启停、详情字段和状态颜色规则；`buildDataObjectDetailModel()`、`startPreview()`、`refreshPreview()`、`stopPreview()` 和 `getObjectDataState()` 都不依赖 React。Vue Workbench 本阶段不新增绑定、详情或颜色界面，宿主可以在不改 core contract 的前提下消费这些 API；React 的 Device data 表单、预览工具条和详情卡不会进入 Vue package。
 

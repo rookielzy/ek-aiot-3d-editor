@@ -13,7 +13,10 @@ export const DATA_QUERY_DEFINITION_PROBLEM_MESSAGE_KEYS = {
   "binding-property-in-use": "dataSources.queryProblem.bindingPropertyInUse",
   "command-failed": "dataSources.queryProblem.commandFailed",
   "connection-not-found": "dataSources.queryProblem.connectionNotFound",
+  "header-invalid": "dataSources.queryProblem.headerInvalid",
+  "header-reserved": "dataSources.queryProblem.headerReserved",
   "mapping-invalid": "dataSources.queryProblem.mappingInvalid",
+  "method-invalid": "dataSources.queryProblem.methodInvalid",
   "mapping-property-required": "dataSources.queryProblem.mappingPropertyRequired",
   "name-duplicate": "dataSources.queryProblem.nameDuplicate",
   "name-required": "dataSources.queryProblem.nameRequired",
@@ -22,8 +25,10 @@ export const DATA_QUERY_DEFINITION_PROBLEM_MESSAGE_KEYS = {
   "parameter-missing": "dataSources.queryProblem.parameterMissing",
   "parameter-type": "dataSources.queryProblem.parameterType",
   "path-invalid": "dataSources.queryProblem.pathInvalid",
+  "post-read-only-required": "dataSources.queryProblem.postReadOnlyRequired",
   "query-in-use": "dataSources.queryProblem.queryInUse",
   "query-not-found": "dataSources.queryProblem.queryNotFound",
+  "success-condition-invalid": "dataSources.queryProblem.successConditionInvalid",
   "update-policy-invalid": "dataSources.queryProblem.updatePolicyInvalid"
 } satisfies Record<DataQueryDefinitionProblemCode, WorkbenchMessageKey>;
 
@@ -50,8 +55,12 @@ export const DATA_QUERY_PROBLEM_MESSAGE_KEYS = {
   "connection-not-found": "dataSources.request.problem.connectionNotFound",
   "credential-unavailable": "dataSources.request.problem.credentialUnavailable",
   "executor-unavailable": "dataSources.request.problem.executorUnavailable",
+  "header-invalid": "dataSources.request.problem.headerInvalid",
+  "header-reserved": "dataSources.request.problem.headerReserved",
+  "method-invalid": "dataSources.request.problem.methodInvalid",
   "parameter-definition-invalid": "dataSources.request.problem.parameterDefinitionInvalid",
   "parameter-duplicate": "dataSources.request.problem.parameterDuplicate",
+  "parameter-location-invalid": "dataSources.request.problem.parameterLocationInvalid",
   "parameter-missing": "dataSources.request.problem.parameterMissing",
   "parameter-type": "dataSources.request.problem.parameterType",
   "path-absolute": "dataSources.request.problem.pathAbsolute",
@@ -60,13 +69,19 @@ export const DATA_QUERY_PROBLEM_MESSAGE_KEYS = {
   "path-protocol-relative": "dataSources.request.problem.pathProtocolRelative",
   "path-required": "dataSources.request.problem.pathRequired",
   "path-traversal": "dataSources.request.problem.pathTraversal",
+  "post-read-only-required": "dataSources.request.problem.postReadOnlyRequired",
   "request-aborted": "dataSources.request.problem.requestAborted",
   "request-failed": "dataSources.request.problem.requestFailed",
   "request-timeout": "dataSources.request.problem.requestTimeout",
+  "response-auth": "dataSources.request.problem.responseAuth",
+  "response-business": "dataSources.request.problem.responseBusiness",
   "response-http": "dataSources.request.problem.responseHttp",
   "response-invalid": "dataSources.request.problem.responseInvalid",
   "response-json-invalid": "dataSources.request.problem.responseJsonInvalid",
-  "service-disposed": "dataSources.request.problem.serviceDisposed"
+  "response-not-json": "dataSources.request.problem.responseNotJson",
+  "response-too-large": "dataSources.request.problem.responseTooLarge",
+  "service-disposed": "dataSources.request.problem.serviceDisposed",
+  "success-condition-invalid": "dataSources.request.problem.successConditionInvalid"
 } satisfies Record<DataQueryProblemCode, WorkbenchMessageKey>;
 
 export const DATA_QUERY_RUN_STATUS_MESSAGE_KEYS = {

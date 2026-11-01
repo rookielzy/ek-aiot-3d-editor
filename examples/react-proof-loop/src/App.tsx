@@ -11,6 +11,7 @@ const fetchDataRequestExecutor: DataRequestExecutor = async (request) => {
   const response = await fetch(request.url, {
     method: request.method,
     headers: request.headers,
+    body: request.body === null ? undefined : JSON.stringify(request.body),
     signal: request.signal
   });
   return {

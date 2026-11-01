@@ -39,6 +39,42 @@ describe("useEditor", () => {
     dispose();
   });
 
+  it("forwards host executor and response limits to the core data service", async () => {
+    const source = createEditor();
+    source.dispatch({
+      type: "create-data-connection",
+      connection: {
+        id: "connection-a",
+        name: "Plant API",
+        baseUrl: "https://api.example.test/v1",
+        auth: { kind: "none" },
+        headers: {},
+        timeoutMs: 10_000
+      }
+    });
+    const serialized = source.serialize();
+    source.dispose();
+
+    const { editor, dispose } = useEditor({
+      snapshot: serialized,
+      executor: async () => ({
+        status: 200,
+        contentType: "application/json",
+        body: "{\"value\":\"0123456789\"}"
+      }),
+      maxResponseBytes: 10
+    });
+
+    const result = await editor.getDataService().executeQueryDraft({
+      connectionId: "connection-a",
+      path: "/devices",
+      parameters: []
+    }).result;
+    expect(result.status).toBe("error");
+    expect(result.problems.map((problem) => problem.code)).toEqual(["response-too-large"]);
+    dispose();
+  });
+
   it("loads a v9 connection-only data domain without Vue-specific data UI", () => {
     const source = createEditor();
     source.dispatch({

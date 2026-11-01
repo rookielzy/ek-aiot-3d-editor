@@ -73,7 +73,8 @@ export class CoreEditor implements EditorWithGlbImport {
       subscribeSnapshot: (listener) => this.store.subscribe(() => listener()),
       executor: options.executor ?? null,
       credentials: this.#dataCredentials,
-      authRevision: options.authRevision
+      authRevision: options.authRevision,
+      maxResponseBytes: options.maxResponseBytes
     });
     this.#dataColorService = new CoreDataColorService({
       getSnapshot: () => this.store.getSnapshot(),

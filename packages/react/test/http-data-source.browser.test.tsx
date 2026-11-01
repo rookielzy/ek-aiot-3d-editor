@@ -6,6 +6,7 @@ import {
   buildSaveDataObjectBindingCommand,
   buildSaveDataQueryCommand,
   createEditor,
+  type DataRequestDescriptor,
   type DataRequestExecutor,
   type RendererLike
 } from "@ek-aiot/3d-editor-core";
@@ -81,6 +82,125 @@ describe("same-origin HTTP data source smoke", () => {
     expect(result.textContent).toContain("200");
     expect(result.textContent).toContain("Config revision");
     expect(editor.getSnapshot().dataSources.queries).toEqual({});
+    expect(JSON.stringify(editor.serialize())).not.toContain("same-origin-fixture");
+  });
+
+  it("posts typed body values with a host-injected authentication header", async () => {
+    const secrets: Record<string, string> = { "credential-fixture": "fixture-secret" };
+    const requests: DataRequestDescriptor[] = [];
+    const executor: DataRequestExecutor = async (request) => {
+      requests.push(request);
+      const headers: Record<string, string> = { ...request.headers };
+      if (request.auth.kind === "api-key" && request.credentialRef) {
+        headers[request.auth.headerName] = secrets[request.credentialRef];
+      }
+      const response = await fetch(request.url, {
+        method: request.method,
+        headers,
+        body: request.body === null ? undefined : JSON.stringify(request.body),
+        signal: request.signal
+      });
+      return {
+        status: response.status,
+        contentType: response.headers.get("content-type"),
+        body: await response.text()
+      };
+    };
+    editor = createEditor({
+      executor,
+      credentials: [{ ref: "credential-fixture", label: "Fixture key", available: true }]
+    });
+    const connection = editor.dispatch({
+      type: "create-data-connection",
+      connection: {
+        id: "connection-post",
+        name: "Fixture POST API",
+        baseUrl: `${window.location.origin}/__fixtures__/http-data-source`,
+        auth: { kind: "api-key", credentialRef: "credential-fixture", headerName: "X-Zone-Key" },
+        headers: { "X-Trace": "connection-trace" },
+        timeoutMs: 10_000
+      }
+    });
+    expect(connection.ok).toBe(true);
+
+    const result = await editor.getDataService().executeQueryDraft({
+      connectionId: "connection-post",
+      method: "POST",
+      readOnly: true,
+      path: "/search/{area}",
+      headers: { "X-Trace": "query-trace" },
+      parameters: [
+        { name: "area", type: "string", defaultValue: "A", location: "path" },
+        { name: "offset", type: "number", defaultValue: 0, location: "body" },
+        { name: "include", type: "boolean", defaultValue: false, location: "body" },
+        { name: "label", type: "string", defaultValue: "", location: "body" }
+      ],
+      successCondition: { path: [{ kind: "key", key: "code" }], equals: 0 }
+    }).result;
+
+    expect(result.status).toBe("success");
+    expect(result.problems).toEqual([]);
+    expect(result.request?.method).toBe("POST");
+    const echo = result.response?.json as Record<string, unknown>;
+    expect(echo.method).toBe("POST");
+    expect(echo.path).toBe("/__fixtures__/http-data-source/search/A");
+    expect(echo.body).toEqual({ offset: 0, include: false, label: "" });
+    expect(echo.bodyTypes).toEqual({ offset: "number", include: "boolean", label: "string" });
+    const receivedHeaders = echo.headers as Record<string, string>;
+    expect(receivedHeaders["x-zone-key"]).toBe("fixture-secret");
+    expect(receivedHeaders["x-trace"]).toBe("query-trace");
+    expect(receivedHeaders["content-type"]).toBe("application/json");
+    expect(requests).toHaveLength(1);
+    expect(requests[0].credentialRef).toBe("credential-fixture");
+    expect(requests[0].headers).toMatchObject({ "Content-Type": "application/json" });
+    expect(JSON.stringify(requests[0].headers)).not.toContain("fixture-secret");
+    expect(JSON.stringify(result.request)).not.toContain("fixture-secret");
+    expect(JSON.stringify(editor.serialize())).not.toContain("fixture-secret");
+  });
+
+  it("reports a business failure for a real POST response exactly once", async () => {
+    const requests: DataRequestDescriptor[] = [];
+    const executor: DataRequestExecutor = async (request) => {
+      requests.push(request);
+      const response = await fetch(request.url, {
+        method: request.method,
+        headers: request.headers,
+        body: request.body === null ? undefined : JSON.stringify(request.body),
+        signal: request.signal
+      });
+      return {
+        status: response.status,
+        contentType: response.headers.get("content-type"),
+        body: await response.text()
+      };
+    };
+    editor = createEditor({ executor });
+    const connection = editor.dispatch({
+      type: "create-data-connection",
+      connection: {
+        id: "connection-business",
+        name: "Business fixture",
+        baseUrl: `${window.location.origin}/__fixtures__/http-data-source`,
+        auth: { kind: "none" },
+        headers: {},
+        timeoutMs: 10_000
+      }
+    });
+    expect(connection.ok).toBe(true);
+
+    const result = await editor.getDataService().executeQueryDraft({
+      connectionId: "connection-business",
+      method: "POST",
+      readOnly: true,
+      path: "/business-failure",
+      parameters: [{ name: "area", type: "string", defaultValue: "A", location: "body" }],
+      successCondition: { path: [{ kind: "key", key: "code" }], equals: 0 }
+    }).result;
+
+    expect(result.status).toBe("error");
+    expect(result.problems.map((problem) => problem.code)).toEqual(["response-business"]);
+    expect(result.response?.status).toBe(200);
+    expect(requests).toHaveLength(1);
     expect(JSON.stringify(editor.serialize())).not.toContain("same-origin-fixture");
   });
 

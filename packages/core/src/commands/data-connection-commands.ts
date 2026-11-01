@@ -115,9 +115,18 @@ function withConnection(snapshot: SceneSnapshot, connection: DataConnection): Sc
 }
 
 function copyAuth(auth: DataConnection["auth"]): DataConnection["auth"] {
-  return auth.kind === "bearer"
-    ? { kind: "bearer", credentialRef: auth.credentialRef }
-    : { kind: "none" };
+  switch (auth.kind) {
+    case "bearer":
+      return { kind: "bearer", credentialRef: auth.credentialRef };
+    case "api-key":
+      return {
+        kind: "api-key",
+        credentialRef: auth.credentialRef,
+        headerName: auth.headerName
+      };
+    default:
+      return { kind: "none" };
+  }
 }
 
 function formatProblems(problems: readonly DataConnectionProblem[]): string {

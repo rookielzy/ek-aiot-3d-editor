@@ -25,7 +25,9 @@ import { assertValidSceneSnapshot, type ValidationResult } from "./validation";
 
 export function migrateSerializedSnapshot(serialized: SerializedSceneSnapshot): SceneSnapshot {
   if (serialized.version === SNAPSHOT_VERSION) {
-    const normalized = normalizeDataObjectBindingColors(normalizeDataQueryPolicies(serialized));
+    const normalized = normalizeDataObjectBindingColors(
+      normalizeDataQueryRequests(normalizeDataQueryPolicies(serialized))
+    );
     assertValidSceneSnapshot(normalized);
     return immutableClone(normalized);
   }
@@ -98,6 +100,76 @@ function normalizeDataQueryPolicies(serialized: SceneSnapshot): SceneSnapshot {
     }
     changed = true;
     return [queryId, { ...query, updatePolicy: createDefaultDataQueryUpdatePolicy() }];
+  })) as unknown as QueryRecord;
+  if (!changed) {
+    return serialized;
+  }
+  return {
+    ...serialized,
+    dataSources: {
+      ...serialized.dataSources,
+      queries: normalized
+    }
+  };
+}
+
+/**
+ * POST, query headers, success conditions and explicit parameter locations
+ * arrived while the v9 data-source contract was still unreleased. Older GET
+ * queries keep their implicit path/query placement and normalize to GET.
+ */
+function normalizeDataQueryRequests(serialized: SceneSnapshot): SceneSnapshot {
+  type QueryRecord = SceneSnapshot["dataSources"]["queries"];
+  type LegacyParameter = Omit<QueryRecord[string]["parameters"][number], "location"> & {
+    location?: QueryRecord[string]["parameters"][number]["location"];
+  };
+  type LegacyQuery = Omit<
+    QueryRecord[string],
+    "method" | "readOnly" | "headers" | "successCondition" | "parameters"
+  > & {
+    method?: QueryRecord[string]["method"];
+    readOnly?: boolean;
+    headers?: Record<string, string>;
+    successCondition?: QueryRecord[string]["successCondition"];
+    parameters: readonly LegacyParameter[];
+  };
+  const queries = serialized.dataSources.queries as unknown as Record<string, LegacyQuery>;
+  let changed = false;
+  const normalized = Object.fromEntries(Object.entries(queries).map(([queryId, query]) => {
+    const method = query.method ?? "GET";
+    const placeholders = typeof query.path === "string"
+      ? new Set([...query.path.matchAll(/\{([A-Za-z0-9_.-]+)\}/g)].map((match) => match[1]))
+      : new Set<string>();
+    let queryChanged = query.method === undefined ||
+      query.readOnly === undefined ||
+      query.headers === undefined ||
+      query.successCondition === undefined;
+    const parameters = Array.isArray(query.parameters)
+      ? query.parameters.map((parameter) => {
+          if (parameter.location !== undefined) {
+            return parameter;
+          }
+          queryChanged = true;
+          return {
+            ...parameter,
+            location: placeholders.has(parameter.name.trim())
+              ? "path" as const
+              : method === "POST" ? "body" as const : "query" as const
+          };
+        })
+      : query.parameters;
+    if (!queryChanged) {
+      return [queryId, query];
+    }
+    changed = true;
+    return [queryId, {
+      ...query,
+      method,
+      readOnly: query.readOnly ?? true,
+      headers: query.headers ?? {},
+      parameters,
+      successCondition: query.successCondition ?? null
+    }];
   })) as unknown as QueryRecord;
   if (!changed) {
     return serialized;

@@ -11,12 +11,21 @@ export function useEditor(options: UseEditorOptions = {}): Editor {
   const [initialCredentials] = useState(options.credentials);
   const [initialExecutor] = useState(() => options.executor);
   const [initialAuthRevision] = useState(options.authRevision);
+  const [initialMaxResponseBytes] = useState(options.maxResponseBytes);
   return useMemo(() => options.editor ?? createEditor({
     snapshot: options.snapshot,
     credentials: initialCredentials,
     executor: initialExecutor,
-    authRevision: initialAuthRevision
-  }), [options.editor, options.snapshot, initialCredentials, initialExecutor, initialAuthRevision]);
+    authRevision: initialAuthRevision,
+    maxResponseBytes: initialMaxResponseBytes
+  }), [
+    options.editor,
+    options.snapshot,
+    initialCredentials,
+    initialExecutor,
+    initialAuthRevision,
+    initialMaxResponseBytes
+  ]);
 }
 
 export function useEditorSnapshot(editor: Editor): SceneSnapshot {

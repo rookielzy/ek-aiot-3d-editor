@@ -7,6 +7,12 @@ import {
   DEFAULT_DATA_CONNECTION_TIMEOUT_MS,
   isDataConnectionNameTaken
 } from "./defaults";
+import {
+  RESERVED_DATA_HEADER_NAMES,
+  isValidDataHeaderName,
+  reservedDataHeaderNames,
+  validateDataHeaders
+} from "./headers";
 import type {
   DataConnectionAuth,
   DataConnectionDraft,
@@ -15,15 +21,6 @@ import type {
   DataConnectionProblem,
   DataConnectionValidationResult
 } from "./types";
-
-const RESERVED_HEADER_NAMES = new Set([
-  "authorization",
-  "cookie",
-  "proxy-authorization",
-  "set-cookie"
-]);
-const UNSAFE_HEADER_NAMES = new Set(["__proto__", "constructor", "prototype"]);
-const HTTP_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 
 export function validateDataSources(value: unknown, nodes: unknown, errors: string[]): void {
   if (!isPlainRecord(value)) {
@@ -187,10 +184,29 @@ export function validateDataConnectionDraft(
     id,
     name: connection.name
   }));
-  return validateConnectionFields(draft, {
+  const connectionId = options.connectionId ?? null;
+  const result = validateConnectionFields(draft, {
     existing,
-    connectionId: options.connectionId ?? null
+    connectionId
   });
+  if (!result.value || !connectionId) {
+    return result;
+  }
+
+  const reserved = reservedDataHeaderNames(result.value.auth);
+  const conflicts = Object.values(snapshot.dataSources.queries)
+    .filter((query) => query.connectionId === connectionId)
+    .flatMap((query) => Object.keys(query.headers)
+      .filter((name) => reserved.has(name.toLowerCase()))
+      .map((name): DataConnectionProblem => ({
+        field: "auth",
+        code: "header-reserved",
+        message: `Query "${query.name}" uses header "${name}", which this authentication reserves.`
+      })));
+  if (conflicts.length === 0) {
+    return result;
+  }
+  return { ok: false, problems: [...result.problems, ...conflicts] };
 }
 
 function validateConnectionFields(
@@ -222,7 +238,7 @@ function validateConnectionFields(
 
   const baseUrl = validateBaseUrl(input.baseUrl, problems);
   const auth = validateAuth(input.auth, problems);
-  const headers = validateHeaders(input.headers, problems);
+  const headers = validateHeaders(input.headers, auth, problems);
   const timeoutMs = validateTimeout(input.timeoutMs, problems);
 
   if (problems.length > 0) {
@@ -286,12 +302,25 @@ function validateAuth(value: unknown, problems: DataConnectionProblem[]): DataCo
   if (value === undefined) {
     return { kind: "none" };
   }
-  if (!isPlainRecord(value) || (value.kind !== "none" && value.kind !== "bearer")) {
-    problems.push({ field: "auth", code: "auth-invalid", message: "Authentication must be none or bearer." });
+  if (!isPlainRecord(value) || (value.kind !== "none" && value.kind !== "bearer" && value.kind !== "api-key")) {
+    problems.push({
+      field: "auth",
+      code: "auth-invalid",
+      message: "Authentication must be none, bearer, or an API key header."
+    });
     return null;
   }
-  if (Object.keys(value).some((key) => key !== "kind" && (value.kind !== "bearer" || key !== "credentialRef"))) {
-    problems.push({ field: "auth", code: "auth-invalid", message: "Authentication must contain only its kind and credential reference." });
+  const allowedKeys = value.kind === "none"
+    ? ["kind"]
+    : value.kind === "bearer"
+      ? ["kind", "credentialRef"]
+      : ["kind", "credentialRef", "headerName"];
+  if (Object.keys(value).some((key) => !allowedKeys.includes(key))) {
+    problems.push({
+      field: "auth",
+      code: "auth-invalid",
+      message: "Authentication contains unsupported fields."
+    });
     return null;
   }
   if (value.kind === "none") {
@@ -300,44 +329,53 @@ function validateAuth(value: unknown, problems: DataConnectionProblem[]): DataCo
 
   const credentialRef = typeof value.credentialRef === "string" ? value.credentialRef.trim() : "";
   if (!credentialRef) {
-    problems.push({ field: "auth", code: "credential-required", message: "Bearer authentication requires a credential reference." });
+    problems.push({
+      field: "auth",
+      code: "credential-required",
+      message: value.kind === "bearer"
+        ? "Bearer authentication requires a credential reference."
+        : "API key authentication requires a credential reference."
+    });
     return null;
   }
-  return { kind: "bearer", credentialRef };
+  if (value.kind === "bearer") {
+    return { kind: "bearer", credentialRef };
+  }
+
+  const headerName = typeof value.headerName === "string" ? value.headerName.trim() : "";
+  if (!headerName || !isValidDataHeaderName(headerName)) {
+    problems.push({
+      field: "auth",
+      code: "auth-invalid",
+      message: "API key authentication requires a valid header name."
+    });
+    return null;
+  }
+  if (RESERVED_DATA_HEADER_NAMES.includes(headerName.toLowerCase())) {
+    problems.push({
+      field: "auth",
+      code: "header-reserved",
+      message: `Header "${headerName}" is reserved for another authentication scheme.`
+    });
+    return null;
+  }
+  return { kind: "api-key", credentialRef, headerName };
 }
 
-function validateHeaders(value: unknown, problems: DataConnectionProblem[]): Record<string, string> | null {
-  if (value === undefined) {
-    return {};
+function validateHeaders(
+  value: unknown,
+  auth: DataConnectionAuth | null,
+  problems: DataConnectionProblem[]
+): Record<string, string> | null {
+  const result = validateDataHeaders(value, { reserved: reservedDataHeaderNames(auth) });
+  for (const problem of result.problems) {
+    problems.push({
+      field: "headers",
+      code: problem.code === "reserved" ? "header-reserved" : "headers-invalid",
+      message: problem.message
+    });
   }
-  if (!isPlainRecord(value)) {
-    problems.push({ field: "headers", code: "headers-invalid", message: "Connection headers must be a plain object." });
-    return null;
-  }
-
-  const headers: Record<string, string> = {};
-  let valid = true;
-  for (const [rawName, rawValue] of Object.entries(value)) {
-    const name = rawName.trim();
-    if (!name || name !== rawName || !HTTP_TOKEN.test(name) || UNSAFE_HEADER_NAMES.has(name.toLowerCase())) {
-      problems.push({ field: "headers", code: "headers-invalid", message: `Header name "${rawName}" is invalid.` });
-      valid = false;
-      continue;
-    }
-    if (RESERVED_HEADER_NAMES.has(name.toLowerCase())) {
-      problems.push({ field: "headers", code: "header-reserved", message: `Header "${rawName}" is reserved for authentication.` });
-      valid = false;
-      continue;
-    }
-    if (typeof rawValue !== "string" || /[\r\n\u0000-\u001f\u007f]/.test(rawValue)) {
-      problems.push({ field: "headers", code: "headers-invalid", message: `Header "${rawName}" must have a safe string value.` });
-      valid = false;
-      continue;
-    }
-    headers[name] = rawValue;
-  }
-
-  return valid ? headers : null;
+  return result.headers;
 }
 
 function validateTimeout(value: unknown, problems: DataConnectionProblem[]): number | null {

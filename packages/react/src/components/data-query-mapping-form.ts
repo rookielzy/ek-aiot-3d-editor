@@ -13,13 +13,17 @@ import {
   type DataQuery,
   type DataQueryDefinition,
   type DataQueryMapping,
+  type DataQueryMethod,
   type DataQueryParameterOverrides,
+  type DataSuccessCondition,
   type DataTimeFormat,
   type DataValueMapEntry
 } from "@ek-aiot/3d-editor-core";
 import {
+  createQueryHeaderForm,
   createQueryParameterForm,
   toQueryParameterDrafts,
+  type QueryHeaderForm,
   type QueryParameterForm
 } from "./data-query-form";
 
@@ -52,12 +56,20 @@ export interface QueryQualityEntryForm {
   quality: DataQuality;
 }
 
+export type QuerySuccessValueType = "string" | "number" | "boolean" | "null";
+
 export interface QueryFormState {
   name: string;
+  method: DataQueryMethod;
+  readOnly: boolean;
   path: string;
+  headers: QueryHeaderForm[];
   refreshIntervalSeconds: string;
   maxAgeSeconds: string;
   parameters: QueryParameterForm[];
+  successPath: string;
+  successType: QuerySuccessValueType;
+  successValue: string;
   mode: DataMappingMode;
   rootPath: string;
   identityKind: "path" | "parameter" | "literal";
@@ -120,10 +132,16 @@ export function createQueryQualityEntryForm(): QueryQualityEntryForm {
 export function createQueryFormState(): QueryFormState {
   const form: QueryFormState = {
     name: "",
+    method: "GET",
+    readOnly: true,
     path: "",
+    headers: [],
     refreshIntervalSeconds: formatSeconds(DEFAULT_DATA_QUERY_REFRESH_INTERVAL_MS),
     maxAgeSeconds: formatSeconds(DEFAULT_DATA_QUERY_MAX_AGE_MS),
     parameters: [],
+    successPath: "",
+    successType: "number",
+    successValue: "",
     mode: "array",
     rootPath: "",
     identityKind: "path",
@@ -165,15 +183,26 @@ export function queryFormFromQuery(query: DataQuery): QueryFormState {
     rangeMax: property.range?.max === null || property.range?.max === undefined ? "" : String(property.range.max),
     allowedText: property.allowed ? JSON.stringify(property.allowed) : ""
   }));
+  const successType: QuerySuccessValueType = query.successCondition === null
+    ? "number"
+    : query.successCondition.equals === null
+      ? "null"
+      : typeof query.successCondition.equals === "boolean"
+        ? "boolean"
+        : typeof query.successCondition.equals === "number" ? "number" : "string";
   const form: QueryFormState = {
     name: query.name,
+    method: query.method,
+    readOnly: query.readOnly,
     path: query.path,
+    headers: Object.entries(query.headers).map(([name, value]) => createQueryHeaderForm(name, value)),
     refreshIntervalSeconds: formatSeconds(query.updatePolicy.refreshIntervalMs),
     maxAgeSeconds: formatSeconds(query.updatePolicy.maxAgeMs),
     parameters: query.parameters.map((parameter) => ({
       ...createQueryParameterForm(),
       name: parameter.name,
       type: parameter.type,
+      location: parameter.location ?? "auto",
       useDefault: Object.prototype.hasOwnProperty.call(parameter, "defaultValue"),
       defaultText: Object.prototype.hasOwnProperty.call(parameter, "defaultValue")
         ? String(parameter.defaultValue)
@@ -181,6 +210,11 @@ export function queryFormFromQuery(query: DataQuery): QueryFormState {
       override: false,
       overrideText: ""
     })),
+    successPath: query.successCondition ? formatDataPath(query.successCondition.path) : "",
+    successType,
+    successValue: query.successCondition === null || query.successCondition.equals === null
+      ? ""
+      : String(query.successCondition.equals),
     mode: query.mapping.mode,
     rootPath: formatDataPath(query.mapping.root),
     identityKind: query.mapping.identity.kind,
@@ -277,11 +311,41 @@ export function buildQueryDefinitionFromForm(
   return {
     connectionId,
     name: form.name,
+    method: form.method,
+    readOnly: form.readOnly,
     path: form.path,
+    headers: queryHeadersToRecord(form.headers),
     parameters: toQueryParameterDrafts(form.parameters),
+    successCondition: buildSuccessConditionFromForm(form),
     mapping,
     updatePolicy: buildUpdatePolicy(form)
   };
+}
+
+export function buildSuccessConditionFromForm(form: QueryFormState): DataSuccessCondition | null {
+  if (!form.successPath.trim()) {
+    return null;
+  }
+  const path = parseDataPath(form.successPath) ?? [];
+  const equals: DataPathPrimitive = form.successType === "null"
+    ? null
+    : form.successType === "boolean"
+      ? form.successValue === "true"
+      : form.successType === "number"
+        ? form.successValue.trim() === "" ? Number.NaN : Number(form.successValue)
+        : form.successValue;
+  return { path, equals };
+}
+
+export function queryHeadersToRecord(headers: readonly QueryHeaderForm[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const header of headers) {
+    if (!header.name && !header.value) {
+      continue;
+    }
+    result[header.name] = header.value;
+  }
+  return result;
 }
 
 function buildUpdatePolicy(form: QueryFormState): DataQueryDefinition["updatePolicy"] {
@@ -294,15 +358,22 @@ function buildUpdatePolicy(form: QueryFormState): DataQueryDefinition["updatePol
 export function serializeQueryForm(form: QueryFormState): string {
   return JSON.stringify({
     name: form.name,
+    method: form.method,
+    readOnly: form.readOnly,
     path: form.path,
+    headers: form.headers.map(({ name, value }) => ({ name, value })),
     refreshIntervalSeconds: form.refreshIntervalSeconds,
     maxAgeSeconds: form.maxAgeSeconds,
     parameters: form.parameters.map((parameter) => ({
       name: parameter.name,
       type: parameter.type,
+      location: parameter.location,
       useDefault: parameter.useDefault,
       defaultText: parameter.defaultText
     })),
+    successPath: form.successPath,
+    successType: form.successType,
+    successValue: form.successValue,
     mode: form.mode,
     rootPath: form.rootPath,
     identityKind: form.identityKind,

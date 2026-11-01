@@ -1,12 +1,13 @@
 import type { JsonValue } from "../snapshot/json";
 import type { SceneSnapshot } from "../snapshot/types";
-import { MAX_DATA_QUERY_RETRY_BACKOFF_MS } from "./defaults";
+import { DEFAULT_DATA_MAX_RESPONSE_BYTES, MAX_DATA_QUERY_RETRY_BACKOFF_MS } from "./defaults";
 import { mapDataQueryBody, type DataMappedEntity, type DataMappingProblem } from "./mapping";
 import {
-  buildDataGetRequest,
+  buildDataQueryRequest,
   type DataQueryDraft,
   type DataQueryParameterOverrides,
   type DataQueryProblem,
+  type DataRequestAuth,
   type DataRequestSummary
 } from "./query";
 import type {
@@ -19,46 +20,45 @@ import type {
   DataObjectRuntimeState,
   DataRequestPhase
 } from "./object-data";
+import {
+  evaluateDataResponse,
+  type DataQueryResponse,
+  type DataResponseDescriptor,
+  type DataResponseFailure
+} from "./response";
 import type {
   DataConnection,
   DataCredentialDescriptor,
   DataObjectBinding,
   DataParameterValue,
-  DataQuery
+  DataQuery,
+  DataQueryMethod
 } from "./types";
 
+export {
+  type DataQueryResponse,
+  type DataResponseBodyKind,
+  type DataResponseDescriptor,
+  type DataResponseFailure,
+  type DataResponseFailureCode
+} from "./response";
+
 export interface DataRequestDescriptor {
-  method: "GET";
+  method: DataQueryMethod;
+  readOnly: boolean;
   url: string;
   headers: Readonly<Record<string, string>>;
+  body: JsonValue | null;
+  auth: DataRequestAuth;
   credentialRef: string | null;
   timeoutMs: number;
+  maxResponseBytes: number;
   signal: AbortSignal;
-}
-
-export interface DataResponseDescriptor {
-  status: number;
-  body: string;
-  contentType?: string | null;
-  headers?: Readonly<Record<string, string>>;
 }
 
 export type DataRequestExecutor = (
   request: DataRequestDescriptor
 ) => Promise<DataResponseDescriptor> | DataResponseDescriptor;
-
-export type DataResponseBodyKind = "json" | "text" | "empty";
-
-export interface DataQueryResponse {
-  status: number;
-  ok: boolean;
-  contentType: string | null;
-  headers: Readonly<Record<string, string>>;
-  bodyText: string;
-  bodyKind: DataResponseBodyKind;
-  json?: JsonValue;
-  receivedAt: number;
-}
 
 export type DataQueryRunStatus = "running" | "success" | "error" | "cancelled" | "stale";
 
@@ -108,6 +108,7 @@ export interface DataHostCapabilities {
   executor?: DataRequestExecutor | null;
   credentials?: readonly DataCredentialDescriptor[];
   authRevision?: number;
+  maxResponseBytes?: number | null;
 }
 
 export interface EditorDataService {
@@ -134,6 +135,7 @@ export interface CoreDataServiceOptions {
   executor?: DataRequestExecutor | null;
   credentials?: readonly DataCredentialDescriptor[];
   authRevision?: number;
+  maxResponseBytes?: number | null;
 }
 
 interface ActiveRun {
@@ -211,11 +213,12 @@ export class CoreDataService implements EditorDataService {
   #executor: DataRequestExecutor | null;
   #credentials: readonly DataCredentialDescriptor[];
   #hostRevision: number;
+  #maxResponseBytes: number;
   #state: DataServiceState;
   #objectState: DataObjectDataState;
   #objectStates: Record<string, DataObjectRuntimeState> = {};
   #dataSourcesKey: string;
-  #runConnectionKey: string | undefined;
+  #runConfigKey: string | undefined;
   #configRevision = 0;
   #current: ActiveRun | null = null;
   #nextRunId = 0;
@@ -229,6 +232,7 @@ export class CoreDataService implements EditorDataService {
     this.#executor = options.executor ?? null;
     this.#credentials = Object.freeze([...(options.credentials ?? [])]);
     this.#hostRevision = options.authRevision ?? 0;
+    this.#maxResponseBytes = normalizeMaxResponseBytes(options.maxResponseBytes);
     this.#dataSourcesKey = dataSourcesKey(this.#getSnapshot());
     this.#state = Object.freeze({
       executorAvailable: this.#executor !== null,
@@ -269,26 +273,31 @@ export class CoreDataService implements EditorDataService {
     if (this.#disposed) {
       return;
     }
-    let changed = false;
+    let authChanged = false;
     if (Object.prototype.hasOwnProperty.call(capabilities, "executor")) {
       const next = capabilities.executor ?? null;
       if (next !== this.#executor) {
         this.#executor = next;
-        changed = true;
+        authChanged = true;
       }
     }
     if (capabilities.credentials !== undefined) {
       const next = Object.freeze([...capabilities.credentials]);
       if (!sameCredentials(next, this.#credentials)) {
         this.#credentials = next;
-        changed = true;
+        authChanged = true;
       }
     }
+    if (capabilities.maxResponseBytes !== undefined) {
+      // The response limit is not part of the auth context: existing values stay
+      // valid and the new limit only applies to later evaluations.
+      this.#maxResponseBytes = normalizeMaxResponseBytes(capabilities.maxResponseBytes);
+    }
     const nextRevision = Math.max(
-      this.#hostRevision + (changed ? 1 : 0),
+      this.#hostRevision + (authChanged ? 1 : 0),
       capabilities.authRevision ?? 0
     );
-    if (!changed && nextRevision === this.#hostRevision) {
+    if (!authChanged && nextRevision === this.#hostRevision) {
       return;
     }
     this.#hostRevision = nextRevision;
@@ -345,7 +354,7 @@ export class CoreDataService implements EditorDataService {
       resolve
     };
     this.#current = active;
-    this.#runConnectionKey = JSON.stringify(this.#getSnapshot().dataSources.connections[draft.connectionId]);
+    this.#runConfigKey = dataSourcesRunKey(this.#getSnapshot(), draft.connectionId);
     this.#publish({ ...this.#state, run: active.state });
     void this.#execute(active, draft, options.overrides ?? {});
 
@@ -455,6 +464,7 @@ export class CoreDataService implements EditorDataService {
       return Promise.resolve();
     }
     this.#reconcilingPreview = true;
+    const runNewContexts = trigger === "start" || trigger === "refresh";
     const snapshot = this.#getSnapshot();
     const now = Date.now();
     const objectContexts = new Map<string, PreviewContext>();
@@ -476,7 +486,7 @@ export class CoreDataService implements EditorDataService {
         }], queryMaxAge(query));
         continue;
       }
-      const built = buildDataGetRequest(snapshot, query, { overrides: binding.parameterOverrides });
+      const built = buildDataQueryRequest(snapshot, query, { overrides: binding.parameterOverrides });
       if (!built.ok) {
         this.#objectStates[binding.objectNodeId] = errorBindingState(binding, built.problems.map((problem) => ({
           kind: problem.field === "parameters" ? "parameters" : "request",
@@ -518,7 +528,7 @@ export class CoreDataService implements EditorDataService {
           authRevision: this.#hostRevision,
           request: built.summary,
           bindings: new Map(),
-          phase: "idle",
+          phase: runNewContexts || query.method !== "POST" ? "idle" : "waiting",
           paused: null,
           controller: null,
           timeoutTimer: null,
@@ -556,14 +566,21 @@ export class CoreDataService implements EditorDataService {
         if (context.lastResult) {
           this.#applyMappedResult(context, binding, context.lastResult, { history });
         } else {
-          this.#objectStates[binding.objectNodeId] = createRuntimeState(binding, "loading", {
-            contextKey: context.key,
-            phase: context.phase,
-            refreshing: context.phase === "requesting",
-            paused: context.paused,
-            nextRefreshAt: context.nextRefreshAt,
-            history
-          }, now, queryMaxAge(query));
+          const awaitingManualPost = context.query.method === "POST" && context.phase === "waiting";
+          this.#objectStates[binding.objectNodeId] = createRuntimeState(
+            binding,
+            awaitingManualPost ? "inactive" : "loading",
+            {
+              contextKey: context.key,
+              phase: context.phase,
+              refreshing: context.phase === "requesting",
+              paused: context.paused,
+              nextRefreshAt: context.nextRefreshAt,
+              history
+            },
+            now,
+            queryMaxAge(query)
+          );
         }
       } else {
         this.#objectStates[binding.objectNodeId] = withContextState(previousState, context, now);
@@ -586,7 +603,7 @@ export class CoreDataService implements EditorDataService {
       }
     }
 
-    if (trigger === "start" || trigger === "refresh") {
+    if (runNewContexts) {
       for (const context of this.#contexts.values()) {
         if (createdContexts.includes(context)) {
           continue;
@@ -598,12 +615,14 @@ export class CoreDataService implements EditorDataService {
       }
     }
     for (const context of createdContexts) {
-      this.#enqueueContext(context);
+      if (runNewContexts || context.query.method !== "POST") {
+        this.#enqueueContext(context);
+      }
     }
 
     this.#publishObjectState();
     this.#reconcilingPreview = false;
-    if (trigger === "start" || trigger === "refresh") {
+    if (runNewContexts) {
       return this.#waitForRunningContexts();
     }
     this.#flushRefreshWaitersIfIdle();
@@ -675,16 +694,11 @@ export class CoreDataService implements EditorDataService {
         return;
       }
       controller.abort();
-      this.#completeContext(context, token, {
-        kind: "retry",
-        receivedAt: Date.now(),
-        retryAfterMs: null,
-        problems: [{
-          kind: "request",
-          code: "request-timeout",
-          message: `The request exceeded ${context.request.timeoutMs} ms.`
-        }]
-      });
+      this.#completeContext(context, token, transportFailureOutcome(context, {
+        kind: "request",
+        code: "request-timeout",
+        message: `The request exceeded ${context.request.timeoutMs} ms.`
+      }));
     }, context.request.timeoutMs);
 
     let descriptor: DataResponseDescriptor | null;
@@ -698,11 +712,15 @@ export class CoreDataService implements EditorDataService {
       });
       descriptor = await Promise.race([
         this.#executor!({
-          method: "GET",
+          method: context.request.method,
+          readOnly: context.request.readOnly,
           url: context.request.url,
           headers: context.request.headers,
+          body: context.request.body,
+          auth: context.request.auth,
           credentialRef: context.request.credentialRef,
           timeoutMs: context.request.timeoutMs,
+          maxResponseBytes: this.#maxResponseBytes,
           signal: controller.signal
         }),
         aborted
@@ -711,16 +729,11 @@ export class CoreDataService implements EditorDataService {
       if (!this.#isCurrentRun(context, token)) {
         return;
       }
-      this.#completeContext(context, token, {
-        kind: "retry",
-        receivedAt: Date.now(),
-        retryAfterMs: null,
-        problems: [{
-          kind: "request",
-          code: "request-failed",
-          message: error instanceof Error ? error.message : String(error)
-        }]
-      });
+      this.#completeContext(context, token, transportFailureOutcome(context, {
+        kind: "request",
+        code: "request-failed",
+        message: error instanceof Error ? error.message : String(error)
+      }));
       return;
     }
     if (descriptor === null || !this.#isCurrentRun(context, token)) {
@@ -731,59 +744,22 @@ export class CoreDataService implements EditorDataService {
 
   #interpretResponse(context: PreviewContext, descriptor: DataResponseDescriptor): PreviewOutcome {
     const receivedAt = Date.now();
-    const response = normalizeResponse(descriptor, receivedAt);
-    if (!response.ok) {
-      return {
-        kind: "fatal",
-        receivedAt,
-        problems: [{ kind: "request", code: "response-invalid", message: response.message }]
-      };
+    const evaluation = evaluateDataResponse(descriptor, {
+      receivedAt,
+      maxResponseBytes: this.#maxResponseBytes,
+      successCondition: context.query.successCondition
+    });
+    if (evaluation.kind === "failure") {
+      return responseFailureOutcome(evaluation.failure, context.query.method);
     }
-    const value = response.value;
-    if (value.status === 401 || value.status === 403) {
-      return {
-        kind: "paused",
-        status: value.status,
-        problems: [{
-          kind: "request",
-          code: "response-auth",
-          status: value.status,
-          message: `The service returned HTTP ${value.status}. Fix credentials, then retry.`
-        }]
-      };
-    }
-    if (!value.ok) {
-      const problem: DataObjectRuntimeProblem = {
-        kind: "request",
-        code: "response-http",
-        status: value.status,
-        message: `The service returned HTTP ${value.status}.`
-      };
-      if (isRetryableStatus(value.status)) {
-        return {
-          kind: "retry",
-          receivedAt,
-          retryAfterMs: parseRetryAfter(value.headers, receivedAt),
-          problems: [problem]
-        };
-      }
-      return { kind: "fatal", receivedAt, problems: [problem] };
-    }
-    if (value.bodyKind === "text") {
-      return {
-        kind: "fatal",
-        receivedAt,
-        problems: [{ kind: "request", code: "response-json-invalid", message: "The response body is not valid JSON." }]
-      };
-    }
-    if (value.bodyKind === "empty" || value.json === undefined) {
+    if (evaluation.kind === "empty") {
       return {
         kind: "success",
         result: { entities: [], problems: [], receivedAt }
       };
     }
 
-    const mapped = mapDataQueryBody(context.query.mapping, value.json, {
+    const mapped = mapDataQueryBody(context.query.mapping, evaluation.json, {
       connectionId: context.query.connectionId,
       queryId: context.query.id,
       executionId: `preview-${context.runToken}-${Date.now()}`,
@@ -966,6 +942,12 @@ export class CoreDataService implements EditorDataService {
 
   #scheduleNextPoll(context: PreviewContext, delay: number): void {
     this.#clearPollTimer(context);
+    if (context.query.method === "POST") {
+      // Read-only POST queries run only for manual tests, first preview, or explicit refresh.
+      context.nextRefreshAt = null;
+      context.retryBackoffMs = null;
+      return;
+    }
     const now = Date.now();
     context.nextRefreshAt = now + delay;
     context.pollTimer = setTimeout(() => {
@@ -1124,6 +1106,7 @@ export class CoreDataService implements EditorDataService {
         queryId: context.query.id,
         connectionId: context.connectionId,
         queryName: context.queryName,
+        method: context.query.method,
         parameters: Object.freeze({ ...context.parameters }),
         objectNodeIds: Object.freeze([...context.bindings.keys()]),
         phase: context.phase,
@@ -1175,7 +1158,7 @@ export class CoreDataService implements EditorDataService {
     if (active.settled) {
       return;
     }
-    const built = buildDataGetRequest(this.#getSnapshot(), draft, { overrides });
+    const built = buildDataQueryRequest(this.#getSnapshot(), draft, { overrides });
     if (!built.ok) {
       this.#finish(active, { status: "error", problems: built.problems });
       return;
@@ -1208,11 +1191,15 @@ export class CoreDataService implements EditorDataService {
     }
 
     const request: DataRequestDescriptor = Object.freeze({
-      method: "GET",
+      method: requestSummary.method,
+      readOnly: requestSummary.readOnly,
       url: requestSummary.url,
       headers: requestSummary.headers,
+      body: requestSummary.body,
+      auth: requestSummary.auth,
       credentialRef: requestSummary.credentialRef,
       timeoutMs: requestSummary.timeoutMs,
+      maxResponseBytes: this.#maxResponseBytes,
       signal: active.controller.signal
     });
 
@@ -1257,44 +1244,31 @@ export class CoreDataService implements EditorDataService {
     }
 
     const receivedAt = Date.now();
-    const response = normalizeResponse(responseDescriptor, receivedAt);
-    if (!response.ok) {
+    const evaluation = evaluateDataResponse(responseDescriptor, {
+      receivedAt,
+      maxResponseBytes: this.#maxResponseBytes,
+      successCondition: requestSummary.successCondition
+    });
+    if (evaluation.kind === "failure") {
       this.#finish(active, {
         status: "error",
         request: requestSummary,
+        response: evaluation.failure.response,
         problems: [{
-          code: "response-invalid",
+          code: evaluation.failure.code,
           field: "response",
           connectionId: active.connectionId,
-          message: response.message
+          ...(evaluation.failure.status !== null ? { status: evaluation.failure.status } : {}),
+          message: evaluation.failure.message
         }]
       });
       return;
     }
-
-    const problems: DataQueryProblem[] = [];
-    if (!response.value.ok) {
-      problems.push({
-        code: "response-http",
-        field: "response",
-        connectionId: active.connectionId,
-        status: response.value.status,
-        message: `The service returned HTTP ${response.value.status}.`
-      });
-    }
-    if (response.value.bodyKind === "text") {
-      problems.push({
-        code: "response-json-invalid",
-        field: "response",
-        connectionId: active.connectionId,
-        message: "The response body is not valid JSON."
-      });
-    }
     this.#finish(active, {
-      status: problems.length > 0 ? "error" : "success",
+      status: "success",
       request: requestSummary,
-      response: response.value,
-      problems
+      response: evaluation.response,
+      problems: []
     });
   }
 
@@ -1376,8 +1350,9 @@ export class CoreDataService implements EditorDataService {
     }
     this.#dataSourcesKey = nextKey;
     this.#configRevision += 1;
-    const invalidated = this.#state.run !== null &&
-      JSON.stringify(snapshot.dataSources.connections[this.#state.run.connectionId]) !== this.#runConnectionKey;
+    const runConnectionId = this.#current?.connectionId ?? this.#state.run?.connectionId;
+    const invalidated = runConnectionId !== undefined &&
+      dataSourcesRunKey(snapshot, runConnectionId) !== this.#runConfigKey;
     if (invalidated) {
       this.#invalidateActive();
     }
@@ -1428,8 +1403,12 @@ function previewContextKey(
     queryId: query.id,
     connectionId: query.connectionId,
     query: {
+      method: query.method,
+      readOnly: query.readOnly,
       path: query.path,
+      headers: query.headers,
       parameters: query.parameters,
+      successCondition: query.successCondition,
       mapping: query.mapping,
       updatePolicy: query.updatePolicy
     },
@@ -1472,6 +1451,18 @@ function sameCredentials(
 
 function dataSourcesKey(snapshot: Pick<SceneSnapshot, "dataSources">): string {
   return JSON.stringify(snapshot.dataSources);
+}
+
+function dataSourcesRunKey(
+  snapshot: Pick<SceneSnapshot, "dataSources">,
+  connectionId: string
+): string {
+  return stableJson({
+    connection: snapshot.dataSources.connections[connectionId] ?? null,
+    queries: Object.values(snapshot.dataSources.queries)
+      .filter((query) => query.connectionId === connectionId)
+      .sort((left, right) => left.id.localeCompare(right.id))
+  });
 }
 
 function withContextState(
@@ -1673,8 +1664,45 @@ function freezeObjectDataState(
   });
 }
 
-function isRetryableStatus(status: number): boolean {
-  return status === 408 || status === 429 || status >= 500;
+function responseFailureOutcome(
+  failure: DataResponseFailure,
+  method: DataQueryMethod
+): PreviewOutcome {
+  const problem: DataObjectRuntimeProblem = {
+    kind: "request",
+    code: failure.code,
+    ...(failure.status !== null ? { status: failure.status } : {}),
+    message: failure.message
+  };
+  if (failure.code === "response-auth" && failure.status !== null) {
+    return { kind: "paused", status: failure.status, problems: [problem] };
+  }
+  if (failure.retryable && method === "GET") {
+    const receivedAt = failure.receivedAt ?? Date.now();
+    return {
+      kind: "retry",
+      receivedAt,
+      retryAfterMs: failure.response ? parseRetryAfter(failure.response.headers, receivedAt) : null,
+      problems: [problem]
+    };
+  }
+  return { kind: "fatal", receivedAt: failure.receivedAt, problems: [problem] };
+}
+
+function transportFailureOutcome(
+  context: PreviewContext,
+  problem: DataObjectRuntimeProblem
+): PreviewOutcome {
+  const receivedAt = Date.now();
+  return context.query.method === "GET"
+    ? { kind: "retry", receivedAt, retryAfterMs: null, problems: [problem] }
+    : { kind: "fatal", receivedAt, problems: [problem] };
+}
+
+function normalizeMaxResponseBytes(value: number | null | undefined): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
+    ? value
+    : DEFAULT_DATA_MAX_RESPONSE_BYTES;
 }
 
 function parseRetryAfter(headers: Readonly<Record<string, string>>, now: number): number | null {
@@ -1725,72 +1753,5 @@ function disposedHandle(runId: string, connectionId: string, configRevision: num
     configRevision,
     result: Promise.resolve(result),
     cancel() {}
-  };
-}
-
-function normalizeResponse(
-  value: unknown,
-  receivedAt: number
-): { ok: true; value: DataQueryResponse } | { ok: false; message: string } {
-  if (!value || typeof value !== "object") {
-    return { ok: false, message: "The host returned a non-object response." };
-  }
-  const descriptor = value as Partial<DataResponseDescriptor>;
-  if (
-    typeof descriptor.status !== "number" ||
-    !Number.isInteger(descriptor.status) ||
-    descriptor.status < 100 ||
-    descriptor.status > 599
-  ) {
-    return { ok: false, message: "The host response status is invalid." };
-  }
-  if (typeof descriptor.body !== "string") {
-    return { ok: false, message: "The host response body must be text." };
-  }
-  if (
-    descriptor.contentType !== undefined &&
-    descriptor.contentType !== null &&
-    typeof descriptor.contentType !== "string"
-  ) {
-    return { ok: false, message: "The host response content type is invalid." };
-  }
-  const headers: Record<string, string> = {};
-  if (descriptor.headers !== undefined) {
-    if (!descriptor.headers || typeof descriptor.headers !== "object" || Array.isArray(descriptor.headers)) {
-      return { ok: false, message: "The host response headers are invalid." };
-    }
-    for (const [name, headerValue] of Object.entries(descriptor.headers)) {
-      if (typeof headerValue !== "string") {
-        return { ok: false, message: "The host response headers must be strings." };
-      }
-      headers[name] = headerValue;
-    }
-  }
-
-  const bodyText = descriptor.body;
-  const trimmed = bodyText.trim();
-  let bodyKind: DataResponseBodyKind = "empty";
-  let json: JsonValue | undefined;
-  if (trimmed.length > 0) {
-    try {
-      json = JSON.parse(trimmed) as JsonValue;
-      bodyKind = "json";
-    } catch {
-      bodyKind = "text";
-    }
-  }
-
-  return {
-    ok: true,
-    value: Object.freeze({
-      status: descriptor.status,
-      ok: descriptor.status >= 200 && descriptor.status < 300,
-      contentType: descriptor.contentType ?? null,
-      headers: Object.freeze(headers),
-      bodyText,
-      bodyKind,
-      ...(bodyKind === "json" ? { json } : {}),
-      receivedAt
-    })
   };
 }

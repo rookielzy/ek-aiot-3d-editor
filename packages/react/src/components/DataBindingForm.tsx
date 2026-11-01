@@ -419,8 +419,12 @@ export function DataBindingForm({
     setCandidates({ status: "loading", signature: requestSignature });
     const handle = service.executeQueryDraft({
       connectionId: query.connectionId,
+      method: query.method,
+      readOnly: query.readOnly,
       path: query.path,
-      parameters: query.parameters
+      headers: query.headers,
+      parameters: query.parameters,
+      successCondition: query.successCondition
     }, { overrides });
     candidateRunRef.current = handle.id;
     const result = await handle.result;

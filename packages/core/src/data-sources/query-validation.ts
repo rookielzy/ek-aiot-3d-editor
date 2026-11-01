@@ -4,11 +4,15 @@ import {
   createDefaultDataQueryUpdatePolicy,
   MIN_DATA_QUERY_REFRESH_INTERVAL_MS
 } from "./defaults";
+import { reservedDataHeaderNames, validateDataHeaders } from "./headers";
 import { validateDataQueryMapping } from "./mapping";
 import {
-  buildDataGetRequest,
+  buildDataQueryRequest,
+  resolveDataParameterLocations,
   resolveDataQueryParameters,
+  validateDataSuccessCondition,
   validateDataQueryParameterDefinitions,
+  type DataQueryProblem,
   type DataQueryProblemCode
 } from "./query";
 import type {
@@ -17,12 +21,13 @@ import type {
   DataParameterType,
   DataParameterValue,
   DataQuery,
-  DataQueryDefinition,
   DataQueryDefinitionProblem,
   DataQueryMapping,
+  DataQueryMethod,
   DataQueryParameterDraft,
   DataQueryUpdatePolicy,
-  DataQueryValidationResult
+  DataQueryValidationResult,
+  DataSuccessCondition
 } from "./types";
 
 export interface ValidateDataQueryDefinitionOptions {
@@ -71,6 +76,9 @@ export function validateDataQueryDefinition(
     });
   }
 
+  const method = validateMethod(input.method, problems);
+  const readOnly = validateReadOnly(input.readOnly, method, problems);
+  const headers = validateHeaders(input.headers, options.connection ?? null, problems);
   const parameters = validateParameters(input.parameters, connectionId, problems);
   const path = typeof input.path === "string" ? input.path.trim() : "";
 
@@ -82,51 +90,104 @@ export function validateDataQueryDefinition(
     headers: {},
     timeoutMs: 10_000
   } : null);
-  if (connection && parameters && !problems.some((problem) => problem.field === "parameters")) {
-    const request = buildDataGetRequest(
-      fakeSnapshot(connection),
-      {
-        connectionId: connection.id,
-        path,
-        parameters
-      },
-      { overrides: sampleParameterValues(parameters) }
-    );
-    if (!request.ok) {
-      for (const problem of request.problems) {
-        if (problem.code === "connection-not-found") {
-          continue;
-        }
+  let normalizedParameters: DataQueryParameterDraft[] | null = null;
+  let successCondition: DataSuccessCondition | null = null;
+  if (
+    connection &&
+    parameters &&
+    headers &&
+    method &&
+    readOnly &&
+    !problems.some((problem) => problem.field === "parameters")
+  ) {
+    const locations = resolveDataParameterLocations(parameters, method, path, connectionId);
+    if (!locations.ok) {
+      for (const problem of locations.problems) {
         problems.push({
-          field: problem.field === "path" ? "path" : "parameters",
-          code: mapRequestProblemCode(problem.code),
+          field: "parameters",
+          code: "parameter-invalid",
           message: problem.message,
           ...(problem.parameterName ? { parameterName: problem.parameterName } : {})
         });
       }
     }
+    if (locations.ok) {
+      normalizedParameters = parameters.map((parameter) => ({
+        ...parameter,
+        location: locations.locations[parameter.name.trim()]
+      }));
+      if (!problems.some((problem) => problem.field === "parameters")) {
+        const validatedSuccessCondition = validateDataSuccessCondition(input.successCondition, connectionId);
+        if (validatedSuccessCondition.problem) {
+          problems.push({
+            field: "successCondition",
+            code: "success-condition-invalid",
+            message: validatedSuccessCondition.problem.message
+          });
+        }
+        if (!validatedSuccessCondition.problem) {
+          const request = buildDataQueryRequest(
+            fakeSnapshot(connection),
+            {
+              connectionId: connection.id,
+              method,
+              readOnly,
+              path,
+              headers,
+              parameters: normalizedParameters,
+              successCondition: validatedSuccessCondition.condition
+            },
+            { overrides: sampleParameterValues(normalizedParameters) }
+          );
+          if (!request.ok) {
+            for (const problem of request.problems) {
+              if (problem.code === "connection-not-found") {
+                continue;
+              }
+              problems.push({
+                field: queryProblemField(problem),
+                code: mapRequestProblemCode(problem.code),
+                message: problem.message,
+                ...(problem.parameterName ? { parameterName: problem.parameterName } : {})
+              });
+            }
+          }
+          if (request.ok) {
+            successCondition = request.summary.successCondition;
+          }
+        }
+      }
+    }
   }
 
-  const mapping = validateDataQueryMapping(input.mapping, { parameters: parameters ?? [] });
+  const mapping = validateDataQueryMapping(input.mapping, { parameters: normalizedParameters ?? parameters ?? [] });
   for (const problem of mapping.problems) {
     problems.push(problem);
   }
 
-  const updatePolicy = validateUpdatePolicy(input.updatePolicy, problems);
+  const updatePolicy = validateUpdatePolicy(input.updatePolicy, method, problems);
 
   if (
     problems.length === 0 &&
-    parameters &&
+    normalizedParameters &&
     mapping.value &&
     updatePolicy &&
     options.existingQuery &&
     options.referencingBindings &&
     options.referencingBindings.length > 0
   ) {
-    validateBindingReferences(options.existingQuery, parameters, mapping.value, options.referencingBindings, problems);
+    validateBindingReferences(options.existingQuery, normalizedParameters, mapping.value, options.referencingBindings, problems);
   }
 
-  if (problems.length > 0 || !mapping.value || !parameters || !updatePolicy) {
+  if (
+    problems.length > 0 ||
+    !mapping.value ||
+    !normalizedParameters ||
+    !headers ||
+    !method ||
+    !readOnly ||
+    !updatePolicy
+  ) {
     return { ok: false, problems };
   }
 
@@ -136,16 +197,104 @@ export function validateDataQueryDefinition(
     value: {
       connectionId,
       name,
+      method,
+      readOnly,
       path,
-      parameters,
+      headers,
+      parameters: normalizedParameters,
+      successCondition,
       mapping: mapping.value,
       updatePolicy
     }
   };
 }
 
+function validateMethod(value: unknown, problems: DataQueryDefinitionProblem[]): DataQueryMethod | null {
+  if (value === undefined) {
+    return "GET";
+  }
+  if (value !== "GET" && value !== "POST") {
+    problems.push({
+      field: "method",
+      code: "method-invalid",
+      message: "A query method must be GET or POST."
+    });
+    return null;
+  }
+  return value;
+}
+
+function validateReadOnly(
+  value: unknown,
+  method: DataQueryMethod | null,
+  problems: DataQueryDefinitionProblem[]
+): true | null {
+  if (value === undefined) {
+    if (method === "POST") {
+      problems.push({
+        field: "method",
+        code: "post-read-only-required",
+        message: "A POST query must be explicitly confirmed as read-only."
+      });
+      return null;
+    }
+    return true;
+  }
+  if (value !== true) {
+    problems.push({
+      field: "method",
+      code: method === "POST" ? "post-read-only-required" : "method-invalid",
+      message: method === "POST"
+        ? "A POST query must be explicitly confirmed as read-only."
+        : "Only read-only data queries are supported."
+    });
+    return null;
+  }
+  return true;
+}
+
+function validateHeaders(
+  value: unknown,
+  connection: DataConnection | null,
+  problems: DataQueryDefinitionProblem[]
+): Record<string, string> | null {
+  const result = validateDataHeaders(value, {
+    reserved: reservedDataHeaderNames(connection?.auth)
+  });
+  for (const problem of result.problems) {
+    problems.push({
+      field: "headers",
+      code: problem.code === "reserved" ? "header-reserved" : "header-invalid",
+      message: problem.message
+    });
+  }
+  return result.headers;
+}
+
+function queryProblemField(problem: DataQueryProblem): DataQueryDefinitionProblem["field"] {
+  if (problem.field === "path") {
+    return "path";
+  }
+  if (problem.field === "parameters") {
+    return "parameters";
+  }
+  switch (problem.code) {
+    case "header-invalid":
+    case "header-reserved":
+      return "headers";
+    case "method-invalid":
+    case "post-read-only-required":
+      return "method";
+    case "success-condition-invalid":
+      return "successCondition";
+    default:
+      return "query";
+  }
+}
+
 function validateUpdatePolicy(
   input: unknown,
+  method: DataQueryMethod | null,
   problems: DataQueryDefinitionProblem[]
 ): DataQueryUpdatePolicy | null {
   if (input === undefined) {
@@ -181,6 +330,7 @@ function validateUpdatePolicy(
     });
   }
   if (
+    method === "GET" &&
     typeof refreshIntervalMs === "number" &&
     Number.isSafeInteger(refreshIntervalMs) &&
     refreshIntervalMs >= MIN_DATA_QUERY_REFRESH_INTERVAL_MS &&
@@ -230,6 +380,9 @@ function validateParameters(
       name: typeof parameter.name === "string" ? parameter.name.trim() : "",
       type: parameter.type as DataParameterType
     };
+    if (parameter.location !== undefined) {
+      entry.location = parameter.location as DataQueryParameterDraft["location"];
+    }
     if (Object.prototype.hasOwnProperty.call(parameter, "defaultValue") &&
       parameter.defaultValue !== undefined) {
       entry.defaultValue = parameter.defaultValue as DataParameterValue;
@@ -287,12 +440,25 @@ function mapRequestProblemCode(code: DataQueryProblemCode): DataQueryDefinitionP
   switch (code) {
     case "connection-not-found":
       return "connection-not-found";
+    case "header-invalid":
+      return "header-invalid";
+    case "header-reserved":
+      return "header-reserved";
+    case "method-invalid":
+      return "method-invalid";
     case "parameter-duplicate":
       return "parameter-duplicate";
     case "parameter-missing":
       return "parameter-missing";
     case "parameter-type":
       return "parameter-type";
+    case "post-read-only-required":
+      return "post-read-only-required";
+    case "success-condition-invalid":
+      return "success-condition-invalid";
+    case "parameter-location-invalid":
+    case "parameter-definition-invalid":
+      return "parameter-invalid";
     default:
       return code.startsWith("path-") ? "path-invalid" : "parameter-invalid";
   }

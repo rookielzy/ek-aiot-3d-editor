@@ -10,7 +10,16 @@ export interface DataConnectionAuthBearer {
   credentialRef: string;
 }
 
-export type DataConnectionAuth = DataConnectionAuthNone | DataConnectionAuthBearer;
+export interface DataConnectionAuthApiKey {
+  kind: "api-key";
+  credentialRef: string;
+  headerName: string;
+}
+
+export type DataConnectionAuth =
+  | DataConnectionAuthNone
+  | DataConnectionAuthBearer
+  | DataConnectionAuthApiKey;
 
 export interface DataConnection {
   id: DataConnectionId;
@@ -36,11 +45,26 @@ export type DataParameterType = "string" | "number" | "boolean";
 export type DataParameterValue = string | number | boolean;
 export type DataQueryParameterOverrides = Readonly<Record<string, DataParameterValue | null | undefined>>;
 
+export type DataQueryMethod = "GET" | "POST";
+export type DataParameterLocation = "path" | "query" | "body";
+export type DataParameterLocationInput = DataParameterLocation | "auto";
+
 export interface DataQueryParameterDraft {
   name: string;
   type: DataParameterType;
   /** Omit to require an explicit test/binding value for this parameter. */
   defaultValue?: DataParameterValue;
+  /**
+   * Where the value is sent. `auto` inserts into the path when a placeholder
+   * uses the name, otherwise uses the query string (GET) or JSON body (POST).
+   */
+  location?: DataParameterLocationInput;
+}
+
+/** One strict JSON-scalar comparison against a resolved response field. */
+export interface DataSuccessCondition {
+  path: DataPath;
+  equals: DataPathPrimitive;
 }
 
 export type DataPathSegment =
@@ -118,8 +142,9 @@ export interface DataQueryMapping {
 }
 
 /**
- * Durable GET polling policy. `refreshIntervalMs` is the delay after a
- * completed request; `maxAgeMs` bounds both receive age and source sample age.
+ * Durable query update policy. For GET, `refreshIntervalMs` is the delay after
+ * a completed request; `maxAgeMs` bounds both receive age and source sample age.
+ * POST uses only `maxAgeMs` and runs on explicit triggers instead of polling.
  */
 export interface DataQueryUpdatePolicy {
   refreshIntervalMs: number;
@@ -134,13 +159,25 @@ export interface DataQuery {
   id: DataQueryId;
   connectionId: DataConnectionId;
   name: string;
+  method: DataQueryMethod;
+  /** POST requires an explicit read-only confirmation; GET is always a read. */
+  readOnly: boolean;
   path: string;
+  headers: Readonly<Record<string, string>>;
   parameters: readonly DataQueryParameterDraft[];
+  successCondition: DataSuccessCondition | null;
   mapping: DataQueryMapping;
   updatePolicy: DataQueryUpdatePolicy;
 }
 
-export type DataQueryDefinition = Omit<DataQuery, "id">;
+/**
+ * Query authoring input. Request fields added after the first v9 slice stay
+ * optional in drafts; validation persists their normalized values.
+ */
+export type DataQueryDefinition = Omit<
+  DataQuery,
+  "id" | "method" | "readOnly" | "headers" | "successCondition"
+> & Partial<Pick<DataQuery, "method" | "readOnly" | "headers" | "successCondition">>;
 
 export interface DataQueryInput extends DataQueryDefinition {
   id?: DataQueryId;
@@ -149,8 +186,11 @@ export interface DataQueryInput extends DataQueryDefinition {
 export type DataQueryField =
   | "name"
   | "connection"
+  | "method"
+  | "headers"
   | "path"
   | "parameters"
+  | "successCondition"
   | "mapping"
   | "updatePolicy"
   | "query";
@@ -160,8 +200,11 @@ export type DataQueryDefinitionProblemCode =
   | "binding-property-in-use"
   | "command-failed"
   | "connection-not-found"
+  | "header-invalid"
+  | "header-reserved"
   | "mapping-invalid"
   | "mapping-property-required"
+  | "method-invalid"
   | "name-duplicate"
   | "name-required"
   | "parameter-duplicate"
@@ -169,8 +212,10 @@ export type DataQueryDefinitionProblemCode =
   | "parameter-missing"
   | "parameter-type"
   | "path-invalid"
+  | "post-read-only-required"
   | "query-in-use"
   | "query-not-found"
+  | "success-condition-invalid"
   | "update-policy-invalid";
 
 export interface DataQueryDefinitionProblem {
@@ -181,10 +226,13 @@ export interface DataQueryDefinitionProblem {
   propertyKey?: string;
 }
 
+/** Fully normalized query fields ready for persistence. */
+export type NormalizedDataQueryDefinition = Omit<DataQuery, "id">;
+
 export interface DataQueryValidationResult {
   ok: boolean;
   problems: DataQueryDefinitionProblem[];
-  value?: DataQueryDefinition;
+  value?: NormalizedDataQueryDefinition;
 }
 
 /**

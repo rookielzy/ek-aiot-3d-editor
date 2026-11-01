@@ -123,8 +123,12 @@ function cloneQueryDefinition(query: DataQuery): DataQueryDefinition {
   return JSON.parse(JSON.stringify({
     connectionId: query.connectionId,
     name: query.name,
+    method: query.method,
+    readOnly: query.readOnly,
     path: query.path,
+    headers: query.headers,
     parameters: query.parameters,
+    successCondition: query.successCondition,
     mapping: query.mapping,
     updatePolicy: query.updatePolicy
   })) as DataQueryDefinition;

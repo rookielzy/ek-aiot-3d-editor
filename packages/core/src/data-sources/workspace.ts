@@ -11,6 +11,7 @@ export interface DataQueryListItem {
   id: string;
   connectionId: string;
   name: string;
+  method: "GET" | "POST";
   path: string;
   mode: "array" | "single";
   propertyCount: number;
@@ -24,6 +25,7 @@ export interface DataConnectionListItem {
   baseUrl: string;
   authKind: DataConnectionAuth["kind"];
   credentialRef: string | null;
+  credentialHeaderName: string | null;
   credentialLabel: string | null;
   credentialAvailable: boolean | null;
   timeoutMs: number;
@@ -59,7 +61,7 @@ export function buildDataSourcesWorkspaceModel(
   const connections = Object.values(snapshot.dataSources.connections)
     .map((connection): DataConnectionListItem => {
       const counts = countDataConnectionReferences(snapshot.dataSources, connection.id);
-      const credentialRef = connection.auth.kind === "bearer" ? connection.auth.credentialRef : null;
+      const credentialRef = connection.auth.kind === "none" ? null : connection.auth.credentialRef;
       const credential = credentialRef ? credentialsByRef.get(credentialRef) : undefined;
       const credentialAvailable = credentialRef ? Boolean(credential?.available) : null;
 
@@ -69,6 +71,7 @@ export function buildDataSourcesWorkspaceModel(
         baseUrl: connection.baseUrl,
         authKind: connection.auth.kind,
         credentialRef,
+        credentialHeaderName: connection.auth.kind === "api-key" ? connection.auth.headerName : null,
         credentialLabel: credential?.label ?? null,
         credentialAvailable,
         timeoutMs: connection.timeoutMs,
@@ -127,6 +130,7 @@ export function buildDataQueryList(
         id: query.id,
         connectionId: query.connectionId,
         name: query.name,
+        method: query.method,
         path: query.path,
         mode: query.mapping.mode,
         propertyCount: query.mapping.properties.length,
@@ -149,6 +153,7 @@ export function filterDataConnectionItems(
     connection.name,
     connection.baseUrl,
     connection.credentialRef ?? "",
+    connection.credentialHeaderName ?? "",
     connection.credentialLabel ?? "",
     connection.authKind
   ].some((value) => value.toLowerCase().includes(query)));

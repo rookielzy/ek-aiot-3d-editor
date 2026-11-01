@@ -14,7 +14,8 @@ import {
   resolveDefaultPresentationView,
   buildAssetWorkspaceModel,
   buildDataSourcesWorkspaceModel,
-  buildDataGetRequest,
+  buildDataQueryRequest,
+  resolveDataParameterLocations,
   buildDeleteDataConnectionCommand,
   buildDuplicateDataConnectionCommand,
   buildInspectorModel,
@@ -583,7 +584,13 @@ describe("core public API", () => {
       path: "/devices/{deviceId}",
       parameters: [{ name: "deviceId", type: "string", defaultValue: "pump-1" }]
     };
-    const requestBuild = buildDataGetRequest(dataSnapshot, queryDraft);
+    const requestBuild = buildDataQueryRequest(dataSnapshot, queryDraft);
+    const parameterLocations = resolveDataParameterLocations(
+      queryDraft.parameters,
+      "GET",
+      queryDraft.path,
+      dataConnection.id
+    );
     const requestExecutor: DataRequestExecutor = async (request: DataRequestDescriptor): Promise<DataResponseDescriptor> => ({
       status: 200,
       body: JSON.stringify({ url: request.url })
@@ -726,6 +733,7 @@ describe("core public API", () => {
     expect(deleteConnectionResult.ok).toBe(true);
     expect(requestBuild.ok).toBe(true);
     expect(requestBuild.ok && requestBuild.summary.url).toBe("https://api.example.test/v1/devices/pump-1");
+    expect(parameterLocations).toMatchObject({ ok: true, locations: { deviceId: "path" } });
     expect(editorDataService?.getState()).toMatchObject({ executorAvailable: false, configRevision: 0, run: null });
     expect(editorWithExecutorDataService?.getState()).toMatchObject({ executorAvailable: true, configRevision: 0, run: null });
     expect(typeof baseEditor.getDataService).toBe("function");

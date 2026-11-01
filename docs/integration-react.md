@@ -68,7 +68,7 @@ export function EditorPage() {
 
 ## 数据源连接
 
-默认 Data 工作区从 Snapshot 的 `dataSources` 读取连接，并通过 `credentials` 接收宿主凭证描述。凭证描述只包含 `ref`、`label`、`available`，不会进入 Snapshot、项目包或 command history：
+默认 Data 工作区从 Snapshot 的 `dataSources` 读取连接，并通过 `credentials` 接收宿主凭证描述。凭证描述只包含 `ref`、`label`、`available`，不会进入 Snapshot、项目包或 command history。认证支持 none、Bearer 和 API key；API key 只保存 `credentialRef` 与非秘密 `headerName`（默认 `X-API-Key`），公共与查询头不能使用认证保留头名：
 
 ```tsx
 <EditorWorkbench
@@ -82,15 +82,28 @@ export function EditorPage() {
 
 `credentials` 是 editor 的初始化选项。`useEditor`、`useWorkbench` 和 `EditorWorkbench` 使用首次传入的凭证描述；后续重渲染即使传入新的数组或描述，也不会替换 editor、场景或 history。传入外部 `editor` 时，以该 editor 的凭证描述为准。
 
-### 手动 GET 请求
+### 手动 GET/POST 请求
 
-Data 工作区的 “Test request” 可以在未保存查询的情况下运行一次受控 GET。宿主通过 `executor` 注入真实网络能力；core 只构建请求、校验参数、管理超时/取消与运行态，不会调用 global `fetch`：
+Data 工作区的 “Test request” 可以在未保存查询的情况下运行一次受控 GET 或只读 POST。宿主通过 `executor` 注入真实网络能力；core 只构建请求、校验参数、管理超时/取消与运行态，不会调用 global `fetch`：
 
 ```tsx
 import type { DataRequestExecutor } from "@ek-aiot/3d-editor-core";
 
-const executor: DataRequestExecutor = async ({ method, url, headers, signal }) => {
-  const response = await fetch(url, { method, headers, signal });
+const tokens: Record<string, string> = { "warehouse-token": await loadToken() };
+
+const executor: DataRequestExecutor = async (request) => {
+  const headers = { ...request.headers };
+  if (request.auth.kind === "bearer" && request.credentialRef) {
+    headers.Authorization = `Bearer ${tokens[request.credentialRef]}`;
+  } else if (request.auth.kind === "api-key" && request.credentialRef) {
+    headers[request.auth.headerName] = tokens[request.credentialRef];
+  }
+  const response = await fetch(request.url, {
+    method: request.method,
+    headers,
+    body: request.body === null ? undefined : JSON.stringify(request.body),
+    signal: request.signal
+  });
   return {
     status: response.status,
     contentType: response.headers.get("content-type"),
@@ -104,9 +117,11 @@ const executor: DataRequestExecutor = async ({ method, url, headers, signal }) =
 />
 ```
 
-executor 收到 `credentialRef` 而不是秘密；认证头、来源校验、重定向和网络边界由宿主负责。`executor` 与 `credentials` 一样是 editor 初始化选项：`useEditor`/`EditorWorkbench` 不会因后续重渲染替换它们；传入外部 `editor` 时以该 editor 的能力为准。
+executor 收到 `credentialRef`、认证类型和 API key header name，而不是秘密；认证头、来源校验、重定向和网络边界由宿主负责。`executor` 与 `credentials` 一样是 editor 初始化选项：`useEditor`/`EditorWorkbench` 不会因后续重渲染替换它们；传入外部 `editor` 时以该 editor 的能力为准。宿主可通过 `createEditor({ maxResponseBytes })` 设置响应硬上限（默认 1 MiB）；超限的整次执行以 `response-too-large` 失败，不会把截断内容当作完整设备集合。运行中可通过 `editor.getDataService().setHostCapabilities()` 替换 executor、凭证描述、认证 revision 或响应上限；只有 executor 与凭证上下文变化才提升认证 revision 并清除旧运行态，响应上限变化只影响后续判定。
 
-请求草稿只存在于当前窗口会话。core 的参数解析区分未提供、空字符串、`0` 和 `false`，缺少必填值或类型错误时不会调用 executor；路径只允许相对服务前缀，路径参数和 query 参数分别编码。运行结果包含请求摘要（方法、最终地址、公共头、超时、凭证引用、解析后的参数）、执行时的 `dataSources` 配置修订、HTTP 状态、原始文本、解析后的 JSON、耗时和诊断。响应、测试参数覆盖、取消状态和 timer 都不进入 `Snapshot`、`.ek3d`、command history 或 clipboard；修改草稿、连接配置、undo/redo 或销毁 editor 后，晚到响应不会成为当前结果。没有配置 executor 时，Data 工作区保留连接和查询编辑能力并显示可定位问题，而不是静默请求。
+请求草稿只存在于当前窗口会话。core 的参数解析区分未提供、空字符串、`0` 和 `false`，缺少必填值或类型错误时不会调用 executor；参数可放在 path、query 或 POST body，body 是显式 body 参数组成的扁平 typed JSON 对象，POST 必须显式确认只读后才能执行。路径只允许相对服务前缀，路径参数和 query 参数分别编码；公共头与查询头按大小写不敏感合并，查询头覆盖同名连接头，认证保留头在保存和执行时都会被拒绝。可选的业务成功条件按字段路径与 JSON scalar 严格比较；HTTP 失败、认证失败、业务失败、204/空响应、非 JSON、解析失败和超过宿主响应上限会得到不同 problem。运行结果包含请求摘要（方法、只读确认、最终地址、合并后的头、body、超时、凭证引用、解析后的参数、成功条件）、执行时的 `dataSources` 配置修订、HTTP 状态、原始文本、解析后的 JSON、耗时和诊断。响应、测试参数覆盖、取消状态和 timer 都不进入 `Snapshot`、`.ek3d`、command history 或 clipboard；修改草稿、连接配置、undo/redo 或销毁 editor 后，晚到响应不会成为当前结果。没有配置 executor 时，Data 工作区保留连接和查询编辑能力并显示可定位问题，而不是静默请求。
+
+只读 POST 不会自动轮询或重试，只在手动测试、首次预览或显式刷新时执行；工作区用 “Read-only POST · manual refresh” 标记区别于 GET 的周期刷新。
 
 查询编辑器把导入的响应或示例 JSON 按保存的字段映射预览为标准设备属性。查询名称、路径、参数和映射作为一次 command 提交；示例 JSON、临时参数覆盖和预览样本只存在会话内。结构合法但尚未测试的查询可以在离线状态保存，字段错误显示在对应结果上。
 

@@ -49,7 +49,7 @@ describe("React object binding authoring", () => {
       enabled: true
     });
     const query = editor.getSnapshot().dataSources.queries[binding.queryId];
-    expect(query.parameters).toEqual([{ name: "areaId", type: "string", defaultValue: "A" }]);
+    expect(query.parameters).toEqual([{ name: "areaId", type: "string", defaultValue: "A", location: "query" }]);
     expect(binding.details).toEqual([
       { key: "running", label: null, precision: null },
       { key: "temperature", label: "Temperature °C", precision: 1 }
@@ -108,7 +108,7 @@ describe("React object binding authoring", () => {
     await waitFor(() => expect(urls).toHaveLength(3));
     expect(urls[2]).toBe("https://api.example.test/v1/pumps?areaId=A");
     expect(Object.values(editor.getSnapshot().dataSources.queries)[0]?.parameters)
-      .toEqual([{ name: "areaId", type: "string", defaultValue: "A" }]);
+      .toEqual([{ name: "areaId", type: "string", defaultValue: "A", location: "query" }]);
     expect(editor.getSnapshot().dataSources.bindings).toEqual({});
 
     view.unmount();

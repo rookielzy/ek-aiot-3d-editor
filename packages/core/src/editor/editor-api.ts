@@ -25,6 +25,7 @@ export interface EditorOptions {
   credentials?: readonly DataCredentialDescriptor[];
   executor?: DataRequestExecutor | null;
   authRevision?: number;
+  maxResponseBytes?: number | null;
 }
 
 export interface MountRuntimeOptions extends Omit<EditorRuntimeOptions, "store" | "dispatcher"> {}

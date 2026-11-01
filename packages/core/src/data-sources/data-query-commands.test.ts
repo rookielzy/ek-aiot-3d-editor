@@ -354,20 +354,22 @@ describe("durable query authoring", () => {
   it("accepts stored query fields regardless of JSON object key order", () => {
     const editor = createEditor();
     createConnection(editor, "Plant API");
+    const created = buildSaveDataQueryCommand(editor.getSnapshot(), queryDefinition());
+    if (!created.ok) throw new Error("Expected a query command.");
+    editor.dispatch(created.command);
     const snapshot = editor.serialize();
-    const definition = queryDefinition();
+    const stored = Object.values(snapshot.dataSources.queries)[0];
 
     expect(validateSceneSnapshot({
       ...snapshot,
       dataSources: {
         ...snapshot.dataSources,
         queries: {
-          "query-a": {
-            id: "query-a",
-            ...definition,
+          [stored.id]: {
+            ...stored,
             mapping: {
-              ...definition.mapping,
-              properties: definition.mapping.properties.map((property) =>
+              ...stored.mapping,
+              properties: stored.mapping.properties.map((property) =>
                 Object.fromEntries(Object.entries(property).reverse())
               )
             }

@@ -1,12 +1,19 @@
-import type { SceneSnapshot } from "../snapshot/types";
+import type { JsonValue } from "../snapshot/json";
 import { isPlainRecord } from "../snapshot/json";
+import type { SceneSnapshot } from "../snapshot/types";
+import { findDataHeaderName, mergeDataHeaders, reservedDataHeaderNames, validateDataHeaders } from "./headers";
+import { isValidDataPath } from "./path";
 import type {
   DataConnection,
   DataConnectionId,
+  DataParameterLocation,
   DataParameterType,
   DataParameterValue,
+  DataPathPrimitive,
+  DataQueryMethod,
   DataQueryParameterDraft,
-  DataQueryParameterOverrides
+  DataQueryParameterOverrides,
+  DataSuccessCondition
 } from "./types";
 
 export type {
@@ -18,21 +25,35 @@ export type {
 
 export interface DataQueryDraft {
   connectionId: DataConnectionId;
+  method?: DataQueryMethod;
+  readOnly?: boolean;
   path: string;
+  headers?: Readonly<Record<string, string>>;
   parameters: readonly DataQueryParameterDraft[];
+  successCondition?: DataSuccessCondition | null;
 }
 
-export interface BuildDataGetRequestOptions {
+export interface BuildDataQueryRequestOptions {
   overrides?: DataQueryParameterOverrides;
 }
 
+/** Resolved auth description for the host executor; never contains secrets. */
+export type DataRequestAuth =
+  | { kind: "none" }
+  | { kind: "bearer"; credentialRef: string }
+  | { kind: "api-key"; credentialRef: string; headerName: string };
+
 export interface DataRequestSummary {
-  method: "GET";
+  method: DataQueryMethod;
+  readOnly: boolean;
   url: string;
   headers: Readonly<Record<string, string>>;
+  body: JsonValue | null;
+  auth: DataRequestAuth;
   credentialRef: string | null;
   timeoutMs: number;
   parameters: Readonly<Record<string, DataParameterValue>>;
+  successCondition: DataSuccessCondition | null;
 }
 
 export type DataQueryProblemField =
@@ -48,8 +69,12 @@ export type DataQueryProblemCode =
   | "connection-not-found"
   | "credential-unavailable"
   | "executor-unavailable"
+  | "header-invalid"
+  | "header-reserved"
+  | "method-invalid"
   | "parameter-definition-invalid"
   | "parameter-duplicate"
+  | "parameter-location-invalid"
   | "parameter-missing"
   | "parameter-type"
   | "path-absolute"
@@ -58,13 +83,19 @@ export type DataQueryProblemCode =
   | "path-protocol-relative"
   | "path-required"
   | "path-traversal"
+  | "post-read-only-required"
   | "request-aborted"
   | "request-failed"
   | "request-timeout"
+  | "response-auth"
+  | "response-business"
   | "response-http"
   | "response-invalid"
   | "response-json-invalid"
-  | "service-disposed";
+  | "response-not-json"
+  | "response-too-large"
+  | "service-disposed"
+  | "success-condition-invalid";
 
 export interface DataQueryProblem {
   code: DataQueryProblemCode;
@@ -76,9 +107,15 @@ export interface DataQueryProblem {
   credentialRef?: string;
 }
 
-export type BuildDataGetRequestResult =
+export type BuildDataQueryRequestResult =
   | { ok: true; summary: DataRequestSummary }
   | { ok: false; problems: DataQueryProblem[] };
+
+/** @deprecated Use BuildDataQueryRequestOptions. */
+export type BuildDataGetRequestOptions = BuildDataQueryRequestOptions;
+
+/** @deprecated Use BuildDataQueryRequestResult. */
+export type BuildDataGetRequestResult = BuildDataQueryRequestResult;
 
 export interface ResolveDataQueryParametersResult {
   ok: boolean;
@@ -90,12 +127,13 @@ const PARAMETER_NAME = /^[A-Za-z0-9_.-]+$/;
 const PATH_PARAMETER = /\{([A-Za-z0-9_.-]+)\}/g;
 const UNSAFE_PARAMETER_NAMES = new Set(["__proto__", "constructor", "prototype"]);
 const SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+const PARAMETER_LOCATIONS = new Set<DataParameterLocation | "auto">(["auto", "path", "query", "body"]);
 
-export function buildDataGetRequest(
+export function buildDataQueryRequest(
   snapshot: Pick<SceneSnapshot, "dataSources">,
   draft: DataQueryDraft,
-  options: BuildDataGetRequestOptions = {}
-): BuildDataGetRequestResult {
+  options: BuildDataQueryRequestOptions = {}
+): BuildDataQueryRequestResult {
   const connection = snapshot.dataSources.connections[draft.connectionId];
   if (!connection) {
     return {
@@ -109,27 +147,91 @@ export function buildDataGetRequest(
     };
   }
 
-  const resolution = resolveDataQueryParameters(draft.parameters, options.overrides, connection.id);  if (!resolution.ok) {
+  const method = draft.method ?? "GET";
+  if (method !== "GET" && method !== "POST") {
+    return {
+      ok: false,
+      problems: [{
+        code: "method-invalid",
+        field: "request",
+        connectionId: connection.id,
+        message: "A data query method must be GET or POST."
+      }]
+    };
+  }
+  if (method === "POST" && draft.readOnly !== true) {
+    return {
+      ok: false,
+      problems: [{
+        code: "post-read-only-required",
+        field: "request",
+        connectionId: connection.id,
+        message: "A POST query must be explicitly confirmed as read-only before execution."
+      }]
+    };
+  }
+
+  const resolution = resolveDataQueryParameters(draft.parameters, options.overrides, connection.id);
+  if (!resolution.ok) {
     return { ok: false, problems: resolution.problems };
   }
 
-  const built = buildRequestUrl(connection, draft.path, resolution.values);
+  const path = typeof draft.path === "string" ? draft.path.trim() : "";
+  const locationResolution = resolveDataParameterLocations(draft.parameters, method, path, connection.id);
+  if (!locationResolution.ok) {
+    return { ok: false, problems: locationResolution.problems };
+  }
+  const locations = locationResolution.locations;
+  const requestProblems: DataQueryProblem[] = [];
+
+  const successCondition = validateDataSuccessCondition(draft.successCondition, connection.id);
+  if (successCondition.problem) {
+    requestProblems.push(successCondition.problem);
+  }
+
+  const body = buildRequestBody(method, draft.parameters, locations, resolution.values);
+  const headers = buildRequestHeaders(
+    connection,
+    draft.headers,
+    method,
+    body !== null
+  );
+  if (headers.problems.length > 0 || headers.headers === null) {
+    return { ok: false, problems: [...requestProblems, ...headers.problems] };
+  }
+  if (requestProblems.length > 0) {
+    return { ok: false, problems: requestProblems };
+  }
+
+  const built = buildRequestUrl(connection, path, resolution.values, locations);
   if (!built.ok) {
     return built;
   }
 
-  const headers: Record<string, string> = { ...connection.headers };
   return {
     ok: true,
     summary: Object.freeze({
-      method: "GET",
+      method,
+      readOnly: true,
       url: built.url,
-      headers: Object.freeze(headers),
-      credentialRef: connection.auth.kind === "bearer" ? connection.auth.credentialRef : null,
+      headers: Object.freeze(headers.headers),
+      body,
+      auth: requestAuth(connection),
+      credentialRef: connectionCredentialRef(connection),
       timeoutMs: connection.timeoutMs,
-      parameters: Object.freeze({ ...resolution.values })
+      parameters: Object.freeze({ ...resolution.values }),
+      successCondition: successCondition.condition
     })
   };
+}
+
+/** @deprecated Use buildDataQueryRequest. */
+export function buildDataGetRequest(
+  snapshot: Pick<SceneSnapshot, "dataSources">,
+  draft: DataQueryDraft,
+  options: BuildDataGetRequestOptions = {}
+): BuildDataGetRequestResult {
+  return buildDataQueryRequest(snapshot, draft, options);
 }
 
 export function resolveDataQueryParameters(
@@ -240,6 +342,19 @@ export function validateDataQueryParameterDefinitions(
       continue;
     }
     if (
+      parameter.location !== undefined &&
+      !PARAMETER_LOCATIONS.has(parameter.location as DataParameterLocation | "auto")
+    ) {
+      problems.push({
+        code: "parameter-location-invalid",
+        field: "parameters",
+        connectionId,
+        parameterName: name,
+        message: `Parameter ${name} has an unsupported location.`
+      });
+      continue;
+    }
+    if (
       Object.prototype.hasOwnProperty.call(parameter, "defaultValue") &&
       parameter.defaultValue !== undefined &&
       !isParameterValueOfType(parameter.defaultValue, parameter.type)
@@ -256,10 +371,185 @@ export function validateDataQueryParameterDefinitions(
   return problems;
 }
 
+export interface ResolveDataParameterLocationsResult {
+  ok: boolean;
+  locations: Record<string, DataParameterLocation>;
+  problems: DataQueryProblem[];
+}
+
+/** Resolves `auto` placements and checks that declared locations fit the path. */
+export function resolveDataParameterLocations(
+  parameters: readonly DataQueryParameterDraft[],
+  method: DataQueryMethod,
+  rawPath: string,
+  connectionId: string | null
+): ResolveDataParameterLocationsResult {
+  const path = typeof rawPath === "string" ? rawPath.trim() : "";
+  const placeholders = collectPathPlaceholders(path);
+  const locations: Record<string, DataParameterLocation> = {};
+  const problems: DataQueryProblem[] = [];
+  for (const parameter of parameters) {
+    const name = parameter.name.trim();
+    const location = resolveParameterLocation(parameter, method, placeholders);
+    locations[name] = location;
+    if (location === "body" && method !== "POST") {
+      problems.push({
+        code: "parameter-location-invalid",
+        field: "parameters",
+        connectionId,
+        parameterName: name,
+        message: `Parameter ${name} uses the body, but only POST queries send a JSON body.`
+      });
+      continue;
+    }
+    if (location === "path" && !placeholders.has(name)) {
+      problems.push({
+        code: "parameter-location-invalid",
+        field: "parameters",
+        connectionId,
+        parameterName: name,
+        message: `Parameter ${name} is marked as a path parameter but the path has no {${name}} placeholder.`
+      });
+      continue;
+    }
+    if (location !== "path" && placeholders.has(name)) {
+      problems.push({
+        code: "parameter-location-invalid",
+        field: "parameters",
+        connectionId,
+        parameterName: name,
+        message: `Parameter ${name} is used in the path and must use the path location.`
+      });
+    }
+  }
+  return { ok: problems.length === 0, locations, problems };
+}
+
+function collectPathPlaceholders(path: string): Set<string> {
+  const names = new Set<string>();
+  for (const match of path.matchAll(PATH_PARAMETER)) {
+    names.add(match[1]);
+  }
+  return names;
+}
+
+function resolveParameterLocation(
+  parameter: DataQueryParameterDraft,
+  method: DataQueryMethod,
+  placeholders: ReadonlySet<string>
+): DataParameterLocation {
+  const name = parameter.name.trim();
+  const declared = parameter.location ?? "auto";
+  if (declared !== "auto") {
+    return declared;
+  }
+  if (placeholders.has(name)) {
+    return "path";
+  }
+  return method === "POST" ? "body" : "query";
+}
+
+function buildRequestBody(
+  method: DataQueryMethod,
+  parameters: readonly DataQueryParameterDraft[],
+  locations: Readonly<Record<string, DataParameterLocation>>,
+  values: Readonly<Record<string, DataParameterValue>>
+): JsonValue | null {
+  if (method !== "POST") {
+    return null;
+  }
+  const entries = parameters
+    .filter((parameter) => locations[parameter.name.trim()] === "body")
+    .map((parameter) => [parameter.name.trim(), values[parameter.name.trim()]] as const);
+  return entries.length > 0 ? Object.fromEntries(entries) : null;
+}
+
+function buildRequestHeaders(
+  connection: DataConnection,
+  queryHeaders: Readonly<Record<string, string>> | undefined,
+  method: DataQueryMethod,
+  hasBody: boolean
+): { headers: Record<string, string> | null; problems: DataQueryProblem[] } {
+  const reserved = reservedDataHeaderNames(connection.auth);
+  const connectionHeaders = validateDataHeaders(connection.headers, { reserved });
+  const draftHeaders = validateDataHeaders(queryHeaders ?? {}, { reserved });
+  const problems = [...connectionHeaders.problems, ...draftHeaders.problems].map((problem): DataQueryProblem => ({
+    code: problem.code === "reserved" ? "header-reserved" : "header-invalid",
+    field: "request",
+    connectionId: connection.id,
+    message: problem.message
+  }));
+  if (problems.length > 0) {
+    return { headers: null, problems };
+  }
+
+  const headers = mergeDataHeaders(connectionHeaders.headers!, draftHeaders.headers!);
+  if (method === "POST" && hasBody && !findDataHeaderName(headers, "content-type")) {
+    headers["Content-Type"] = "application/json";
+  }
+  return { headers, problems: [] };
+}
+
+export function validateDataSuccessCondition(
+  value: unknown,
+  connectionId: string
+): { condition: DataSuccessCondition | null; problem: DataQueryProblem | null } {
+  if (value === undefined || value === null) {
+    return { condition: null, problem: null };
+  }
+  if (
+    !isPlainRecord(value) ||
+    Object.keys(value).some((key) => key !== "path" && key !== "equals") ||
+    !isValidDataPath(value.path) ||
+    !isJsonScalar(value.equals)
+  ) {
+    return {
+      condition: null,
+      problem: {
+        code: "success-condition-invalid",
+        field: "request",
+        connectionId,
+        message: "A business success condition requires a non-empty field path and a JSON scalar value."
+      }
+    };
+  }
+  return {
+    condition: { path: value.path, equals: value.equals },
+    problem: null
+  };
+}
+
+function isJsonScalar(value: unknown): value is DataPathPrimitive {
+  return value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean" ||
+    (typeof value === "number" && Number.isFinite(value));
+}
+
+function requestAuth(connection: DataConnection): DataRequestAuth {
+  switch (connection.auth.kind) {
+    case "bearer":
+      return { kind: "bearer", credentialRef: connection.auth.credentialRef };
+    case "api-key":
+      return {
+        kind: "api-key",
+        credentialRef: connection.auth.credentialRef,
+        headerName: connection.auth.headerName
+      };
+    default:
+      return { kind: "none" };
+  }
+}
+
+function connectionCredentialRef(connection: DataConnection): string | null {
+  return connection.auth.kind === "none" ? null : connection.auth.credentialRef;
+}
+
 function buildRequestUrl(
   connection: DataConnection,
   rawPath: string,
-  values: Readonly<Record<string, DataParameterValue>>
+  values: Readonly<Record<string, DataParameterValue>>,
+  locations: Readonly<Record<string, DataParameterLocation>>
 ): { ok: true; url: string } | { ok: false; problems: DataQueryProblem[] } {
   const path = typeof rawPath === "string" ? rawPath.trim() : "";
   const problem = (
@@ -269,7 +559,8 @@ function buildRequestUrl(
       | "path-protocol-relative"
       | "path-traversal"
       | "path-invalid"
-      | "path-parameter-missing",
+      | "path-parameter-missing"
+      | "parameter-location-invalid",
     message: string,
     parameterName?: string
   ): DataQueryProblem => ({
@@ -303,9 +594,14 @@ function buildRequestUrl(
     }
 
     let missingParameter: string | null = null;
+    let misplacedParameter: string | null = null;
     const replaced = segment.replace(PATH_PARAMETER, (_match, name: string) => {
-      if (!Object.prototype.hasOwnProperty.call(values, name)) {
+      if (!Object.prototype.hasOwnProperty.call(values, name) || locations[name] === undefined) {
         missingParameter = name;
+        return _match;
+      }
+      if (locations[name] !== "path") {
+        misplacedParameter = name;
         return _match;
       }
       usedParameters.add(name);
@@ -318,6 +614,16 @@ function buildRequestUrl(
           "path-parameter-missing",
           `Path parameter ${missingParameter} is not defined.`,
           missingParameter
+        )]
+      };
+    }
+    if (misplacedParameter) {
+      return {
+        ok: false,
+        problems: [problem(
+          "parameter-location-invalid",
+          `Path parameter ${misplacedParameter} must use the path location.`,
+          misplacedParameter
         )]
       };
     }
@@ -345,9 +651,19 @@ function buildRequestUrl(
   }
 
   const search = new URLSearchParams();
-  for (const [name, value] of Object.entries(values)) {
-    if (!usedParameters.has(name)) {
-      search.append(name, String(value));
+  for (const [name, location] of Object.entries(locations)) {
+    if (location === "path" && !usedParameters.has(name)) {
+      return {
+        ok: false,
+        problems: [problem(
+          "parameter-location-invalid",
+          `Parameter ${name} is marked as a path parameter but the path has no {${name}} placeholder.`,
+          name
+        )]
+      };
+    }
+    if (location === "query" && Object.prototype.hasOwnProperty.call(values, name)) {
+      search.append(name, String(values[name]));
     }
   }
   if ([...search].length > 0) {

@@ -275,6 +275,365 @@ describe("shared preview runtime", () => {
     harness.editor.dispose();
   });
 
+  it("runs a read-only POST once for the first preview and only again on explicit refresh", async () => {
+    const requests: DataRequestDescriptor[] = [];
+    const executor = vi.fn<DataRequestExecutor>(async (request) => {
+      requests.push(request);
+      return jsonResponse({ ...freshBody(), code: 0 });
+    });
+    const harness = createHarness(
+      executor,
+      [binding("object-a", "pump-01")],
+      { refreshIntervalMs: 1_000, maxAgeMs: 5_000 },
+      {
+        method: "POST",
+        readOnly: true,
+        headers: { "X-Trace": "preview" },
+        successCondition: { path: [{ kind: "key", key: "code" }], equals: 0 }
+      }
+    );
+
+    await harness.service.startPreview();
+    expect(executor).toHaveBeenCalledTimes(1);
+    expect(requests[0]).toMatchObject({
+      method: "POST",
+      readOnly: true,
+      body: { areaId: "A" },
+      headers: { "X-Trace": "preview", "Content-Type": "application/json" }
+    });
+    const started = harness.service.getObjectDataState();
+    expect(started.objects["object-a"]).toMatchObject({ status: "ready", phase: "waiting" });
+    expect(started.contexts[started.objects["object-a"].contextKey]).toMatchObject({
+      method: "POST",
+      nextRefreshAt: null,
+      phase: "waiting"
+    });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(executor).toHaveBeenCalledTimes(1);
+
+    await harness.service.refreshPreview();
+    expect(executor).toHaveBeenCalledTimes(2);
+    harness.editor.dispose();
+  });
+
+  it("keeps multiple connections, queries, parameters, and success conditions independent", async () => {
+    const requests: DataRequestDescriptor[] = [];
+    const executor = vi.fn<DataRequestExecutor>(async (request) => {
+      requests.push(request);
+      return jsonResponse({
+        ...freshBody(),
+        code: request.url.includes("/pumps-a") ? 0 : 1
+      });
+    });
+    const editor = createEditor({ executor });
+    for (const [index, name] of ["Plant A", "Plant B"].entries()) {
+      const created = editor.dispatch({
+        type: "create-data-connection",
+        connection: {
+          id: `connection-${index === 0 ? "a" : "b"}`,
+          name,
+          baseUrl: `https://api-${index === 0 ? "a" : "b"}.example.test/v1`,
+          auth: { kind: "none" },
+          headers: {},
+          timeoutMs: 10_000
+        }
+      });
+      if (!created.ok) throw new Error(created.error);
+    }
+    const baseQuery = queryDefinition();
+    const firstQuery = buildSaveDataQueryCommand(editor.getSnapshot(), {
+      ...baseQuery,
+      name: "Plant A pumps",
+      path: "/pumps-a",
+      headers: { "X-Query": "a" },
+      parameters: [{ name: "area", type: "string", defaultValue: "A" }],
+      successCondition: { path: [{ kind: "key", key: "code" }], equals: 0 }
+    });
+    if (!firstQuery.ok) throw new Error(firstQuery.problems.map((problem) => problem.message).join("\n"));
+    if (!editor.dispatch(firstQuery.command).ok) throw new Error("Failed to save the first query.");
+    const secondQuery = buildSaveDataQueryCommand(editor.getSnapshot(), {
+      ...baseQuery,
+      connectionId: "connection-b",
+      name: "Plant B pumps",
+      path: "/pumps-b/{areaId}",
+      headers: { "X-Query": "b" },
+      parameters: [{ name: "areaId", type: "string", defaultValue: "B" }],
+      successCondition: { path: [{ kind: "key", key: "code" }], equals: 1 }
+    });
+    if (!secondQuery.ok) throw new Error(secondQuery.problems.map((problem) => problem.message).join("\n"));
+    if (!editor.dispatch(secondQuery.command).ok) throw new Error("Failed to save the second query.");
+
+    const queries = editor.getSnapshot().dataSources.queries;
+    const firstQueryId = Object.keys(queries).find((id) => queries[id].name === "Plant A pumps")!;
+    const secondQueryId = Object.keys(queries).find((id) => queries[id].name === "Plant B pumps")!;
+    for (const [objectNodeId, queryId, deviceId] of [
+      ["object-a", firstQueryId, "pump-01"],
+      ["object-b", secondQueryId, "pump-02"]
+    ] as const) {
+      const imported = editor.dispatch({
+        type: "import-glb",
+        objectId: objectNodeId,
+        name: objectNodeId,
+        asset: { id: `asset-${objectNodeId}` }
+      });
+      if (!imported.ok) throw new Error(imported.error);
+      const bindingResult = buildSaveDataObjectBindingCommand(editor.getSnapshot(), {
+        objectNodeId,
+        queryId,
+        parameterOverrides: {},
+        deviceId,
+        enabled: true,
+        details: [{ key: "temperature" }]
+      });
+      if (!bindingResult.ok) throw new Error(bindingResult.problems.map((problem) => problem.message).join("\n"));
+      if (!editor.dispatch(bindingResult.command).ok) throw new Error("Failed to save the binding.");
+    }
+
+    const service = editor.getDataService();
+    await service.startPreview();
+
+    expect(executor).toHaveBeenCalledTimes(2);
+    expect(requests.map((request) => request.url).sort()).toEqual([
+      "https://api-a.example.test/v1/pumps-a?area=A",
+      "https://api-b.example.test/v1/pumps-b/B"
+    ]);
+    expect(requests.map((request) => request.headers["X-Query"]).sort()).toEqual(["a", "b"]);
+    const state = service.getObjectDataState();
+    expect(state.preview.contextCount).toBe(2);
+    expect(state.objects["object-a"]).toMatchObject({
+      status: "ready",
+      queryId: firstQueryId,
+      entityId: "pump-01"
+    });
+    expect(state.objects["object-b"]).toMatchObject({
+      status: "ready",
+      queryId: secondQueryId,
+      entityId: "pump-02"
+    });
+    expect(state.objects["object-a"].contextKey).not.toBe(state.objects["object-b"].contextKey);
+    editor.dispose();
+  });
+
+  it("does not run a read-only POST again when configuration or host credentials change", async () => {
+    const executor = vi.fn<DataRequestExecutor>(async () =>
+      jsonResponse({ ...freshBody(), code: 0 }));
+    const harness = createHarness(
+      executor,
+      [binding("object-a", "pump-01")],
+      { refreshIntervalMs: 1_000, maxAgeMs: 5_000 },
+      {
+        method: "POST",
+        readOnly: true,
+        successCondition: { path: [{ kind: "key", key: "code" }], equals: 0 }
+      }
+    );
+
+    await harness.service.startPreview();
+    expect(executor).toHaveBeenCalledTimes(1);
+
+    const query = harness.editor.getSnapshot().dataSources.queries[harness.queryId];
+    const update = buildSaveDataQueryCommand(harness.editor.getSnapshot(), {
+      connectionId: query.connectionId,
+      name: query.name,
+      method: query.method,
+      readOnly: query.readOnly,
+      path: query.path,
+      headers: query.headers,
+      parameters: query.parameters,
+      successCondition: query.successCondition,
+      mapping: {
+        ...query.mapping,
+        properties: query.mapping.properties.map((property, index) =>
+          index === 0 ? { ...property, label: "Renamed temperature" } : property)
+      },
+      updatePolicy: query.updatePolicy
+    }, { queryId: harness.queryId });
+    if (!update.ok) throw new Error(update.problems.map((problem) => problem.message).join("\n"));
+    expect(harness.editor.dispatch(update.command).ok).toBe(true);
+    await flush();
+    expect(executor).toHaveBeenCalledTimes(1);
+    const reconfigured = harness.service.getObjectDataState();
+    expect(reconfigured.objects["object-a"]).toMatchObject({ status: "inactive", phase: "waiting" });
+    expect(reconfigured.contexts[reconfigured.objects["object-a"].contextKey]).toMatchObject({
+      method: "POST",
+      phase: "waiting",
+      nextRefreshAt: null
+    });
+
+    harness.service.setHostCapabilities({ authRevision: 1 });
+    await flush();
+    expect(executor).toHaveBeenCalledTimes(1);
+
+    await harness.service.refreshPreview();
+    expect(executor).toHaveBeenCalledTimes(2);
+    expect(harness.service.getObjectDataState().objects["object-a"]).toMatchObject({ status: "ready" });
+    harness.editor.dispose();
+  });
+
+  it("does not automatically retry a failed POST", async () => {
+    let response: DataResponseDescriptor = {
+      status: 503,
+      contentType: "application/json",
+      body: "{}"
+    };
+    const executor = vi.fn<DataRequestExecutor>(async () => response);
+    const harness = createHarness(
+      executor,
+      [binding("object-a", "pump-01")],
+      { refreshIntervalMs: 1_000, maxAgeMs: 5_000 },
+      { method: "POST", readOnly: true }
+    );
+
+    await harness.service.startPreview();
+    expect(executor).toHaveBeenCalledTimes(1);
+    const failed = harness.service.getObjectDataState();
+    expect(failed.objects["object-a"]).toMatchObject({
+      status: "error",
+      problems: [expect.objectContaining({ code: "response-http", status: 503 })]
+    });
+    expect(failed.contexts[failed.objects["object-a"].contextKey]).toMatchObject({
+      phase: "waiting",
+      nextRefreshAt: null,
+      retryBackoffMs: null
+    });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(executor).toHaveBeenCalledTimes(1);
+
+    response = jsonResponse({ ...freshBody(), code: 0 });
+    await harness.service.refreshPreview();
+    expect(executor).toHaveBeenCalledTimes(2);
+    expect(harness.service.getObjectDataState().objects["object-a"]).toMatchObject({ status: "ready" });
+    harness.editor.dispose();
+  });
+
+  it("stops automatic execution after a POST business failure and keeps the body out of object values", async () => {
+    const executor = vi.fn<DataRequestExecutor>(async () =>
+      jsonResponse({ ...freshBody(), code: "0" }));
+    const harness = createHarness(
+      executor,
+      [binding("object-a", "pump-01")],
+      { refreshIntervalMs: 1_000, maxAgeMs: 5_000 },
+      {
+        method: "POST",
+        readOnly: true,
+        successCondition: { path: [{ kind: "key", key: "code" }], equals: 0 }
+      }
+    );
+
+    await harness.service.startPreview();
+    expect(executor).toHaveBeenCalledTimes(1);
+    const state = harness.service.getObjectDataState();
+    expect(state.objects["object-a"]).toMatchObject({
+      status: "error",
+      fields: [],
+      problems: [expect.objectContaining({ code: "response-business" })]
+    });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(executor).toHaveBeenCalledTimes(1);
+    harness.editor.dispose();
+  });
+
+  it("keeps a missing api key credential recoverable and hides values after the auth revision changes", async () => {
+    const requests: DataRequestDescriptor[] = [];
+    const executor = vi.fn<DataRequestExecutor>(async (request) => {
+      requests.push(request);
+      return jsonResponse(freshBody());
+    });
+    const editor = createEditor({
+      executor,
+      credentials: [{ ref: "credential-ops", label: "Operations key", available: true }]
+    });
+    expect(editor.dispatch({
+      type: "create-data-connection",
+      connection: {
+        id: "connection-a",
+        name: "Plant API",
+        baseUrl: "https://api.example.test/v1",
+        auth: { kind: "api-key", credentialRef: "credential-ops", headerName: "X-Api-Key" },
+        headers: {},
+        timeoutMs: 10_000
+      }
+    }).ok).toBe(true);
+    const query = buildSaveDataQueryCommand(editor.getSnapshot(), {
+      connectionId: "connection-a",
+      name: "Pump status",
+      path: "/pumps",
+      parameters: [{ name: "areaId", type: "string", defaultValue: "A" }],
+      mapping: queryDefinition().mapping,
+      updatePolicy: { refreshIntervalMs: 60_000, maxAgeMs: 120_000 }
+    });
+    if (!query.ok) throw new Error(query.problems.map((problem) => problem.message).join("\n"));
+    expect(editor.dispatch(query.command).ok).toBe(true);
+    const queryId = Object.keys(editor.getSnapshot().dataSources.queries)[0];
+    expect(editor.dispatch({
+      type: "import-glb",
+      objectId: "object-a",
+      name: "Pump object",
+      asset: { id: "asset-object-a" }
+    }).ok).toBe(true);
+    const saved = buildSaveDataObjectBindingCommand(editor.getSnapshot(), {
+      objectNodeId: "object-a",
+      queryId,
+      parameterOverrides: {},
+      deviceId: "pump-01",
+      enabled: true,
+      details: [{ key: "temperature" }]
+    });
+    if (!saved.ok) throw new Error(saved.problems.map((problem) => problem.message).join("\n"));
+    expect(editor.dispatch(saved.command).ok).toBe(true);
+
+    const service = editor.getDataService();
+    await service.startPreview();
+    expect(requests[0].credentialRef).toBe("credential-ops");
+    expect(requests[0].auth).toEqual({
+      kind: "api-key",
+      credentialRef: "credential-ops",
+      headerName: "X-Api-Key"
+    });
+    expect(service.getObjectDataState().objects["object-a"]).toMatchObject({
+      status: "ready",
+      fields: expect.arrayContaining([expect.objectContaining({ key: "temperature", value: 42.6 })])
+    });
+
+    service.setHostCapabilities({
+      credentials: [{ ref: "credential-ops", label: "Operations key", available: false }],
+      authRevision: 1
+    });
+    await flush();
+    expect(executor).toHaveBeenCalledTimes(1);
+    const unauthenticated = service.getObjectDataState();
+    expect(unauthenticated.objects["object-a"]).toMatchObject({
+      status: "error",
+      fields: [],
+      problems: [expect.objectContaining({ code: "credential-unavailable" })]
+    });
+    expect(editor.serialize().dataSources.connections["connection-a"].auth).toEqual({
+      kind: "api-key",
+      credentialRef: "credential-ops",
+      headerName: "X-Api-Key"
+    });
+    editor.dispose();
+  });
+
+  it("applies a response-limit change without bumping the auth revision or clearing values", async () => {
+    const executor = vi.fn<DataRequestExecutor>(async () => jsonResponse(freshBody()));
+    const harness = createHarness(executor, [binding("object-a", "pump-01")]);
+
+    await harness.service.startPreview();
+    const before = harness.service.getObjectDataState();
+    const revision = harness.service.getAuthRevision();
+    harness.service.setHostCapabilities({ maxResponseBytes: 2_048 });
+    await flush();
+
+    expect(harness.service.getAuthRevision()).toBe(revision);
+    expect(harness.service.getObjectDataState()).toBe(before);
+    expect(executor).toHaveBeenCalledTimes(1);
+    harness.editor.dispose();
+  });
+
   it("ignores late responses from a replaced executor", async () => {
     let resolveOld!: (response: DataResponseDescriptor) => void;
     const oldExecutor = vi.fn<DataRequestExecutor>(() =>
@@ -739,7 +1098,13 @@ interface HarnessBinding {
 function createHarness(
   executor: DataRequestExecutor,
   bindings: readonly HarnessBinding[],
-  updatePolicy: DataQueryUpdatePolicy = INTERVAL_POLICY
+  updatePolicy: DataQueryUpdatePolicy = INTERVAL_POLICY,
+  request: {
+    method?: "GET" | "POST";
+    readOnly?: boolean;
+    headers?: Record<string, string>;
+    successCondition?: { path: Array<{ kind: "key"; key: string }>; equals: string | number | boolean | null };
+  } = {}
 ): { editor: ReturnType<typeof createEditor>; service: EditorDataService; queryId: string } {
   const editor = createEditor({ executor });
   const connection = editor.dispatch({
@@ -754,7 +1119,7 @@ function createHarness(
     }
   });
   if (!connection.ok) throw new Error(connection.error);
-  const query = buildSaveDataQueryCommand(editor.getSnapshot(), queryDefinition(updatePolicy));
+  const query = buildSaveDataQueryCommand(editor.getSnapshot(), queryDefinition(updatePolicy, request));
   if (!query.ok) throw new Error(query.problems.map((problem) => problem.message).join("\n"));
   if (!editor.dispatch(query.command).ok) throw new Error("Failed to save query.");
   const queryId = Object.keys(editor.getSnapshot().dataSources.queries)[0];
@@ -781,11 +1146,23 @@ function createHarness(
   return { editor, service: editor.getDataService(), queryId };
 }
 
-function queryDefinition(updatePolicy: Partial<DataQueryUpdatePolicy> = {}) {
+function queryDefinition(
+  updatePolicy: Partial<DataQueryUpdatePolicy> = {},
+  request: {
+    method?: "GET" | "POST";
+    readOnly?: boolean;
+    headers?: Record<string, string>;
+    successCondition?: { path: Array<{ kind: "key"; key: string }>; equals: string | number | boolean | null };
+  } = {}
+) {
   return {
     connectionId: "connection-a",
     name: "Pump status",
+    method: request.method ?? "GET",
+    ...(request.readOnly !== undefined ? { readOnly: request.readOnly } : {}),
     path: "/pumps",
+    ...(request.headers ? { headers: request.headers } : {}),
+    ...(request.successCondition ? { successCondition: request.successCondition } : {}),
     parameters: [{ name: "areaId", type: "string" as const, defaultValue: "A" }],
     mapping: {
       mode: "array" as const,

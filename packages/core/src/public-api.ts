@@ -152,6 +152,8 @@ export type {
 export type {
   BuildDataGetRequestOptions,
   BuildDataGetRequestResult,
+  BuildDataQueryRequestOptions,
+  BuildDataQueryRequestResult,
   DataParameterType,
   DataParameterValue,
   DataQueryDraft,
@@ -160,7 +162,9 @@ export type {
   DataQueryProblem,
   DataQueryProblemCode,
   DataQueryProblemField,
+  DataRequestAuth,
   DataRequestSummary,
+  ResolveDataParameterLocationsResult,
   ResolveDataQueryParametersResult
 } from "./data-sources/query";
 export type {
@@ -197,6 +201,8 @@ export type {
   DataRequestExecutor,
   DataResponseBodyKind,
   DataResponseDescriptor,
+  DataResponseFailure,
+  DataResponseFailureCode,
   DataServiceState,
   DataServiceSubscriber,
   EditorDataService
@@ -240,6 +246,7 @@ export type {
   DataColorRuleInput,
   DataConnection,
   DataConnectionAuth,
+  DataConnectionAuthApiKey,
   DataConnectionAuthBearer,
   DataConnectionAuthNone,
   DataConnectionDraft,
@@ -254,10 +261,13 @@ export type {
   DataIdentityMapping,
   DataMappedValueType,
   DataMappingMode,
+  NormalizedDataQueryDefinition,
   DataObjectBinding,
   DataObjectBindingInput,
   DataObjectBindingValidationResult,
   DataObservedAtMapping,
+  DataParameterLocation,
+  DataParameterLocationInput,
   DataPath,
   DataPathPrimitive,
   DataPathSegment,
@@ -275,9 +285,11 @@ export type {
   DataQueryId,
   DataQueryInput,
   DataQueryMapping,
+  DataQueryMethod,
   DataQueryReferenceCounts,
   DataQueryUpdatePolicy,
   DataQueryValidationResult,
+  DataSuccessCondition,
   DataTimeFormat,
   DataValueMapEntry,
   SceneDataSources
@@ -581,9 +593,17 @@ export {
   parseDataPath,
   resolveDataPath
 } from "./data-sources/path";
-export { buildDataGetRequest, resolveDataQueryParameters, validateDataQueryParameterDefinitions } from "./data-sources/query";
 export {
+  buildDataGetRequest,
+  buildDataQueryRequest,
+  resolveDataParameterLocations,
+  resolveDataQueryParameters,
+  validateDataQueryParameterDefinitions
+} from "./data-sources/query";
+export {
+  DEFAULT_API_KEY_HEADER_NAME,
   DEFAULT_DATA_CONNECTION_TIMEOUT_MS,
+  DEFAULT_DATA_MAX_RESPONSE_BYTES,
   DEFAULT_DATA_QUERY_MAX_AGE_MS,
   DEFAULT_DATA_QUERY_REFRESH_INTERVAL_MS,
   MAX_DATA_QUERY_RETRY_BACKOFF_MS,

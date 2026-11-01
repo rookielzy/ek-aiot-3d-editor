@@ -8,7 +8,8 @@ import type {
   DataMappedValueType,
   DataParameterValue,
   DataQuality,
-  DataQueryId
+  DataQueryId,
+  DataQueryMethod
 } from "./types";
 import { DATA_DETAIL_DEFAULT_PRECISION } from "./bindings";
 
@@ -87,6 +88,7 @@ export interface DataObjectContextState {
   queryId: DataQueryId;
   connectionId: string;
   queryName: string;
+  method: DataQueryMethod;
   parameters: Readonly<Record<string, DataParameterValue>>;
   objectNodeIds: readonly string[];
   phase: DataRequestPhase;

@@ -7,9 +7,12 @@ import {
   type FormEvent
 } from "react";
 import {
-  buildDataGetRequest,
+  buildDataQueryRequest,
+  formatDataPath,
+  type DataParameterLocationInput,
   type DataParameterType,
   type DataParameterValue,
+  type DataQueryMethod,
   type DataQueryRunState,
   type DataServiceState
 } from "@ek-aiot/3d-editor-core";
@@ -51,6 +54,8 @@ export function DataQueryTester({ context, connectionId, onClose }: DataQueryTes
     [service]
   );
   const dataState = useSyncExternalStore(subscribe, getState, getState);
+  const [method, setMethod] = useState<DataQueryMethod>("GET");
+  const [readOnly, setReadOnly] = useState(true);
   const [path, setPath] = useState("");
   const [parameters, setParameters] = useState<QueryParameterForm[]>([]);
   const pathRef = useRef<HTMLInputElement>(null);
@@ -74,8 +79,10 @@ export function DataQueryTester({ context, connectionId, onClose }: DataQueryTes
 
   const parameterDrafts = toQueryParameterDrafts(parameters);
   const overrides = collectQueryOverrides(parameters);
-  const preview = buildDataGetRequest(context.snapshot, {
+  const preview = buildDataQueryRequest(context.snapshot, {
     connectionId,
+    method,
+    readOnly,
     path,
     parameters: parameterDrafts
   }, { overrides });
@@ -113,6 +120,26 @@ export function DataQueryTester({ context, connectionId, onClose }: DataQueryTes
     setPath(value);
   }
 
+  function updateMethod(next: DataQueryMethod): void {
+    invalidateRuns();
+    setMethod(next);
+    setReadOnly(next === "GET");
+    if (next === "GET") {
+      setParameters((current) => current.map((parameter) =>
+        parameter.location === "body" ? { ...parameter, location: "auto" } : parameter
+      ));
+    }
+  }
+
+  function updateReadOnly(value: boolean): void {
+    invalidateRuns();
+    setReadOnly(value);
+  }
+
+  function updateLocation(id: string, location: DataParameterLocationInput): void {
+    updateParameter(id, { location });
+  }
+
   function runRequest(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     if (!service || running) {
@@ -121,6 +148,8 @@ export function DataQueryTester({ context, connectionId, onClose }: DataQueryTes
     service.invalidateQueryRuns();
     void service.executeQueryDraft({
       connectionId,
+      method,
+      readOnly,
       path,
       parameters: parameterDrafts
     }, { overrides }).result;
@@ -147,6 +176,31 @@ export function DataQueryTester({ context, connectionId, onClose }: DataQueryTes
 
       <form className="ek-workbench__request-form" aria-label={t("dataSources.request.label")} onSubmit={runRequest} noValidate>
         <label className="ek-workbench__field">
+          <span>{t("dataSources.request.method")}</span>
+          <select
+            aria-label={t("dataSources.request.method")}
+            value={method}
+            onChange={(event) => updateMethod(event.target.value as DataQueryMethod)}
+          >
+            <option value="GET">GET</option>
+            <option value="POST">POST</option>
+          </select>
+        </label>
+        {method === "POST" ? (
+          <>
+            <label className="ek-workbench__request-check">
+              <input
+                type="checkbox"
+                aria-label={t("dataSources.request.readOnlyConfirm")}
+                checked={readOnly}
+                onChange={(event) => updateReadOnly(event.target.checked)}
+              />
+              <span>{t("dataSources.request.readOnlyConfirm")}</span>
+            </label>
+            <p className="ek-workbench__request-hint">{t("dataSources.request.postManualHint")}</p>
+          </>
+        ) : null}
+        <label className="ek-workbench__field">
           <span>{t("dataSources.request.path")}</span>
           <input
             ref={pathRef}
@@ -160,7 +214,17 @@ export function DataQueryTester({ context, connectionId, onClose }: DataQueryTes
         <div className="ek-workbench__request-preview">
           <span>{t("dataSources.request.preview")}</span>
           {preview.ok
-            ? <code>{preview.summary.url}</code>
+            ? (
+              <>
+                <span data-method={preview.summary.method}>{preview.summary.method}</span>
+                <code>{preview.summary.url}</code>
+                {preview.summary.body !== null ? (
+                  <pre className="ek-workbench__request-payload" aria-label={t("dataSources.request.bodyPreview")}>
+                    {JSON.stringify(preview.summary.body, null, 2)}
+                  </pre>
+                ) : null}
+              </>
+            )
             : <small>{t("dataSources.request.previewPending")}</small>}
         </div>
 
@@ -195,6 +259,19 @@ export function DataQueryTester({ context, connectionId, onClose }: DataQueryTes
                     {(["string", "number", "boolean"] as const).map((type) => (
                       <option key={type} value={type}>{t(PARAMETER_TYPE_MESSAGE_KEYS[type])}</option>
                     ))}
+                  </select>
+                </label>
+                <label className="ek-workbench__field">
+                  <span>{t("dataSources.request.parameter.location", { index: row })}</span>
+                  <select
+                    aria-label={t("dataSources.request.parameter.location", { index: row })}
+                    value={parameter.location}
+                    onChange={(event) => updateLocation(parameter.id, event.target.value as DataParameterLocationInput)}
+                  >
+                    <option value="auto">{t("dataSources.request.parameter.location.auto")}</option>
+                    <option value="path">{t("dataSources.request.parameter.location.path")}</option>
+                    <option value="query">{t("dataSources.request.parameter.location.query")}</option>
+                    <option value="body">{t("dataSources.request.parameter.location.body")}</option>
                   </select>
                 </label>
                 <div className="ek-workbench__request-parameter-value">
@@ -351,6 +428,28 @@ function RequestSummary({ run, i18n }: { run: DataQueryRunState; i18n: Workbench
             ? <pre>{formatRecord(request.parameters)}</pre>
             : t("dataSources.request.summary.none")}</dd>
         </div>
+        {request.body !== null ? (
+          <div>
+            <dt>{t("dataSources.request.summary.body")}</dt>
+            <dd>
+              <pre aria-label={t("dataSources.request.summary.body")}>
+                {JSON.stringify(request.body, null, 2)}
+              </pre>
+            </dd>
+          </div>
+        ) : null}
+        {request.successCondition ? (
+          <div>
+            <dt>{t("dataSources.request.summary.successCondition")}</dt>
+            <dd>
+              <code>
+                {formatDataPath(request.successCondition.path)}
+                {" = "}
+                {JSON.stringify(request.successCondition.equals)}
+              </code>
+            </dd>
+          </div>
+        ) : null}
       </dl>
     </section>
   );

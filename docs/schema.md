@@ -479,7 +479,8 @@ v9 新增顶层 `dataSources`，用于保存 HTTP JSON 数据源配置。当前�
 ```ts
 type DataConnectionAuth =
   | { kind: "none" }
-  | { kind: "bearer"; credentialRef: string };
+  | { kind: "bearer"; credentialRef: string }
+  | { kind: "api-key"; credentialRef: string; headerName: string };
 
 interface DataConnection {
   id: string;
@@ -492,11 +493,13 @@ interface DataConnection {
 
 type DataParameterType = "string" | "number" | "boolean";
 type DataParameterValue = string | number | boolean;
+type DataParameterLocation = "path" | "query" | "body";
 
 interface DataQueryParameter {
   name: string;
   type: DataParameterType;
   defaultValue?: DataParameterValue;
+  location: DataParameterLocation;
 }
 
 type DataPathSegment =
@@ -548,12 +551,23 @@ interface DataQueryMapping {
   } | null;
 }
 
+type DataQueryMethod = "GET" | "POST";
+
+interface DataSuccessCondition {
+  path: readonly DataPathSegment[];
+  equals: string | number | boolean | null;
+}
+
 interface DataQuery {
   id: string;
   connectionId: string;
   name: string;
+  method: DataQueryMethod;
+  readOnly: boolean;
   path: string;
+  headers: Record<string, string>;
   parameters: readonly DataQueryParameter[];
+  successCondition: DataSuccessCondition | null;
   mapping: DataQueryMapping;
   updatePolicy: {
     refreshIntervalMs: number;
@@ -604,14 +618,16 @@ Validation 规则：
 - 每个 connection 的 `id` 必须和 map key 一致且非空。
 - connection 名称非空，且在整个 connection 范围内大小写不敏感去重。
 - `baseUrl` 必须是绝对 HTTP/HTTPS 地址；拒绝 userinfo、query string、fragment，以及空白/控制字符。保存时去掉末尾 `/`。
-- `headers` 只保存非秘密公共头；header name 必须是 HTTP token，拒绝 `authorization`、`proxy-authorization`、`cookie`、`set-cookie`，header value 不允许 CR/LF 或控制字符。
+- `headers` 只保存非秘密公共头；header name 必须是 HTTP token，拒绝 `authorization`、`proxy-authorization`、`cookie`、`set-cookie`，以及当前 API key auth 使用的 `headerName`（大小写不敏感），header value 不允许 CR/LF 或控制字符。
 - `timeoutMs` 必须是正的 finite safe integer；默认 `10000`。UI 以秒显示和编辑，Snapshot 内统一毫秒。
-- bearer auth 的 `credentialRef` 必须非空。凭证是否存在、是否可用属于宿主能力，不是 Snapshot 校验错误；缺失凭证仍可恢复、编辑和保存。
+- bearer/api-key auth 的 `credentialRef` 必须非空；api-key 的 `headerName` 必须是合法的非保留 HTTP header name。凭证是否存在、是否可用属于宿主能力，不是 Snapshot 校验错误；缺失凭证仍可恢复、编辑和保存。
 - 每个 query 的 `id` 必须和 map key 一致，`connectionId` 必须指向现有 connection；query 名称在同一 connection 内大小写不敏感去重，跨 connection 可同名。
-- query `path` 只能是相对于连接 `baseUrl` 的路径；参数名、类型、默认值、路径编码、穿越防护和占位符完整性复用 `buildDataGetRequest()` 的规则。
-- `updatePolicy.refreshIntervalMs` 必须是至少 `1000` 的 safe integer，`maxAgeMs` 必须是正 safe integer 且不小于轮询间隔；默认分别为 `5000` 与 `15000` 毫秒。JSON 中统一保存毫秒，React UI 以秒显示和编辑。`maxAgeMs` 同时约束接收年龄与可用源采样年龄。
+- query `method` 只能是 `GET` 或 `POST`；`POST` 必须显式保存 `readOnly: true`，未确认只读的 POST 不能保存或执行。query `headers` 的保留头规则与连接公共头一致，保存时按大小写不敏感方式合并，query 头覆盖同名连接头；`Content-Type` 只在 POST 有 body 且未显式提供时补 `application/json`。更新连接认证时，若新的认证保留头与同一连接下既有 query 头冲突，command 以 `header-reserved` 失败并保持 Snapshot/history 原子不变。
+- query `path` 只能是相对于连接 `baseUrl` 的路径；参数名、类型、默认值、位置、路径编码、穿越防护和占位符完整性复用 `buildDataQueryRequest()` 的规则。参数位置为 `path`/`query`/`body`，`body` 仅允许 POST；同一参数不能既出现在路径占位符中又声明为其他位置。body 由显式 `body` 参数组成扁平 JSON 对象，`0`、`false` 与空字符串都会保留。
+- `successCondition` 可为 `null`；非空时 `path` 必须是非空且合法的字段路径，`equals` 必须是 JSON scalar，执行时按严格相等与 HTTP 成功状态共同判定。响应大小上限属于宿主能力（默认 1 MiB），不写入 Snapshot；非 2xx 响应先按 HTTP/认证状态分类再判定是否超限，以保留 401/403 暂停与 GET 可重试错误的退避语义。
+- `updatePolicy.refreshIntervalMs` 必须是至少 `1000` 的 safe integer，`maxAgeMs` 必须是正 safe integer；GET 轮询时 `maxAgeMs` 不得小于间隔。默认分别为 `5000` 与 `15000` 毫秒。JSON 中统一保存毫秒，React UI 以秒显示和编辑。`maxAgeMs` 同时约束接收年龄与可用源采样年龄。POST 查询忽略 `refreshIntervalMs`，只在首次预览、显式刷新或手动测试时执行，因此允许 `maxAgeMs` 小于该未使用间隔。
 - Snapshot 中的 query 必须已经规范化，并显式保存映射默认字段（例如 scale 的 `offset: 0`、单侧 range 的另一侧 `null`）与 `updatePolicy`。草稿可通过 `validateDataQueryDefinition()` 取得规范化结果后交给保存 command；恢复不会隐式补全缺失映射字段。JSON 对象字段顺序不影响校验。
-- 为兼容同一未发布 v9 数据源迭代中早于更新策略的 Snapshot，恢复时缺失 `updatePolicy` 的已保存 query 会补入当前默认策略；`validateSceneSnapshot()` 仍要求显式策略，后续保存会持久化补全后的值。
+- 为兼容同一未发布 v9 数据源迭代中早于更新策略或请求配置的 Snapshot，恢复时缺失 `updatePolicy` 的已保存 query 会补入当前默认策略，缺失 `method`/`readOnly`/`headers`/`successCondition` 的 query 会补为 GET、只读、空头和 `null`，缺失参数 `location` 会按路径占位符与 GET 规则推断；`validateSceneSnapshot()` 仍要求显式规范化字段，后续保存会持久化补全后的值。
 - mapping 至少包含一个属性；属性键在 query 内唯一，来源路径只能是对象键/非负数组索引，禁止通配、递归、脚本和原型链访问。
 - 属性类型、可空性、单位、可选范围/枚举与转换共同校验：range 仅适用于数字属性的 min/max 约束；allowed 是非空、无重复且类型匹配属性类型的值列表。转换输出必须符合声明类型。数组模式每行一个设备；单对象模式的身份可来自字段、参数或固定值。重复设备 ID 使整次映射失败，单字段错误按属性隔离。
 - 时间格式支持带明确时区的 ISO 与 Unix 秒/毫秒；ISO 日历日期必须真实存在，Unix 换算后的毫秒值必须有限且在 JavaScript Date 可表示范围内（包含正负 `8_640_000_000_000_000` 毫秒边界）。源时间超前接收时间超过 30 秒视为无效。source quality 只由明确映射产生，HTTP 成功不推断 `good`。
@@ -624,13 +640,13 @@ Validation 规则：
 
 连接变更通过 `create-data-connection`、`update-data-connection`、`duplicate-data-connection`、`delete-data-connection` command 进入 command/history；一次保存对应一次可撤销编辑。失败会保持 Snapshot/history 原子不变。复制连接生成新 ID 和唯一名称，不复制 query。存在 query/binding 引用时拒绝删除 connection；引用统计由 `countDataConnectionReferences` 提供。
 
-对象绑定通过 `set-data-object-binding`、`delete-data-object-binding` command 进入 command/history；一次保存或解除对应一次可撤销编辑。删除 object node 会同步移除其 binding。binding 的运行态数据（原始响应、解析值、有效参数、预览开关、共享上下文、刷新阶段、时间、新鲜度、历史值和问题）不属于 Snapshot，由 `editor.getDataService()` 单独暴露。`editor.getDataColorService()` 单独暴露规则求值后的应用颜色、材质能力诊断和草稿试用；颜色覆盖使用投影拥有的 `MeshStandardMaterial` 克隆，停止、失败、过期、停用、解除、试用结束、重投影与销毁都恢复最新作者材质并释放克隆，不 dispose loader 纹理或其他对象材质。预览开启时，相同 query、有效参数、连接/查询配置与宿主认证 revision 的多个 binding 共用一个上下文，每周期只发一次 GET；对象和设备身份不参与列表查询共享键。执行器替换、认证 revision 变化、配置变化、停止与 dispose 会使旧 generation 失效，晚到响应不会提交。
+对象绑定通过 `set-data-object-binding`、`delete-data-object-binding` command 进入 command/history；一次保存或解除对应一次可撤销编辑。删除 object node 会同步移除其 binding。binding 的运行态数据（原始响应、解析值、有效参数、预览开关、共享上下文、刷新阶段、时间、新鲜度、历史值和问题）不属于 Snapshot，由 `editor.getDataService()` 单独暴露。`editor.getDataColorService()` 单独暴露规则求值后的应用颜色、材质能力诊断和草稿试用；颜色覆盖使用投影拥有的 `MeshStandardMaterial` 克隆，停止、失败、过期、停用、解除、试用结束、重投影与销毁都恢复最新作者材质并释放克隆，不 dispose loader 纹理或其他对象材质。预览开启时，相同 query、有效参数、连接/查询配置与宿主认证 revision 的多个 binding 共用一个上下文，GET 每周期只发一次请求，POST 只在首次预览或显式刷新时执行；对象和设备身份不参与列表查询共享键。执行器替换、认证 revision 变化、配置变化、停止与 dispose 会使旧 generation 失效，晚到响应不会提交。
 
 查询变更通过 `create-data-query`、`update-data-query`、`duplicate-data-query`、`delete-data-query` command 进入 command/history。查询配置、映射与更新策略在同一 command 中保存，只增加一次编辑历史；复制查询生成新 ID 和同一 connection 内的唯一名称；存在 binding 引用时拒绝删除查询。`buildDataQueryList()` 与 `countDataQueryReferences()` 提供列表和引用统计。
 
 Host credential descriptors（`ref`、`label`、`available`）通过 `createEditor({ credentials })` 注入，只存在运行态；它们不会写入 Snapshot、项目包或 clipboard。Snapshot 与 clipboard 只在连接上保留 `credentialRef` 字符串引用，不包含凭证内容。React 数据工作区的连接列表由 `buildDataSourcesWorkspaceModel` 从 Snapshot 与 host credentials 派生。
 
-已保存的查询配置、映射与更新策略属于 durable `DataQuery`，通过 command 写入 Snapshot，并随项目包和 `.ek3d` 保存。未保存的请求/映射草稿、示例 JSON、请求结果、临时参数覆盖、原始响应及其 JSON、耗时、取消状态和 generation 只属于 editor session，不进入 Snapshot、项目包、`.ek3d` 或 clipboard。`buildDataGetRequest()` 只接受相对于连接 `baseUrl` 的路径，拒绝绝对地址、协议相对地址、编码穿越和带 query/fragment 的路径；参数定义区分 `string`、finite `number` 和 `boolean`，默认值与临时覆盖分别解析，未提供、`""`、`0`、`false` 不会互相替代。宿主通过 `createEditor({ executor })` 注入请求执行器，收到 `method`、最终 URL、非秘密 headers、`credentialRef`、`timeoutMs` 和 `AbortSignal`，返回状态、允许的响应头、content type 与文本 body。没有 executor 时返回结构化运行态问题，不会回退到浏览器 `fetch`。`mapDataQueryBody()` 从映射配置和内存中的响应 body 产生带 `connectionId`、`queryId`、`entityId`、属性值、`observedAt`、`receivedAt` 与 `sourceQuality` 的标准样本；这些样本不写入 Snapshot。
+已保存的查询配置、映射与更新策略属于 durable `DataQuery`，通过 command 写入 Snapshot，并随项目包和 `.ek3d` 保存。未保存的请求/映射草稿、示例 JSON、请求结果、临时参数覆盖、原始响应及其 JSON、耗时、取消状态和 generation 只属于 editor session，不进入 Snapshot、项目包、`.ek3d` 或 clipboard。`buildDataQueryRequest()` 只接受相对于连接 `baseUrl` 的路径，拒绝绝对地址、协议相对地址、编码穿越和带 query/fragment 的路径（旧的 `buildDataGetRequest()` 继续作为 GET 兼容入口）；参数定义区分 `string`、finite `number` 和 `boolean`，默认值与临时覆盖分别解析，未提供、`""`、`0`、`false` 不会互相替代。宿主通过 `createEditor({ executor })` 注入请求执行器，收到 `method`、只读确认、最终 URL、合并后的非秘密 headers、typed JSON body、认证描述、`credentialRef`、`timeoutMs`、响应上限和 `AbortSignal`，返回状态、允许的响应头、content type 与文本 body。没有 executor 时返回结构化运行态问题，不会回退到浏览器 `fetch`。`mapDataQueryBody()` 从映射配置和内存中的响应 body 产生带 `connectionId`、`queryId`、`entityId`、属性值、`observedAt`、`receivedAt` 与 `sourceQuality` 的标准样本；这些样本不写入 Snapshot。
 
 ## Command 与 Snapshot 的关系
 

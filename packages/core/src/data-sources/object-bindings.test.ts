@@ -37,7 +37,7 @@ describe("durable object bindings", () => {
       color: null
     });
     expect(editor.getSnapshot().dataSources.queries[queryId].parameters).toEqual([
-      { name: "areaId", type: "string", defaultValue: "A" }
+      { name: "areaId", type: "string", defaultValue: "A", location: "query" }
     ]);
 
     const restored = createEditor({ snapshot: editor.serialize() });
@@ -74,8 +74,8 @@ describe("durable object bindings", () => {
       values: { areaId: "B", deviceId: "pump-01" }
     });
     expect(editor.getSnapshot().dataSources.queries[queryId].parameters).toEqual([
-      { name: "areaId", type: "string", defaultValue: "A" },
-      { name: "deviceId", type: "string" }
+      { name: "areaId", type: "string", defaultValue: "A", location: "query" },
+      { name: "deviceId", type: "string", location: "query" }
     ]);
     expect(connectionId).toBe("connection-a");
     editor.dispose();

@@ -7,6 +7,7 @@ import {
   buildDuplicateDataQueryCommand,
   buildSaveDataConnectionCommand,
   createUniqueDataConnectionName,
+  DEFAULT_API_KEY_HEADER_NAME,
   DEFAULT_DATA_CONNECTION_TIMEOUT_MS,
   filterDataConnectionItems,
   type DataConnectionAuth,
@@ -40,6 +41,7 @@ interface DataFormState {
   baseUrl: string;
   authKind: DataConnectionAuth["kind"];
   credentialRef: string;
+  apiKeyHeader: string;
   timeoutSeconds: string;
   headers: DataFormHeader[];
   baseline: string;
@@ -249,6 +251,7 @@ function DataSourcesSession({
       baseUrl: "",
       authKind: "none",
       credentialRef: "",
+      apiKeyHeader: DEFAULT_API_KEY_HEADER_NAME,
       timeoutSeconds: formatSeconds(DEFAULT_DATA_CONNECTION_TIMEOUT_MS),
       headers: [],
       baseline: ""
@@ -271,7 +274,8 @@ function DataSourcesSession({
       name: stored.name,
       baseUrl: stored.baseUrl,
       authKind: stored.auth.kind,
-      credentialRef: stored.auth.kind === "bearer" ? stored.auth.credentialRef : "",
+      credentialRef: stored.auth.kind === "none" ? "" : stored.auth.credentialRef,
+      apiKeyHeader: stored.auth.kind === "api-key" ? stored.auth.headerName : DEFAULT_API_KEY_HEADER_NAME,
       timeoutSeconds: formatSeconds(stored.timeoutMs),
       headers: Object.entries(stored.headers).map(([name, value]) => createFormHeader(name, value)),
       baseline: ""
@@ -338,7 +342,9 @@ function DataSourcesSession({
       baseUrl: form.baseUrl,
       auth: form.authKind === "bearer"
         ? { kind: "bearer", credentialRef: form.credentialRef }
-        : { kind: "none" },
+        : form.authKind === "api-key"
+          ? { kind: "api-key", credentialRef: form.credentialRef, headerName: form.apiKeyHeader }
+          : { kind: "none" },
       headers: formToHeaders(form.headers),
       timeoutMs: Number.isFinite(timeoutSeconds) ? Math.round(timeoutSeconds * 1000) : Number.NaN
     };
@@ -690,7 +696,14 @@ function ConnectionRow({
         <small>{connection.baseUrl}</small>
       </div>
       <div className="ek-workbench__connection-badges">
-        <span>{connection.authKind === "bearer" ? t("dataSources.list.auth.bearer") : t("dataSources.list.auth.none")}</span>
+        <span>{connection.authKind === "bearer"
+          ? t("dataSources.list.auth.bearer")
+          : connection.authKind === "api-key"
+            ? t("dataSources.list.auth.apiKey")
+            : t("dataSources.list.auth.none")}</span>
+        {connection.credentialHeaderName
+          ? <span>{t("dataSources.list.authHeader", { name: connection.credentialHeaderName })}</span>
+          : null}
         {credentialText ? <span data-state={connection.missingCredential ? "missing" : undefined}>{credentialText}</span> : null}
         {connection.missingCredential ? <span data-state="missing">{t("dataSources.list.credentialMissing")}</span> : null}
         <span>{t("dataSources.list.timeout", { seconds: formatSeconds(connection.timeoutMs) })}</span>
@@ -735,13 +748,14 @@ function ConnectionRow({
               <li key={query.id} className="ek-workbench__query-row" aria-label={t("dataSources.queries.rowLabel", { name: query.name })}>
                 <div className="ek-workbench__query-main">
                   <strong>{query.name}</strong>
-                  <small>{query.path}</small>
+                  <small>{query.method} · {query.path}</small>
                   <small>{t("dataSources.queries.summary", {
                     count: query.propertyCount,
                     mode: t(query.mode === "array"
                       ? "dataSources.queries.mode.array"
                       : "dataSources.queries.mode.single")
                   })}</small>
+                  {query.method === "POST" ? <small>{t("dataSources.queries.manual")}</small> : null}
                   {query.bindingCount > 0 ? <small>{boundObjectLabel(t, query.bindingCount)}</small> : null}
                 </div>
                 <div className="ek-workbench__query-actions">
@@ -869,10 +883,25 @@ function DataConnectionForm({
         >
           <option value="none">{t("dataSources.form.auth.none")}</option>
           <option value="bearer">{t("dataSources.form.auth.bearer")}</option>
+          <option value="api-key">{t("dataSources.form.auth.apiKey")}</option>
         </select>
       </label>
 
-      {form.authKind === "bearer" ? (
+      {form.authKind === "api-key" ? (
+        <label className="ek-workbench__field">
+          <span>{t("dataSources.form.apiKeyHeader")}</span>
+          <input
+            type="text"
+            aria-label={t("dataSources.form.apiKeyHeader")}
+            aria-invalid={fieldProblems("auth").length > 0}
+            value={form.apiKeyHeader}
+            onChange={(event) => onChange({ apiKeyHeader: event.target.value })}
+          />
+          <small>{t("dataSources.form.apiKeyHeaderHint")}</small>
+        </label>
+      ) : null}
+
+      {form.authKind !== "none" ? (
         <label className="ek-workbench__field">
           <span>{t("dataSources.form.credential")}</span>
           <select
@@ -1010,6 +1039,7 @@ function serializeFormDraft(form: Omit<DataFormState, "baseline">): string {
     baseUrl: form.baseUrl,
     authKind: form.authKind,
     credentialRef: form.credentialRef,
+    apiKeyHeader: form.apiKeyHeader,
     timeoutSeconds: form.timeoutSeconds,
     headers: form.headers.map(({ name, value }) => ({ name, value }))
   });

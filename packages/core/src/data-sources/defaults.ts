@@ -13,6 +13,8 @@ export const MIN_DATA_QUERY_REFRESH_INTERVAL_MS = 1_000;
 export const DEFAULT_DATA_QUERY_REFRESH_INTERVAL_MS = 5_000;
 export const DEFAULT_DATA_QUERY_MAX_AGE_MS = 15_000;
 export const MAX_DATA_QUERY_RETRY_BACKOFF_MS = 60_000;
+export const DEFAULT_DATA_MAX_RESPONSE_BYTES = 1_048_576;
+export const DEFAULT_API_KEY_HEADER_NAME = "X-API-Key";
 
 export function createDefaultDataQueryUpdatePolicy(): DataQueryUpdatePolicy {
   return {

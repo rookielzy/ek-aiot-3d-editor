@@ -337,6 +337,53 @@ describe("Editor data service", () => {
     editor.dispose();
   });
 
+  it("invalidates a pending draft when a query changes on the same connection", async () => {
+    let deliver!: (response: DataResponseDescriptor) => void;
+    const context = createDataEditor({
+      executor: () => new Promise<DataResponseDescriptor>((resolve) => {
+        deliver = resolve;
+      })
+    });
+    const handle = context.service.executeQueryDraft(context.draft);
+
+    expect(context.editor.dispatch({
+      type: "create-data-query",
+      query: {
+        connectionId: "connection-a",
+        name: "Saved query",
+        path: "/saved",
+        parameters: [],
+        mapping: {
+          mode: "single",
+          root: [],
+          identity: { kind: "literal", value: "device-1" },
+          displayName: null,
+          properties: [{
+            key: "value",
+            label: "Value",
+            type: "number",
+            nullable: false,
+            unit: null,
+            source: [{ kind: "key", key: "value" }],
+            transform: { kind: "number" },
+            range: null,
+            allowed: null
+          }],
+          observedAt: null,
+          sourceQuality: null
+        },
+        updatePolicy: { refreshIntervalMs: 5_000, maxAgeMs: 15_000 }
+      }
+    }).ok).toBe(true);
+
+    expect(await handle.result).toMatchObject({ status: "stale", current: false });
+    expect(context.service.getState().run).toBeNull();
+    deliver(okResponse());
+    await flushPromises();
+    expect(context.service.getState().run).toBeNull();
+    context.editor.dispose();
+  });
+
   it.each(["running", "success"] as const)("preserves a %s run when an unrelated connection changes", async (status) => {
     const requests: DataRequestDescriptor[] = [];
     let deliver!: (response: DataResponseDescriptor) => void;
@@ -431,15 +478,29 @@ describe("Editor data service", () => {
       bodyKind: "json"
     },
     {
-      label: "non-JSON body",
+      label: "non-JSON content type",
       response: { status: 200, contentType: "text/plain", body: "not-json" },
+      status: "error",
+      codes: ["response-not-json"],
+      bodyKind: "text"
+    },
+    {
+      label: "JSON parse failure",
+      response: { status: 200, contentType: "application/json", body: "{not-json" },
       status: "error",
       codes: ["response-json-invalid"],
       bodyKind: "text"
     },
     {
-      label: "empty body",
+      label: "204 response",
       response: { status: 204, body: "" },
+      status: "success",
+      codes: [],
+      bodyKind: "empty"
+    },
+    {
+      label: "successful empty body",
+      response: { status: 200, contentType: "application/json", body: "  " },
       status: "success",
       codes: [],
       bodyKind: "empty"
@@ -458,6 +519,202 @@ describe("Editor data service", () => {
       bodyText: response.body,
       bodyKind
     });
+    editor.dispose();
+  });
+
+  it("executes a read-only POST with typed body values, overridden query headers, and api key by reference", async () => {
+    const requests: DataRequestDescriptor[] = [];
+    const executor: DataRequestExecutor = async (request) => {
+      requests.push(request);
+      return {
+        status: 200,
+        contentType: "application/json",
+        body: "{\"code\":0,\"items\":[{\"value\":\"7\"}]}"
+      };
+    };
+    const { editor, service } = createDataEditor({
+      executor,
+      auth: { kind: "api-key", credentialRef: "credential-ops", headerName: "X-Api-Key" },
+      credentials: [{ ref: "credential-ops", label: "Operations key", available: true }],
+      headers: { "X-Tenant": "plant-a", "X-Source": "connection" }
+    });
+
+    const result = await service.executeQueryDraft({
+      connectionId: "connection-a",
+      method: "POST",
+      readOnly: true,
+      path: "/search/{area}",
+      headers: { "x-tenant": "override", "X-Trace": "trace-1" },
+      parameters: [
+        { name: "area", type: "string", defaultValue: "A", location: "path" },
+        { name: "tag", type: "string", defaultValue: "a b", location: "query" },
+        { name: "limit", type: "number", defaultValue: 0, location: "body" },
+        { name: "include", type: "boolean", defaultValue: false, location: "body" }
+      ],
+      successCondition: { path: [{ kind: "key", key: "code" }], equals: 0 }
+    }).result;
+
+    expect(result.status).toBe("success");
+    expect(result.request).toMatchObject({
+      method: "POST",
+      readOnly: true,
+      url: "https://api.example.test/v1/search/A?tag=a+b",
+      body: { limit: 0, include: false },
+      auth: { kind: "api-key", credentialRef: "credential-ops", headerName: "X-Api-Key" },
+      credentialRef: "credential-ops"
+    });
+    expect(result.request?.headers).toEqual({
+      "X-Source": "connection",
+      "x-tenant": "override",
+      "X-Trace": "trace-1",
+      "Content-Type": "application/json"
+    });
+    expect(requests[0]).toMatchObject({
+      method: "POST",
+      body: { limit: 0, include: false },
+      auth: { kind: "api-key", credentialRef: "credential-ops", headerName: "X-Api-Key" },
+      maxResponseBytes: expect.any(Number)
+    });
+    expect(JSON.stringify(result.request)).not.toContain("Operations key");
+    expect(JSON.stringify(editor.serialize())).not.toContain("Operations key");
+    editor.dispose();
+  });
+
+  it("distinguishes business failure, response limits, and missing api key credentials", async () => {
+    const business = createDataEditor({
+      executor: async () => ({
+        status: 200,
+        contentType: "application/json",
+        body: "{\"code\":\"0\"}"
+      })
+    });
+    const businessResult = await business.service.executeQueryDraft({
+      connectionId: "connection-a",
+      method: "POST",
+      readOnly: true,
+      path: "/search",
+      parameters: [],
+      successCondition: { path: [{ kind: "key", key: "code" }], equals: 0 }
+    }).result;
+    expect(businessResult.status).toBe("error");
+    expect(businessResult.problems.map((problem) => problem.code)).toEqual(["response-business"]);
+    expect(businessResult.response?.json).toEqual({ code: "0" });
+    business.editor.dispose();
+
+    const large = createDataEditor({
+      executor: async () => ({
+        status: 200,
+        contentType: "application/json",
+        body: "{\"value\":\"0123456789\"}"
+      }),
+      maxResponseBytes: 10
+    });
+    const largeResult = await large.service.executeQueryDraft(large.draft).result;
+    expect(largeResult.status).toBe("error");
+    expect(largeResult.problems.map((problem) => problem.code)).toEqual(["response-too-large"]);
+    expect(largeResult.response).toBeNull();
+    large.editor.dispose();
+
+    const executor = vi.fn<DataRequestExecutor>(async () => okResponse());
+    const missing = createDataEditor({
+      executor,
+      auth: { kind: "api-key", credentialRef: "credential-missing", headerName: "X-Api-Key" }
+    });
+    const missingResult = await missing.service.executeQueryDraft(missing.draft).result;
+    expect(missingResult.status).toBe("error");
+    expect(missingResult.problems).toEqual([
+      expect.objectContaining({
+        code: "credential-unavailable",
+        field: "credential",
+        credentialRef: "credential-missing"
+      })
+    ]);
+    expect(executor).not.toHaveBeenCalled();
+    expect(missing.editor.getSnapshot().dataSources.connections["connection-a"]?.auth).toEqual({
+      kind: "api-key",
+      credentialRef: "credential-missing",
+      headerName: "X-Api-Key"
+    });
+    missing.editor.dispose();
+  });
+
+  it("classifies oversized error responses by HTTP status before the size limit", async () => {
+    const oversizedError = {
+      status: 401,
+      contentType: "application/json",
+      body: "{\"error\":\"0123456789\"}"
+    };
+    const auth = createDataEditor({
+      executor: async () => oversizedError,
+      maxResponseBytes: 10
+    });
+    const authResult = await auth.service.executeQueryDraft(auth.draft).result;
+    expect(authResult.status).toBe("error");
+    expect(authResult.problems.map((problem) => problem.code)).toEqual(["response-auth"]);
+    expect(authResult.response).toMatchObject({ status: 401, bodyKind: "text" });
+    auth.editor.dispose();
+
+    const unavailable = createDataEditor({
+      executor: async () => ({ ...oversizedError, status: 503 }),
+      maxResponseBytes: 10
+    });
+    const unavailableResult = await unavailable.service.executeQueryDraft(unavailable.draft).result;
+    expect(unavailableResult.status).toBe("error");
+    expect(unavailableResult.problems.map((problem) => problem.code)).toEqual(["response-http"]);
+    expect(unavailableResult.response).toMatchObject({ status: 503, bodyKind: "text" });
+    unavailable.editor.dispose();
+  });
+
+  it("does not call the executor for an unconfirmed POST draft", async () => {
+    const executor = vi.fn<DataRequestExecutor>(async () => okResponse());
+    const { editor, service, draft } = createDataEditor({ executor });
+
+    const result = await service.executeQueryDraft({
+      ...draft,
+      method: "POST",
+      readOnly: false
+    }).result;
+
+    expect(result.status).toBe("error");
+    expect(result.problems.map((problem) => problem.code)).toEqual(["post-read-only-required"]);
+    expect(result.request).toBeNull();
+    expect(executor).not.toHaveBeenCalled();
+    editor.dispose();
+  });
+
+  it("compares business success values strictly by JSON scalar type and path", async () => {
+    let body = "{\"code\":false}";
+    const { editor, service, draft } = createDataEditor({
+      executor: async () => ({
+        status: 200,
+        contentType: "application/json",
+        body
+      })
+    });
+    const condition = (equals: string | number | boolean | null) => ({
+      path: [{ kind: "key" as const, key: "code" }],
+      equals
+    });
+    const run = () => service.executeQueryDraft({
+      ...draft,
+      successCondition: condition(0)
+    }).result;
+
+    expect((await run()).problems.map((problem) => problem.code)).toEqual(["response-business"]);
+    body = "{\"code\":null}";
+    const nullRun = await service.executeQueryDraft({
+      ...draft,
+      successCondition: condition("")
+    }).result;
+    expect(nullRun.problems.map((problem) => problem.code)).toEqual(["response-business"]);
+    body = "{\"other\":0}";
+    const missingRun = await service.executeQueryDraft({
+      ...draft,
+      successCondition: condition(0)
+    }).result;
+    expect(missingRun.problems.map((problem) => problem.code)).toEqual(["response-business"]);
+    body = "{\"code\":0}";
+    expect((await run()).status).toBe("success");
     editor.dispose();
   });
 
@@ -497,7 +754,9 @@ function createDataEditor(options: {
   executor?: DataRequestExecutor | null;
   credentials?: readonly DataCredentialDescriptor[];
   auth?: DataConnectionAuth;
+  headers?: Record<string, string>;
   timeoutMs?: number;
+  maxResponseBytes?: number;
 } = {}): {
   editor: ReturnType<typeof createEditor>;
   service: EditorDataService;
@@ -506,6 +765,7 @@ function createDataEditor(options: {
   const editor = createEditor({
     executor: options.executor ?? null,
     credentials: options.credentials,
+    maxResponseBytes: options.maxResponseBytes,
     snapshot: {
       ...createEmptySnapshot("scene-a"),
       dataSources: {
@@ -515,7 +775,7 @@ function createDataEditor(options: {
             name: "Plant API",
             baseUrl: "https://api.example.test/v1",
             auth: options.auth ?? { kind: "none" },
-            headers: {},
+            headers: options.headers ?? {},
             timeoutMs: options.timeoutMs ?? 10_000
           }
         },

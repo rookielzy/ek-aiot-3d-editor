@@ -140,7 +140,9 @@ function phaseLabel(
     return workbench.i18n.t("dataBinding.preview.paused");
   }
   if (context.phase === "waiting" && context.nextRefreshAt === null) {
-    return workbench.i18n.t("dataBinding.preview.phase.awaitingRetry");
+    return workbench.i18n.t(context.method === "POST"
+      ? "dataBinding.preview.phase.manual"
+      : "dataBinding.preview.phase.awaitingRetry");
   }
   if (context.nextRefreshAt !== null) {
     return workbench.i18n.t("dataBinding.preview.nextRefresh", {

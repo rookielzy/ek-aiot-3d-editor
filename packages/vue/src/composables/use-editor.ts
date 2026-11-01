@@ -18,7 +18,8 @@ export function useEditor(options: UseEditorOptions = {}): UseEditorResult {
     snapshot: options.snapshot,
     credentials: options.credentials,
     executor: options.executor,
-    authRevision: options.authRevision
+    authRevision: options.authRevision,
+    maxResponseBytes: options.maxResponseBytes
   }));
   const snapshot = shallowRef(editor.getSnapshot());
   const unsubscribe = editor.subscribe((nextSnapshot) => {

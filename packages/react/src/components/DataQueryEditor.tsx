@@ -9,7 +9,7 @@ import {
   type FormEvent
 } from "react";
 import {
-  buildDataGetRequest,
+  buildDataQueryRequest,
   buildDataQueryReferenceModel,
   buildSaveDataQueryCommand,
   formatDataPath,
@@ -20,6 +20,7 @@ import {
   type DataMappedField,
   type DataMappingProblem,
   type DataMappingResult,
+  type DataParameterLocationInput,
   type DataParameterType,
   type DataParameterValue,
   type DataPath,
@@ -27,6 +28,7 @@ import {
   type DataQueryDefinition,
   type DataQueryDefinitionProblem,
   type DataQueryMapping,
+  type DataQueryMethod,
   type DataQueryParameterOverrides,
   type DataQueryParameterUsage,
   type DataQueryPropertyUsage,
@@ -39,27 +41,32 @@ import type { WorkbenchI18n, WorkbenchMessageKey, WorkbenchMessageValues } from 
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
 import {
   collectQueryOverrides,
+  createQueryHeaderForm,
   createQueryParameterForm,
   hasQueryOverrides,
   toQueryParameterDrafts,
+  type QueryHeaderForm,
   type QueryParameterForm
 } from "./data-query-form";
 import {
   buildMappingFromForm,
   buildQueryDefinitionFromForm,
+  buildSuccessConditionFromForm,
   createQueryFormState,
   createQueryMapEntryForm,
   createQueryPropertyForm,
   createQueryQualityEntryForm,
   queryDraftSignature,
   queryFormFromQuery,
+  queryHeadersToRecord,
   resolvedParametersForForm,
   serializeQueryForm,
   type QueryFormProblem,
   type QueryFormState,
   type QueryMapEntryForm,
   type QueryPropertyForm,
-  type QueryQualityEntryForm
+  type QueryQualityEntryForm,
+  type QuerySuccessValueType
 } from "./data-query-mapping-form";
 import { DataParameterValueInput } from "./DataParameterValueInput";
 import {
@@ -131,6 +138,13 @@ const VALUE_TYPE_MESSAGE_KEYS = {
   string: "dataSources.mapping.identity.valueType.string",
   number: "dataSources.mapping.identity.valueType.number"
 } satisfies Record<QueryFormState["identityValueType"], WorkbenchMessageKey>;
+
+const SUCCESS_TYPE_MESSAGE_KEYS = {
+  string: "dataSources.request.success.type.string",
+  number: "dataSources.request.success.type.number",
+  boolean: "dataSources.request.success.type.boolean",
+  null: "dataSources.request.success.type.null"
+} satisfies Record<QuerySuccessValueType, WorkbenchMessageKey>;
 
 const TIME_FORMAT_MESSAGE_KEYS = {
   iso: "dataSources.mapping.observedAt.format.iso",
@@ -315,6 +329,36 @@ export function DataQueryEditor({
     updateParameter(id, { type, defaultText: initialText, overrideText: initialText });
   }
 
+  function changeParameterLocation(id: string, location: DataParameterLocationInput): void {
+    updateParameter(id, { location });
+  }
+
+  function changeMethod(method: DataQueryMethod): void {
+    updateRequestForm({
+      method,
+      readOnly: method === "POST" ? false : true,
+      parameters: method === "GET"
+        ? form.parameters.map((parameter) =>
+            parameter.location === "body" ? { ...parameter, location: "auto" } : parameter
+          )
+        : form.parameters
+    });
+  }
+
+  function addHeader(): void {
+    updateRequestForm({ headers: [...form.headers, createQueryHeaderForm()] });
+  }
+
+  function updateHeader(id: string, patch: Partial<QueryHeaderForm>): void {
+    updateRequestForm({
+      headers: form.headers.map((header) => header.id === id ? { ...header, ...patch } : header)
+    });
+  }
+
+  function removeHeader(id: string): void {
+    updateRequestForm({ headers: form.headers.filter((header) => header.id !== id) });
+  }
+
   function updateProperty(index: number, patch: Partial<QueryPropertyForm>): void {
     updateForm({
       properties: form.properties.map((property, propertyIndex) =>
@@ -381,8 +425,12 @@ export function DataQueryEditor({
     const usedOverrides = hasQueryOverrides(form.parameters);
     const handle = service.executeQueryDraft({
       connectionId,
+      method: form.method,
+      readOnly: form.readOnly,
       path: form.path,
-      parameters: parameterDrafts
+      headers: queryHeadersToRecord(form.headers),
+      parameters: parameterDrafts,
+      successCondition: buildSuccessConditionFromForm(form)
     }, { overrides: requestOverrides });
     setRunId(handle.id);
     const result = await handle.result;
@@ -627,6 +675,32 @@ export function DataQueryEditor({
             ) : null}
 
             <label className="ek-workbench__field">
+              <span>{t("dataSources.request.method")}</span>
+              <select
+                aria-label={t("dataSources.request.method")}
+                value={form.method}
+                onChange={(event) => changeMethod(event.target.value as DataQueryMethod)}
+              >
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+              </select>
+            </label>
+            {form.method === "POST" ? (
+              <>
+                <label className="ek-workbench__request-check">
+                  <input
+                    type="checkbox"
+                    aria-label={t("dataSources.request.readOnlyConfirm")}
+                    checked={form.readOnly}
+                    onChange={(event) => updateRequestForm({ readOnly: event.target.checked })}
+                  />
+                  <span>{t("dataSources.request.readOnlyConfirm")}</span>
+                </label>
+                <p className="ek-workbench__request-hint">{t("dataSources.request.postManualHint")}</p>
+              </>
+            ) : null}
+
+            <label className="ek-workbench__field">
               <span>{t("dataSources.request.path")}</span>
               <input
                 type="text"
@@ -641,19 +715,54 @@ export function DataQueryEditor({
               {requestUrlPreview(context, connectionId, form, parameterDrafts, overrides)}
             </div>
 
+            <fieldset className="ek-workbench__request-headers">
+              <legend>{t("dataSources.request.headers")}</legend>
+              <p className="ek-workbench__request-hint">{t("dataSources.request.headers.hint")}</p>
+              {form.headers.length === 0 ? <small>{t("dataSources.request.headers.empty")}</small> : null}
+              {form.headers.map((header, index) => {
+                const row = index + 1;
+                return (
+                  <div key={header.id} className="ek-workbench__request-header-row">
+                    <input
+                      type="text"
+                      aria-label={t("dataSources.request.header.name", { index: row })}
+                      placeholder={t("dataSources.request.header.name", { index: row })}
+                      value={header.name}
+                      onChange={(event) => updateHeader(header.id, { name: event.target.value })}
+                    />
+                    <input
+                      type="text"
+                      aria-label={t("dataSources.request.header.value", { index: row })}
+                      placeholder={t("dataSources.request.header.value", { index: row })}
+                      value={header.value}
+                      onChange={(event) => updateHeader(header.id, { value: event.target.value })}
+                    />
+                    <button
+                      type="button"
+                      aria-label={t("dataSources.request.header.remove", { index: row })}
+                      onClick={() => removeHeader(header.id)}
+                    >{t("dataSources.request.header.removeLabel")}</button>
+                  </div>
+                );
+              })}
+              <button type="button" onClick={addHeader}>{t("dataSources.request.headers.add")}</button>
+            </fieldset>
+
             <div className="ek-workbench__query-inline">
-              <label className="ek-workbench__field">
-                <span>{t("dataSources.queryEditor.refreshInterval")}</span>
-                <input
-                  type="number"
-                  min={1}
-                  step={1}
-                  inputMode="numeric"
-                  aria-label={t("dataSources.queryEditor.refreshInterval")}
-                  value={form.refreshIntervalSeconds}
-                  onChange={(event) => updateRequestForm({ refreshIntervalSeconds: event.target.value })}
-                />
-              </label>
+              {form.method === "GET" ? (
+                <label className="ek-workbench__field">
+                  <span>{t("dataSources.queryEditor.refreshInterval")}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    inputMode="numeric"
+                    aria-label={t("dataSources.queryEditor.refreshInterval")}
+                    value={form.refreshIntervalSeconds}
+                    onChange={(event) => updateRequestForm({ refreshIntervalSeconds: event.target.value })}
+                  />
+                </label>
+              ) : null}
               <label className="ek-workbench__field">
                 <span>{t("dataSources.queryEditor.maxAge")}</span>
                 <input
@@ -667,7 +776,11 @@ export function DataQueryEditor({
                 />
               </label>
             </div>
-            <p className="ek-workbench__request-hint">{t("dataSources.queryEditor.updatePolicyHint")}</p>
+            <p className="ek-workbench__request-hint">
+              {form.method === "POST"
+                ? t("dataSources.queryEditor.manualPolicyHint")
+                : t("dataSources.queryEditor.updatePolicyHint")}
+            </p>
 
             <fieldset className="ek-workbench__request-parameters">
               <legend>{t("dataSources.request.parameters")}</legend>
@@ -681,10 +794,53 @@ export function DataQueryEditor({
                   usage={parameterUsage.get(parameter.name.trim()) ?? null}
                   onChange={(patch) => updateParameter(parameter.id, patch)}
                   onChangeType={(type) => changeParameterType(parameter.id, type)}
+                  onChangeLocation={(location) => changeParameterLocation(parameter.id, location)}
                   onRemove={() => removeParameter(parameter.id)}
                 />
               ))}
               <button type="button" onClick={addParameter}>{t("dataSources.request.parameters.add")}</button>
+            </fieldset>
+
+            <fieldset className="ek-workbench__query-success">
+              <legend>{t("dataSources.request.success.title")}</legend>
+              <p className="ek-workbench__request-hint">{t("dataSources.request.success.hint")}</p>
+              <div className="ek-workbench__query-inline">
+                <PathField
+                  label={t("dataSources.request.success.path")}
+                  value={form.successPath}
+                  onChange={(value) => updateRequestForm({ successPath: value })}
+                  suggestionListId={suggestionListId}
+                />
+                <label className="ek-workbench__field">
+                  <span>{t("dataSources.request.success.type")}</span>
+                  <select
+                    aria-label={t("dataSources.request.success.type")}
+                    value={form.successType}
+                    onChange={(event) => updateRequestForm({
+                      successType: event.target.value as QuerySuccessValueType
+                    })}
+                  >
+                    {(["string", "number", "boolean", "null"] as const).map((type) => (
+                      <option key={type} value={type}>{t(SUCCESS_TYPE_MESSAGE_KEYS[type])}</option>
+                    ))}
+                  </select>
+                </label>
+                {form.successType !== "null" ? (
+                  <label className="ek-workbench__field">
+                    <span>{t("dataSources.request.success.value")}</span>
+                    <DataParameterValueInput
+                      id="query-success-value"
+                      type={form.successType}
+                      value={form.successValue}
+                      disabled={false}
+                      label={t("dataSources.request.success.value")}
+                      trueLabel={t("dataSources.request.boolean.true")}
+                      falseLabel={t("dataSources.request.boolean.false")}
+                      onChange={(value) => updateRequestForm({ successValue: value })}
+                    />
+                  </label>
+                ) : null}
+              </div>
             </fieldset>
 
             <div className="ek-workbench__request-actions">
@@ -1005,14 +1161,29 @@ function requestUrlPreview(
   parameters: ReturnType<typeof toQueryParameterDrafts>,
   overrides: DataQueryParameterOverrides
 ) {
-  const preview = buildDataGetRequest(context.snapshot, {
+  const preview = buildDataQueryRequest(context.snapshot, {
     connectionId,
+    method: form.method,
+    readOnly: form.readOnly,
     path: form.path,
-    parameters
+    headers: queryHeadersToRecord(form.headers),
+    parameters,
+    successCondition: buildSuccessConditionFromForm(form)
   }, { overrides });
-  return preview.ok
-    ? <code>{preview.summary.url}</code>
-    : <small>{context.i18n.t("dataSources.request.previewPending")}</small>;
+  if (!preview.ok) {
+    return <small>{context.i18n.t("dataSources.request.previewPending")}</small>;
+  }
+  return (
+    <>
+      <span data-method={preview.summary.method}>{preview.summary.method}</span>
+      <code>{preview.summary.url}</code>
+      {preview.summary.body !== null ? (
+        <pre className="ek-workbench__request-payload" aria-label={context.i18n.t("dataSources.request.bodyPreview")}>
+          {JSON.stringify(preview.summary.body, null, 2)}
+        </pre>
+      ) : null}
+    </>
+  );
 }
 
 function ParameterRow({
@@ -1022,6 +1193,7 @@ function ParameterRow({
   usage,
   onChange,
   onChangeType,
+  onChangeLocation,
   onRemove
 }: {
   parameter: QueryParameterForm;
@@ -1030,6 +1202,7 @@ function ParameterRow({
   usage: DataQueryParameterUsage | null;
   onChange(patch: Partial<QueryParameterForm>): void;
   onChangeType(type: DataParameterType): void;
+  onChangeLocation(location: DataParameterLocationInput): void;
   onRemove(): void;
 }) {
   const t = i18n.t;
@@ -1054,6 +1227,19 @@ function ParameterRow({
           {(["string", "number", "boolean"] as const).map((type) => (
             <option key={type} value={type}>{t(PARAMETER_TYPE_MESSAGE_KEYS[type])}</option>
           ))}
+        </select>
+      </label>
+      <label className="ek-workbench__field">
+        <span>{t("dataSources.request.parameter.location", { index })}</span>
+        <select
+          aria-label={t("dataSources.request.parameter.location", { index })}
+          value={parameter.location}
+          onChange={(event) => onChangeLocation(event.target.value as DataParameterLocationInput)}
+        >
+          <option value="auto">{t("dataSources.request.parameter.location.auto")}</option>
+          <option value="path">{t("dataSources.request.parameter.location.path")}</option>
+          <option value="query">{t("dataSources.request.parameter.location.query")}</option>
+          <option value="body">{t("dataSources.request.parameter.location.body")}</option>
         </select>
       </label>
       <div className="ek-workbench__request-parameter-value">

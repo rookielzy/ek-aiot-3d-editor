@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildDataGetRequest,
+  buildDataQueryRequest,
   createEditor,
   type DataQueryDraft
 } from "../index";
@@ -30,7 +30,7 @@ describe("GET request drafting", () => {
       ]
     };
 
-    const result = buildDataGetRequest(editor.getSnapshot(), draft, {
+    const result = buildDataQueryRequest(editor.getSnapshot(), draft, {
       overrides: { deviceId: "pump 1&2", include: false }
     });
 
@@ -38,8 +38,11 @@ describe("GET request drafting", () => {
     if (!result.ok) throw new Error("Expected a built request.");
     expect(result.summary).toEqual({
       method: "GET",
+      readOnly: true,
       url: "https://api.example.test/v1/devices/pump%201%262/events?include=false&offset=0&q=",
       headers: { "X-Tenant": "plant-a" },
+      body: null,
+      auth: { kind: "none" },
       credentialRef: null,
       timeoutMs: 12_000,
       parameters: {
@@ -47,13 +50,14 @@ describe("GET request drafting", () => {
         include: false,
         offset: 0,
         q: ""
-      }
+      },
+      successCondition: null
     });
-    const missing = buildDataGetRequest(editor.getSnapshot(), draft);
+    const missing = buildDataQueryRequest(editor.getSnapshot(), draft);
     expect(!missing.ok && missing.problems.map((problem) => [problem.code, problem.parameterName])).toEqual([
       ["parameter-missing", "include"]
     ]);
-    const encodedSlash = buildDataGetRequest(editor.getSnapshot(), draft, { overrides: { include: false } });
+    const encodedSlash = buildDataQueryRequest(editor.getSnapshot(), draft, { overrides: { include: false } });
     expect(encodedSlash.ok && encodedSlash.summary.url).toBe(
       "https://api.example.test/v1/devices/pump%2F1/events?include=false&offset=0&q="
     );
@@ -75,7 +79,7 @@ describe("GET request drafting", () => {
       }
     });
     const build = (parameters: DataQueryDraft["parameters"], overrides?: Record<string, unknown>) =>
-      buildDataGetRequest(editor.getSnapshot(), {
+      buildDataQueryRequest(editor.getSnapshot(), {
         connectionId: "connection-a",
         path: "/devices",
         parameters
@@ -96,7 +100,7 @@ describe("GET request drafting", () => {
     expect(!invalidName.ok && invalidName.problems.map((problem) => problem.code)).toEqual(["parameter-definition-invalid"]);
     const badType = build([{ name: "area", type: "date" as never, defaultValue: "A" }]);
     expect(!badType.ok && badType.problems.map((problem) => problem.code)).toEqual(["parameter-definition-invalid"]);
-    const missingPathParameter = buildDataGetRequest(editor.getSnapshot(), {
+    const missingPathParameter = buildDataQueryRequest(editor.getSnapshot(), {
       connectionId: "connection-a",
       path: "/devices/{deviceId}",
       parameters: []
@@ -129,7 +133,7 @@ describe("GET request drafting", () => {
       }
     });
 
-    const result = buildDataGetRequest(editor.getSnapshot(), {
+    const result = buildDataQueryRequest(editor.getSnapshot(), {
       connectionId: "connection-a",
       path,
       parameters: []
@@ -156,7 +160,7 @@ describe("GET request drafting", () => {
       }
     });
 
-    const result = buildDataGetRequest(editor.getSnapshot(), {
+    const result = buildDataQueryRequest(editor.getSnapshot(), {
       connectionId: "connection-a",
       path: "/devices",
       parameters: []

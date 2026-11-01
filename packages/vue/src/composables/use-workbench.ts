@@ -678,7 +678,8 @@ function resolveInitialEditor(options: UseWorkbenchOptions, editorOption: Ref<Ed
     snapshot: options.snapshot,
     credentials: options.credentials,
     executor: options.executor,
-    authRevision: options.authRevision
+    authRevision: options.authRevision,
+    maxResponseBytes: options.maxResponseBytes
   });
 }
 
