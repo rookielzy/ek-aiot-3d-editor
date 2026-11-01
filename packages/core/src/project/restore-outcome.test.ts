@@ -20,14 +20,15 @@ describe("project restore reporting", () => {
 
     const result = editor.importProject(packageBytes);
 
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
     expect(result.outcome?.kind).toBe("config-error");
     expect(result.problems).toMatchObject([expect.objectContaining({
       code: "project-data-config-invalid",
       source: "validation"
     })]);
     expect(result.problems[0]!.message).toContain("query-missing");
-    expect(editor.getSnapshot().objects["object-a"]).toBeUndefined();
+    expect(editor.getSnapshot().objects["object-a"]).toBeDefined();
+    expect(editor.getSnapshot().dataSources.bindings["object-a"]?.queryId).toBe("query-missing");
     editor.dispose();
   });
 
@@ -204,8 +205,16 @@ function withDanglingBinding(scene: SceneSnapshot): SceneSnapshot {
 }
 
 function packageWithScene(scene: unknown): Uint8Array {
+  const assets = scene && typeof scene === "object" && "assets" in scene && scene.assets && typeof scene.assets === "object"
+    ? Object.fromEntries(Object.entries(scene.assets).map(([assetId, asset]) => [assetId, {
+      id: assetId,
+      kind: (asset as { kind: string }).kind,
+      payloadPath: `assets/${assetId}.bin`
+    }]))
+    : {};
   return defaultArchiveAdapter.write([
-    { path: "project.json", bytes: encodeArchiveJson(PROJECT_MANIFEST) },
-    { path: "scene.json", bytes: encodeArchiveJson(scene) }
+    { path: "project.json", bytes: encodeArchiveJson({ ...PROJECT_MANIFEST, assets }) },
+    { path: "scene.json", bytes: encodeArchiveJson(scene) },
+    ...Object.keys(assets).map((assetId) => ({ path: `assets/${assetId}.bin`, bytes: new Uint8Array([1, 2, 3]) }))
   ]);
 }

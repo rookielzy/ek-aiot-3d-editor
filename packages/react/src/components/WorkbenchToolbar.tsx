@@ -87,6 +87,17 @@ export function WorkbenchToolbar({
       const result = context.importProject(packageBytes);
       onProjectProblems(result.problems);
       if (result.ok) {
+        if (result.outcome.kind === "config-error") {
+          setProjectStatus({
+            tone: "error",
+            message: {
+              key: "reactWorkbench.toolbar.status.openConfigInvalid.message",
+              fallback: "Project data configuration is damaged ({problemCount} broken references)",
+              values: { problemCount: result.outcome.problems.length }
+            }
+          });
+          return;
+        }
         setProjectStatus({
           tone: result.manifest?.completeness === "partial" || result.problems.length ? "warning" : "success",
           message: {

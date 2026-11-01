@@ -34,11 +34,6 @@ export interface DataReferenceIssue {
   message: string;
 }
 
-export interface DataSourcesValidationReport {
-  errors: string[];
-  danglingReferences: DataReferenceIssue[];
-}
-
 export function validateDataSources(
   value: unknown,
   nodes: unknown,

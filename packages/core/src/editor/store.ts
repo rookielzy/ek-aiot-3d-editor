@@ -42,9 +42,9 @@ export class EditorStore {
     }
   }
 
-  replaceSnapshot(nextSnapshot: SceneSnapshot): SceneSnapshot {
+  replaceSnapshot(nextSnapshot: SceneSnapshot, options: { allowDanglingDataReferences?: boolean } = {}): SceneSnapshot {
     this.#assertActive();
-    assertValidSceneSnapshot(nextSnapshot);
+    assertValidSceneSnapshot(nextSnapshot, options);
     this.#snapshot = immutableClone(nextSnapshot);
     if (this.#suppressNotifyDepth === 0) {
       this.#pendingNotify = false;

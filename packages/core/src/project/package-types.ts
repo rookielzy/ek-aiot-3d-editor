@@ -44,6 +44,7 @@ export interface ProjectPackage {
   manifest: ProjectPackageManifest;
   scene: SceneSnapshot;
   payloads: Record<string, Uint8Array>;
+  warnings: ProjectProblem[];
 }
 
 export interface ProjectProblem extends Problem {

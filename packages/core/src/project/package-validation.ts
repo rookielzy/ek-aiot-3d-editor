@@ -64,7 +64,8 @@ export function parseProjectPackage(bytes: Uint8Array, options: ParseProjectPack
     validateManifestAgainstScene(manifest, scene, entryMap, limits, problems);
   }
 
-  if (problems.length > 0 || !manifest || !scene) {
+  const fatalProblems = problems.filter((problem) => problem.code !== "project-data-config-invalid");
+  if (fatalProblems.length > 0 || !manifest || !scene) {
     return { problems };
   }
 
@@ -76,11 +77,13 @@ export function parseProjectPackage(bytes: Uint8Array, options: ParseProjectPack
   return {
     manifest,
     scene,
-    payloads
+    payloads,
+    warnings: problems
   };
 }
 
 export function validateProjectManifest(value: unknown, problems: ProjectProblem[]): ProjectPackageManifest | undefined {
+  const initialProblemCount = problems.length;
   if (!isPlainRecord(value)) {
     problems.push(createProjectProblem("project-manifest-invalid", "Project manifest must be a plain object."));
     return undefined;
@@ -109,7 +112,7 @@ export function validateProjectManifest(value: unknown, problems: ProjectProblem
     problems.push(createProjectProblem("project-manifest-runtime-value", "Project manifest must be JSON-compatible."));
   }
 
-  return problems.length === 0 ? value as unknown as ProjectPackageManifest : undefined;
+  return problems.length === initialProblemCount ? value as unknown as ProjectPackageManifest : undefined;
 }
 
 export function createProjectProblem(code: string, message: string, metadata?: Record<string, unknown>): ProjectProblem {
@@ -231,7 +234,7 @@ function validateProjectScene(value: unknown, problems: ProjectProblem[]): Scene
 
   let scene: SceneSnapshot;
   try {
-    scene = migrateSerializedSnapshot(value as never);
+    scene = migrateSerializedSnapshot(value as never, { allowDanglingDataReferences: true });
   } catch (error) {
     const message = errorMessage(error);
     problems.push(createProjectProblem(
@@ -249,7 +252,11 @@ function validateProjectScene(value: unknown, problems: ProjectProblem[]): Scene
         error
       ));
     }
-    return undefined;
+    const onlyDanglingReferences = result.errors.length > 0 &&
+      result.errors.every((error) => result.danglingDataReferences.some((issue) => issue.message === error));
+    if (!onlyDanglingReferences) {
+      return undefined;
+    }
   }
   return scene;
 }

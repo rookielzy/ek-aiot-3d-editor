@@ -21,14 +21,29 @@ import {
   type V4SceneSnapshot,
   type V3SceneSnapshot
 } from "./types";
-import { assertValidSceneSnapshot, type ValidationResult } from "./validation";
+import { assertValidSceneSnapshot, validateSceneSnapshot, type ValidationResult } from "./validation";
 
-export function migrateSerializedSnapshot(serialized: SerializedSceneSnapshot): SceneSnapshot {
+export interface SnapshotMigrationOptions {
+  allowDanglingDataReferences?: boolean;
+}
+
+export function migrateSerializedSnapshot(
+  serialized: SerializedSceneSnapshot,
+  options: SnapshotMigrationOptions = {}
+): SceneSnapshot {
   if (serialized.version === SNAPSHOT_VERSION) {
     const normalized = normalizeDataObjectBindingColors(
       normalizeDataQueryRequests(normalizeDataQueryPolicies(serialized))
     );
-    assertValidSceneSnapshot(normalized);
+    if (options.allowDanglingDataReferences) {
+      const result = validateSceneSnapshot(normalized);
+      const errors = result.errors.filter((error) => !result.danglingDataReferences.some((issue) => issue.message === error));
+      if (errors.length > 0) {
+        throw new Error(errors.join("\n"));
+      }
+    } else {
+      assertValidSceneSnapshot(normalized);
+    }
     return immutableClone(normalized);
   }
 

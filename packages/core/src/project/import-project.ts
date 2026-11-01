@@ -51,7 +51,7 @@ export function importProjectAssets(
     ok: true,
     snapshot: parsed.scene,
     manifest: parsed.manifest,
-    problems: [],
+    problems: parsed.warnings,
     outcome: { kind: "none", missingCredentialCount: 0 }
   };
 }

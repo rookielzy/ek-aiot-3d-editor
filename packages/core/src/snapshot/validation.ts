@@ -216,10 +216,18 @@ function getObjectIdForNode(nodes: Record<string, unknown>, nodeId: unknown): st
   return node.objectId;
 }
 
-export function assertValidSceneSnapshot(value: unknown): asserts value is SceneSnapshot {
+export function assertValidSceneSnapshot(
+  value: unknown,
+  options: { allowDanglingDataReferences?: boolean } = {}
+): asserts value is SceneSnapshot {
   const result = validateSceneSnapshot(value);
   if (!result.ok) {
-    throw new Error(result.errors.join("\n"));
+    const errors = options.allowDanglingDataReferences
+      ? result.errors.filter((error) => !result.danglingDataReferences.some((issue) => issue.message === error))
+      : result.errors;
+    if (errors.length > 0) {
+      throw new Error(errors.join("\n"));
+    }
   }
 }
 

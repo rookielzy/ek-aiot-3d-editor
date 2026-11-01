@@ -237,7 +237,7 @@ export class CoreEditor implements EditorWithGlbImport {
     this.marqueeSelection.reset();
     this.viewportHelpers.setHover(null);
     this.viewportHelpers.setSnapFeedback(IDLE_VIEWPORT_SNAP_FEEDBACK);
-    const snapshot = this.store.replaceSnapshot(result.snapshot);
+    const snapshot = this.store.replaceSnapshot(result.snapshot, { allowDanglingDataReferences: true });
     this.#notifyAssetWorkspaceSubscribers();
     void this.#runtime?.project(snapshot);
     return {
