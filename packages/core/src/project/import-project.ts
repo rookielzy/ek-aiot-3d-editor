@@ -24,7 +24,10 @@ export function importProjectAssets(
     return {
       ok: false,
       snapshot: undefined as unknown as SceneSnapshot,
-      problems: parsed.problems
+      problems: parsed.problems,
+      outcome: parsed.problems.some((problem) => problem.code === "project-data-config-invalid")
+        ? { kind: "config-error", problems: parsed.problems }
+        : { kind: "package-error" }
     };
   }
 
@@ -48,6 +51,7 @@ export function importProjectAssets(
     ok: true,
     snapshot: parsed.scene,
     manifest: parsed.manifest,
-    problems: []
+    problems: [],
+    outcome: { kind: "none", missingCredentialCount: 0 }
   };
 }

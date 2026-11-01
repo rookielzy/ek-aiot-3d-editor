@@ -50,6 +50,17 @@ export interface ProjectProblem extends Problem {
   source: "validation";
 }
 
+/**
+ * How a restore attempt stands once package parsing finishes. `package-error`
+ * means the bytes or manifest are unusable; `config-error` means the scene
+ * parsed but its durable data references cannot resolve and need editing.
+ */
+export type ProjectRestoreOutcome =
+  | { kind: "package-error" }
+  | { kind: "config-error"; problems: readonly Problem[] }
+  | { kind: "reconnect"; missingCredentialCount: number }
+  | { kind: "none"; missingCredentialCount: 0 };
+
 export interface ProjectPackageLimits {
   maxArchiveBytes: number;
   maxEntries: number;
@@ -71,6 +82,7 @@ export interface ProjectImportResult {
   snapshot: SceneSnapshot;
   manifest?: ProjectPackageManifest;
   problems: ProjectProblem[];
+  outcome: ProjectRestoreOutcome;
 }
 
 export interface ProjectExportOptions {

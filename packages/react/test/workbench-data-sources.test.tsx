@@ -186,7 +186,7 @@ describe("React data source workspace", () => {
     fireEvent.change(screen.getByLabelText("Header value 1"), { target: { value: "Bearer secret" } });
     fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
 
-    expect(screen.getByText("Authentication headers cannot be set as public headers.")).toBeTruthy();
+    expect(screen.getByText("Authentication headers cannot be set as public or query headers.")).toBeTruthy();
     expect(editor.getSnapshot().dataSources.connections[saved.id].headers).toEqual({ "X-Tenant": "plant-1" });
     expect(editor.getHistoryState()).toEqual({ undoCount: 1, redoCount: 0 });
   });

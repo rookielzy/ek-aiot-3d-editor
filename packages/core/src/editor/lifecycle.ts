@@ -15,6 +15,7 @@ import { planGlbImportRemap } from "../assets/import-remap";
 import { CommandDispatcher } from "../commands/dispatcher";
 import type { Command, CommandResult } from "../commands/types";
 import type { DataCredentialDescriptor } from "../data-sources/types";
+import { classifyDataConfigProblems } from "../data-sources/config-problems";
 import { CoreDataColorService, type EditorDataColorService } from "../data-sources/color-preview";
 import { CoreDataService, type EditorDataService } from "../data-sources/service";
 import { CommandHistory, type HistoryState } from "../history/history";
@@ -24,7 +25,7 @@ import { exportProjectPackage } from "../project/export-project";
 import { importProjectAssets } from "../project/import-project";
 import { replaceProjectAsset } from "../project/replace-asset";
 import type { ProjectAssetPayloadSummary, ProjectAssetSourceInput } from "../project/project-api";
-import type { ProjectExportOptions, ProjectExportResult, ProjectImportOptions, ProjectImportResult, ReplaceAssetInput, ReplaceAssetResult } from "../project/project-api";
+import type { ProjectExportOptions, ProjectExportResult, ProjectImportOptions, ProjectImportResult, ProjectRestoreOutcome, ReplaceAssetInput, ReplaceAssetResult } from "../project/project-api";
 import { ThreeEditorRuntime, type EditorRuntime } from "../runtime/editor-runtime";
 import { disposeObjectTree } from "../runtime/disposal";
 import { GlbImportError, ThreeGltfLoaderAdapter } from "../runtime/gltf-loader-adapter";
@@ -227,7 +228,8 @@ export class CoreEditor implements EditorWithGlbImport {
       this.#notifyAssetWorkspaceSubscribers();
       return {
         ...result,
-        snapshot: this.store.getSnapshot()
+        snapshot: this.store.getSnapshot(),
+        outcome: isDataConfigDamage(result.problems) ? { kind: "config-error", problems: result.problems } : { kind: "package-error" }
       };
     }
 
@@ -240,7 +242,8 @@ export class CoreEditor implements EditorWithGlbImport {
     void this.#runtime?.project(snapshot);
     return {
       ...result,
-      snapshot
+      snapshot,
+      outcome: this.#dataRestoreOutcome(snapshot)
     };
   }
 
@@ -608,6 +611,17 @@ export class CoreEditor implements EditorWithGlbImport {
     this.#dataService.stopPreview();
   }
 
+  #dataRestoreOutcome(snapshot: SceneSnapshot): ProjectRestoreOutcome {
+    const outcome = classifyDataConfigProblems(snapshot, this.#dataCredentials);
+    if (outcome.kind === "config-error") {
+      return { kind: "config-error", problems: outcome.configProblems };
+    }
+    if (outcome.kind === "reconnect") {
+      return { kind: "reconnect", missingCredentialCount: outcome.missingCredentialCount };
+    }
+    return { kind: "none", missingCredentialCount: 0 };
+  }
+
   #dataEditGuard(command: Command): string | null {
     if (!this.#dataService.getObjectDataState().preview.enabled) {
       return null;
@@ -694,6 +708,10 @@ function isCommandAllowedDuringPreview(command: Command): boolean {
 
 function isProjectAssetSource(source: AssetInput["source"]): source is ProjectAssetSourceInput {
   return source !== undefined && source !== null;
+}
+
+function isDataConfigDamage(problems: readonly { code: string }[]): boolean {
+  return problems.some((problem) => problem.code === "project-data-config-invalid");
 }
 
 async function createResolvedAssetForImport(asset: AssetInput) {

@@ -229,19 +229,42 @@ function validateProjectScene(value: unknown, problems: ProjectProblem[]): Scene
   try {
     scene = migrateSerializedSnapshot(value as never);
   } catch (error) {
-    problems.push(createProjectProblem("project-scene-invalid", errorMessage(error)));
+    const message = errorMessage(error);
+    problems.push(createProjectProblem(
+      isDataConfigError(message) ? "project-data-config-invalid" : "project-scene-invalid",
+      message
+    ));
     return undefined;
   }
 
   const result = validateSceneSnapshot(scene);
   if (!result.ok) {
     for (const error of result.errors) {
-      problems.push(createProjectProblem("project-scene-invalid", error));
+      problems.push(createProjectProblem(
+        isDataConfigError(error) ? "project-data-config-invalid" : "project-scene-invalid",
+        error
+      ));
     }
     return undefined;
   }
   return scene;
 }
+
+/**
+ * Durable data references that cannot resolve are a repairable configuration
+ * problem, distinct from a corrupt package the user must re-obtain.
+ */
+function isDataConfigError(message: string): boolean {
+  return DATA_CONFIG_ERROR_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+const DATA_CONFIG_ERROR_PATTERNS: readonly RegExp[] = [
+  /^Data binding /,
+  /^Data query /,
+  /^Data connection /,
+  /^Snapshot dataSources/,
+  /^Data field /
+];
 
 function validateManifestRecord(assetId: string, value: unknown, problems: ProjectProblem[]): void {
   if (!isPlainRecord(value)) {

@@ -189,6 +189,11 @@ export {
   buildDataObjectDetailModel
 } from "./data-sources/object-data";
 export { buildDataRuntimeProblems } from "./data-sources/runtime-problems";
+export {
+  buildDataConfigProblems,
+  classifyDataConfigProblems
+} from "./data-sources/config-problems";
+export type { DataRestoreOutcome, DataRestoreOutcomeKind } from "./data-sources/config-problems";
 export type {
   DataQueryDraftExecutionOptions,
   DataQueryResponse,
@@ -486,6 +491,7 @@ export type {
   ProjectPackageManifest,
   ProjectPackageVersion,
   ProjectProblem,
+  ProjectRestoreOutcome,
   ReplaceAssetInput,
   ReplaceAssetResult
 } from "./project/project-api";

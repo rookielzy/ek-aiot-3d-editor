@@ -5,6 +5,7 @@ import {
 } from "../assets/workspace";
 import { buildDataSourcesWorkspaceModel, type DataSourcesWorkspaceModel } from "../data-sources/workspace";
 import { buildDataRuntimeProblems } from "../data-sources/runtime-problems";
+import { buildDataConfigProblems } from "../data-sources/config-problems";
 import type { DataObjectDataState } from "../data-sources/object-data";
 import type { DataCredentialDescriptor } from "../data-sources/types";
 import { buildInspectorModel } from "../inspector/selection";
@@ -213,7 +214,10 @@ export function buildWorkbenchModel(snapshot: SceneSnapshot, options: BuildWorkb
   const transformMode = options.transformMode ?? "translate";
   const runtimeReady = options.runtimeReady ?? false;
   const projectProblems = options.projectProblems ?? [];
-  const dataProblems = options.dataState ? buildDataRuntimeProblems(options.dataState) : [];
+  const dataProblems = [
+    ...buildDataConfigProblems(snapshot),
+    ...(options.dataState ? buildDataRuntimeProblems(options.dataState) : [])
+  ];
   const problems = buildWorkbenchProblems(inspector, dataProblems, projectProblems);
   const selection = buildWorkbenchSelection(snapshot, inspector);
   const hierarchy = buildWorkbenchHierarchy(snapshot, inspector, problems.items);

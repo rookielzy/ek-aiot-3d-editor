@@ -95,6 +95,27 @@ export function WorkbenchToolbar({
             values: { fileName: file.name }
           }
         });
+        // A restored configuration can need host credentials before preview works.
+        if (result.outcome.kind === "reconnect") {
+          setProjectStatus({
+            tone: "warning",
+            message: {
+              key: "reactWorkbench.toolbar.status.openedReconnect.message",
+              fallback: "Reconnect required to preview data ({credentialCount} credentials missing)",
+              values: { credentialCount: result.outcome.missingCredentialCount, fileName: file.name }
+            }
+          });
+        }
+      } else if (result.outcome.kind === "config-error") {
+        // Durable references are broken: report repairable damage, not a bad file.
+        setProjectStatus({
+          tone: "error",
+          message: {
+            key: "reactWorkbench.toolbar.status.openConfigInvalid.message",
+            fallback: "Opened scene has damaged data configuration",
+            values: { problemCount: result.outcome.problems.length }
+          }
+        });
       } else {
         setProjectStatus(errorProjectStatus(
           result.problems[0]?.display?.titleDescriptor,

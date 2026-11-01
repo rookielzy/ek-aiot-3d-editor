@@ -12,6 +12,7 @@ export type {
   ProjectPackageManifest,
   ProjectPackageVersion,
   ProjectProblem,
+  ProjectRestoreOutcome,
   ReplaceAssetInput,
   ReplaceAssetResult
 } from "./package-types";
