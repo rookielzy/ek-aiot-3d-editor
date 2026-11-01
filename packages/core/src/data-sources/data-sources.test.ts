@@ -427,7 +427,7 @@ describe("data source connections", () => {
         bindings: {}
       }
     };
-    expect(validateSceneSnapshot(valid)).toEqual({ ok: true, errors: [] });
+    expect(validateSceneSnapshot(valid)).toEqual({ ok: true, errors: [], danglingDataReferences: [] });
 
     const { dataSources: _missingDataSources, ...withoutDataSources } = base;
     expect(validateSceneSnapshot(withoutDataSources).ok).toBe(false);

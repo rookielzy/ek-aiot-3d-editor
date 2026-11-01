@@ -61,14 +61,38 @@ describe("data runtime across project restore", () => {
     harness.editor.restore(restored);
     expect(signals[0]!.aborted).toBe(true);
 
-    pending[0]!(jsonResponse(freshBody({ "pump-01": 999 })));
+    // The old run's payload would produce a distinctive value if it landed.
+    pending[0]!(jsonResponse(freshBody({ "pump-restored": 999 })));
     await starting;
     await flush();
 
     const state = harness.editor.getDataService().getObjectDataState();
     expect(state.preview.enabled).toBe(false);
     expect(state.objects).toEqual({});
+    expect(state.contexts).toEqual({});
+    // No value from the abandoned run reached the scene. The abort that restore
+    // issues settles the in-flight request, so its payload is never read.
+    expect(JSON.stringify(state)).not.toContain("999");
     expect(harness.editor.getSnapshot().dataSources.bindings["object-a"].deviceId).toBe("pump-restored");
+  });
+
+  it("refuses to apply a response whose run was ended even if it arrives with a resolvable payload", async () => {
+    const sink = createColorSink();
+    const harness = createHarness({ executor: async () => jsonResponse(freshBody()) });
+    harness.editor.getDataColorService().setSink(sink);
+    await harness.editor.getDataService().startPreview();
+    expect(harness.editor.getDataService().getObjectDataState().objects["object-a"]).toMatchObject({ status: "ready" });
+
+    // Ending preview must leave nothing behind that a later response could revive.
+    harness.editor.restore(harness.editor.serialize());
+    await flush();
+
+    expect(harness.editor.getDataService().getObjectDataState()).toMatchObject({
+      preview: { enabled: false },
+      objects: {},
+      contexts: {}
+    });
+    expect(sink.appliedColors()).toEqual([]);
   });
 
   it("ignores a late old response that arrives after a project import replaced the scene", async () => {
@@ -84,16 +108,19 @@ describe("data runtime across project restore", () => {
 
     const imported = harness.editor.importProject(packageBytes);
     expect(imported.ok).toBe(true);
+    // The abandoned run's payload would be accepted by the new scene only if it leaked.
     pending[0]!(jsonResponse(freshBody({ "pump-01": 999 })));
     await starting;
     await flush();
 
     expect(harness.editor.getSnapshot().objects["object-z"]).toBeTruthy();
     expect(harness.editor.getSnapshot().objects["object-a"]).toBeUndefined();
-    expect(harness.editor.getDataService().getObjectDataState()).toMatchObject({
+    const state = harness.editor.getDataService().getObjectDataState();
+    expect(state).toMatchObject({
       preview: { enabled: false },
       objects: {}
     });
+    expect(JSON.stringify(state)).not.toContain("999");
   });
 
   it("obtains current values again after the host re-provides an executor and preview is explicitly started", async () => {

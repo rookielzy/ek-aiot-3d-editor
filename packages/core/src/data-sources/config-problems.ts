@@ -8,29 +8,44 @@ import type { DataCredentialDescriptor } from "./types";
  * Durable references that cannot resolve are configuration damage, not a
  * transient runtime failure. They survive a project round-trip broken, so an
  * importer must report them instead of silently treating the scene as healthy.
+ *
+ * Codes are prefixed `config-` so they never collide with the runtime problem
+ * codes that reuse similar wording (for example the runtime `query-missing`
+ * reported when preview cannot resolve a binding).
  */
 const CONFIG_PROBLEM_CODES = {
-  "query-missing": {
+  "config-query-missing": {
     title: "Data binding points to a missing query",
     detail: "The binding references query {queryId}, which is not part of the saved data configuration.",
     severity: "error"
   },
-  "target-not-object": {
+  "config-target-not-object": {
     title: "Data binding target is not an object",
     detail: "The binding targets node {nodeId}, which must be an object node.",
     severity: "error"
   },
-  "connection-missing": {
+  "config-connection-missing": {
     title: "Data query points to a missing connection",
     detail: "Query {queryId} references connection {connectionId}, which is not part of the saved data configuration.",
     severity: "error"
   }
 } as const;
 
-type DataConfigProblemCode = keyof typeof CONFIG_PROBLEM_CODES;
+export type DataConfigProblemCode = keyof typeof CONFIG_PROBLEM_CODES;
+
+export const DATA_CONFIG_PROBLEM_CODES: readonly DataConfigProblemCode[] = Object.keys(CONFIG_PROBLEM_CODES) as DataConfigProblemCode[];
+
+export function isDataConfigProblemCode(code: string): code is DataConfigProblemCode {
+  return code in CONFIG_PROBLEM_CODES;
+}
 
 export type DataRestoreOutcomeKind = "none" | "reconnect" | "config-error";
 
+/**
+ * How a restored data configuration stands against the current host. `kind`
+ * alone decides the user-facing outcome; `configProblems` is only meaningful
+ * for `"config-error"` and `missingCredentialCount` only for `"reconnect"`.
+ */
 export interface DataRestoreOutcome {
   kind: DataRestoreOutcomeKind;
   /** Durable references that cannot resolve; these are not repairable by reconnect. */
@@ -38,6 +53,7 @@ export interface DataRestoreOutcome {
   /** Connections whose credential the host does not currently provide. */
   missingCredentialCount: number;
 }
+
 /**
  * Derive problems for durable data configuration that cannot resolve on its
  * own. Runtime gaps such as a missing executor, credential, network, or an
@@ -51,7 +67,7 @@ export function buildDataConfigProblems(
 
   for (const query of Object.values(queries)) {
     if (!snapshot.dataSources.connections[query.connectionId]) {
-      problems.push(createConfigProblem("connection-missing", {
+      problems.push(createConfigProblem("config-connection-missing", {
         kind: "data-query",
         connectionId: query.connectionId,
         queryId: query.id
@@ -66,13 +82,13 @@ export function buildDataConfigProblems(
       queryId: binding.queryId
     };
     if (!queries[binding.queryId]) {
-      problems.push(createConfigProblem("query-missing", target, {
+      problems.push(createConfigProblem("config-query-missing", target, {
         nodeId: binding.objectNodeId,
         queryId: binding.queryId
       }));
     }
     if (snapshot.nodes[binding.objectNodeId]?.kind !== "object") {
-      problems.push(createConfigProblem("target-not-object", target, {
+      problems.push(createConfigProblem("config-target-not-object", target, {
         nodeId: binding.objectNodeId,
         queryId: binding.queryId
       }));

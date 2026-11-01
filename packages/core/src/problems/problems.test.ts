@@ -17,6 +17,6 @@ describe("authored problem metadata validation", () => {
       }
     };
 
-    expect(validateSceneSnapshot(snapshot)).toEqual({ ok: true, errors: [] });
+    expect(validateSceneSnapshot(snapshot)).toEqual({ ok: true, errors: [], danglingDataReferences: [] });
   });
 });

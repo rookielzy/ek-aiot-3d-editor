@@ -24,7 +24,16 @@ The experimental `.ek3d` project package is a ZIP container with:
 - `scene.json`: the normal serialized `SceneSnapshot`
 - `assets/*`: GLB, texture, HDR, or image payload bytes referenced by asset ID
 
-Import validates archive shape, entry paths, manifest records, scene snapshot, payload references, and size limits before replacing editor state. Old scene snapshots are migrated to the current schema during import. Export fails by default when a referenced payload is unavailable; callers can opt into `partial: true`, which marks the manifest as partial and reports structured package problems. The package manifest remains version 1 because the package layout is unchanged.
+Import validates archive shape, entry paths, manifest records, scene snapshot, payload references, and size limits before replacing editor state. Old scene snapshots are migrated to the current schema during import; version 1 through 8 scenes keep their content and restore with an empty `dataSources` domain, so no connection or binding is ever invented. Export fails by default when a referenced payload is unavailable; callers can opt into `partial: true`, which marks the manifest as partial and reports structured package problems. The package manifest remains version 1 because the package layout is unchanged.
+
+`importProject()` returns `outcome` so a host can tell why a restore needs attention:
+
+- `package-error` — the bytes, manifest, or scene are unusable.
+- `config-error` — the scene parsed but durable data references do not resolve (unknown query, missing connection, binding target that is not an object node). These are reported as `project-data-config-invalid` and are repairable in the editor, not a corrupt archive.
+- `reconnect` — the configuration is valid but `missingCredentialCount` connections lack a host credential. The project still opens and stays editable with preview off.
+- `none` — the configuration is valid and every credential is available.
+
+Restoring ends any data trial or preview, drops color overrides, and cancels in-flight requests first, so a late response from an abandoned run cannot write into the new scene. Preview stays off after restore: nothing is validated or fetched automatically, and an explicit `startPreview()` after the host supplies an executor and credentials fetches current values. Export never includes samples, test parameters, health markers, secrets, or runtime resources, and it does not fail because a service is temporarily unreachable.
 
 `editor.replaceAsset({ assetId, source })` replaces the transient payload for an existing asset ID. Scene objects, materials, environment sources, cubemap faces, and authored problem state keep their durable references. Mounted runtimes retry projection through the project-aware resolver; successful recovery removes derived runtime problems without writing resolver output, `File`, `Blob`, object URLs, loaded textures, cubemaps, or PMREM output into the snapshot.
 

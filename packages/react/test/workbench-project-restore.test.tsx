@@ -50,6 +50,20 @@ describe("React project restore feedback", () => {
     expect(editor.getDataService().getObjectDataState().preview.enabled).toBe(false);
   });
 
+  it("keeps the data panel reachable so a reconnect restore can be repaired", async () => {
+    const editor = createEditor({ credentials: [] });
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} rightPanel={() => null} />);
+
+    await openPackage(restorablePackage(), "restored.ek3d");
+    expect(projectStatus().getAttribute("data-tone")).toBe("warning");
+
+    // The restored configuration is still there and its panel opens for repair.
+    fireEvent.click(screen.getByRole("button", { name: /^Data \d+$/ }));
+    expect(await screen.findByText("Plant API")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "New connection" })).toBeTruthy();
+    expect(editor.getSnapshot().dataSources.connections["connection-a"]).toMatchObject({ name: "Plant API" });
+  });
+
   it("keeps a restored project editable when the host later provides a credential and executor", async () => {
     const executor = vi.fn<DataRequestExecutor>(async () => ({
       status: 200,

@@ -107,12 +107,12 @@ export function WorkbenchToolbar({
           });
         }
       } else if (result.outcome.kind === "config-error") {
-        // Durable references are broken: report repairable damage, not a bad file.
+        // Durable references are broken: report repairable damage rather than a bad file.
         setProjectStatus({
           tone: "error",
           message: {
             key: "reactWorkbench.toolbar.status.openConfigInvalid.message",
-            fallback: "Opened scene has damaged data configuration",
+            fallback: "Project data configuration is damaged ({problemCount} broken references)",
             values: { problemCount: result.outcome.problems.length }
           }
         });

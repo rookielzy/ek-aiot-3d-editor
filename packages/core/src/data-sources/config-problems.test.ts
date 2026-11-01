@@ -15,13 +15,13 @@ describe("data config problems", () => {
 
     expect(problems).toMatchObject([{
       severity: "error",
-      code: "query-missing",
+      code: "config-query-missing",
       source: "data",
       target: { kind: "data-object", nodeId: "object-a", queryId: "query-missing" },
-      metadata: expect.objectContaining({ dataKind: "config", status: "query-missing" })
+      metadata: expect.objectContaining({ dataKind: "config", status: "config-query-missing" })
     }]);
     expect(problems[0]!.display?.titleDescriptor?.key).toBe("problem.dataConfigProblem.title.title");
-    expect(problems[0]!.display?.detailDescriptor?.key).toBe("problem.dataConfigProblem.queryMissing.detail");
+    expect(problems[0]!.display?.detailDescriptor?.key).toBe("problem.dataConfigProblem.configQueryMissing.detail");
   });
 
   it("reports a binding whose target node is not an object as a config error", () => {
@@ -32,8 +32,8 @@ describe("data config problems", () => {
     });
 
     expect(buildDataConfigProblems(snapshot).map((problem) => problem.code)).toEqual([
-      "query-missing",
-      "target-not-object"
+      "config-query-missing",
+      "config-target-not-object"
     ]);
     editor.dispose();
   });
@@ -44,7 +44,7 @@ describe("data config problems", () => {
     });
 
     expect(buildDataConfigProblems(snapshot)).toMatchObject([{
-      code: "connection-missing",
+      code: "config-connection-missing",
       target: { kind: "data-query", connectionId: "connection-missing", queryId: "query-a" }
     }]);
   });
@@ -71,7 +71,7 @@ describe("data restore outcome classification", () => {
 
     expect(classifyDataConfigProblems(snapshot, [credential(true)])).toEqual({
       kind: "config-error",
-      configProblems: [expect.objectContaining({ code: "query-missing" })],
+      configProblems: [expect.objectContaining({ code: "config-query-missing" })],
       missingCredentialCount: 0
     });
   });

@@ -22,7 +22,29 @@ import type {
   DataConnectionValidationResult
 } from "./types";
 
-export function validateDataSources(value: unknown, nodes: unknown, errors: string[]): void {
+/**
+ * Durable references that fail to resolve. Structural defects stay in `errors`
+ * (the configuration is corrupt); a missing query/connection/target object is a
+ * *dangling* reference the user can repair by editing, so it is reported
+ * separately and must not be mistaken for a corrupt package.
+ */
+export interface DataReferenceIssue {
+  code: "query-missing" | "connection-missing" | "target-not-object";
+  /** Human-readable message, also pushed into `errors`. */
+  message: string;
+}
+
+export interface DataSourcesValidationReport {
+  errors: string[];
+  danglingReferences: DataReferenceIssue[];
+}
+
+export function validateDataSources(
+  value: unknown,
+  nodes: unknown,
+  errors: string[],
+  danglingReferences: DataReferenceIssue[] = []
+): void {
   if (!isPlainRecord(value)) {
     errors.push("Snapshot dataSources must be a plain object.");
     return;
@@ -90,6 +112,11 @@ export function validateDataSources(value: unknown, nodes: unknown, errors: stri
         errors.push(`Data query ${queryId} must use a matching non-empty id.`);
       }
       const connectionId = typeof query.connectionId === "string" ? query.connectionId : "";
+      if (connectionId.length > 0 && !validConnections.has(connectionId)) {
+        const message = `Data query ${queryId} connection ${connectionId} must exist in dataSources.connections.`;
+        errors.push(message);
+        danglingReferences.push({ code: "connection-missing", message });
+      }
       const result = validateDataQueryDefinition(query, {
         queryId,
         existingQueries,
@@ -125,27 +152,36 @@ export function validateDataSources(value: unknown, nodes: unknown, errors: stri
       if (binding.objectNodeId !== objectNodeId) {
         errors.push(`Data binding ${objectNodeId} must use a matching objectNodeId.`);
       }
-      if (typeof binding.queryId !== "string" || !validQueries[binding.queryId]) {
-        errors.push(`Data binding ${objectNodeId} query ${String(binding.queryId)} must exist in dataSources.queries.`);
+      const queryExists = typeof binding.queryId === "string" && Boolean(validQueries[binding.queryId]);
+      if (!queryExists) {
+        const message = `Data binding ${objectNodeId} query ${String(binding.queryId)} must exist in dataSources.queries.`;
+        errors.push(message);
+        danglingReferences.push({ code: "query-missing", message });
       }
       const node = isPlainRecord(nodes) ? nodes[objectNodeId] : undefined;
       if (!isPlainRecord(node) || node.kind !== "object") {
-        errors.push(`Data binding ${objectNodeId} target must be an existing object node.`);
+        const message = `Data binding ${objectNodeId} target must be an existing object node.`;
+        errors.push(message);
+        danglingReferences.push({ code: "target-not-object", message });
       }
 
-      const result = validateDataObjectBindingInput({
+      // Field validation needs the query it validates against; with a dangling
+      // query its failures would only restate the missing reference.
+      const result = queryExists ? validateDataObjectBindingInput({
         dataSources: {
           connections: Object.fromEntries(validConnections),
           queries: validQueries,
           bindings: {}
         },
         nodes: bindingNodes
-      }, binding);
-      for (const problem of result.problems) {
-        errors.push(`Data binding ${objectNodeId} ${problem.code}: ${problem.message}`);
-      }
-      if (result.value && !matchesNormalizedValue(binding, result.value, true)) {
-        errors.push(`Data binding ${objectNodeId} must contain normalized binding fields.`);
+      }, binding) : null;
+      if (result) {
+        for (const problem of result.problems) {
+          errors.push(`Data binding ${objectNodeId} ${problem.code}: ${problem.message}`);
+        }
+        if (result.value && !matchesNormalizedValue(binding, result.value, true)) {
+          errors.push(`Data binding ${objectNodeId} must contain normalized binding fields.`);
+        }
       }
     }
   }

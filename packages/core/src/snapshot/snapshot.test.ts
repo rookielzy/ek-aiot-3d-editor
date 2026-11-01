@@ -24,7 +24,7 @@ describe("scene snapshot contract", () => {
     expect(snapshot.problems).toEqual({ acknowledged: {} });
     expect(snapshot.selection).toEqual({ nodeId: null, nodeIds: [], objectId: null, objectIds: [] });
     expect(isJsonCompatible(snapshot)).toBe(true);
-    expect(validateSceneSnapshot(snapshot)).toEqual({ ok: true, errors: [] });
+    expect(validateSceneSnapshot(snapshot)).toEqual({ ok: true, errors: [], danglingDataReferences: [] });
   });
 
   it("rejects browser and runtime objects before serialization", () => {
@@ -390,7 +390,7 @@ describe("scene snapshot contract", () => {
       }
     };
 
-    expect(validateSceneSnapshot(snapshot)).toEqual({ ok: true, errors: [] });
+    expect(validateSceneSnapshot(snapshot)).toEqual({ ok: true, errors: [], danglingDataReferences: [] });
   });
 
   it.each([

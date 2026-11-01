@@ -42,6 +42,28 @@ describe("project restore reporting", () => {
     editor.dispose();
   });
 
+  it("keeps structurally corrupt data configuration a package problem, not a repairable one", () => {
+    const editor = createEditor();
+    const scene = healthyScene();
+    // A connection whose own id does not match its key is corruption, not a dangling reference.
+    const corrupt = {
+      ...scene,
+      dataSources: {
+        ...scene.dataSources,
+        connections: {
+          "connection-a": { ...scene.dataSources.connections["connection-a"]!, id: "connection-other" }
+        }
+      }
+    };
+
+    const result = editor.importProject(packageWithScene(corrupt));
+
+    expect(result.ok).toBe(false);
+    expect(result.outcome?.kind).toBe("package-error");
+    expect(result.problems).toMatchObject([expect.objectContaining({ code: "project-scene-invalid" })]);
+    editor.dispose();
+  });
+
   it("restores a valid configuration without credentials and reports that a reconnect is required", () => {
     const source = createEditor();
     seedRestorableConfiguration(source);

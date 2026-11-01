@@ -87,6 +87,13 @@ const result = editor.importProject(packageBytes);
 if (!result.ok) {
   console.warn(result.problems);
 }
+
+switch (result.outcome.kind) {
+  case "package-error": // 包本身不可用，需要重新获取
+  case "config-error": // 数据引用失效，可在编辑器内修复
+  case "reconnect": // 配置可用，但宿主还缺凭证
+  case "none":
+}
 ```
 
 导入会校验：
@@ -99,6 +106,15 @@ if (!result.ok) {
 - size limits。
 
 导入成功会替换 editor state，并把 payload 注册到 transient project asset store。Snapshot 仍然只保存 asset reference。
+
+`result.outcome` 说明恢复后的数据配置相对当前宿主的状态：
+
+- `package-error`：字节或 manifest 不可用（`project-archive-invalid`、`project-scene-invalid` 等），需要重新获取项目文件。
+- `config-error`：scene 可解析但数据引用无法解析（绑定的查询不存在、查询的连接不存在、绑定目标不是对象节点），报为 `project-data-config-invalid`。这类问题可在编辑器内修复，不当成损坏的包。
+- `reconnect`：配置合法，但其中有 `missingCredentialCount` 个连接缺少宿主凭证。场景照常打开、可编辑，预览保持关闭，宿主补齐凭证后再显式启动即可。
+- `none`：配置合法且凭证齐备。
+
+打开项目时会先结束数据试用/预览、撤掉颜色覆盖并取消在途请求；恢复后预览关闭，不会自动校验或联网，晚到的旧响应不会写入新场景。
 
 ## 本地资产 workspace
 

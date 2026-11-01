@@ -1,6 +1,6 @@
 # 09: 让项目导出恢复保持配置并停止旧运行态
 
-Status: ready-for-agent
+Status: ready-for-human
 
 Parent: [HTTP 数据源管理首期实现规格](../spec.md)
 
@@ -28,13 +28,13 @@ Decisions: D02, D04, D11, D13
 
 ## Acceptance criteria
 
-- [ ] v1–v8 迁移保持旧场景，v9 多连接/查询/绑定在 JSON 和 .ek3d 往返后等价。
-- [ ] 项目 container/manifest 布局保持兼容；只有 scene schema 升级，不把字段新增当作容器破坏性更改。
-- [ ] 没有 executor、缺凭证、断网或资源未加载时仍可恢复合法配置；非法查询/NodeId 引用按配置错误报告。
-- [ ] 恢复/打开项目先结束试用/预览、撤掉颜色、取消旧请求；晚到旧响应不会写入新场景。
-- [ ] 恢复后预览关闭，不自动验证或联网；重新提供宿主执行器/凭证后显式启动能获得当前值。
-- [ ] 导出不含样本、测试参数、健康标记、密钥或运行态资源；导出不因服务暂不可达而失败。
-- [ ] 原有资产 payload、材质、camera view 和导入选择/变换/undo/restore proof loop 不回退。
+- [x] v1–v8 迁移保持旧场景，v9 多连接/查询/绑定在 JSON 和 .ek3d 往返后等价。
+- [x] 项目 container/manifest 布局保持兼容；只有 scene schema 升级，不把字段新增当作容器破坏性更改。
+- [x] 没有 executor、缺凭证、断网或资源未加载时仍可恢复合法配置；非法查询/NodeId 引用按配置错误报告。
+- [x] 恢复/打开项目先结束试用/预览、撤掉颜色、取消旧请求；晚到旧响应不会写入新场景。
+- [x] 恢复后预览关闭，不自动验证或联网；重新提供宿主执行器/凭证后显式启动能获得当前值。
+- [x] 导出不含样本、测试参数、健康标记、密钥或运行态资源；导出不因服务暂不可达而失败。
+- [x] 原有资产 payload、材质、camera view 和导入选择/变换/undo/restore proof loop 不回退。
 
 ## Testing
 
@@ -51,3 +51,15 @@ Decisions: D02, D04, D11, D13
 ## Comments
 
 2026-10-26：按用户认可的原型流程整理为正式规划任务。Status 表示定义就绪，不代表实现、验证或用户已授权开始执行。
+
+2026-11-01：已实现并提交。
+
+- core 新增 `data-sources/config-problems.ts`：`buildDataConfigProblems` 按 NodeId/查询/连接引用派生配置错误，`classifyDataConfigProblems` 区分配置损坏与缺凭证；`ProjectImportResult.outcome` 暴露 `package-error` / `config-error` / `reconnect` / `none`。工作台模型把配置问题并入数据问题列表。
+- 项目包校验把无法解析的数据引用报为 `project-data-config-invalid`，与 `project-scene-invalid` 区分；container/manifest 布局未变。
+- React 项目菜单按结果区分配置损坏（error）与需重新连接（warning），并新增 en/zh-CN 文案；Vue 字典同步同键以维持 parity（本任务不加数据 UI）。
+- 顺带修正一个与本任务无关的既有失败断言：ticket 08 已改文案，`workbench-data-sources.test.tsx` 仍断言旧文案。
+
+验证命令与结果：
+- `npx tsc -p packages/core/tsconfig.json --noEmit`、React `tsc --noEmit`、Vue `vue-tsc --noEmit`：通过。仓库 `pnpm typecheck` 在 Windows 因脚本使用 `rm -rf` 无法运行，改为等价的直接调用。
+- `pnpm test`：147 文件 / 1330 用例全部通过（改动前基线为 1300 通过、1 失败，即上面那条旧文案断言）。
+- `pnpm test:browser`：30 文件 / 129 用例全部通过。

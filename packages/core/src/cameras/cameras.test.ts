@@ -25,7 +25,7 @@ describe("authored camera contract", () => {
       presentation: { defaultCameraId: "camera-a" }
     };
 
-    expect(validateSceneSnapshot(snapshot)).toEqual({ ok: true, errors: [] });
+    expect(validateSceneSnapshot(snapshot)).toEqual({ ok: true, errors: [], danglingDataReferences: [] });
     expect(JSON.parse(JSON.stringify(snapshot)).cameras["camera-a"]).toEqual(camera);
   });
 

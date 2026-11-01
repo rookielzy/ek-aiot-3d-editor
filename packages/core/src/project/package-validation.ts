@@ -1,7 +1,7 @@
 import { collectAssetReferenceLocations } from "../assets/workspace";
 import { createDisplayMessageDescriptor } from "../i18n/display-messages";
 import { isSupportedAssetKind } from "../snapshot/primitives";
-import type { AssetReference, SceneSnapshot } from "../snapshot/types";
+import { SNAPSHOT_VERSION, type AssetReference, type SceneSnapshot } from "../snapshot/types";
 import { isJsonCompatible, validateSceneSnapshot } from "../snapshot/validation";
 import { migrateSerializedSnapshot } from "../snapshot/migrations";
 import { decodeArchiveJson, type ArchiveAdapter, type ArchiveEntry } from "./archive-adapter";
@@ -225,13 +225,17 @@ function readJsonEntry(
 }
 
 function validateProjectScene(value: unknown, problems: ProjectProblem[]): SceneSnapshot | undefined {
+  // Migrating asserts validity and throws a bare message, so collect the
+  // structured dangling-reference signal from the raw scene first.
+  const danglingMessages = collectDanglingDataReferenceMessages(value);
+
   let scene: SceneSnapshot;
   try {
     scene = migrateSerializedSnapshot(value as never);
   } catch (error) {
     const message = errorMessage(error);
     problems.push(createProjectProblem(
-      isDataConfigError(message) ? "project-data-config-invalid" : "project-scene-invalid",
+      isDanglingReferenceMessage(message, danglingMessages) ? "project-data-config-invalid" : "project-scene-invalid",
       message
     ));
     return undefined;
@@ -241,7 +245,7 @@ function validateProjectScene(value: unknown, problems: ProjectProblem[]): Scene
   if (!result.ok) {
     for (const error of result.errors) {
       problems.push(createProjectProblem(
-        isDataConfigError(error) ? "project-data-config-invalid" : "project-scene-invalid",
+        isDanglingReferenceMessage(error, danglingMessages) ? "project-data-config-invalid" : "project-scene-invalid",
         error
       ));
     }
@@ -251,20 +255,30 @@ function validateProjectScene(value: unknown, problems: ProjectProblem[]): Scene
 }
 
 /**
- * Durable data references that cannot resolve are a repairable configuration
- * problem, distinct from a corrupt package the user must re-obtain.
+ * Migration asserts validity and joins every violation into one message, so a
+ * failure counts as repairable damage only when every line it reports is a
+ * dangling reference. A structural defect reported alongside them means the
+ * configuration itself is corrupt.
  */
-function isDataConfigError(message: string): boolean {
-  return DATA_CONFIG_ERROR_PATTERNS.some((pattern) => pattern.test(message));
+function isDanglingReferenceMessage(message: string, danglingMessages: Set<string>): boolean {
+  if (danglingMessages.size === 0) {
+    return false;
+  }
+  const lines = message.split("\n").map((line) => line.trim()).filter(Boolean);
+  return lines.length > 0 && lines.every((line) => danglingMessages.has(line));
 }
 
-const DATA_CONFIG_ERROR_PATTERNS: readonly RegExp[] = [
-  /^Data binding /,
-  /^Data query /,
-  /^Data connection /,
-  /^Snapshot dataSources/,
-  /^Data field /
-];
+/**
+ * Dangling data references are repairable configuration damage, not a corrupt
+ * package. Read them from the current-version scene when possible; older
+ * versions cannot be inspected without migrating first.
+ */
+function collectDanglingDataReferenceMessages(value: unknown): Set<string> {
+  if (!isPlainRecord(value) || value.version !== SNAPSHOT_VERSION) {
+    return new Set();
+  }
+  return new Set(validateSceneSnapshot(value).danglingDataReferences.map((issue) => issue.message));
+}
 
 function validateManifestRecord(assetId: string, value: unknown, problems: ProjectProblem[]): void {
   if (!isPlainRecord(value)) {

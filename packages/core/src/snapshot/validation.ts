@@ -1,6 +1,6 @@
 import { validateCameras, validatePresentationState } from "../cameras/validation";
 import type { AuthoredCameraView } from "../cameras/types";
-import { validateDataSources } from "../data-sources/validation";
+import { validateDataSources, type DataReferenceIssue } from "../data-sources/validation";
 import { validateSceneEnvironment } from "../environment/validation";
 import type { ImportedGlbMaterialSlotDescriptor, ImportedGlbSourceDescriptor } from "../imported-targets/types";
 import { validateLights } from "../lights/validation";
@@ -13,13 +13,20 @@ import { SNAPSHOT_VERSION, type AssetReference, type SceneImportedGlbNode, type 
 export interface ValidationResult {
   ok: boolean;
   errors: string[];
+  /**
+   * Durable data references that do not resolve. They are also present in
+   * `errors`, but callers (project import) need to tell repairable dangling
+   * references apart from structural corruption.
+   */
+  danglingDataReferences: DataReferenceIssue[];
 }
 
 export function validateSceneSnapshot(value: unknown): ValidationResult {
   const errors: string[] = [];
+  const danglingDataReferences: DataReferenceIssue[] = [];
 
   if (!isPlainRecord(value)) {
-    return { ok: false, errors: ["Snapshot must be a plain object."] };
+    return { ok: false, errors: ["Snapshot must be a plain object."], danglingDataReferences };
   }
 
   if (value.version !== SNAPSHOT_VERSION) {
@@ -89,7 +96,7 @@ export function validateSceneSnapshot(value: unknown): ValidationResult {
   validateCameras(value.cameras, errors);
   validatePresentationState(value.presentation, value.cameras, errors);
   validateAuthoredProblemState(value.problems, errors);
-  validateDataSources(value.dataSources, value.nodes, errors);
+  validateDataSources(value.dataSources, value.nodes, errors, danglingDataReferences);
 
   if ("metadata" in value && !isJsonCompatible(value.metadata)) {
     errors.push("Snapshot metadata must be JSON-compatible.");
@@ -99,7 +106,7 @@ export function validateSceneSnapshot(value: unknown): ValidationResult {
     errors.push("Snapshot must be JSON-compatible and must not contain runtime objects.");
   }
 
-  return { ok: errors.length === 0, errors };
+  return { ok: errors.length === 0, errors, danglingDataReferences };
 }
 
 function validateSelection(selection: unknown, nodes: unknown, objects: unknown, errors: string[]): void {

@@ -200,7 +200,7 @@ describe("snapshot serialization", () => {
     const legacy = createLegacyProofLoopSnapshot();
 
     expect(validateSceneSnapshot(legacy).ok).toBe(false);
-    expect(validateSerializedSceneSnapshot(legacy)).toEqual({ ok: true, errors: [] });
+    expect(validateSerializedSceneSnapshot(legacy)).toEqual({ ok: true, errors: [], danglingDataReferences: [] });
   });
 
   it("round-trips durable shadow settings without runtime shadow objects", () => {

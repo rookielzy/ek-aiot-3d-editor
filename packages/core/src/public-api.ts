@@ -191,9 +191,15 @@ export {
 export { buildDataRuntimeProblems } from "./data-sources/runtime-problems";
 export {
   buildDataConfigProblems,
-  classifyDataConfigProblems
+  classifyDataConfigProblems,
+  DATA_CONFIG_PROBLEM_CODES,
+  isDataConfigProblemCode
 } from "./data-sources/config-problems";
-export type { DataRestoreOutcome, DataRestoreOutcomeKind } from "./data-sources/config-problems";
+export type {
+  DataConfigProblemCode,
+  DataRestoreOutcome,
+  DataRestoreOutcomeKind
+} from "./data-sources/config-problems";
 export type {
   DataQueryDraftExecutionOptions,
   DataQueryResponse,

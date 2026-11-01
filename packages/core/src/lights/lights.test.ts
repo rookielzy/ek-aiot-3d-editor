@@ -77,7 +77,7 @@ describe("light schema validation", () => {
       rootNodeIds: ["light-a"]
     };
 
-    expect(validateSceneSnapshot(snapshot)).toEqual({ ok: true, errors: [] });
+    expect(validateSceneSnapshot(snapshot)).toEqual({ ok: true, errors: [], danglingDataReferences: [] });
   });
 
   it.each([

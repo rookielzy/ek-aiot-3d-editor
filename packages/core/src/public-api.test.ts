@@ -39,6 +39,10 @@ import {
   planGlbImportRemap,
   sortAssetWorkspaceItems,
   buildSetTransformCommand,
+  buildDataConfigProblems,
+  classifyDataConfigProblems,
+  DATA_CONFIG_PROBLEM_CODES,
+  isDataConfigProblemCode,
   createImportedGlbBindingDescriptor,
   createDisplayMessageDescriptor,
   createFallbackDisplayMessageDescriptor,
@@ -65,6 +69,8 @@ import {
   type DataConnection,
   type DataConnectionDraft,
   type DataCredentialDescriptor,
+  type DataRestoreOutcome,
+  type ProjectRestoreOutcome,
   type DataQueryDraft,
   type DataRequestDescriptor,
   type DataRequestExecutor,
@@ -769,8 +775,21 @@ describe("core public API", () => {
     editorWithExecutor.dispose();
   });
 
-  it("exports shared inspector contracts without exposing runtime internals", () => {
+  it("exports project restore outcome classification from the package root", () => {
     const snapshot = createEmptySnapshot("scene-a");
+    const problems = buildDataConfigProblems(snapshot);
+    const outcome: DataRestoreOutcome = classifyDataConfigProblems(snapshot, []);
+    const restoreOutcome: ProjectRestoreOutcome = { kind: "none", missingCredentialCount: 0 };
+
+    expect(problems).toEqual([]);
+    expect(outcome).toMatchObject({ kind: "none", missingCredentialCount: 0 });
+    expect(DATA_CONFIG_PROBLEM_CODES).toContain("config-query-missing");
+    expect(isDataConfigProblemCode("config-query-missing")).toBe(true);
+    expect(isDataConfigProblemCode("query-missing")).toBe(false);
+    expect(restoreOutcome.kind).toBe("none");
+  });
+
+  it("exports shared inspector contracts without exposing runtime internals", () => {    const snapshot = createEmptySnapshot("scene-a");
     const inspector: InspectorModel = buildInspectorModel(snapshot);
     const command: InspectorCommandResult = buildSetTransformCommand(snapshot, "position.x", 1);
     const cameraView = buildCreateCameraViewInput(snapshot, { id: "view-a", name: "Hero" });

@@ -347,9 +347,9 @@ export function migrateV2Snapshot(serialized: PreviousSceneSnapshot): SceneSnaps
 export function validateSerializedSceneSnapshot(value: unknown): ValidationResult {
   try {
     migrateSerializedSnapshot(value as SerializedSceneSnapshot);
-    return { ok: true, errors: [] };
+    return { ok: true, errors: [], danglingDataReferences: [] };
   } catch (error) {
-    return { ok: false, errors: [error instanceof Error ? error.message : String(error)] };
+    return { ok: false, errors: [error instanceof Error ? error.message : String(error)], danglingDataReferences: [] };
   }
 }
 
