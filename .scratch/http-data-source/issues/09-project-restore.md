@@ -61,5 +61,18 @@ Decisions: D02, D04, D11, D13
 
 验证命令与结果：
 - `npx tsc -p packages/core/tsconfig.json --noEmit`、React `tsc --noEmit`、Vue `vue-tsc --noEmit`：通过。仓库 `pnpm typecheck` 在 Windows 因脚本使用 `rm -rf` 无法运行，改为等价的直接调用。
-- `pnpm test`：147 文件 / 1330 用例全部通过（改动前基线为 1300 通过、1 失败，即上面那条旧文案断言）。
+- `pnpm test`：147 文件 / 1334 用例全部通过（改动前基线为 1300 通过、1 失败，即上面那条旧文案断言）。
 - `pnpm test:browser`：30 文件 / 129 用例全部通过。
+
+2026-11-01（review 跟进）：按 code-review 两个 sub-agent 的结论修了实质问题，另起一个 commit。
+
+- **改为结构化分类**：不再用英文报错前缀正则判断"是不是配置损坏"。`validateDataSources` 在检测到绑定的查询不存在、查询的连接不存在、绑定目标不是对象节点时，额外产出一条结构化 `DataReferenceIssue`；`validateSceneSnapshot` 把它随 `danglingDataReferences` 返回。因此 `Data connection X must use a matching non-empty id.` 这类结构性损坏仍报 `project-scene-invalid`（`package-error`），只有纯引用悬空才报 `project-data-config-invalid`（`config-error`）。
+- **修 code 冲突**：配置问题 code 改为 `config-query-missing` / `config-connection-missing` / `config-target-not-object`，不再和运行时已有的 `query-missing` 同名；并导出 `DATA_CONFIG_PROBLEM_CODES`、`isDataConfigProblemCode`。
+- **去掉级联噪音**：查询已悬空时跳过绑定字段校验，避免同一处问题被 `query-not-found`、`detail-unknown` 重复报一遍。
+- **修正文案**：`openConfigInvalid` 原文案写"已打开的场景…"但此时 `ok === false`（场景并未打开），改为"项目数据配置已损坏（N 处引用失效）"。
+- **补测试有效性**：对 `restore-runtime` 的两条"晚到响应"用例做了变异验证（临时去掉 `#isCurrentRun` 与 `#completeContext` 的保护），确认它们靠的是 abort 竞态把响应置为 `null`，而不是断言写错；同时把 payload 改成可区分的值并断言不会出现在状态里。新增"恢复后数据面板仍可打开修复"的 React 用例。
+- **补公共契约**：新增 `.changeset/project-restore-data-config.md`，更新 `packages/core/README.md` 与 `docs/project-package.md`，`public-api.test.ts` 覆盖新增导出。
+
+复跑：`pnpm test` 147 文件 / 1334 用例通过；`pnpm test:browser` 30 文件 / 129 用例通过；三个包 typecheck 通过。
+
+遗留（不在本任务范围）：Vue 的工具栏本任务不加数据 UI（按 spec 由 ticket 12 统一验收），因此只同步了 i18n 键以维持 React/Vue 字典 parity。
