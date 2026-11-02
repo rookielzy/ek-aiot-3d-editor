@@ -57,7 +57,13 @@
     <aside :id="`${panelId}-left`" :hidden="leftCollapsed" class="ek-workbench__side-panel" :aria-label="context.i18n.t('reactWorkbench.shell.projectPanel.label')">
       <slot v-if="$slots.leftPanel" name="leftPanel" v-bind="context" />
       <slot v-else-if="$slots.sidePanel" name="sidePanel" v-bind="context" />
-      <WorkbenchLeftPanel v-else :context="context" :active-view="activeView" />
+      <WorkbenchLeftPanel
+        v-else
+        :context="context"
+        :active-view="activeView"
+        :data-locate="dataLocate"
+        @data-locate-handled="handleDataLocateHandled"
+      />
     </aside>
 
     <WorkbenchPanelResize v-if="desktop && !leftCollapsed" side="left" :panel-id="`${panelId}-left`"
@@ -82,7 +88,7 @@
 
     <footer class="ek-workbench__status" :aria-label="context.i18n.t('reactWorkbench.shell.status.label')">
       <slot v-if="$slots.status" name="status" v-bind="context" />
-      <WorkbenchStatusBar v-else :context="context" />
+      <WorkbenchStatusBar v-else :context="context" @locate-data-target="locateDataTarget" />
     </footer>
   </main>
 </template>
@@ -91,6 +97,7 @@
 import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, toRef, useId } from "vue";
 import { buildWorkbenchModel, resolveEditorShortcut, type EditorRuntimeOptions, type Problem } from "@ek-aiot/3d-editor-core";
 import { useWorkbench } from "../composables/use-workbench";
+import type { DataProblemTarget } from "./workbench-problem-target";
 import type { EditorWorkbenchEmitDefinitions, EditorWorkbenchProps, EditorWorkbenchSlots } from "./EditorWorkbench.types";
 import EditorViewport from "./EditorViewport.vue";
 import InspectorView from "./InspectorView.vue";
@@ -127,6 +134,7 @@ const instance = getCurrentInstance();
 const workbench = useWorkbench({
   editor: toRef(props, "editor"),
   snapshot: props.snapshot,
+  credentials: props.credentials,
   executor: props.executor,
   loader: toRef(props, "loader"),
   locale: toRef(props, "locale"),
@@ -155,6 +163,8 @@ const context = computed(() => {
     runtimeProblems: workbench.runtimeProblems.value,
     projectProblems: projectProblems.value,
     assetPayloads: base.assets.payloads,
+    dataCredentials: workbench.editor.getDataCredentials?.() ?? [],
+    dataState: workbench.dataState.value,
     history: workbench.editor.getHistoryState(),
     snap: workbench.snap.value,
     viewportHelpers: workbench.viewportHelperState.value,
@@ -186,8 +196,9 @@ const showLocaleSwitcher = computed(() => props.showLocaleSwitcher);
 const localeSwitcherDisabled = computed(() => props.localeSwitcherDisabled);
 const root = ref<HTMLElement | null>(null);
 const panelId = useId();
-type PanelView = "scene" | "assets" | "project";
+type PanelView = "scene" | "assets" | "data" | "project";
 const activeView = ref<PanelView>("scene");
+const dataLocate = ref<{ connectionId: string; queryId: string } | null>(null);
 const leftCollapsed = ref(false);
 const rightCollapsed = ref(false);
 const { desktop, maximum, leftWidth, rightWidth, setLeftWidth, setRightWidth } = useWorkbenchPanelWidths(root);
@@ -200,12 +211,27 @@ const panelStyle = computed(() => ({
 const panelViews = computed<Array<{ id: PanelView; icon: WorkbenchIconName; count: number }>>(() => [
   { id: "scene", icon: "group", count: context.value.model.hierarchy.totalCount },
   { id: "assets", icon: "floor", count: context.value.model.assets.workspace?.totalCount ?? context.value.model.assets.totalCount },
+  { id: "data", icon: "data", count: context.value.model.dataSources.totalCount },
   { id: "project", icon: "open", count: context.value.model.problems.totalCount }
 ]);
 
 function selectView(view: PanelView): void {
   leftCollapsed.value = activeView.value === view ? !leftCollapsed.value : false;
   activeView.value = view;
+}
+
+function handleDataLocateHandled(): void {
+  dataLocate.value = null;
+}
+
+function locateDataTarget(target: DataProblemTarget): void {
+  const query = context.value.snapshot.dataSources.queries[target.queryId];
+  if (!query) {
+    return;
+  }
+  activeView.value = "data";
+  leftCollapsed.value = false;
+  dataLocate.value = { connectionId: query.connectionId, queryId: target.queryId };
 }
 
 function replaceAsset(assetId: string, file: File): void {

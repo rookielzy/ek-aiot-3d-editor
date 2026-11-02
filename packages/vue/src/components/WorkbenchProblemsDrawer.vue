@@ -25,6 +25,11 @@
         <span v-if="problem.detail || problem.detailDescriptor">
           {{ problem.detailDescriptor ? t(problem.detailDescriptor) : problem.detail }}
         </span>
+        <button
+          v-if="isDataTarget(problem.target)"
+          type="button"
+          @click="locateDataTarget(problem.target)"
+        >{{ t("reactWorkbench.problems.locate") }}</button>
         <label v-if="problem.assetId && problem.recoverability === 'user-action'" class="ek-workbench__file-action">
           <span>{{ problem.actionLabelDescriptor ? t(problem.actionLabelDescriptor) : problem.actionLabel ?? t("reactWorkbench.inspector.problems.replaceAsset.label") }}</span>
           <input type="file" :disabled="busy.includes(problem.assetId)" @change="recover(problem.assetId, $event)" />
@@ -45,6 +50,7 @@ import type { MessageDescriptor, ProblemTarget } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext } from "../composables/use-workbench";
 import type { WorkbenchMessageInput } from "../i18n/workbench-i18n";
 import { renderProblemSource, renderSeverity } from "./inspector-i18n";
+import { isDataProblemTarget, type DataProblemTarget } from "./workbench-problem-target";
 
 const props = defineProps<{
   context: ResolvedWorkbenchContext;
@@ -54,6 +60,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: [];
+  locateDataTarget: [target: DataProblemTarget];
 }>();
 
 const closeButton = ref<HTMLButtonElement | null>(null);
@@ -74,6 +81,18 @@ function onKeyDown(event: KeyboardEvent): void {
     event.stopPropagation();
     emit("close");
   }
+}
+
+function isDataTarget(target: ProblemTarget): target is DataProblemTarget {
+  return isDataProblemTarget(target);
+}
+
+function locateDataTarget(target: ProblemTarget): void {
+  if (!isDataTarget(target)) {
+    return;
+  }
+  emit("locateDataTarget", target);
+  emit("close");
 }
 
 function renderTarget(target: ProblemTarget): string {

@@ -1,5 +1,11 @@
 <template>
-  <WorkbenchProblemsDrawer :id="drawerId" :context="context" :open="open" @close="closeDrawer" />
+  <WorkbenchProblemsDrawer
+    :id="drawerId"
+    :context="context"
+    :open="open"
+    @close="closeDrawer"
+    @locate-data-target="emit('locateDataTarget', $event)"
+  />
   <div class="ek-workbench__default-status">
     <span class="ek-workbench__status-chip" :data-tone="status.selectionCount > 0 ? 'active' : 'neutral'">
       <strong>{{ t("reactWorkbench.status.group.selection") }}</strong>
@@ -69,9 +75,14 @@ import type { ResolvedWorkbenchContext } from "../composables/use-workbench";
 import type { WorkbenchMessageValues } from "../i18n/workbench-i18n";
 import { problemToneFromCounts } from "./workbench-model-helpers";
 import WorkbenchProblemsDrawer from "./WorkbenchProblemsDrawer.vue";
+import type { DataProblemTarget } from "./workbench-problem-target";
 
 const props = defineProps<{
   context: ResolvedWorkbenchContext;
+}>();
+
+const emit = defineEmits<{
+  locateDataTarget: [target: DataProblemTarget];
 }>();
 
 const open = ref(false);

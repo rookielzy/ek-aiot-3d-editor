@@ -11,11 +11,28 @@ import {
 import {
   buildDataQueryRequest,
   buildDataQueryReferenceModel,
+  buildMappingFromForm,
+  buildQueryDefinitionFromForm,
   buildSaveDataQueryCommand,
+  buildSuccessConditionFromForm,
+  collectQueryOverrides,
+  createQueryFormState,
+  createQueryHeaderForm,
+  createQueryMapEntryForm,
+  createQueryParameterForm,
+  createQueryPropertyForm,
+  createQueryQualityEntryForm,
   formatDataPath,
+  hasQueryOverrides,
   mapDataQueryBody,
   parseDataPath,
+  queryDraftSignature,
+  queryFormFromQuery,
+  queryHeadersToRecord,
   resolveDataPath,
+  resolvedParametersForForm,
+  serializeQueryForm,
+  toQueryParameterDrafts,
   validateDataQueryMapping,
   type DataMappedField,
   type DataMappingProblem,
@@ -35,39 +52,18 @@ import {
   type DataQueryRunState,
   type DataServiceState,
   type DataTimeFormat,
-  type JsonValue
-} from "@ek-aiot/3d-editor-core";
-import type { WorkbenchI18n, WorkbenchMessageKey, WorkbenchMessageValues } from "../i18n/workbench-i18n";
-import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
-import {
-  collectQueryOverrides,
-  createQueryHeaderForm,
-  createQueryParameterForm,
-  hasQueryOverrides,
-  toQueryParameterDrafts,
-  type QueryHeaderForm,
-  type QueryParameterForm
-} from "./data-query-form";
-import {
-  buildMappingFromForm,
-  buildQueryDefinitionFromForm,
-  buildSuccessConditionFromForm,
-  createQueryFormState,
-  createQueryMapEntryForm,
-  createQueryPropertyForm,
-  createQueryQualityEntryForm,
-  queryDraftSignature,
-  queryFormFromQuery,
-  queryHeadersToRecord,
-  resolvedParametersForForm,
-  serializeQueryForm,
+  type JsonValue,
   type QueryFormProblem,
   type QueryFormState,
+  type QueryHeaderForm,
   type QueryMapEntryForm,
+  type QueryParameterForm,
   type QueryPropertyForm,
   type QueryQualityEntryForm,
   type QuerySuccessValueType
-} from "./data-query-mapping-form";
+} from "@ek-aiot/3d-editor-core";
+import type { WorkbenchI18n, WorkbenchMessageKey, WorkbenchMessageValues } from "../i18n/workbench-i18n";
+import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
 import { DataParameterValueInput } from "./DataParameterValueInput";
 import {
   DATA_MAPPING_PROBLEM_MESSAGE_KEYS,

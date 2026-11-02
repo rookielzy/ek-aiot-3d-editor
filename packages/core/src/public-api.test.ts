@@ -40,6 +40,23 @@ import {
   sortAssetWorkspaceItems,
   buildSetTransformCommand,
   buildDataConfigProblems,
+  buildMappingFromForm,
+  buildQueryDefinitionFromForm,
+  collectQueryOverrides,
+  createQueryFormState,
+  createQueryHeaderForm,
+  createQueryParameterForm,
+  createQueryPropertyForm,
+  DATA_MAPPING_PROBLEM_MESSAGE_KEYS,
+  DATA_QUERY_DEFINITION_PROBLEM_MESSAGE_KEYS,
+  DATA_QUERY_PROBLEM_MESSAGE_KEYS,
+  DATA_QUERY_RUN_STATUS_MESSAGE_KEYS,
+  PARAMETER_TYPE_MESSAGE_KEYS,
+  dataQueryProblemMessageValues,
+  queryDraftSignature,
+  queryFormFromQuery,
+  serializeQueryForm,
+  toQueryParameterDrafts,
   classifyDataConfigProblems,
   DATA_CONFIG_PROBLEM_CODES,
   isDataConfigProblemCode,
@@ -597,6 +614,66 @@ describe("core public API", () => {
       queryDraft.path,
       dataConnection.id
     );
+    const queryForm = createQueryFormState();
+    const queryFormWithParameter = {
+      ...queryForm,
+      name: "Device detail",
+      path: "/devices/{deviceId}",
+      parameters: [createQueryParameterForm()],
+      properties: [createQueryPropertyForm()]
+    };
+    const queryFormHeaders = [createQueryHeaderForm("X-Zone", "north")];
+    const queryFormOverrides = collectQueryOverrides(queryFormWithParameter.parameters);
+    const queryFormParameterDrafts = toQueryParameterDrafts(queryFormWithParameter.parameters);
+    const queryFormMapping = buildMappingFromForm({
+      ...queryFormWithParameter,
+      rootPath: "items",
+      identityPath: "id",
+      properties: []
+    });
+    const queryFormSignature = queryDraftSignature(queryFormWithParameter, queryFormOverrides);
+    const queryFormSerialized = serializeQueryForm(queryFormWithParameter);
+    const queryDefinitionProblemKeys = Object.values(DATA_QUERY_DEFINITION_PROBLEM_MESSAGE_KEYS);
+    const queryProblemKeys = [
+      ...Object.values(DATA_MAPPING_PROBLEM_MESSAGE_KEYS),
+      ...Object.values(DATA_QUERY_PROBLEM_MESSAGE_KEYS),
+      ...Object.values(DATA_QUERY_RUN_STATUS_MESSAGE_KEYS),
+      ...Object.values(PARAMETER_TYPE_MESSAGE_KEYS)
+    ];
+    const queryProblemValues = dataQueryProblemMessageValues({
+      code: "request-timeout",
+      field: "request",
+      connectionId: dataConnection.id,
+      message: "Request timed out."
+    });
+    const roundTrippedForm = queryFormFromQuery({
+      id: "query-a",
+      connectionId: dataConnection.id,
+      name: "Device detail",
+      method: "GET",
+      readOnly: true,
+      path: "/devices/{deviceId}",
+      headers: { "X-Zone": "north" },
+      parameters: [],
+      successCondition: null,
+      updatePolicy: { refreshIntervalMs: 5_000, maxAgeMs: 15_000 },
+      mapping: {
+        mode: "array",
+        root: [],
+        identity: { kind: "parameter", parameterName: "deviceId" },
+        displayName: null,
+        properties: [],
+        observedAt: null,
+        sourceQuality: null
+      }
+    });
+    const builtDefinition = queryFormMapping.mapping
+      ? buildQueryDefinitionFromForm(
+          { ...queryFormWithParameter, headers: queryFormHeaders },
+          dataConnection.id,
+          queryFormMapping.mapping
+        )
+      : null;
     const requestExecutor: DataRequestExecutor = async (request: DataRequestDescriptor): Promise<DataResponseDescriptor> => ({
       status: 200,
       body: JSON.stringify({ url: request.url })
@@ -740,6 +817,23 @@ describe("core public API", () => {
     expect(requestBuild.ok).toBe(true);
     expect(requestBuild.ok && requestBuild.summary.url).toBe("https://api.example.test/v1/devices/pump-1");
     expect(parameterLocations).toMatchObject({ ok: true, locations: { deviceId: "path" } });
+    expect(queryForm.name).toBe("");
+    expect(queryFormWithParameter.parameters).toHaveLength(1);
+    expect(queryFormParameterDrafts).toEqual([{ name: "", type: "string", location: "auto", defaultValue: "" }]);
+    expect(queryFormOverrides).toEqual({});
+    expect(queryFormMapping.mapping).toMatchObject({ mode: "array", root: [{ kind: "key", key: "items" }] });
+    expect(queryFormMapping.problems).toEqual([]);
+    expect(queryFormSignature).toContain("Device detail");
+    expect(queryFormSerialized).toContain("\"path\":\"/devices/{deviceId}\"");
+    expect(queryDefinitionProblemKeys).toContain("dataSources.queryProblem.nameRequired");
+    expect(queryProblemKeys).toContain("dataSources.mappingProblem.propertyMissing");
+    expect(queryProblemKeys).toContain("dataSources.request.status.running");
+    expect(queryProblemKeys).toContain("dataSources.request.type.boolean");
+    expect(queryProblemValues).toEqual({ parameterName: "", status: "", credentialRef: "", detail: "Request timed out." });
+    expect(roundTrippedForm.name).toBe("Device detail");
+    expect(roundTrippedForm.headers[0]).toMatchObject({ name: "X-Zone", value: "north" });
+    expect(builtDefinition?.headers).toEqual({ "X-Zone": "north" });
+    expect(builtDefinition?.connectionId).toBe("connection-a");
     expect(editorDataService?.getState()).toMatchObject({ executorAvailable: false, configRevision: 0, run: null });
     expect(editorWithExecutorDataService?.getState()).toMatchObject({ executorAvailable: true, configRevision: 0, run: null });
     expect(typeof baseEditor.getDataService).toBe("function");

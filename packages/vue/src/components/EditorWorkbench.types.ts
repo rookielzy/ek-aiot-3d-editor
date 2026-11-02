@@ -7,6 +7,7 @@ export type WorkbenchRegionName = "toolbar" | "leftPanel" | "sidePanel" | "viewp
 export interface EditorWorkbenchProps {
   editor?: EditorWithGlbImport;
   snapshot?: EditorOptions["snapshot"];
+  credentials?: EditorOptions["credentials"];
   executor?: EditorOptions["executor"];
   resolver?: AssetResolverBridge;
   loader?: EditorRuntimeOptions["loader"];

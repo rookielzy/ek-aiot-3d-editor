@@ -8,22 +8,20 @@ import {
 } from "react";
 import {
   buildDataQueryRequest,
+  collectQueryOverrides,
+  createQueryParameterForm,
   formatDataPath,
+  toQueryParameterDrafts,
   type DataParameterLocationInput,
   type DataParameterType,
   type DataParameterValue,
   type DataQueryMethod,
   type DataQueryRunState,
-  type DataServiceState
+  type DataServiceState,
+  type QueryParameterForm
 } from "@ek-aiot/3d-editor-core";
 import type { WorkbenchI18n } from "../i18n/workbench-i18n";
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
-import {
-  collectQueryOverrides,
-  createQueryParameterForm,
-  toQueryParameterDrafts,
-  type QueryParameterForm
-} from "./data-query-form";
 import { DataParameterValueInput } from "./DataParameterValueInput";
 import {
   DATA_QUERY_RUN_STATUS_MESSAGE_KEYS,

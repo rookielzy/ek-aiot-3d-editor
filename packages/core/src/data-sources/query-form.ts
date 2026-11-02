@@ -1,32 +1,36 @@
 import {
   DEFAULT_DATA_QUERY_MAX_AGE_MS,
-  DEFAULT_DATA_QUERY_REFRESH_INTERVAL_MS,
-  formatDataPath,
-  parseDataPath,
-  resolveDataQueryParameters,
-  type DataMappedValueType,
-  type DataMappingMode,
-  type DataParameterValue,
-  type DataPath,
-  type DataPathPrimitive,
-  type DataQuality,
-  type DataQuery,
-  type DataQueryDefinition,
-  type DataQueryMapping,
-  type DataQueryMethod,
-  type DataQueryParameterOverrides,
-  type DataSuccessCondition,
-  type DataTimeFormat,
-  type DataValueMapEntry
-} from "@ek-aiot/3d-editor-core";
+  DEFAULT_DATA_QUERY_REFRESH_INTERVAL_MS
+} from "./defaults";
+import { formatDataPath, parseDataPath } from "./path";
+import { resolveDataQueryParameters } from "./query";
 import {
   createQueryHeaderForm,
   createQueryParameterForm,
   toQueryParameterDrafts,
   type QueryHeaderForm,
   type QueryParameterForm
-} from "./data-query-form";
+} from "./query-parameter-form";
+import type {
+  DataMappedValueType,
+  DataMappingMode,
+  DataParameterValue,
+  DataPath,
+  DataPathPrimitive,
+  DataQuality,
+  DataQuery,
+  DataQueryDefinition,
+  DataQueryMapping,
+  DataQueryMethod,
+  DataQueryParameterOverrides,
+  DataSuccessCondition,
+  DataTimeFormat,
+  DataValueMapEntry
+} from "./types";
 
+/**
+ * Adapter-agnostic draft for one authored property mapping row.
+ */
 export interface QueryPropertyForm {
   id: string;
   key: string;
@@ -58,6 +62,12 @@ export interface QueryQualityEntryForm {
 
 export type QuerySuccessValueType = "string" | "number" | "boolean" | "null";
 
+/**
+ * Complete draft of one query: request, mapping, and update policy.
+ *
+ * `baseline` holds the serialized form the draft started from so editors can
+ * tell dirty drafts apart from untouched ones.
+ */
 export interface QueryFormState {
   name: string;
   method: DataQueryMethod;
@@ -322,6 +332,17 @@ export function buildQueryDefinitionFromForm(
   };
 }
 
+export function queryHeadersToRecord(headers: readonly QueryHeaderForm[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const header of headers) {
+    if (!header.name && !header.value) {
+      continue;
+    }
+    result[header.name] = header.value;
+  }
+  return result;
+}
+
 export function buildSuccessConditionFromForm(form: QueryFormState): DataSuccessCondition | null {
   if (!form.successPath.trim()) {
     return null;
@@ -335,17 +356,6 @@ export function buildSuccessConditionFromForm(form: QueryFormState): DataSuccess
         ? form.successValue.trim() === "" ? Number.NaN : Number(form.successValue)
         : form.successValue;
   return { path, equals };
-}
-
-export function queryHeadersToRecord(headers: readonly QueryHeaderForm[]): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const header of headers) {
-    if (!header.name && !header.value) {
-      continue;
-    }
-    result[header.name] = header.value;
-  }
-  return result;
 }
 
 function buildUpdatePolicy(form: QueryFormState): DataQueryDefinition["updatePolicy"] {

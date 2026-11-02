@@ -13,6 +13,7 @@ import {
   DATA_DETAIL_MAX_PRECISION,
   mapDataQueryBody,
   normalizeDataColorHex,
+  parseParameterText,
   type DataBindingColor,
   type DataBindingProblem,
   type DataBindingProblemCode,
@@ -31,7 +32,6 @@ import type { WorkbenchI18n, WorkbenchMessageKey, WorkbenchMessageValues } from 
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
 import { DataParameterValueInput } from "./DataParameterValueInput";
 import { DataQueryEditor } from "./DataQueryEditor";
-import { parseParameterText } from "./data-query-form";
 import {
   DATA_MAPPING_PROBLEM_MESSAGE_KEYS,
   formatDataQueryProblem,

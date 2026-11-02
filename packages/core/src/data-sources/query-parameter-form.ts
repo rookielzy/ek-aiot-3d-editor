@@ -4,8 +4,15 @@ import type {
   DataParameterValue,
   DataQueryParameterDraft,
   DataQueryParameterOverrides
-} from "@ek-aiot/3d-editor-core";
+} from "./types";
 
+/**
+ * Adapter-agnostic draft row for a query parameter definition.
+ *
+ * Editors keep one row per parameter while it is being authored. The row holds
+ * raw text so partially typed values stay representable; conversion to durable
+ * drafts happens only through the helpers below.
+ */
 export interface QueryParameterForm {
   id: string;
   name: string;

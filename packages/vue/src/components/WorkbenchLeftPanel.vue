@@ -163,6 +163,10 @@
       </template>
     </section>
 
+    <section class="ek-workbench__panel-section" :aria-label="t('dataSources.panel.label')" :hidden="activeView !== 'data'">
+      <DataSourcesPanel :context="context" :locate="dataLocate ?? null" @locate-handled="emit('dataLocateHandled')" />
+    </section>
+
     <section class="ek-workbench__panel-section" :aria-label="t('reactWorkbench.leftPanel.project.label')" :hidden="activeView !== 'project'">
       <template v-if="activeView === 'project'">
         <div class="ek-workbench__section-header">
@@ -229,6 +233,7 @@ import {
 import type { ResolvedWorkbenchContext } from "../composables/use-workbench";
 import type { WorkbenchMessageKey, WorkbenchMessageValues } from "../i18n/workbench-i18n";
 import WorkbenchHierarchy from "./WorkbenchHierarchy.vue";
+import DataSourcesPanel from "./DataSourcesPanel.vue";
 
 type LocalizedStatusMessage =
   | {
@@ -262,7 +267,12 @@ interface AssetQueueItem {
 
 const props = defineProps<{
   context: ResolvedWorkbenchContext;
-  activeView: "scene" | "assets" | "project";
+  activeView: "scene" | "assets" | "data" | "project";
+  dataLocate?: { connectionId: string; queryId: string } | null;
+}>();
+
+const emit = defineEmits<{
+  dataLocateHandled: [];
 }>();
 
 const recoveryState = reactive<AssetRecoveryState>({});

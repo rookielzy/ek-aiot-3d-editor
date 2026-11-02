@@ -628,6 +628,49 @@ export {
   createUniqueDataQueryName
 } from "./data-sources/defaults";
 export { validateDataConnectionDraft } from "./data-sources/validation";
+export type {
+  QueryFormProblem,
+  QueryFormState,
+  QueryMapEntryForm,
+  QueryPropertyForm,
+  QueryQualityEntryForm,
+  QuerySuccessValueType
+} from "./data-sources/query-form";
+export {
+  buildMappingFromForm,
+  buildQueryDefinitionFromForm,
+  buildSuccessConditionFromForm,
+  createQueryFormState,
+  createQueryMapEntryForm,
+  createQueryPropertyForm,
+  createQueryQualityEntryForm,
+  formatMapValue,
+  queryDraftSignature,
+  queryFormFromQuery,
+  queryHeadersToRecord,
+  resolvedParametersForForm,
+  serializeQueryForm
+} from "./data-sources/query-form";
+export type {
+  QueryHeaderForm,
+  QueryParameterForm
+} from "./data-sources/query-parameter-form";
+export {
+  collectQueryOverrides,
+  createQueryHeaderForm,
+  createQueryParameterForm,
+  hasQueryOverrides,
+  parseParameterText,
+  toQueryParameterDrafts
+} from "./data-sources/query-parameter-form";
+export {
+  DATA_MAPPING_PROBLEM_MESSAGE_KEYS,
+  DATA_QUERY_DEFINITION_PROBLEM_MESSAGE_KEYS,
+  DATA_QUERY_PROBLEM_MESSAGE_KEYS,
+  DATA_QUERY_RUN_STATUS_MESSAGE_KEYS,
+  PARAMETER_TYPE_MESSAGE_KEYS,
+  dataQueryProblemMessageValues
+} from "./data-sources/problem-message-keys";
 
 export { createAuthoredCameraView, createAuthoredCameraViewInput, createEmptyPresentationState } from "./cameras/defaults";
 export {
