@@ -1,6 +1,6 @@
 # 12: 验收跨框架闭环并完成文档和发布准备
 
-Status: ready-for-agent
+Status: done
 
 Parent: [HTTP 数据源管理首期实现规格](../spec.md)
 
