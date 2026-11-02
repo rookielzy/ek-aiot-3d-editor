@@ -369,6 +369,72 @@ const editor = core.createEditor();
 if (!core.validateSceneSnapshot(editor.getSnapshot()).ok) throw new Error("core runtime smoke check failed");
 editor.dispose();
 
+// Cross-framework delivery: a data-bound project authored through the published
+// package API must restore in a second editor (the other framework's host) with
+// identical durable configuration, and must not carry runtime state.
+const source = core.createEditor({ credentials: [{ ref: "token", label: "Token", available: true }] });
+const connection = source.dispatch({
+  type: "create-data-connection",
+  connection: {
+    id: "api",
+    name: "API",
+    baseUrl: "https://api.example.test",
+    auth: { kind: "bearer", credentialRef: "token" },
+    headers: {},
+    timeoutMs: 10000
+  }
+});
+if (!connection.ok) throw new Error(\`create-data-connection failed: \${connection.error}\`);
+const imported = source.dispatch({ type: "import-glb", objectId: "pump", name: "Pump", asset: { id: "pump-model" } });
+if (!imported.ok) throw new Error(\`import-glb failed: \${imported.error}\`);
+source.registerAsset({ id: "pump-model", kind: "glb", label: "pump.glb", source: new Uint8Array([103, 108, 84, 70]) });
+const query = core.buildSaveDataQueryCommand(source.getSnapshot(), {
+  id: "status",
+  connectionId: "api",
+  name: "Status",
+  path: "/devices",
+  parameters: [],
+  mapping: {
+    mode: "array",
+    root: [{ kind: "key", key: "items" }],
+    identity: { kind: "path", path: [{ kind: "key", key: "deviceCode" }], valueType: "string" },
+    displayName: null,
+    properties: [],
+    observedAt: null,
+    sourceQuality: null
+  },
+  updatePolicy: { refreshIntervalMs: 60000, maxAgeMs: 120000 }
+});
+if (!query.ok) throw new Error(\`buildSaveDataQueryCommand failed: \${JSON.stringify(query.problems)}\`);
+if (!source.dispatch(query.command).ok) throw new Error("save query failed");
+const binding = core.buildSaveDataObjectBindingCommand(source.getSnapshot(), {
+  objectNodeId: "pump",
+  queryId: "status",
+  deviceId: "pump-1",
+  enabled: true,
+  details: []
+});
+if (!binding.ok) throw new Error(\`buildSaveDataObjectBindingCommand failed: \${JSON.stringify(binding.problems)}\`);
+if (!source.dispatch(binding.command).ok) throw new Error("save binding failed");
+const authoredState = source.getSnapshot().dataSources;
+const packageBytes = source.exportProject().packageBytes;
+if (!(packageBytes instanceof Uint8Array)) throw new Error("exportProject produced no package bytes");
+source.dispose();
+
+const receiver = core.createEditor({ credentials: [{ ref: "token", label: "Token", available: false }] });
+const restored = receiver.importProject(packageBytes);
+if (!restored.ok) throw new Error(\`importProject failed: \${JSON.stringify(restored.problems)}\`);
+if (JSON.stringify(receiver.getSnapshot().dataSources) !== JSON.stringify(authoredState)) {
+  throw new Error("restored data sources differ from the authored project");
+}
+if (restored.outcome.kind !== "reconnect" || restored.outcome.missingCredentialCount !== 1) {
+  throw new Error(\`expected a reconnect outcome, got \${JSON.stringify(restored.outcome)}\`);
+}
+if (receiver.getDataService().getObjectDataState().preview.enabled) {
+  throw new Error("restoring a project must not start preview traffic");
+}
+receiver.dispose();
+
 for (const specifier of ${JSON.stringify(forbiddenImportsForReleasePackages(), null, 2)}) {
   let failed = false;
   try {

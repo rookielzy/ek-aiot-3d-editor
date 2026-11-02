@@ -280,7 +280,7 @@ Core 提供 `resolveEditorShortcut()` 和 `executeEditorAction()`。React/Vue wo
 - 持久化快捷键配置和命令面板 UI。
 - 持久化布局。
 - 完整资产库、模型市场和外部 paste/import 队列。
-- 数据绑定和运行态 dashboard。
+- 运行态 dashboard、事件编排和托管发布；HTTP 数据源与对象数据绑定本身已交付，见 `integration-react.md`、`integration-vue.md` 和 `integration-vanilla.md`。
 - Agent 编辑。
 
 这些都可以作为后续规划，但不属于当前 `0.x` contract 的已交付能力。

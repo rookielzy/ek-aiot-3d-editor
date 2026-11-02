@@ -234,6 +234,71 @@ if (exported.packageBytes instanceof Uint8Array) {
 
 浏览器中如果导出结果是 `Promise<Uint8Array>`，需要 await 后再保存。
 
+## 数据源（无框架宿主）
+
+数据源不需要 React 或 Vue。宿主提供请求执行器与凭证，其余配置、请求构造、映射求值和响应判定都在 core：
+
+```ts
+import { buildSaveDataObjectBindingCommand, buildSaveDataQueryCommand, createEditor, type DataRequestExecutor } from "@ek-aiot/3d-editor-core";
+
+const executor: DataRequestExecutor = async (request) => {
+  // 请求描述是冻结的：复制头再注入秘密，不要修改原对象。
+  const headers = { ...request.headers };
+  if (request.auth.kind === "bearer" && request.credentialRef === "plant-token") {
+    headers.Authorization = `Bearer ${process.env.PLANT_TOKEN}`;
+  }
+  const response = await fetch(request.url, {
+    method: request.method,
+    headers,
+    body: request.body === null ? undefined : JSON.stringify(request.body),
+    signal: request.signal
+  });
+  return {
+    status: response.status,
+    contentType: response.headers.get("content-type"),
+    body: await response.text()
+  };
+};
+
+const editor = createEditor({
+  executor,
+  credentials: [{ ref: "plant-token", label: "Plant token", available: true }]
+});
+
+// 配置通过 core 的 builder 生成命令，再用 dispatch 提交，因此同样进入 undo/redo。
+const query = buildSaveDataQueryCommand(editor.getSnapshot(), {
+  id: "pump-status",
+  connectionId: "plant-api",
+  name: "Pump status",
+  path: "/devices",
+  parameters: [],
+  mapping: { /* mode, root, identity, properties ... */ },
+  updatePolicy: { refreshIntervalMs: 60_000, maxAgeMs: 120_000 }
+});
+if (query.ok) editor.dispatch(query.command);
+
+const binding = buildSaveDataObjectBindingCommand(editor.getSnapshot(), {
+  objectNodeId: "plant-pump",
+  queryId: "pump-status",
+  deviceId: "plant-pump",
+  enabled: true,
+  details: [{ key: "temperature" }, { key: "running" }]
+});
+if (binding.ok) editor.dispatch(binding.command);
+```
+
+`editor.getDataService()` 暴露 `startPreview()`、`stopPreview()`、`refreshPreview()` 和 `getObjectDataState()`。配置阶段不会产生任何网络请求；只有显式调用 `startPreview()` 或 `refreshPreview()` 才会执行。宿主能力可以随时补齐：
+
+```ts
+editor.getDataService().setHostCapabilities({
+  executor,
+  credentials: [{ ref: "plant-token", label: "Plant token", available: true }],
+  authRevision: editor.getDataService().getAuthRevision() + 1
+});
+```
+
+缺少执行器时对象状态是 `error` 且带 `executor-unavailable`；缺少凭证时是 `error` 且带 `credential-unavailable`，两种情况都不会发出请求。响应正文、`receivedAt`、新鲜度和诊断只存在于 `getObjectDataState()`，不进入 Snapshot、history 或 `.ek3d`。同一个 `.ek3d` 或 `editor.serialize()` 可以在 React、Vue 与无框架宿主间传递。
+
 ## 生命周期建议
 
 - 一个 editor 对应一个 durable editing session。

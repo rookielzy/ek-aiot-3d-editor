@@ -26,6 +26,7 @@ import { EditorWorkbench, type WorkbenchLocale } from "@ek-aiot/3d-editor-vue";
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import { createShowcaseEditor, showcaseInteractions } from "../../showcase/showcase";
 import { createDemoGltfLoader } from "./demo-gltf-loader";
+import { fetchDataRequestExecutor } from "./demo-data-executor";
 
 const props = defineProps<{
   locale?: WorkbenchLocale;
@@ -54,7 +55,7 @@ watch([resolvedLoader, attempt], async ([loader]) => {
   editor.value = null;
   failed.value = false;
   try {
-    const created = await createShowcaseEditor(loader, current.signal);
+    const created = await createShowcaseEditor(loader, current.signal, { executor: fetchDataRequestExecutor });
     if (current.signal.aborted) {
       created.dispose();
       return;

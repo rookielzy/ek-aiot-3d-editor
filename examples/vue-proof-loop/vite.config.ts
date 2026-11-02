@@ -3,9 +3,10 @@ import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import tailwindcss from "@tailwindcss/vite";
 import { threeDecoderAssetsPlugin } from "../../scripts/vite-three-decoder-assets";
+import { dataSourceHttpFixturePlugin } from "../../scripts/vite-data-source-fixture";
 
 export default defineConfig({
-  plugins: [vue(), tailwindcss(), threeDecoderAssetsPlugin()],
+  plugins: [vue(), tailwindcss(), threeDecoderAssetsPlugin(), dataSourceHttpFixturePlugin()],
   resolve: {
     alias: [
       {

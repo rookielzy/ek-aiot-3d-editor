@@ -338,7 +338,9 @@ pnpm test:browser
 
 浏览器测试会覆盖空画布启动、资产导入、英文/中文 UI、桌面宽度和窄屏宽度下的 command bar、左侧工作区、inspector 和 status bar，确保默认 shell 不产生横向页面溢出，控件文字不会明显越界。
 
-该命令使用 headless Chromium 验证 React starter 的默认 workbench 区域、selection、transform/history、material inspector smoke、project export/open、problem status 和 canvas 非空渲染状态。它不是端到端托管发布测试，也不承诺完整资产库、外部 paste、数据绑定或事件编排能力。
+跨框架数据闭环也有专门证据：`packages/react/test/cross-framework-data.browser.test.tsx` 使用真实同源 HTTP 夹具和真实 WebGL 渲染，验证 React 配置并导出 → Vue 恢复后显式连接 → 无框架宿主读取与执行，三处得到相同的设备 identity 与映射值；同一文件还在 1440×900、1920×1080、1100×800 三种布局和中英双语下检查数据面板、连接行与操作按钮不被横向遮挡，并用 100 个对象共享一条列表查询、每轮轮询只发一次请求的场景验证没有重复或堆积请求。`packages/react/test/workbench-cross-framework.test.tsx` 覆盖打开别处导出的项目、显示重新连接提示、以及宿主补齐 `executor`/`credentials` 后原地修复。
+
+该命令使用 headless Chromium 验证 React starter 的默认 workbench 区域、selection、transform/history、material inspector smoke、project export/open、problem status 和 canvas 非空渲染状态。它不是端到端托管发布测试，也不承诺完整资产库、外部 paste 或事件编排能力。
 
 ## 宿主拥有 editor 生命周期
 

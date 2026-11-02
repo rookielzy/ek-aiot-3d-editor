@@ -158,6 +158,13 @@ async function openProject(event: Event): Promise<void> {
     const packageBytes = new Uint8Array(await file.arrayBuffer());
     const result = props.context.importProject(packageBytes);
     emit("projectProblems", result.problems);
+    // Broken durable references are repairable authoring damage, not a bad file.
+    // Core reports them on both paths: a rejected scene keeps its message in
+    // `problems`, an accepted one is classified after the snapshot is replaced.
+    if (result.outcome.kind === "config-error") {
+      projectStatus.value = configInvalidProjectStatus(result.outcome.problems.length);
+      return;
+    }
     if (result.ok) {
       projectStatus.value = {
         tone: result.manifest?.completeness === "partial" || result.problems.length ? "warning" : "success",
@@ -171,6 +178,17 @@ async function openProject(event: Event): Promise<void> {
           values: { fileName: file.name }
         }
       };
+      // A restored configuration can need host credentials before preview works.
+      if (result.outcome.kind === "reconnect") {
+        projectStatus.value = {
+          tone: "warning",
+          message: {
+            key: "reactWorkbench.toolbar.status.openedReconnect.message",
+            fallback: "Reconnect required to preview data ({credentialCount} credentials missing)",
+            values: { credentialCount: result.outcome.missingCredentialCount, fileName: file.name }
+          }
+        };
+      }
     } else {
       projectStatus.value = errorProjectStatus(result.problems[0]?.display?.titleDescriptor,
         "reactWorkbench.toolbar.status.openFailed.message", "Project open failed");
@@ -297,6 +315,17 @@ function errorProjectStatus(
   return {
     tone: "error",
     message: { key, fallback }
+  };
+}
+
+function configInvalidProjectStatus(problemCount: number): ProjectActionStatus {
+  return {
+    tone: "error",
+    message: {
+      key: "reactWorkbench.toolbar.status.openConfigInvalid.message",
+      fallback: "Project data configuration is damaged ({problemCount} broken references)",
+      values: { problemCount }
+    }
   };
 }
 </script>

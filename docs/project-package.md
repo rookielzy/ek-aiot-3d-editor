@@ -35,6 +35,8 @@ assets/
 
 GLB import analysis 产生的 `glbImportManifest` 属于 `scene.json` 中 asset metadata 的 JSON-compatible authoring data。Imported GLB target node、source descriptor、slot key、authored transform override 和 remap metadata 也保存在 `scene.json`。Authored camera views 保存在 `scene.json.cameras`，默认展示视角保存在 `scene.json.presentation.defaultCameraId`；light shadow authoring fields 保存在 shadow-capable light payload 中；它们不需要额外 `assets/*` payload。GLB reimport 会更新同一稳定 asset ID 的 manifest metadata，并保留 matched imported node identity；unresolved target/slot 只保存 JSON-compatible remap marker，不保存 replacement loader result。它们不改变 ZIP 布局，也不在 `assets/*` 下创建额外记录。Runtime imported target links、base transform caches、viewport grid/floor/axes/light/shadow camera helpers、selection/hover/snap guide helpers、helper visibility、hover target、snap feedback state、marquee overlay/drag rectangle/candidate IDs、editor camera navigation、OrbitControls state、controls target object、renderer shadowMap state、Three.js LightShadow/shadow maps、loader results、resolver output 和 runtime problems 不会进入 `scene.json` 或 `project.json`。
 
+数据源配置同样只以作者态进入 `scene.json.dataSources`，形如 `{ connections, queries, bindings }`：连接保存名称、baseUrl、超时、非秘密公共头以及认证**类型**和 `credentialRef`，查询保存方法、路径、参数位置、映射和更新策略，绑定保存查询/设备/参数覆盖/详情字段/状态颜色规则。以下内容永远不会写入 `.ek3d`：认证秘密本身的取值、宿主 `DataRequestExecutor`、请求描述与发送时的头、响应正文与样本、`receivedAt`/耗时/新鲜度、预览开关与暂停状态、试运行结果、以及由 runtime 持有的颜色覆盖。因此同一个 `.ek3d` 可以在 React、Vue 或无框架宿主之间传递：接收方拿到的是完整的作者态配置，凭证由它自己的宿主在执行时补齐。
+
 ## project.json
 
 ```ts

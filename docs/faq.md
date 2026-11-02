@@ -22,7 +22,7 @@
 
 ## React/Vue 包会不会各自实现一套编辑器逻辑？
 
-不会。React/Vue 只做生命周期、UI 渲染和扩展区域适配。命令、history、Snapshot、runtime projection、asset/project package 逻辑都在 core。
+不会。React/Vue 只做生命周期、UI 渲染和扩展区域适配。命令、history、Snapshot、runtime projection、asset/project package 逻辑，以及数据源的请求构造、映射求值、响应判定和预览调度都在 core。两个包的数据工作区因此行为一致，跨框架传递的 `.ek3d` 不需要任何转换。
 
 ## 为什么 core 直接依赖 Three.js？
 
@@ -38,7 +38,7 @@
 
 ## `pnpm test:browser` 验证的是什么？
 
-它使用 Vitest browser mode 和 headless Chromium，覆盖 runtime picking、TransformControls smoke、React/Vue demo checklist parity、问题 badge、层级文本和 canvas 非空渲染 smoke。它避免脆弱的 WebGL 像素级比对，也不是完整发布站点或托管 runtime 测试。
+它使用 Vitest browser mode 和 headless Chromium，覆盖 runtime picking、TransformControls smoke、React/Vue demo checklist parity、问题 badge、层级文本和 canvas 非空渲染 smoke，以及跨框架数据闭环：真实同源 HTTP 夹具与真实 WebGL 渲染下的 React 配置 → 导出 → Vue 恢复并连接 → vanilla 读取，配合 1440×900 / 1920×1080 / 1100×800 布局与中英双语检查。它避免脆弱的 WebGL 像素级比对，也不是完整发布站点或托管 runtime 测试。
 
 ## 是否支持 HDR 环境？
 
@@ -46,7 +46,13 @@ Snapshot 和 runtime 已有 HDR environment/background intent、资产解析和 
 
 ## 是否支持数据绑定、事件、动画或运行态发布？
 
-当前不支持。这些属于 Le5le-like 低代码平台能力，不是当前 snapshot-first 3D editor contract 的范围。
+HTTP 数据源与对象数据绑定已经支持：`snapshot.dataSources` 保存连接、查询和绑定，宿主通过 `createEditor({ executor, credentials })` 提供请求能力，`editor.getDataService()` 提供手动预览、刷新和对象数据状态，`editor.getDataColorService()` 按数据值驱动状态颜色。React 与 Vue Workbench 都提供等价的数据工作区与检查器界面。
+
+事件编排、动画和托管运行态发布仍不支持。这些属于 Le5le-like 低代码平台能力，不是当前 snapshot-first 3D editor contract 的范围。
+
+## 数据源的凭证会写进 `.ek3d` 吗？
+
+不会。连接只保存认证**类型**和 `credentialRef`，秘密由宿主执行器在发送时解析并注入请求头。响应正文、样本、`receivedAt`、预览开关和试运行结果同样只存在于当前会话的 runtime 状态。所以项目包可以在 React、Vue 和无框架宿主之间传递，接收方收到 `outcome.kind === "reconnect"` 后补齐自己的凭证即可，不需要重新配置。
 
 ## 是否支持 Agent 集成？
 

@@ -82,11 +82,13 @@ const executor: DataRequestExecutor = async (request) => {
 const { editor } = useEditor({ executor, maxResponseBytes: 512 * 1024 });
 ```
 
-请求描述只携带方法、只读确认、非秘密公共/查询头、typed JSON body、认证类型与 `credentialRef`；认证秘密由宿主执行器在发送时解析，Bearer/API key 均由宿主注入对应头。GET 与已确认只读的 POST 共用同一执行与响应判定路径；POST 只在手动测试、首次预览或显式刷新时执行，不自动轮询或重试。`maxResponseBytes` 设置响应硬上限（默认 1 MiB），超过时整次执行失败；`useEditor` 与 `useWorkbench` 都把它传给 core。响应正文、耗时、generation、取消和诊断只留在当前会话，不写入 Snapshot、history 或项目包。Vue 数据工作区 UI 保持现状，不因启用数据服务而新增请求表单。已保存查询与映射通过框架无关的 `snapshot.dataSources.queries`、`mapDataQueryBody()` 和 `validateDataQueryMapping()` 使用，查询定义中的方法、头、参数位置与成功条件同样可由 Vue 宿主直接构造；React 新增的 query 编辑界面不会改变 Vue Workbench 的行为。
+请求描述只携带方法、只读确认、非秘密公共/查询头、typed JSON body、认证类型与 `credentialRef`；认证秘密由宿主执行器在发送时解析，Bearer/API key 均由宿主注入对应头。GET 与已确认只读的 POST 共用同一执行与响应判定路径；POST 只在手动测试、首次预览或显式刷新时执行，不自动轮询或重试。`maxResponseBytes` 设置响应硬上限（默认 1 MiB），超过时整次执行失败；`useEditor` 与 `useWorkbench` 都把它传给 core。响应正文、耗时、generation、取消和诊断只留在当前会话，不写入 Snapshot、history 或项目包。已保存查询与映射通过框架无关的 `snapshot.dataSources.queries`、`mapDataQueryBody()` 和 `validateDataQueryMapping()` 使用，查询定义中的方法、头、参数位置与成功条件同样可由 Vue 宿主直接构造。
 
-对象绑定同样完全属于 core contract：`snapshot.dataSources.bindings` 保存查询、设备、参数覆盖、启停、详情字段和状态颜色规则；`buildDataObjectDetailModel()`、`startPreview()`、`refreshPreview()`、`stopPreview()` 和 `getObjectDataState()` 都不依赖 React。Vue Workbench 本阶段不新增绑定、详情或颜色界面，宿主可以在不改 core contract 的前提下消费这些 API；React 的 Device data 表单、预览工具条和详情卡不会进入 Vue package。
+Vue Workbench 提供与 React 等价的数据工作区：左侧 `数据` 视图中的连接与查询列表、连接表单、查询编辑器、请求测试器和绑定对话框（`DataSourcesPanel.vue`），以及检查器中的对象绑定表单、预览工具条和详情卡（`DataBindingInspector.vue`、`DataDetailCard.vue`）。两者都只调用 core 公开的 `editor.getDataService()`，不复制请求构造、映射求值或响应判定逻辑；宿主是否可用由 `executor` 与 `credentials` 决定，配置在宿主补齐能力后原地生效，无需重开项目。
 
-状态颜色和草稿试用由 `editor.getDataColorService()` 提供：规则求值、未生效原因、材质能力诊断、试用开始/结束都在 core，颜色覆盖与释放由 runtime 投影拥有。Vue 本阶段不渲染这些状态，也不得直接操作 Three.js 材质；后续 Vue UI 必须复用同一服务，而不是复制颜色求值或材质投影逻辑。
+对象绑定同样完全属于 core contract：`snapshot.dataSources.bindings` 保存查询、设备、参数覆盖、启停、详情字段和状态颜色规则；`buildDataObjectDetailModel()`、`startPreview()`、`refreshPreview()`、`stopPreview()` 和 `getObjectDataState()` 都不依赖 React。Vue Workbench 的预览同样只在用户显式启动后才发请求，`startPreview()` 不会因为存在绑定就自动联网。
+
+状态颜色和草稿试用由 `editor.getDataColorService()` 提供：规则求值、未生效原因、材质能力诊断、试用开始/结束都在 core，颜色覆盖与释放由 runtime 投影拥有。Vue 通过 `DataBindingForm.vue` 编辑规则并在检查器中展示能力诊断；颜色覆盖与释放仍由 runtime 投影拥有，适配器不得直接操作 Three.js 材质。
 
 宿主扩展区域为 `toolbar`、`leftPanel`、兼容 `sidePanel`、`viewportOverlay`、`rightPanel` 和 `status`。`leftPanel` 优先于 `sidePanel`；`show-default-toolbar="false"` 同时隐藏默认顶部及视口工具，但不隐藏宿主 `toolbar` slot。切换 locale、导航或抽屉只改变 session UI，不替换 editor/runtime、selection、history 或 canvas。
 
@@ -271,13 +273,15 @@ pnpm --filter @ek-aiot/vue-proof-loop build
 
 默认 UI 可以完成 starter flow：从空场景导入 GLB、选择 hierarchy row、viewport picking 或打开 `Marquee` 后使用 marquee selection，capture/edit/default/apply authored camera view，编辑 Transform/Material inspector、在 expanded GLB 上选择 broad object 或 material slot target、切换 helper/snap/transform、undo/redo、duplicate、搜索/过滤资产、export partial package、通过 Open 重新载入 `.ek3d`、从左栏恢复缺失资产，以及对 registered GLB 执行 reimport。缺失资产恢复使用同一个稳定 asset ID 调用 `replaceAsset()`，替换 payload 后 runtime 重新投影并清除派生 runtime problem；GLB reimport 使用 `context.assets.reimportGlbAsset()`，提交 replacement manifest 和 target remap，并在按钮反馈中显示 exact/remapped/new/unresolved summary。
 
+数据侧同样有跨框架证据：`packages/vue/test/workbench-cross-framework.test.ts` 与 React 的同名用例互为镜像，验证 Vue 宿主能打开别处导出的项目、报告需要重新连接、保持配置可编辑，并在宿主补齐 `executor`/`credentials` 后原地修复；`packages/react/test/cross-framework-data.browser.test.tsx` 用真实同源 HTTP fixture 和真实 WebGL 渲染，跑通 React 配置 → 导出 → Vue 恢复并显式连接 → vanilla 读取执行的完整链路，并在 1440×900、1920×1080、1100×800 三种布局与中英双语下检查数据面板没有横向遮挡。
+
 浏览器证据通过仓库根目录命令运行：
 
 ```bash
 pnpm test:browser
 ```
 
-该命令使用 headless Chromium 验证 Vue starter 的默认 workbench 区域、selection、transform/history、material inspector smoke、project export/open、problem status 和 canvas 非空渲染状态，并和 React starter 保持同等行为。它不是端到端托管发布测试，也不承诺完整资产库、外部 paste、数据绑定或事件编排能力。
+该命令使用 headless Chromium 验证 Vue starter 的默认 workbench 区域、selection、transform/history、material inspector smoke、project export/open、problem status 和 canvas 非空渲染状态，并和 React starter 保持同等行为。它不是端到端托管发布测试，也不承诺完整资产库、外部 paste 或事件编排能力。
 
 ## 响应式边界
 

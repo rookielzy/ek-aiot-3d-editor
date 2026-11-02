@@ -45,6 +45,7 @@ When the release PR is merged and no changesets remain, the same workflow runs `
 - tarball file-list checks for required dist, README, license, and changelog content
 - exclusion checks for sources, tests, fixtures, `.tsbuildinfo`, examples, and JavaScript source maps
 - temporary consumer install/import checks from the packed tarballs
+- a cross-framework data source restore check inside that consumer: a data-bound project authored through the published root API is exported, restored in a second editor, must report the `reconnect` outcome with an unchanged durable `dataSources`, and must not start preview traffic
 - fresh Vite React and Vite Vue consumer builds that import the package root API plus the documented `styles.css` CSS subpath and mount `EditorWorkbench`
 - documented i18n root-import surface checks for `DEFAULT_WORKBENCH_LOCALE`, locale labels, locale normalization, resolver helpers, React render-prop `i18n`, and Vue `update:locale` / scoped-slot `i18n` types
 - private subpath import checks through package `exports`
