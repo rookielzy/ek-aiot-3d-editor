@@ -1,6 +1,6 @@
 # 11: 在 Vue 完成对象绑定、数据预览和颜色交互
 
-Status: ready-for-agent
+Status: ready-for-human
 
 Parent: [HTTP 数据源管理首期实现规格](../spec.md)
 
@@ -50,3 +50,20 @@ Vue Inspector/Workbench DOM、composable 生命周期与双语；真实 GLB/WebG
 ## Comments
 
 2026-10-26：按用户认可的原型流程整理为正式规划任务。Status 表示定义就绪，不代表实现、验证或用户已授权开始执行。
+
+2026-11-02：Vue 对象绑定、数据预览与颜色交互已实现，实现与 React 适配层保持同一 core 契约与文案。
+
+实现摘要：
+- 新增 `DataBindingForm.vue`（查询/设备/参数覆盖/详情字段顺序与精度/颜色规则与试用/启用状态/问题列表）、`DataBindingInspector.vue`（按选中节点类型分派，含 imported 子节点跳到所属对象）、`DataDetailCard.vue`、`DataPreviewControls.vue`、`DataQueryBindingsDialog.vue`，以及纯逻辑辅助 `data-binding-ui.ts`、`data-context-format.ts`。
+- `use-workbench` 订阅 `DataColorService` 并随 editor 更换重新订阅、卸载时清理，与既有 `dataState`/`dataServiceState` 模式一致；Vue 侧不新建 interval 或 request cache，全部复用 core 的共享上下文。
+- `InspectorView` 在预览运行时锁定 Transform/Material 并给出提示；`EditorWorkbench` 承载预览控制、详情卡和复制设备提示，并支持 `data-field`/`data-object` 问题定位。
+- `DataSourcesPanel` 增加按查询的“绑定对象”摘要与“管理绑定”入口，与 React 一致。
+
+验证命令与结果：
+- `pnpm --filter @ek-aiot/3d-editor-vue typecheck`：通过。
+- `pnpm -r --filter './packages/*' typecheck`：core、react、vue 全部通过（`pnpm typecheck` 因 core 构建脚本使用 `rm`，在 Windows 下不可用，故按包运行）。
+- `npx vitest run packages/vue`：17 个文件 / 171 个用例全部通过。
+- `npx vitest run packages/vue/test/workbench-object-binding.test.ts`、`workbench-data-preview.test.ts`、`workbench-data-colors.test.ts`、`workbench-data-binding-lifecycle.test.ts`、`i18n-string-audit.test.ts`：通过。
+- `pnpm test`：152 个文件 / 1366 个用例全部通过。
+
+已知范围说明：浏览器端真实 GLB/WebGL/同源 HTTP 闭环与卡片屏幕定位仍未覆盖（与 React 适配层一致，属后续验证范围）；trial 切换目标与过期/失败外观恢复由 core 行为保证，Vue 仅做展示。

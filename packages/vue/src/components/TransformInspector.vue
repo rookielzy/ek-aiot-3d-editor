@@ -5,6 +5,7 @@
     </header>
     <p v-if="section.empty" class="ek-inspector-empty">{{ renderSectionReason(resolvedI18n, section) }}</p>
     <template v-else>
+      <p v-if="locked" class="ek-inspector-warning">{{ resolvedI18n.t("reactWorkbench.inspector.previewLocked") }}</p>
       <fieldset v-for="vector in ['position', 'rotation', 'scale'] as const" :key="vector" class="ek-inspector-vector">
         <legend>{{ resolvedI18n.t(`reactWorkbench.inspector.transform.${vector}`) }}</legend>
         <div class="ek-inspector-grid ek-inspector-grid--vectors">
@@ -14,7 +15,7 @@
               :key="`${snapshot.selection.nodeId}:${field.id}`"
               :value="displayValue(field.id, field.value)"
               :aria-label="renderFieldLabel(resolvedI18n, field)"
-              :disabled="field.disabled"
+              :disabled="field.disabled || locked"
               :step="vector === 'rotation' ? 1 : field.step ?? 0.01"
               :aria-invalid="problem?.fieldId === field.id ? true : undefined"
               :aria-describedby="problem?.fieldId === field.id ? problemId : undefined"
@@ -40,6 +41,7 @@ const props = defineProps<{
   snapshot: SceneSnapshot;
   section: InspectorSection;
   i18n?: InspectorI18n;
+  locked?: boolean;
 }>();
 
 const resolvedI18n = computed(() => props.i18n ?? DEFAULT_INSPECTOR_I18N);

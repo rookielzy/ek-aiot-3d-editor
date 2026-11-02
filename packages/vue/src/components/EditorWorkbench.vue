@@ -49,11 +49,19 @@
         <strong>{{ context.i18n.t("reactWorkbench.shell.empty.title") }}</strong>
         <p>{{ context.i18n.t("reactWorkbench.shell.empty.description") }}</p>
       </div>
+      <DataPreviewControls :context="context" />
+      <div v-if="objectOperationNotice" class="ek-workbench__object-operation-notice" role="status">
+        <span>{{ objectOperationNotice }}</span>
+        <button type="button" :aria-label="context.i18n.t('reactWorkbench.nodeOperation.dismiss')" @click="objectOperationNotice = null">{{ context.i18n.t("reactWorkbench.nodeOperation.dismiss") }}</button>
+      </div>
+      <DataDetailCard
+        :context="context"
+        :focus-field="dataFieldFocus?.nodeId === context.selection.nodeId ? { propertyKey: dataFieldFocus.propertyKey } : null"
+      />
       <div v-if="$slots.viewportOverlay" class="ek-workbench__overlay">
         <slot name="viewportOverlay" v-bind="context" />
       </div>
     </section>
-
     <aside :id="`${panelId}-left`" :hidden="leftCollapsed" class="ek-workbench__side-panel" :aria-label="context.i18n.t('reactWorkbench.shell.projectPanel.label')">
       <slot v-if="$slots.leftPanel" name="leftPanel" v-bind="context" />
       <slot v-else-if="$slots.sidePanel" name="sidePanel" v-bind="context" />
@@ -78,6 +86,7 @@
         :snapshot="currentSnapshot"
         :inspector="currentInspector"
         :camera="context.camera"
+        :data-context="context"
         :i18n="context.i18n"
         :class="inspectorClassName"
         @update:active-light-id="workbench.setActiveLightId"
@@ -95,11 +104,13 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, toRef, useId } from "vue";
-import { buildWorkbenchModel, resolveEditorShortcut, type EditorRuntimeOptions, type Problem } from "@ek-aiot/3d-editor-core";
-import { useWorkbench } from "../composables/use-workbench";
+import { buildWorkbenchModel, resolveEditorShortcut, type EditorAction, type EditorRuntimeOptions, type Problem } from "@ek-aiot/3d-editor-core";
+import { useWorkbench, type ResolvedWorkbenchContext } from "../composables/use-workbench";
 import type { DataProblemTarget } from "./workbench-problem-target";
 import type { EditorWorkbenchEmitDefinitions, EditorWorkbenchProps, EditorWorkbenchSlots } from "./EditorWorkbench.types";
 import EditorViewport from "./EditorViewport.vue";
+import DataDetailCard from "./DataDetailCard.vue";
+import DataPreviewControls from "./DataPreviewControls.vue";
 import InspectorView from "./InspectorView.vue";
 import WorkbenchLeftPanel from "./WorkbenchLeftPanel.vue";
 import WorkbenchStatusBar from "./WorkbenchStatusBar.vue";
@@ -152,10 +163,11 @@ const projectProblems = computed(() => projectFeedback.value?.editor === workben
       return true;
     })
   : []);
-const context = computed(() => {
+const context = computed<ResolvedWorkbenchContext>(() => {
   const base = workbench.context.value;
+  const withAction = { ...base, runAction: runActionWithNotice };
   if (!projectProblems.value.length) {
-    return base;
+    return withAction;
   }
   const model = buildWorkbenchModel(workbench.snapshot.value, {
     canPaste: workbench.editor.operations.canPaste(),
@@ -172,7 +184,7 @@ const context = computed(() => {
     runtimeReady: workbench.runtime.value !== null
   });
   return {
-    ...base,
+    ...withAction,
     model,
     problems: {
       ...base.problems,
@@ -181,6 +193,32 @@ const context = computed(() => {
     }
   };
 });
+
+/** Duplicated or pasted objects keep their device binding, so say so once. */
+function runActionWithNotice(action: EditorAction): ReturnType<typeof workbench.runAction> {
+  if (action !== "duplicate" && action !== "paste") {
+    objectOperationNotice.value = null;
+    return workbench.runAction(action);
+  }
+  const before = workbench.snapshot.value;
+  const result = workbench.runAction(action);
+  if (!result || !result.ok) {
+    objectOperationNotice.value = null;
+    return result;
+  }
+  const newBindingNodeIds = Object.keys(result.snapshot.dataSources.bindings)
+    .filter((nodeId) => !before.dataSources.bindings[nodeId]);
+  const selectedBoundNodeIds = result.snapshot.selection.nodeIds
+    .filter((nodeId) => newBindingNodeIds.includes(nodeId));
+  const noticeNodeIds = selectedBoundNodeIds.length > 0 ? selectedBoundNodeIds : newBindingNodeIds;
+  const devices = [...new Set(noticeNodeIds.map((nodeId) =>
+    result.snapshot.dataSources.bindings[nodeId]!.deviceId
+  ))];
+  objectOperationNotice.value = devices.length > 0
+    ? workbench.context.value.i18n.t("reactWorkbench.nodeOperation.copyNotice", { devices: devices.join(", ") })
+    : null;
+  return result;
+}
 const currentSnapshot = computed(() => workbench.snapshot.value);
 const currentInspector = computed(() => workbench.inspector.value);
 const rootClassName = computed(() => props.class ? `ek-workbench ${props.class}` : "ek-workbench");
@@ -199,6 +237,8 @@ const panelId = useId();
 type PanelView = "scene" | "assets" | "data" | "project";
 const activeView = ref<PanelView>("scene");
 const dataLocate = ref<{ connectionId: string; queryId: string } | null>(null);
+const dataFieldFocus = ref<{ nodeId: string; propertyKey: string } | null>(null);
+const objectOperationNotice = ref<string | null>(null);
 const leftCollapsed = ref(false);
 const rightCollapsed = ref(false);
 const { desktop, maximum, leftWidth, rightWidth, setLeftWidth, setRightWidth } = useWorkbenchPanelWidths(root);
@@ -225,13 +265,25 @@ function handleDataLocateHandled(): void {
 }
 
 function locateDataTarget(target: DataProblemTarget): void {
-  const query = context.value.snapshot.dataSources.queries[target.queryId];
-  if (!query) {
+  if (target.kind === "data-query") {
+    const query = context.value.snapshot.dataSources.queries[target.queryId];
+    if (!query) {
+      return;
+    }
+    activeView.value = "data";
+    leftCollapsed.value = false;
+    dataLocate.value = { connectionId: query.connectionId, queryId: target.queryId };
     return;
   }
-  activeView.value = "data";
-  leftCollapsed.value = false;
-  dataLocate.value = { connectionId: query.connectionId, queryId: target.queryId };
+  workbench.dispatch({
+    type: "select-nodes",
+    mode: "replace",
+    nodeIds: [target.nodeId],
+    primaryNodeId: target.nodeId
+  });
+  dataFieldFocus.value = target.kind === "data-field"
+    ? { nodeId: target.nodeId, propertyKey: target.propertyKey }
+    : null;
 }
 
 function replaceAsset(assetId: string, file: File): void {

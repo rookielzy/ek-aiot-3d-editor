@@ -81,10 +81,14 @@
                   <strong>{{ query.name }}</strong>
                   <small>{{ queryRequestLabel(query) }}</small>
                   <small>{{ querySummary(query) }}</small>
+                  <small v-if="query.bindingCount > 0">{{ boundObjectsLabel(query.bindingCount) }}</small>
                 </div>
                 <div class="ek-workbench__data-row-actions">
                   <button type="button" :aria-label="t('dataSources.queries.editAria', { name: query.name })" @click="startQueryEditor(connection.id, query.id)">
                     {{ t("dataSources.queries.edit") }}
+                  </button>
+                  <button type="button" :aria-label="t('dataBinding.queryDialog.openAria', { name: query.name })" @click="openBindings(query.id)">
+                    {{ t("dataBinding.queryDialog.open") }}
                   </button>
                   <button type="button" :aria-label="t('dataSources.queries.duplicateAria', { name: query.name })" @click="duplicateQuery(query.id)">
                     {{ t("dataSources.queries.duplicate") }}
@@ -137,6 +141,14 @@
       :connection-id="tester.connectionId"
       @close="tester = null"
     />
+
+    <DataQueryBindingsDialog
+      v-if="bindingsQueryId"
+      :key="bindingsQueryId"
+      :context="context"
+      :query-id="bindingsQueryId"
+      @close="bindingsQueryId = null"
+    />
   </section>
 </template>
 
@@ -159,6 +171,7 @@ import {
 import type { ResolvedWorkbenchContext } from "../composables/use-workbench";
 import type { WorkbenchMessageKey, WorkbenchMessageValues } from "../i18n/workbench-i18n";
 import DataConnectionForm from "./DataConnectionForm.vue";
+import DataQueryBindingsDialog from "./DataQueryBindingsDialog.vue";
 import DataQueryEditor from "./DataQueryEditor.vue";
 import DataQueryTester from "./DataQueryTester.vue";
 
@@ -179,6 +192,7 @@ const status = ref("");
 const connectionForm = ref<{ connectionId: string | null } | null>(null);
 const connectionFormRef = ref<InstanceType<typeof DataConnectionForm> | null>(null);
 const queryEditor = ref<{ connectionId: string; queryId: string | null } | null>(null);
+const bindingsQueryId = ref<string | null>(null);
 const tester = ref<{ connectionId: string } | null>(null);
 const pendingAction = ref<(() => void) | null>(null);
 const keepEditingRef = ref<HTMLButtonElement | null>(null);
@@ -295,6 +309,13 @@ function startQueryEditor(connectionId: string, queryId: string | null): void {
   requestAction(() => {
     status.value = "";
     queryEditor.value = { connectionId, queryId };
+  });
+}
+
+function openBindings(queryId: string): void {
+  requestAction(() => {
+    status.value = "";
+    bindingsQueryId.value = queryId;
   });
 }
 

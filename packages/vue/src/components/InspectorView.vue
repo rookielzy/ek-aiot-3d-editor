@@ -35,8 +35,15 @@
           </div>
         </dl>
       </header>
-      <TransformInspector v-if="!inspector.selection.light && !inspector.selection.cameraView" :editor="rawEditor" :snapshot="snapshot" :section="inspector.transform" :i18n="resolvedI18n" />
-      <MaterialInspector v-if="!inspector.selection.light && !inspector.selection.cameraView" :key="inspector.selection.nodeId ?? 'none'" :editor="rawEditor" :snapshot="snapshot" :section="inspector.material" :i18n="resolvedI18n" />
+      <TransformInspector v-if="!inspector.selection.light && !inspector.selection.cameraView" :editor="rawEditor" :snapshot="snapshot" :section="inspector.transform" :i18n="resolvedI18n" :locked="previewLocked" />
+      <MaterialInspector v-if="!inspector.selection.light && !inspector.selection.cameraView" :key="inspector.selection.nodeId ?? 'none'" :editor="rawEditor" :snapshot="snapshot" :section="inspector.material" :i18n="resolvedI18n" :locked="previewLocked" />
+      <DataBindingInspector
+        v-if="dataContext"
+        :context="dataContext"
+        :snapshot="snapshot"
+        :selection="inspector.selection"
+        :i18n="resolvedI18n"
+      />
       <LightInspector v-if="showSelectedLight"
         :editor="rawEditor"
         :snapshot="snapshot"
@@ -80,7 +87,7 @@
 <script setup lang="ts">
 import { computed, ref, toRaw, useId } from "vue";
 import type { Editor, InspectorModel, SceneSnapshot } from "@ek-aiot/3d-editor-core";
-import type { WorkbenchCameraContext } from "../composables/use-workbench";
+import type { ResolvedWorkbenchContext, WorkbenchCameraContext } from "../composables/use-workbench";
 import { DEFAULT_INSPECTOR_I18N, type InspectorI18n } from "./inspector-i18n";
 import { problemToneFromSeverities } from "./workbench-model-helpers";
 import "./inspector.css";
@@ -89,6 +96,7 @@ import MaterialInspector from "./MaterialInspector.vue";
 import EnvironmentInspector from "./EnvironmentInspector.vue";
 import LightInspector from "./LightInspector.vue";
 import CameraInspector from "./CameraInspector.vue";
+import DataBindingInspector from "./DataBindingInspector.vue";
 import ProblemsPanel from "./ProblemsPanel.vue";
 
 const props = defineProps<{
@@ -96,6 +104,7 @@ const props = defineProps<{
   snapshot: SceneSnapshot;
   inspector: InspectorModel;
   camera?: WorkbenchCameraContext;
+  dataContext?: ResolvedWorkbenchContext;
   i18n?: InspectorI18n;
 }>();
 
@@ -128,6 +137,7 @@ const selectedLabel = computed(() => {
   return selection.cameraView?.name ?? selection.light?.name ?? selection.object?.name ?? selection.node?.name ?? selection.nodeId;
 });
 const problemTone = computed(() => problemToneFromSeverities(props.inspector.problems.problems));
+const previewLocked = computed(() => props.dataContext?.dataState.preview.enabled ?? false);
 
 function onReplaceAsset(assetId: string, file: File): void {
   emit("replaceAsset", assetId, file);

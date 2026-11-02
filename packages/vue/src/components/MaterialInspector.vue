@@ -35,10 +35,11 @@
         </div>
       </fieldset>
       <p v-if="activeTarget?.unresolved" class="ek-inspector-warning" role="status">{{ resolvedI18n.t("reactWorkbench.inspector.material.target.unresolvedWarning") }}</p>
+      <p v-if="locked" class="ek-inspector-warning">{{ resolvedI18n.t("reactWorkbench.inspector.previewLocked") }}</p>
       <div class="ek-inspector-grid ek-material-fields">
         <label v-for="field in fields" :key="field.id" class="ek-inspector-field" :class="{ 'ek-inspector-field--checkbox': field.kind === 'checkbox' }">
           <span>{{ renderFieldLabel(resolvedI18n, field) }}</span>
-          <InspectorFieldControl :key="`${effectiveTargetKey}:${field.id}`" :field="field" :i18n="resolvedI18n"
+          <InspectorFieldControl :key="`${effectiveTargetKey}:${field.id}`" :field="locked ? { ...field, disabled: true } : field" :i18n="resolvedI18n"
             :invalid="fieldProblem?.fieldId === field.id" :description-id="fieldProblem?.fieldId === field.id ? problemId(field.id) : undefined"
             :on-commit="(value) => commit(field.id as MaterialFieldId, value)" @cancel="fieldProblem = null" />
           <small v-if="fieldProblem?.fieldId === field.id" :id="problemId(field.id)" class="ek-inspector-field-problem" role="alert">{{ renderProblemMessage(resolvedI18n, fieldProblem) }}</small>
@@ -77,6 +78,7 @@ const props = defineProps<{
   snapshot: SceneSnapshot;
   section: MaterialInspectorSection;
   i18n?: InspectorI18n;
+  locked?: boolean;
 }>();
 
 const resolvedI18n = computed(() => props.i18n ?? DEFAULT_INSPECTOR_I18N);

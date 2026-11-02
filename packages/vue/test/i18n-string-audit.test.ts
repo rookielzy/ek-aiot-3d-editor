@@ -18,6 +18,12 @@ const DEFAULT_WORKBENCH_COMPONENTS = [
   "packages/vue/src/components/LightInspector.vue",
   "packages/vue/src/components/CameraInspector.vue",
   "packages/vue/src/components/ProblemsPanel.vue",
+  "packages/vue/src/components/DataBindingInspector.vue",
+  "packages/vue/src/components/DataBindingForm.vue",
+  "packages/vue/src/components/DataDetailCard.vue",
+  "packages/vue/src/components/DataPreviewControls.vue",
+  "packages/vue/src/components/DataQueryBindingsDialog.vue",
+  "packages/vue/src/components/DataSourcesPanel.vue",
 ] as const;
 
 describe("Vue Workbench hardcoded string audit", () => {

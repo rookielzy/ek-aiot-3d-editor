@@ -12,6 +12,7 @@ import {
   type AssetWorkspacePayloadSummary,
   type Command,
   type DataObjectDataState,
+  type DataColorState,
   type DataServiceState,
   type Editor,
   type EditorWithGlbImport,
@@ -123,6 +124,7 @@ export interface WorkbenchContext {
   model: WorkbenchModel;
   snapshot: SceneSnapshot;
   dataState: DataObjectDataState;
+  dataColorState: DataColorState;
   dataServiceState: DataServiceState;
   inspector: InspectorModel;
   selection: WorkbenchSelectionContext;
@@ -181,6 +183,7 @@ export interface UseWorkbenchResult {
   editor: EditorWithGlbImport;
   snapshot: ShallowRef<SceneSnapshot>;
   dataState: ShallowRef<DataObjectDataState>;
+  dataColorState: ShallowRef<DataColorState>;
   dataServiceState: ShallowRef<DataServiceState>;
   inspector: ComputedRef<InspectorModel>;
   model: ComputedRef<WorkbenchModel>;
@@ -232,6 +235,12 @@ const EMPTY_DATA_SERVICE_STATE: DataServiceState = Object.freeze({
   run: null
 });
 
+const EMPTY_DATA_COLOR_STATE: DataColorState = Object.freeze({
+  previewEnabled: false,
+  trial: null,
+  objects: Object.freeze({})
+});
+
 export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchResult {
   const editorOption = isRefOption(options.editor) ? options.editor : undefined;
   const localeOption = isRefValue<WorkbenchLocale | undefined>(options.locale) ? options.locale : undefined;
@@ -245,6 +254,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   const ownsCurrentEditor = ref(editorOption ? !editorOption.value : !options.editor);
   const snapshot = shallowRef(currentEditor.value.getSnapshot());
   const dataState = shallowRef<DataObjectDataState>(readObjectDataState(currentEditor.value));
+  const dataColorState = shallowRef<DataColorState>(readDataColorState(currentEditor.value));
   const dataServiceState = shallowRef<DataServiceState>(readDataServiceState(currentEditor.value));
   const snap = shallowRef<SnapSettings>(currentEditor.value.snap.get());
   const viewportHelperState = shallowRef<ViewportHelperStateSnapshot>(viewportHelperStore.get());
@@ -256,6 +266,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
   const clipboardVersion = ref(0);
   let unsubscribeSnapshot: (() => void) | null = null;
   let unsubscribeObjectData: (() => void) | null = null;
+  let unsubscribeDataColor: (() => void) | null = null;
   let unsubscribeDataService: (() => void) | null = null;
   let unsubscribeRuntime: (() => void) | null = null;
   let unsubscribeProblems: (() => void) | null = null;
@@ -276,6 +287,11 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     dataState.value = dataService?.getObjectDataState() ?? EMPTY_OBJECT_DATA_STATE;
     unsubscribeObjectData = dataService?.subscribeObjectData((nextState) => {
       dataState.value = nextState;
+    }) ?? null;
+    const dataColorService = nextEditor.getDataColorService?.() ?? null;
+    dataColorState.value = dataColorService?.getState() ?? EMPTY_DATA_COLOR_STATE;
+    unsubscribeDataColor = dataColorService?.subscribe((nextState) => {
+      dataColorState.value = nextState;
     }) ?? null;
     dataServiceState.value = dataService?.getState() ?? EMPTY_DATA_SERVICE_STATE;
     unsubscribeDataService = dataService?.subscribe((nextState) => {
@@ -316,6 +332,8 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     unsubscribeSnapshot = null;
     unsubscribeObjectData?.();
     unsubscribeObjectData = null;
+    unsubscribeDataColor?.();
+    unsubscribeDataColor = null;
     unsubscribeDataService?.();
     unsubscribeDataService = null;
     unsubscribeRuntime?.();
@@ -536,6 +554,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     model: model.value,
     snapshot: snapshot.value,
     dataState: dataState.value,
+    dataColorState: dataColorState.value,
     dataServiceState: dataServiceState.value,
     inspector: inspector.value,
     selection: {
@@ -646,6 +665,7 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
     },
     snapshot,
     dataState,
+    dataColorState,
     dataServiceState,
     inspector,
     model,
@@ -715,6 +735,10 @@ function markRuntimeRaw(runtime: EditorRuntime | null): EditorRuntime | null {
 
 function readObjectDataState(editor: Editor): DataObjectDataState {
   return editor.getDataService?.().getObjectDataState() ?? EMPTY_OBJECT_DATA_STATE;
+}
+
+function readDataColorState(editor: Editor): DataColorState {
+  return editor.getDataColorService?.().getState() ?? EMPTY_DATA_COLOR_STATE;
 }
 
 function readDataServiceState(editor: Editor): DataServiceState {
