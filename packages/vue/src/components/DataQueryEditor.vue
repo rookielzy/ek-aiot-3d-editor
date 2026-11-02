@@ -490,6 +490,7 @@ import {
   buildSuccessConditionFromForm,
   type DataMappingResult,
   type DataMappingValidationResult,
+  type DataParameterValue,
   type DataParameterType,
   type DataQuality,
   type DataQueryMapping,
@@ -501,6 +502,7 @@ import {
   type QueryFormState,
   type QueryHeaderForm,
   type QueryMapEntryForm,
+  type QueryParameterForm,
   type QueryPropertyForm,
   type QueryQualityEntryForm,
   type QuerySuccessValueType
@@ -530,7 +532,7 @@ interface QuerySample {
   receivedAt: number;
   executionId: string;
   signature: string;
-  parameters: Readonly<Record<string, import("@ek-aiot/3d-editor-core").DataParameterValue>>;
+  parameters: Readonly<Record<string, DataParameterValue>>;
   usedOverrides: boolean;
   status: number | null;
 }
@@ -710,7 +712,7 @@ function updateRequestForm(patch: Partial<QueryFormState>): void {
   updateForm(patch);
 }
 
-function updateParameter(id: string, patch: Partial<import("@ek-aiot/3d-editor-core").QueryParameterForm>): void {
+function updateParameter(id: string, patch: Partial<QueryParameterForm>): void {
   updateRequestForm({
     parameters: form.value.parameters.map((parameter) => parameter.id === id ? { ...parameter, ...patch } : parameter)
   });
