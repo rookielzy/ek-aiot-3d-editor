@@ -23,6 +23,7 @@ import {
   type DataQuery,
   type DataQuality,
   type DataQueryProblem,
+  type JsonValue,
   type SceneSnapshot
 } from "@ek-aiot/3d-editor-core";
 import type { WorkbenchI18n, WorkbenchMessageKey } from "../i18n/workbench-i18n";
@@ -368,10 +369,10 @@ export function isValidBindingPrecision(text: string): boolean {
 /** Map a candidate request response through the saved query mapping. */
 export function mapCandidateResponse(
   query: DataQuery,
-  body: unknown,
+  body: JsonValue,
   meta: { executionId: string; receivedAt: number; parameters: Readonly<Record<string, DataParameterValue>> }
 ) {
-  return mapDataQueryBody(query.mapping, body as never, {
+  return mapDataQueryBody(query.mapping, body, {
     connectionId: query.connectionId,
     queryId: query.id,
     executionId: meta.executionId,

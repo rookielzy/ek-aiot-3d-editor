@@ -56,7 +56,7 @@
       </div>
       <DataDetailCard
         :context="context"
-        :focus-field="dataFieldFocus?.nodeId === context.selection.nodeId ? { propertyKey: dataFieldFocus.propertyKey } : null"
+        :focus-field="dataFieldFocus?.nodeId === context.selection.nodeId ? dataFieldFocus : null"
       />
       <div v-if="$slots.viewportOverlay" class="ek-workbench__overlay">
         <slot name="viewportOverlay" v-bind="context" />
