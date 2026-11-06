@@ -19,6 +19,7 @@
     "changeset": "changeset",
     "dev:demo:react": "pnpm --filter @ek-aiot/react-proof-loop dev",
     "dev:demo:vue": "pnpm --filter @ek-aiot/vue-proof-loop dev",
+    "dev:data-source": "node scripts/local-data-source-server.mjs",
     "release:publish": "pnpm release:verify && changeset publish",
     "release:status": "changeset status --verbose",
     "release:verify": "pnpm build && pnpm typecheck && pnpm test && pnpm test:browser && node scripts/verify-release.mjs",

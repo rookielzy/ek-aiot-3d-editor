@@ -7,6 +7,7 @@ import { dataSourceHttpFixturePlugin } from "../../scripts/vite-data-source-fixt
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), threeDecoderAssetsPlugin(), dataSourceHttpFixturePlugin()],
+  server: { proxy: { "/local-api": { target: "http://127.0.0.1:4310", rewrite: (path) => path.replace(/^\/local-api/, "") } } },
   resolve: {
     alias: [
       {

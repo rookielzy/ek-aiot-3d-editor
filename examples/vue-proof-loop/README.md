@@ -51,3 +51,11 @@ real manual GET:
 The demo has no credential store, so a connection using bearer or API-key auth
 reports a host capability problem instead of inventing a secret. The fixture is
 dev-only, same-origin, and never contacts an external service.
+
+## Local backend fixture
+
+Start `pnpm dev:data-source` from the workspace root to run the manually
+testable backend on `127.0.0.1:4310`. The Vite dev server proxies `/local-api`
+to it, so use `/local-api/api/devices` as a connection URL. Add
+`?scenario=empty`, `?scenario=missing-field`, `?scenario=slow`, or
+`?scenario=http-500` to exercise predictable response states.
