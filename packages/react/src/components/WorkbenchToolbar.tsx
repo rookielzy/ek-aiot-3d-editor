@@ -3,6 +3,9 @@ import type { MessageDescriptor, Problem } from "@ek-aiot/3d-editor-core";
 import type { WorkbenchMessageKey } from "../i18n/workbench-i18n";
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
 import { WorkbenchIcon } from "./WorkbenchIcon";
+import { CommandMenu, type CommandMenuCommand } from "./ui/command-menu-list";
+import { MENU_ITEM } from "./ui/command-menu-item";
+import { registerCommandLayer } from "./ui/command-layer";
 
 export interface WorkbenchToolbarProps {
   context: ResolvedWorkbenchContext;
@@ -24,26 +27,62 @@ export function WorkbenchToolbar({
   showLocaleSwitcher = true,
   localeSwitcherDisabled = false
 }: WorkbenchToolbarProps) {
-  const menuId = useId();
+  const id = useId();
+  const menuId = `${id}-project-menu`;
+  const layerId = `${id}-project-menu-layer`;
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  /** The locale `<select>` is one Tab stop in a menu, so the always-visible switch carries it too. */
+  const localeSelectId = `${id}-locale`;
+  const menuOpenRef = useRef(false);
+  menuOpenRef.current = menuOpen;
+  /** Set when the trigger opens the menu, so the panel can take focus as soon as it exists. */
+  const enteringMenuRef = useRef(false);
+  /** Whether the open menu was entered from the keyboard, which decides where focus lands. */
+  const keyboardEntryRef = useRef(false);
   const busyRef = useRef(false);
   const [busy, setBusy] = useState(false);
+  /** Closes the menu and, unless focus is being handed elsewhere, returns it to the trigger. */
+  function closeMenu(options: { restore?: boolean } = {}) {
+    const restore = options.restore ?? true;
+    const panel = menuOpenRef.current ? document.getElementById(menuId) : null;
+    const leaving = panel?.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
+    setMenuOpen(false);
+    if (restore) triggerRef.current?.focus();
+    else if (leaving) leaving.blur();
+  }
+  useEffect(() => {
+    if (!menuOpen || !enteringMenuRef.current) return;
+    enteringMenuRef.current = false;
+    if (!keyboardEntryRef.current) return;
+    const first = [...(document.getElementById(menuId)?.querySelectorAll<HTMLButtonElement>(MENU_ITEM) ?? [])]
+      .find((item) => item.getAttribute("aria-disabled") !== "true");
+    first?.focus();
+  }, [menuOpen]);
   useEffect(() => {
     if (!menuOpen) return;
-    menuRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
-    function dismiss(event: PointerEvent) {
-      if (event.target instanceof Node && !rootRef.current?.contains(event.target)) setMenuOpen(false);
-    }
+    // The application menu is the top-most layer while it is open: Escape closes it and hands
+    // focus back to its trigger before the workbench sees the key.
+    return registerCommandLayer((event) => {
+      if (event.key !== "Escape") return false;
+      event.preventDefault();
+      closeMenu();
+      return true;
+    }, { join: layerId });
+  }, [menuOpen]);
+  useEffect(() => {
+    if (!menuOpen) return;
+    // A press anywhere outside the panel dismisses the menu without stealing focus on its way out.
+    const dismiss = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (document.getElementById(menuId)?.contains(target) || triggerRef.current?.contains(target)) return;
+      closeMenu({ restore: false });
+    };
     document.addEventListener("pointerdown", dismiss, true);
     return () => document.removeEventListener("pointerdown", dismiss, true);
   }, [menuOpen]);
-  function closeMenu() {
-    setMenuOpen(false);
-    triggerRef.current?.focus();
-  }
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [projectStatus, setProjectStatus] = useState<ProjectActionStatus>({
     tone: "neutral"
@@ -176,65 +215,130 @@ export function WorkbenchToolbar({
     }
   }
 
+  function command(
+    key: string,
+    label: WorkbenchMessageKey,
+    title: WorkbenchMessageKey,
+    icon: Parameters<typeof WorkbenchIcon>[0]["name"],
+    run: () => void,
+    running: boolean
+  ): CommandMenuCommand {
+    return {
+      key,
+      label: t(label),
+      title: t(title),
+      icon: <WorkbenchIcon name={icon} />,
+      kind: "action",
+      disabled: running,
+      disabledReason: running ? t("reactWorkbench.toolbar.project.saving") : undefined,
+      onClick: run
+    };
+  }
+
+  const projectCommands: CommandMenuCommand[] = [
+    command("open", "reactWorkbench.toolbar.project.open.label", "reactWorkbench.toolbar.project.open.title", "open", () => fileInputRef.current?.click(), busy),
+    command("export", "reactWorkbench.toolbar.project.export.label", "reactWorkbench.toolbar.project.export.title", "export", () => void exportProject(false), busy),
+    command("export-partial", "reactWorkbench.toolbar.project.exportPartial.label", "reactWorkbench.toolbar.project.exportPartial.title", "export-partial", () => void exportProject(true), busy)
+  ];
+
   return (
-    <div ref={rootRef} className="ek-workbench__default-toolbar" onBlur={(event) => {
-      if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)) setMenuOpen(false);
-    }} onKeyDownCapture={(event) => {
-      if (menuOpen && event.key === "Escape") { event.stopPropagation(); closeMenu(); }
-    }} aria-label={t("reactWorkbench.toolbar.controls.label")}>
-      <button ref={triggerRef} type="button" className="ek-workbench__command-button" aria-expanded={menuOpen} aria-controls={menuId} onClick={() => setMenuOpen(!menuOpen)}>{t("reactWorkbench.toolbar.project.menu")}</button>
-      <div ref={menuRef} id={menuId} className="ek-workbench__project-menu" role="region" hidden={!menuOpen} aria-label={t("reactWorkbench.toolbar.project.label")}>
-        <div className="ek-workbench__tool-group ek-workbench__tool-group--project">
-          <button className="ek-workbench__command-button ek-workbench__command-button--primary" type="button" disabled={busy} onClick={() => fileInputRef.current?.click()} title={t("reactWorkbench.toolbar.project.open.title")}>
-            <WorkbenchIcon name="open" />
-            <span>{t("reactWorkbench.toolbar.project.open.label")}</span>
-          </button>
-          <input
-            ref={fileInputRef}
-            className="ek-workbench__file-input"
-            type="file"
-            aria-label={t("reactWorkbench.toolbar.project.open.title")}
-            disabled={busy}
-            accept={ACCEPT_PROJECT_PACKAGE}
-            onChange={onOpenProject}
+    <div ref={rootRef} className="ek-workbench__default-toolbar" aria-label={t("reactWorkbench.toolbar.controls.label")}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="ek-workbench__command-button"
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        title={t("reactWorkbench.toolbar.project.label")}
+        aria-controls={menuOpen ? menuId : undefined}
+        onClick={(event) => {
+          if (menuOpen) {
+            closeMenu();
+            return;
+          }
+          setMenuOpen(true);
+          // Creating the panel happens later, so this request is answered when it next reports entry.
+          enteringMenuRef.current = true;
+          // `detail` is zero for a click the browser synthesises from the keyboard.
+          keyboardEntryRef.current = event.detail === 0;
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== "ArrowDown" || menuOpen) return;
+          keyboardEntryRef.current = true;
+        }}
+      >
+        <WorkbenchIcon name="open" />
+        {t("reactWorkbench.toolbar.project.menu")}
+      </button>
+      {menuOpen ? (
+        <div
+          id={menuId}
+          className="ek-workbench__project-menu"
+          data-state="open"
+          onKeyDown={(event) => {
+            // The list inside the panel already claims Escape and Tab; this covers the panel
+            // itself so the keys behave the same wherever focus sits in the menu.
+            if (event.defaultPrevented) return;
+            if (event.key === "Escape") {
+              event.preventDefault();
+              closeMenu();
+            } else if (event.key === "Tab") {
+              closeMenu({ restore: false });
+            }
+          }}
+          onBlur={(event) => {
+            const next = event.relatedTarget;
+            if (!(next instanceof Node) || event.currentTarget.contains(next)) return;
+            setMenuOpen(false);
+          }}
+        >
+          <CommandMenu
+            group={{ key: "project", label: t("reactWorkbench.toolbar.project.label"), kind: "action", commands: projectCommands }}
+            listId={menuId}
+            idPrefix={menuId}
+            onActivate={() => closeMenu()}
+            onEscape={() => closeMenu()}
+            onTab={() => closeMenu({ restore: false })}
+            onMoveFocus={(panel) => {
+              // Opening from the keyboard lands on the first enabled command, like the viewport menus.
+              const first = [...panel.querySelectorAll<HTMLButtonElement>(MENU_ITEM)].find((item) => item.getAttribute("aria-disabled") !== "true");
+              first?.focus();
+            }}
           />
-          <button className="ek-workbench__command-button" type="button" disabled={busy} onClick={() => void exportProject(false)} title={t("reactWorkbench.toolbar.project.export.title")}>
-            <WorkbenchIcon name="export" />
-            <span>{t("reactWorkbench.toolbar.project.export.label")}</span>
-          </button>
-          <button className="ek-workbench__command-button" type="button" disabled={busy} onClick={() => void exportProject(true)} title={t("reactWorkbench.toolbar.project.exportPartial.title")}>
-            <WorkbenchIcon name="export-partial" />
-            <span>{t("reactWorkbench.toolbar.project.exportPartial.label")}</span>
-          </button>
         </div>
-        {showLocaleSwitcher ? (
-          <label className="ek-workbench__locale-switcher">
-            <span>{t("reactWorkbench.toolbar.locale.switch.label")}</span>
-            <select
-              aria-label={t("reactWorkbench.toolbar.locale.switch.label")}
-              title={t("reactWorkbench.toolbar.locale.switch.title")}
-              value={context.i18n.locale}
-              disabled={localeSwitcherDisabled}
-              onChange={(event) => {
-                if (localeSwitcherDisabled) {
-                  return;
-                }
-                context.i18n.setLocale(event.target.value as typeof context.i18n.locale);
-              }}
-            >
-              {context.i18n.supportedLocales.map((locale) => (
-                <option key={locale} value={locale}>
-                  {context.i18n.localeLabel(locale)}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-      </div>
+      ) : null}
+      <input
+        ref={fileInputRef}
+        className="ek-workbench__file-input"
+        type="file"
+        aria-label={t("reactWorkbench.toolbar.project.open.title")}
+        disabled={busy}
+        accept={ACCEPT_PROJECT_PACKAGE}
+        onChange={onOpenProject}
+      />
       <span role="status" aria-live="polite" className="ek-workbench__toolbar-status" data-tone={projectStatus.tone}>
         <span className="ek-workbench__toolbar-status-label">{t("reactWorkbench.toolbar.status.label")}</span>
         {projectStatusLabel}
       </span>
+      {showLocaleSwitcher ? (
+        <label className="ek-workbench__locale-switcher" htmlFor={localeSelectId}>
+          <span>{t("reactWorkbench.toolbar.locale.switch.label")}</span>
+          <select
+            id={localeSelectId}
+            aria-label={t("reactWorkbench.toolbar.locale.switch.label")}
+            title={t("reactWorkbench.toolbar.locale.switch.title")}
+            value={context.i18n.locale}
+            disabled={localeSwitcherDisabled}
+            onChange={(event) => context.i18n.setLocale(event.target.value as typeof context.i18n.locale)}
+          >
+            {context.i18n.supportedLocales.map((locale) => (
+              <option key={locale} value={locale}>
+                {context.i18n.localeLabel(locale)}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
       {showLocaleSwitcher ? (
         <button
           type="button"

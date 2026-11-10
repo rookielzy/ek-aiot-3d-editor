@@ -218,7 +218,8 @@ function okResponse() {
 }
 
 async function openPackage(bytes: Uint8Array, fileName: string): Promise<void> {
-  fireEvent.click(screen.getByRole("button", { name: "Project menu" }));
+  // The file input sits beside the project menu, so a package can be handed to the workbench
+  // without routing through the menu first.
   const fileInput = document.querySelector(".ek-workbench__file-input") as HTMLInputElement;
   fireEvent.change(fileInput, { target: { files: [new File([bytes], fileName, { type: "application/octet-stream" })] } });
   await waitFor(() => expect(projectStatus().textContent).not.toMatch(/Opening/));

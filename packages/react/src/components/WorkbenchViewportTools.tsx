@@ -1,8 +1,12 @@
-import { useEffect, useId, useRef, useState } from "react";
-import { createAuthoredCameraViewInput } from "@ek-aiot/3d-editor-core";
-import type { WorkbenchMessageKey } from "../i18n/workbench-i18n";
+import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState, type CSSProperties } from "react";
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
-import { WorkbenchIcon, type WorkbenchIconName } from "./WorkbenchIcon";
+import { CommandMenu, type CommandMenuCommand } from "./ui/command-menu-list";
+import { useCommandMenu } from "./ui/command-menu";
+import { registerCommandLayer } from "./ui/command-layer";
+import { Popover, PopoverContent, PopoverTrigger, getPortalTheme } from "./ui/Popover";
+import { WorkbenchIcon } from "./WorkbenchIcon";
+import { buildViewportToolEntries, type ViewportToolCommand, type ViewportToolGroup } from "./viewport-tool-model";
+import { MENU_ITEM } from "./ui/command-menu-item";
 
 interface WorkbenchViewportToolsProps {
   context: ResolvedWorkbenchContext;
@@ -10,374 +14,138 @@ interface WorkbenchViewportToolsProps {
   onToggleMarqueeSelection(): void;
 }
 
-interface CommandButton {
-  key: string;
-  icon: WorkbenchIconName;
-  label: WorkbenchMessageKey;
-  title: WorkbenchMessageKey;
-  onClick(): void;
-  disabled?: boolean;
-  pressed?: boolean;
+
+function useReducerCount(version: number) {
+  return version + 1;
 }
 
-type CommandGroupKey = "history" | "transform" | "snap" | "selection" | "helpers" | "camera" | "node";
+type MenuEntry = Extract<ReturnType<typeof buildViewportToolEntries>[number], { kind: "menu" }>;
 
-interface CommandGroup {
-  key: CommandGroupKey;
-  label: WorkbenchMessageKey;
-  commands: CommandButton[];
+
+interface MenuSpace {
+  /** Width the open menu may use. */
+  width: number;
+  /** Height left below the strip, so the menu never grows past the viewport it opened in. */
+  maxHeight: number | null;
+}
+
+/** Room a menu has once it is placed against the tool strip it opened from. */
+function measureMenuSpace(): MenuSpace | null {
+  if (typeof document === "undefined") return null;
+  const viewport = document.querySelector<HTMLElement>(".ek-workbench__viewport-shell");
+  const strip = document.querySelector<HTMLElement>(".ek-workbench__viewport-tool-strip");
+  if (!viewport) return null;
+  const bounds = viewport.getBoundingClientRect();
+  const maxHeight = strip ? Math.round(bounds.bottom - strip.getBoundingClientRect().bottom - 16) : null;
+  return { width: Math.round(bounds.width), maxHeight: maxHeight && maxHeight > 0 ? maxHeight : null };
 }
 
 export function WorkbenchViewportTools({ context, marqueeSelectionEnabled, onToggleMarqueeSelection }: WorkbenchViewportToolsProps) {
-  const toolbar = context.model.toolbar;
   const t = context.i18n.t;
   const id = useId();
-  const rootRef = useRef<HTMLDivElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const [openGroup, setOpenGroup] = useState<CommandGroupKey | null>(null);
+  const menu = useCommandMenu();
+  const [, forceUpdate] = useReducer(useReducerCount, 0);
+  // Radix mirrors its own open state on the trigger; writing the same values here keeps them equal.
+  const openMenu = menu.open;
+  const openMenuRef = menu.openRef;
 
-  useEffect(() => {
-    if (!openGroup) return;
-    panelRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
-    function dismiss(event: PointerEvent) {
-      if (event.target instanceof Node && !rootRef.current?.contains(event.target)) {
-        setOpenGroup(null);
-      }
-    }
-    document.addEventListener("pointerdown", dismiss, true);
-    return () => document.removeEventListener("pointerdown", dismiss, true);
-  }, [openGroup]);
+  // The strip lives inside the viewport, so its width is what a menu has to fit into.
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [space, setSpace] = useState<MenuSpace>({ width: 0, maxHeight: null });
 
-  function closeGroup() {
-    setOpenGroup(null);
-    triggerRef.current?.focus();
+  useLayoutEffect(() => {
+    const next = measureMenuSpace();
+    if (next && (next.width !== space.width || next.maxHeight !== space.maxHeight)) setSpace(next);
+  });
+
+  const layerId = `${id}-menu-layer`;
+  const entries = buildViewportToolEntries(context, {
+    marqueeSelectionEnabled,
+    onToggleMarqueeSelection
+  });
+  const directGroups = entries.filter((entry): entry is Extract<(typeof entries)[number], { kind: "group" }> => entry.kind === "group");
+  const menus = entries.filter((entry): entry is MenuEntry => entry.kind === "menu");
+
+  function owned(key: string) {
+    return openMenu === key ? "true" : "false";
   }
 
-  const commandGroups: CommandGroup[] = [
-    {
-      key: "history",
-      label: "reactWorkbench.toolbar.history.label",
-      commands: [
-        {
-          key: "undo",
-          icon: "undo",
-          label: "reactWorkbench.toolbar.history.undo.label",
-          title: "reactWorkbench.toolbar.history.undo.title",
-          disabled: !toolbar.canUndo,
-          onClick: () => context.runAction("undo")
-        },
-        {
-          key: "redo",
-          icon: "redo",
-          label: "reactWorkbench.toolbar.history.redo.label",
-          title: "reactWorkbench.toolbar.history.redo.title",
-          disabled: !toolbar.canRedo,
-          onClick: () => context.runAction("redo")
-        }
-      ]
-    },
-    {
-      key: "transform",
-      label: "reactWorkbench.toolbar.transform.label",
-      commands: [
-        {
-          key: "move",
-          icon: "move",
-          label: "reactWorkbench.toolbar.transform.move.label",
-          title: "reactWorkbench.toolbar.transform.move.title",
-          pressed: toolbar.transformMode === "translate",
-          onClick: () => context.runAction("transform-translate")
-        },
-        {
-          key: "rotate",
-          icon: "rotate",
-          label: "reactWorkbench.toolbar.transform.rotate.label",
-          title: "reactWorkbench.toolbar.transform.rotate.title",
-          pressed: toolbar.transformMode === "rotate",
-          onClick: () => context.runAction("transform-rotate")
-        },
-        {
-          key: "scale",
-          icon: "scale",
-          label: "reactWorkbench.toolbar.transform.scale.label",
-          title: "reactWorkbench.toolbar.transform.scale.title",
-          pressed: toolbar.transformMode === "scale",
-          onClick: () => context.runAction("transform-scale")
-        }
-      ]
-    },
-    {
-      key: "snap",
-      label: "reactWorkbench.toolbar.snap.label",
-      commands: [
-        {
-          key: "snap-move",
-          icon: "move",
-          label: "reactWorkbench.toolbar.snap.move.label",
-          title: "reactWorkbench.toolbar.snap.move.title",
-          pressed: toolbar.snapEnabled.translate,
-          onClick: () => context.runAction("toggle-translate-snap")
-        },
-        {
-          key: "snap-rotate",
-          icon: "rotate",
-          label: "reactWorkbench.toolbar.snap.rotate.label",
-          title: "reactWorkbench.toolbar.snap.rotate.title",
-          pressed: toolbar.snapEnabled.rotate,
-          onClick: () => context.runAction("toggle-rotate-snap")
-        },
-        {
-          key: "snap-scale",
-          icon: "scale",
-          label: "reactWorkbench.toolbar.snap.scale.label",
-          title: "reactWorkbench.toolbar.snap.scale.title",
-          pressed: toolbar.snapEnabled.scale,
-          onClick: () => context.runAction("toggle-scale-snap")
-        }
-      ]
-    },
-    {
-      key: "selection",
-      label: "reactWorkbench.toolbar.selection.label",
-      commands: [
-        {
-          key: "marquee",
-          icon: "marquee",
-          label: "reactWorkbench.toolbar.selection.marquee.label",
-          title: "reactWorkbench.toolbar.selection.marquee.title",
-          pressed: marqueeSelectionEnabled,
-          onClick: () => onToggleMarqueeSelection?.()
-        }
-      ]
-    },
-    {
-      key: "helpers",
-      label: "reactWorkbench.toolbar.helpers.label",
-      commands: [
-        {
-          key: "grid",
-          icon: "grid",
-          label: "reactWorkbench.toolbar.helpers.grid.label",
-          title: "reactWorkbench.toolbar.helpers.grid.title",
-          pressed: toolbar.viewportHelpers.grid,
-          onClick: () => context.toggleViewportHelper("grid")
-        },
-        {
-          key: "floor",
-          icon: "floor",
-          label: "reactWorkbench.toolbar.helpers.floor.label",
-          title: "reactWorkbench.toolbar.helpers.floor.title",
-          pressed: toolbar.viewportHelpers.floor,
-          onClick: () => context.toggleViewportHelper("floor")
-        },
-        {
-          key: "axes",
-          icon: "axes",
-          label: "reactWorkbench.toolbar.helpers.axes.label",
-          title: "reactWorkbench.toolbar.helpers.axes.title",
-          pressed: toolbar.viewportHelpers.axes,
-          onClick: () => context.toggleViewportHelper("axes")
-        },
-        {
-          key: "hover",
-          icon: "hover",
-          label: "reactWorkbench.toolbar.helpers.hover.label",
-          title: "reactWorkbench.toolbar.helpers.hover.title",
-          pressed: toolbar.viewportHelpers.hover,
-          onClick: () => context.toggleViewportHelper("hover")
-        },
-        {
-          key: "bounds",
-          icon: "bounds",
-          label: "reactWorkbench.toolbar.helpers.bounds.label",
-          title: "reactWorkbench.toolbar.helpers.bounds.title",
-          pressed: toolbar.viewportHelpers.selectionBounds,
-          onClick: () => context.toggleViewportHelper("selectionBounds")
-        },
-        {
-          key: "guide",
-          icon: "snap",
-          label: "reactWorkbench.toolbar.helpers.guide.label",
-          title: "reactWorkbench.toolbar.helpers.guide.title",
-          pressed: toolbar.viewportHelpers.snapFeedback,
-          onClick: () => context.toggleViewportHelper("snapFeedback")
-        },
-        {
-          key: "lights",
-          icon: "lights",
-          label: "reactWorkbench.toolbar.helpers.lights.label",
-          title: "reactWorkbench.toolbar.helpers.lights.title",
-          pressed: toolbar.viewportHelpers.lightGizmos,
-          onClick: () => context.toggleViewportHelper("lightGizmos")
-        },
-        {
-          key: "targets",
-          icon: "targets",
-          label: "reactWorkbench.toolbar.helpers.targets.label",
-          title: "reactWorkbench.toolbar.helpers.targets.title",
-          pressed: toolbar.viewportHelpers.lightTargets,
-          onClick: () => context.toggleViewportHelper("lightTargets")
-        },
-        {
-          key: "shadow-camera",
-          icon: "shadow-camera",
-          label: "reactWorkbench.toolbar.helpers.shadowCam.label",
-          title: "reactWorkbench.toolbar.helpers.shadowCam.title",
-          pressed: toolbar.viewportHelpers.shadowCameras,
-          onClick: () => context.toggleViewportHelper("shadowCameras")
-        }
-      ]
-    },
-    {
-      key: "camera",
-      label: "reactWorkbench.toolbar.camera.label",
-      commands: [
-        {
-          key: "reset-camera",
-          icon: "reset-camera",
-          label: "reactWorkbench.toolbar.camera.reset.label",
-          title: "reactWorkbench.toolbar.camera.reset.title",
-          disabled: !context.camera.ready,
-          onClick: context.resetCamera
-        },
-        {
-          key: "frame-selected",
-          icon: "frame-selected",
-          label: "reactWorkbench.toolbar.camera.frameSelected.label",
-          title: "reactWorkbench.toolbar.camera.frameSelected.title",
-          disabled: !toolbar.canFrameSelected,
-          onClick: () => context.frameSelected()
-        },
-        {
-          key: "frame-all",
-          icon: "frame-all",
-          label: "reactWorkbench.toolbar.camera.frameAll.label",
-          title: "reactWorkbench.toolbar.camera.frameAll.title",
-          disabled: !toolbar.canFrameAll,
-          onClick: () => context.frameAll()
-        },
-        {
-          key: "capture-view",
-          icon: "capture-view",
-          label: "reactWorkbench.toolbar.camera.capture.label",
-          title: "reactWorkbench.toolbar.camera.capture.title",
-          disabled: !toolbar.canCaptureCameraView,
-          onClick: () => {
-            const captured = context.captureCameraView({ name: `Camera view ${context.model.project.cameraViewCount + 1}` });
-            if (captured) {
-              const view = createAuthoredCameraViewInput(context.snapshot.cameras, captured);
-              const result = context.dispatch({ type: "create-camera-view", view });
-              if (result.ok) {
-                context.setActiveCameraViewId(view.id ?? null);
-              }
-            }
-          }
-        },
-        {
-          key: "apply-view",
-          icon: "apply-view",
-          label: "reactWorkbench.toolbar.camera.apply.label",
-          title: "reactWorkbench.toolbar.camera.apply.title",
-          disabled: !toolbar.canApplyCameraView,
-          onClick: () => {
-            const view = context.activeCameraViewId ? context.snapshot.cameras[context.activeCameraViewId] : null;
-            if (view) {
-              context.applyCameraView(view);
-            }
-          }
-        }
-      ]
-    },
-    {
-      key: "node",
-      label: "reactWorkbench.toolbar.node.label",
-      commands: [
-        {
-          key: "copy",
-          icon: "copy",
-          label: "reactWorkbench.toolbar.node.copy.label",
-          title: "reactWorkbench.toolbar.node.copy.title",
-          disabled: !toolbar.canCopy,
-          onClick: () => context.runAction("copy")
-        },
-        {
-          key: "paste",
-          icon: "paste",
-          label: "reactWorkbench.toolbar.node.paste.label",
-          title: "reactWorkbench.toolbar.node.paste.title",
-          disabled: !toolbar.canPaste,
-          onClick: () => context.runAction("paste")
-        },
-        {
-          key: "duplicate",
-          icon: "duplicate",
-          label: "reactWorkbench.toolbar.node.duplicate.label",
-          title: "reactWorkbench.toolbar.node.duplicate.title",
-          disabled: !toolbar.canDuplicate,
-          onClick: () => context.runAction("duplicate")
-        },
-        {
-          key: "delete",
-          icon: "delete",
-          label: "reactWorkbench.toolbar.node.delete.label",
-          title: "reactWorkbench.toolbar.node.delete.title",
-          disabled: !toolbar.canDelete,
-          onClick: () => context.runAction("delete")
-        },
-        {
-          key: "group",
-          icon: "group",
-          label: "reactWorkbench.toolbar.node.group.label",
-          title: "reactWorkbench.toolbar.node.group.title",
-          disabled: !toolbar.canGroup,
-          onClick: () => context.runAction("group")
-        },
-        {
-          key: "ungroup",
-          icon: "ungroup",
-          label: "reactWorkbench.toolbar.node.ungroup.label",
-          title: "reactWorkbench.toolbar.node.ungroup.title",
-          disabled: !toolbar.canUngroup,
-          onClick: () => context.runAction("ungroup")
-        },
-        {
-          key: "select-all",
-          icon: "select-all",
-          label: "reactWorkbench.toolbar.node.selectAll.label",
-          title: "reactWorkbench.toolbar.node.selectAll.title",
-          disabled: !toolbar.canSelectAll,
-          onClick: () => context.runAction("select-all")
-        },
-        {
-          key: "clear-selection",
-          icon: "clear-selection",
-          label: "reactWorkbench.toolbar.node.clear.label",
-          title: "reactWorkbench.toolbar.node.clear.title",
-          disabled: !toolbar.canClearSelection,
-          onClick: () => context.runAction("clear-selection")
-        }
-      ]
+  useEffect(() => {
+    if (!openMenu) return;
+    // Typed characters and scene shortcuts are swallowed for the whole open menu, whichever
+    // element holds focus (the trigger after a pointer click, an item after arrow navigation).
+    function stopSceneKeys(event: KeyboardEvent) {
+      if (event.target instanceof HTMLElement && event.target.closest(MENU_ITEM)) return;
+      if (event.key.length > 1) return;
+      event.preventDefault();
+      event.stopPropagation();
     }
-  ];
+    document.addEventListener("keydown", stopSceneKeys, true);
+    return () => document.removeEventListener("keydown", stopSceneKeys, true);
+  }, [openMenu]);
 
-  const directGroups = commandGroups.filter((group) => !["helpers", "camera", "node"].includes(group.key));
-  const menus = commandGroups.filter((group) => ["helpers", "camera", "node"].includes(group.key));
-  function renderCommand(command: CommandButton, compact: boolean) {
+  useEffect(() => {
+    if (!openMenu) return;
+    // Escape reaches three listeners on this layer (the panel's Radix focus loop, the command list,
+    // and this one); joining the layer lets its first claim stand and keeps focus restoration intact.
+    return registerCommandLayer((event) => {
+      if (event.key !== "Escape") return false;
+      event.preventDefault();
+      menu.closeMenu();
+      return true;
+    }, { join: layerId });
+  }, [openMenu, menu]);
+
+  /** Runs one menu command: toggles stay open so repeated helper switches are one press, one-shot
+   * commands close the menu and hand focus back to its trigger. */
+  function activate(group: ViewportToolGroup, command: ViewportToolCommand, menuKey: string) {
+    command["onClick"]();
+    if (group.kind === "action") {
+      menu.closeMenu();
+      return;
+    }
+    // Re-read the context after the click so toggles show their new state before the next focus.
+    forceUpdate();
+    menu.focusItem(document.getElementById(`${id}-${menuKey}`), command.key);
+  }
+
+  function panelElement(key: string | null) {
+    return key ? document.getElementById(`${id}-${key}`) : null;
+  }
+
+  function menuCommand(menuKey: string, group: ViewportToolGroup, command: ViewportToolCommand): CommandMenuCommand {
+    return {
+      key: command.key,
+      label: t(command.label),
+      title: t(command.title),
+      icon: <WorkbenchIcon name={command.icon} />,
+      shortcut: command.shortcut,
+      pressed: command.pressed,
+      disabled: command.disabled,
+      disabledReason: command.disabledReason,
+      kind: group.kind,
+      onClick: () => activate(group, command, menuKey)
+    };
+  }
+
+  function renderCommand(command: ViewportToolCommand, compact: boolean) {
     return (
       <button
         key={command.key}
+        type="button"
         data-ek-discard-draft={command.key === "undo" || command.key === "redo" ? true : undefined}
         className={`ek-workbench__command-button${compact ? " ek-workbench__command-button--icon" : ""}`}
-        type="button"
         onClick={() => {
           command.onClick();
-          if (!compact && openGroup !== "helpers") closeGroup();
+          // Core applies continuous toggles synchronously, so re-read before the next render.
+          if (command.pressed !== undefined) forceUpdate();
         }}
         disabled={command.disabled}
         aria-label={t(command.label)}
+        aria-keyshortcuts={command.shortcut}
         aria-pressed={command.pressed}
-        title={t(command.title)}
+        data-tooltip={command.disabled && command.disabledReason ? command.disabledReason : undefined}
+        title={command.disabled && command.disabledReason ? `${t(command.title)} — ${command.disabledReason}` : t(command.title)}
       >
         <WorkbenchIcon name={command.icon} />
         {command.key.startsWith("snap-") ? <i className="ek-workbench__snap-mark" aria-hidden="true"><WorkbenchIcon name="snap" /></i> : null}
@@ -387,48 +155,107 @@ export function WorkbenchViewportTools({ context, marqueeSelectionEnabled, onTog
   }
 
   return (
-    <div ref={rootRef} className="ek-workbench__viewport-tools"
-      onKeyDownCapture={(event) => {
-        if (openGroup && event.key === "Escape") {
+    <div
+      ref={rootRef}
+      className="ek-workbench__viewport-tools"
+      aria-label={t("reactWorkbench.toolbar.tools.label")}
+      // Key events are handled here, in the React tree that owns the menu, because the panel is
+      // portaled out of this DOM node but stays inside this component's React subtree.
+      onKeyDown={(event) => {
+        if (!openMenu) return;
+        if (event.key === "Escape") {
           event.preventDefault();
-          event.stopPropagation();
-          closeGroup();
+          menu.closeMenu();
+          return;
         }
-      }}
-      onBlur={(event) => {
-        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setOpenGroup(null);
+        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const delta = event.key === "End" ? "last" : event.key === "Home" ? "first" : event.key === "ArrowDown" ? 1 : -1;
+        const panel = panelElement(openMenu);
+        menu.moveFocus(panel, delta);
       }}
     >
       <div className="ek-workbench__viewport-tool-strip">
-        {directGroups.map((group) => (
-          <div key={group.key} className="ek-workbench__tool-group" role="group" aria-label={t(group.label)}>
-            {group.commands.map((command) => renderCommand(command, true))}
+        {directGroups.map((entry) => (
+          <div key={entry.key} className="ek-workbench__tool-group" role="group" aria-label={t(entry.label)}>
+            {entry.groups.flatMap((group) => group.commands.map((command) => renderCommand(command, true)))}
           </div>
         ))}
         <div className="ek-workbench__tool-group">
-          {menus.map((group) => (
-            <button key={group.key} type="button" className="ek-workbench__command-button ek-workbench__command-button--icon"
-              aria-label={t(group.label)} title={t(group.label)} aria-expanded={openGroup === group.key}
-              aria-controls={`${id}-${group.key}`}
-              onClick={(event) => {
-                triggerRef.current = event.currentTarget;
-                setOpenGroup(openGroup === group.key ? null : group.key);
+          {menus.map((entry) => (
+            <Popover
+              key={entry.key}
+              open={openMenu === entry.key}
+              // The menu is driven by the trigger's click, Escape, focus leaving, and command
+              // activation. Radix's own dismissal requests must not close a pressed toggle's menu.
+              // Radix unmounts the panel as soon as its own open state turns false, before any
+              // focus move can land inside it. Accept its state only while React still considers
+              // this menu open, so a stale callback cannot tear down a visible panel.
+              onOpenChange={(next) => {
+                // The visible menu is decided here; Radix's own toggle requests are advisory.
+                if (!next || openMenuRef.current !== entry.key) return;
+                menu.closeMenu({ restore: false });
               }}
             >
-              <WorkbenchIcon name={group.key === "helpers" ? "grid" : group.key === "camera" ? "capture-view" : "group"} />
-              <span>{t(group.label)}</span>
-            </button>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="ek-workbench__command-button ek-workbench__command-button--icon"
+                  aria-label={t(entry.label)}
+                  title={t(entry.label)}
+                  id={`${id}-${entry.key}-trigger`}
+                  ref={menu.triggerRef(entry.key)}
+                  aria-expanded={owned(entry.key)}
+                  data-state={openMenu === entry.key ? "open" : "closed"}
+                  onClick={() => menu.toggleMenu(entry.key)}
+                >
+                  <WorkbenchIcon name={entry.key === "helpers" ? "grid" : entry.key === "camera" ? "capture-view" : "group"} />
+                  <span>{t(entry.label)}</span>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                onOpenAutoFocus={(event) => event.preventDefault()}
+                onCloseAutoFocus={(event) => event.preventDefault()}
+                onPointerDownOutside={(event) => event.preventDefault()}
+                onFocusOutside={(event) => event.preventDefault()}
+                onEscapeKeyDown={(event) => event.preventDefault()}
+                id={`${id}-${entry.key}`}
+                ref={menu.panelRef(entry.key)}
+                className="ek-workbench__menu"
+                data-state="open"
+                style={{
+                  ...getPortalTheme(entry.key === openMenu ? (document.getElementById(`${id}-${entry.key}-trigger`) ?? null) : null),
+                  // Collision padding keeps the menu inside the viewport it was opened from.
+                  "--radix-popover-content-available-width": `${Math.max(160, space.width - 24)}px`,
+                  ...(space.maxHeight ? { "--ek-menu-max-height": `${space.maxHeight}px` } : {}),
+                } as CSSProperties}
+                aria-label={t(entry.label)}
+                onKeyDown={(event) => {
+                  // The list inside the panel already claims Escape and Tab; this covers the
+                  // label above it, which is not focusable but still bubbles its keys here.
+                  if (event.defaultPrevented) return;
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    menu.closeMenu();
+                  } else if (event.key === "Tab") {
+                    menu.closeMenu({ restore: false });
+                  }
+                }}
+              >
+                <CommandMenu
+                  group={{ key: entry.key, label: t(entry.group.label), kind: entry.group.kind, commands: entry.group.commands.map((command) => menuCommand(entry.key, entry.group, command)) }}
+                  idPrefix={`${id}-${entry.key}`}
+                  onMoveFocus={(panel, where) => menu.moveFocus(panel, where)}
+                  onActivate={(commandKey) => menu.focusItem(panelElement(openMenu), commandKey)}
+                  roving={menu.roving}
+                  onEscape={() => menu.closeMenu()}
+                  onTab={() => menu.closeMenu({ restore: false })}
+                />
+              </PopoverContent>
+            </Popover>
           ))}
         </div>
       </div>
-      {menus.map((group) => (
-        <div key={group.key} id={`${id}-${group.key}`} hidden={openGroup !== group.key}
-          ref={openGroup === group.key ? panelRef : undefined}
-          className="ek-workbench__tool-popover" role="group" aria-label={t(group.label)}>
-          <strong>{t(group.label)}</strong>
-          {group.commands.map((command) => renderCommand(command, false))}
-        </div>
-      ))}
     </div>
   );
 }

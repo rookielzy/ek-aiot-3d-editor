@@ -12,6 +12,7 @@ import { useWorkbenchPanelWidths } from "../hooks/use-workbench-panel-widths";
 import { WorkbenchStatusBar } from "./WorkbenchStatusBar";
 import { WorkbenchToolbar } from "./WorkbenchToolbar";
 import { WorkbenchViewportTools } from "./WorkbenchViewportTools";
+import { closeTopLayer } from "./ui/command-layer";
 import type { DataProblemTarget } from "./WorkbenchProblemsDrawer";
 import { createWorkbenchRenderer } from "./workbench-renderer";
 import "./workbench.css";
@@ -160,6 +161,9 @@ export function EditorWorkbench({
     }
 
     function onKeyDown(event: KeyboardEvent) {
+      if (closeTopLayer(event)) {
+        return;
+      }
       const resolution = resolveEditorShortcut({
         key: event.key,
         code: event.code,

@@ -117,7 +117,7 @@ describe("proof-loop starter demo browser verification", () => {
       await openLeftWorkspaceView(host, label("Scene", "场景"));
       await clickHierarchyRow(host, "saved-box", label("Hierarchy", "层级"));
       await editor.getRuntime()!.project();
-      await click("Frame all", "框选全部");
+      await clickCameraCommand(host, label);
       await userEvent.fill(input("Position X", "位置 X"), "2");
       await userEvent.keyboard("{Enter}{Tab}");
       const objectId = Object.keys(editor.getSnapshot().objects)[0]!;
@@ -133,7 +133,7 @@ describe("proof-loop starter demo browser verification", () => {
       await setInspectorColor(background, "#ccddee");
       await openInspectorGroup(host, label("Scene", "场景"));
       await selectInspectorOption(section(host, label("Add light", "添加灯光")), "directional");
-      await click("Frame all", "框选全部");
+      await clickCameraCommand(host, label);
       const inspector = section(host, label("Scene inspector", "场景检查器"));
       await userEvent.click([...inspector.querySelectorAll("button")].find((button) => text(button) === label("Capture", "捕获"))!);
       await userEvent.click([...inspector.querySelectorAll("button")].find((button) => text(button) === label("Set default", "设为默认"))!);
@@ -143,8 +143,7 @@ describe("proof-loop starter demo browser verification", () => {
       const saved = editor.getSnapshot();
       const history = editor.getHistoryState();
       const positionField = input("Position X", "位置 X");
-      const menu = host.querySelector<HTMLElement>(".ek-workbench__project-menu")!;
-      expect(menu.hidden).toBe(true);
+      expect(host.querySelector(".ek-workbench__project-menu:not([hidden])")).toBeNull();
       await clickByText(host, label("简体中文", "English"));
       expect(editor.getSnapshot()).toEqual(saved);
       expect(editor.getHistoryState()).toEqual(history);
@@ -152,9 +151,9 @@ describe("proof-loop starter demo browser verification", () => {
       expect(editor.getRuntime()).toBe(runtime);
       expect(positionField.isConnected).toBe(true);
       await clickByText(host, label("English", "简体中文"));
-      expect(menu.hidden).toBe(true);
+      expect(host.querySelector(".ek-workbench__project-menu:not([hidden])")).toBeNull();
       expect(editor.getSnapshot().selection).toEqual(saved.selection);
-      await click("Export", "导出");
+      await clickProjectCommand(host, label("Export", "导出"));
       await waitForDownloadedProject();
       const bytes = window.__lastDownloadedProject!;
       const entries = defaultArchiveAdapter.read(bytes);
@@ -165,8 +164,7 @@ describe("proof-loop starter demo browser verification", () => {
       for (const forbidden of ["leftWidth", "rightWidth", "Collapsed", "locale", "zh-CN", "blob:", "Object3D", "PMREM"]) expect(json).not.toContain(forbidden);
       await userEvent.fill(positionField, "7");
       await userEvent.keyboard("{Enter}{Tab}");
-      await click("Project menu", "项目菜单");
-      await uploadFile(menu.querySelector('input[type="file"]') as HTMLInputElement, new File([copyBytes(bytes)], "restored.ek3d"));
+      await uploadFile(host.querySelector('input[type="file"]') as HTMLInputElement, new File([copyBytes(bytes)], "restored.ek3d"));
       await waitFor(() => expect(editor.getSnapshot()).toEqual(saved));
       await runtime.project();
       expect(runtime.getObject(objectId)).toBeTruthy();
@@ -189,7 +187,8 @@ describe("proof-loop starter demo browser verification", () => {
         expect(host.querySelector("canvas")).toBe(canvas);
         await click("Close details", "关闭详情");
         await click("Project menu", "项目菜单");
-        const exportButton = button(host, label("Export", "导出"))!;
+        await waitForAnimationFrame();
+        const exportButton = host.querySelector<HTMLElement>(`[data-command="export"]`)!;
         const rect = exportButton.getBoundingClientRect();
         expect(exportButton.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2))).toBe(true);
         await userEvent.keyboard("{Escape}");
@@ -269,6 +268,7 @@ describe("proof-loop starter demo browser verification", () => {
           expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
           expect(section(host, "Editor status").getBoundingClientRect().bottom).toBeLessThanOrEqual(height);
         });
+        await waitForAnimationFrame();
         await verifyViewportToolsReachable(host);
       }
       host.style.height = "600px";
@@ -389,12 +389,10 @@ describe("proof-loop starter demo browser verification", () => {
       expect(editor.getSnapshot().objects[objectId].transform.rotation[1]).toBe(0);
       await clickByText(host, label("Redo", "重做"));
       expect(rotation.value).toBe("90");
-      await clickByText(host, label("Camera", "相机"));
-      await clickByText(host, label("Capture view", "捕获视图"));
+      await clickCameraCommand(host, label, label("Capture view", "捕获视图"));
       const captured = Object.values(editor.getSnapshot().cameras)[0];
       expect(captured.name).toBe(label("Camera view 1", "相机视图 1"));
-      await clickByText(host, label("Camera", "相机"));
-      await clickByText(host, label("Apply view", "应用视图"));
+      await clickCameraCommand(host, label, label("Apply view", "应用视图"));
       const richText = document.createElement("div");
       richText.contentEditable = "true";
       richText.textContent = "Host notes";
@@ -411,7 +409,7 @@ describe("proof-loop starter demo browser verification", () => {
       const resize = section(host, label("Resize right panel", "调整右面板宽度"));
       resize.focus();
       await userEvent.keyboard("{Home}{ArrowLeft}");
-      expect(host.querySelector<HTMLElement>(".ek-workbench__project-menu")!.hidden).toBe(true);
+      expect(host.querySelector(".ek-workbench__project-menu:not([hidden])")).toBeNull();
       await clickByText(host, label("简体中文", "English"));
       expect(editor.serialize()).toEqual(snapshot);
       expect(editor.getHistoryState()).toEqual(history);
@@ -577,10 +575,10 @@ describe("proof-loop starter demo browser verification", () => {
         expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
         expect(section(host, "Editor status").getBoundingClientRect().bottom).toBeLessThanOrEqual(height);
         expect(host.querySelector("canvas")).toBe(canvas);
-        await clickByText(host, "Clear");
+        await clickNodeCommand(host, "Clear selection");
         await userEvent.click(canvas, { position: { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 } });
         await waitFor(() => expect(editor.getSnapshot().nodes[editor.getSnapshot().selection.nodeId!]?.kind).toBe("imported"));
-        await clickByText(host, "Clear");
+        await clickNodeCommand(host, "Clear selection");
         await userEvent.dragAndDrop(canvas, canvas, {
           sourcePosition: { x: 20, y: 70 },
           targetPosition: { x: canvas.clientWidth - 20, y: canvas.clientHeight - 20 }
@@ -598,9 +596,12 @@ describe("proof-loop starter demo browser verification", () => {
         const selectionBeforeLocale = editor.getSnapshot();
         const historyBeforeLocale = editor.getHistoryState();
         const runtime = editor.getRuntime();
-        await clickByText(host, "Project menu");
-        await userEvent.selectOptions(section(host, "Language") as HTMLSelectElement, "zh-CN");
-        await userEvent.keyboard("{Escape}");
+        // The React locale switch is a toolbar control, so switching cannot disturb an open menu layer;
+        // Vue keeps it inside the inline project region, which has to be revealed first.
+        const inlineProjectMenu = host.querySelector<HTMLElement>(".ek-workbench__project-menu");
+        const language = host.querySelector<HTMLElement>('[aria-label="Language"]');
+        if (inlineProjectMenu && language?.closest("[hidden]")) await clickByText(host, "Project menu");
+        await userEvent.selectOptions(host.querySelector<HTMLSelectElement>('[aria-label="Language"]')!, "zh-CN");
         expect(text(section(host, "编辑器状态"))).toContain("个节点");
         expect(editor.getSnapshot()).toEqual(selectionBeforeLocale);
         expect(editor.getHistoryState()).toEqual(historyBeforeLocale);
@@ -672,11 +673,11 @@ describe("proof-loop starter demo browser verification", () => {
     await openLeftWorkspaceView(root.host, "Scene");
     await waitFor(() => expect(text(section(root.host, "Hierarchy"))).toContain("actual-box"));
     await clickHierarchyRow(root.host, "actual-box");
-    await clickByText(root.host, "Frame all");
+    await clickCameraCommand(root.host, (en: string, zh: string) => en);
     const canvas = root.host.querySelector("canvas")!;
     await userEvent.click(root.host.querySelector('[aria-label="Collapse left panel"]')!);
     await userEvent.click(root.host.querySelector('[aria-label="Collapse right panel"]')!);
-    await clickByText(root.host, "Clear");
+    await clickNodeCommand(root.host, "Clear selection");
     await waitFor(() => expect(text(section(root.host, "Editor status"))).toContain("Selection none"));
     await userEvent.click(canvas, { position: { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 } });
     await waitFor(() => expect(text(section(root.host, "Editor status"))).toContain("Selection actual-box"));
@@ -737,7 +738,7 @@ describe("proof-loop starter demo browser verification", () => {
       await waitFor(() => expect(editor.getRuntime()).toBeTruthy());
       await editor.getRuntime()!.project();
       await clickHierarchyRow(host, "Panel");
-      await clickByText(host, "Frame all");
+      await clickCameraCommand(host, (en: string, zh: string) => en);
       const inspector = section(host, "Scene inspector");
       const field = (label: string) => findFieldInput(inspector, label, 'input[type="number"]') as HTMLInputElement;
       await userEvent.fill(field("Position X"), "2");
@@ -803,11 +804,11 @@ describe("proof-loop starter demo browser verification", () => {
       await verifyInspectorLocale(host, editor, "不透明度", "0.6");
       expect(slot().checked).toBe(true);
       const saved = editor.getSnapshot();
-      await clickByText(host, "Export");
+      await clickProjectCommand(host, "Export");
       await waitForDownloadedProject();
       await userEvent.fill(field("Opacity"), "0.2");
       await userEvent.keyboard("{Tab}");
-      const open = section(host, "Project actions").querySelector<HTMLInputElement>('input[type="file"]')!;
+      const open = host.querySelector<HTMLInputElement>('input[type="file"]')!;
       await uploadFile(open, new File([copyBytes(window.__lastDownloadedProject!)], "inspector.ek3d"));
       await waitFor(() => expect(editor.getSnapshot().materials).toEqual(saved.materials));
       expect(editor.getSnapshot().objects.panel.transform).toEqual(saved.objects.panel.transform);
@@ -897,11 +898,11 @@ describe("proof-loop starter demo browser verification", () => {
       await openInspectorGroup(host, "Properties");
       expect(input("FOV").value).toBe("38");
       await verifyInspectorLocale(host, editor, "视场角", "38");
-      await clickByText(host, "Export");
+      await clickProjectCommand(host, "Export");
       await waitForDownloadedProject();
       await userEvent.fill(input("FOV"), "60");
       await userEvent.keyboard("{Enter}{Tab}");
-      const open = section(host, "Project actions").querySelector<HTMLInputElement>('input[type="file"]')!;
+      const open = host.querySelector<HTMLInputElement>('input[type="file"]')!;
       await uploadFile(open, new File([copyBytes(window.__lastDownloadedProject!)], "scene.ek3d"));
       await waitFor(() => expect(editor.getSnapshot().cameras).toEqual(saved.cameras));
       expect(editor.getSnapshot().environment).toEqual(saved.environment);
@@ -1100,15 +1101,17 @@ async function verifyStarterFlow(host: HTMLElement, options: { assertProfessiona
     await setInspectorColor(colorInput, "#00aa88");
     await waitFor(() => expect(text(host)).toContain("Dirty"));
 
-    await clickByText(host, "Snap move");
+    // Snap lives on the tool strip, which renders its pressed state directly.
+    button(host, "Snap move")!.click();
+    await waitForAnimationFrame();
     expect(button(host, "Snap move")?.getAttribute("aria-pressed")).toBe("true");
 
-    await clickByText(host, "Capture view");
+    await clickCameraCommand(host, (en: string) => en, "Capture view");
     await waitFor(() => expect(text(host)).toContain("Camera view 1"));
     await openInspectorGroup(host, "Scene");
     await clickByText(host, "Set default");
     expect(text(host)).toContain("Default");
-    await clickByText(host, "Apply view");
+    await clickCameraCommand(host, (en: string) => en, "Apply view");
     await assertCameraLayout(host);
 
     await openInspectorGroup(host, "Properties");
@@ -1127,13 +1130,13 @@ async function verifyStarterFlow(host: HTMLElement, options: { assertProfessiona
     await waitFor(() => expect(text(host)).toContain("Redo 1"));
     await clickByText(host, "Redo");
 
-    await clickByText(host, "Export partial");
+    await clickProjectCommand(host, "Export partial");
     await waitFor(() => expect(text(host)).toMatch(/Exported (partial )?project/));
     await waitForDownloadedProject();
     expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("asset-unresolved");
     expectExportedPresentation(window.__lastDownloadedProject!);
 
-    const openInput = section(host, "Project actions").querySelector('input[type="file"]') as HTMLInputElement | null;
+    const openInput = host.querySelector<HTMLInputElement>('input[type="file"]');
     expect(openInput, "Expected default Open project file input").toBeTruthy();
     await uploadFile(openInput!, new File([copyBytes(window.__lastDownloadedProject!)], "starter.ek3d", { type: "application/octet-stream" }));
     await waitFor(() => expect(text(host)).toContain("Opened starter.ek3d"));
@@ -1147,7 +1150,7 @@ async function verifyStarterFlow(host: HTMLElement, options: { assertProfessiona
     });
     await openLeftWorkspaceView(host, "Scene");
 
-    await clickByText(host, "Duplicate");
+    await clickNodeCommand(host, "Duplicate selection");
     await openLeftWorkspaceView(host, "Project");
     await waitFor(() => expect(text(visibleSection(host, "Project"))).toContain("Objects2"));
     expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("Import assets");
@@ -1196,7 +1199,7 @@ async function verifyChineseWorkbenchLayout(host: HTMLElement, options: { assert
     });
   }
 
-  await clickByText(host, "捕获视图");
+  await clickCameraCommand(host, (en: string, zh: string) => zh, "捕获视图");
   await waitFor(() => {
     expect(text(host)).toContain("相机视图");
     expect(text(host)).toContain(options.capturedName ?? "Camera view 1");
@@ -1204,7 +1207,7 @@ async function verifyChineseWorkbenchLayout(host: HTMLElement, options: { assert
   await openInspectorGroup(host, "场景");
   await clickByText(host, "设为默认");
   expect(text(host)).toContain("默认");
-  await clickByText(host, "应用视图");
+  await clickCameraCommand(host, (en: string, zh: string) => zh, "应用视图");
   await assertLocalizedCameraLayout(host);
   await assertLocalizedWorkbenchLayout(host);
 }
@@ -1325,15 +1328,21 @@ async function verifyInspectorLocale(host: HTMLElement, editor: ReturnType<typeo
   const history = editor.getHistoryState();
   const runtime = editor.getRuntime();
   const canvas = host.querySelector("canvas");
-  const menu = host.querySelector(".ek-workbench__project-menu");
-  if (menu) await clickByText(host, "Project menu");
+  // React keeps project commands in a popover menu, so the language control is always on the toolbar;
+  // the Vue workbench still hides it behind its inline project region.
+  const inlineMenu = host.querySelector<HTMLElement>(".ek-workbench__project-menu");
+  const reactMenu = [...host.querySelectorAll<HTMLButtonElement>(".ek-workbench__default-toolbar button")]
+    .some((candidate) => candidate.getAttribute("aria-haspopup") === "menu");
+  const language = host.querySelector<HTMLElement>('[aria-label="Language"], [aria-label="语言"]');
+  // Vue reveals its language picker in the inline project region, which only exists while that region is shown.
+  if (!reactMenu && inlineMenu && language && language.closest("[hidden]")) await clickByText(host, "Project menu");
   await userEvent.selectOptions(section(host, "Language") as HTMLSelectElement, "zh-CN");
-  if (menu) await userEvent.keyboard("{Escape}");
+  if (!reactMenu && inlineMenu) await userEvent.keyboard("{Escape}");
   const field = findFieldInput(host, label, "input") as HTMLInputElement;
   expect(field.value).toBe(value);
   expect(field.checkVisibility()).toBe(true);
   field.scrollIntoView({ block: "center" });
-  if (import.meta.env.VITE_CAPTURE_INSPECTOR && !menu) await page.screenshot({ path: `__screenshots__/vue-inspector/${label === "视场角" ? "camera" : "material"}-zh-CN.png` });
+  if (import.meta.env.VITE_CAPTURE_INSPECTOR && !reactMenu) await page.screenshot({ path: `__screenshots__/vue-inspector/${label === "视场角" ? "camera" : "material"}-zh-CN.png` });
   await userEvent.fill(field, value === "38" ? "42" : "0.4");
   await userEvent.keyboard("{Enter}{Tab}");
   await clickByText(host, "撤销");
@@ -1341,9 +1350,10 @@ async function verifyInspectorLocale(host: HTMLElement, editor: ReturnType<typeo
   expect(editor.getHistoryState().undoCount).toBe(history.undoCount);
   expect(editor.getRuntime()).toBe(runtime);
   expect(host.querySelector("canvas")).toBe(canvas);
-  if (menu) await clickByText(host, "项目菜单");
+  const chineseLanguage = host.querySelector<HTMLElement>('[aria-label="语言"], [aria-label="Language"]');
+  if (!reactMenu && inlineMenu && chineseLanguage && chineseLanguage.closest("[hidden]")) await clickByText(host, "项目菜单");
   await userEvent.selectOptions(section(host, "语言") as HTMLSelectElement, "en");
-  if (menu) await userEvent.keyboard("{Escape}");
+  if (!reactMenu && inlineMenu) await userEvent.keyboard("{Escape}");
 }
 
 function mountInspectorHost(host: HTMLElement, editor: ReturnType<typeof createEditor>, framework: "React" | "Vue", loader?: ThreeGltfLoaderAdapter): () => void {
@@ -1364,21 +1374,102 @@ async function openInspectorGroup(host: HTMLElement, label: string): Promise<voi
 }
 
 async function clickByText(host: HTMLElement, label: string): Promise<void> {
-  const target = button(host, label);
-  expect(target, `Expected button ${label}`).toBeTruthy();
-  const menu = target!.closest<HTMLElement>(".ek-workbench__project-menu");
-  if (menu?.hidden) await userEvent.click(host.querySelector(`[aria-controls="${menu.id}"]`)!);
-  const panel = target!.closest<HTMLElement>(".ek-workbench__tool-popover");
-  if (panel?.hidden) {
-    await userEvent.click(host.querySelector(`[aria-controls="${panel.id}"]`)!);
-  }
-  if (menu || panel || target!.closest(".ek-workbench__viewport-tools")) {
-    await userEvent.click(target!);
+  const menuItem = findMenuItem(host, label);
+
+  if (menuItem) {
+    await userEvent.click(menuItem);
     await waitForAnimationFrame();
     return;
   }
+  const target = button(host, label);
+  expect(target, `Expected button ${label}`).toBeTruthy();
   target!.click();
   await waitForAnimationFrame();
+}
+
+/**
+ * Runs a command that lives in a viewport menu: the menu renders its rows only while open, and the
+ * React menu portals its rows to the document body.
+ */
+async function clickCameraCommand(
+  host: HTMLElement,
+  label: (en: string, zh: string) => string,
+  command: string = label("Frame all", "框选全部"),
+): Promise<void> {
+  const trigger = menuTrigger(host, label("Camera", "相机"));
+  expect(trigger, "Expected the Camera menu trigger").toBeTruthy();
+  await openMenu(host, trigger!);
+  await userEvent.click(await waitForMenuCommand(host, command));
+  await waitForAnimationFrame();
+}
+
+/** Runs a node command; the row lives in the node-operations menu, which renders it only while open. */
+async function clickNodeCommand(host: HTMLElement, command: string): Promise<void> {
+  const trigger = menuTrigger(host, "Node operations");
+  expect(trigger, "Expected the Node operations menu trigger").toBeTruthy();
+  await openMenu(host, trigger!);
+  await userEvent.click(await waitForMenuCommand(host, command));
+  await waitForAnimationFrame();
+}
+
+/** Finds the tool-strip button that opens the menu which holds `name`; Vue labels its strip differently. */
+function menuTrigger(host: HTMLElement, name: string): HTMLButtonElement | null {
+  return [...host.querySelectorAll<HTMLButtonElement>(".ek-workbench__viewport-tool-strip button")]
+    .find((candidate) => candidate.getAttribute("aria-label") === name || candidate.textContent?.trim() === name) ?? null;
+}
+
+/** Opens a command menu and waits for the rows it mounts while open. */
+async function openMenu(host: HTMLElement, trigger: HTMLButtonElement): Promise<void> {
+  // A menu opened earlier stays open until its command or Escape closes it.
+  if (host.ownerDocument.querySelector('[role="menu"]') && trigger.getAttribute("aria-expanded") !== "true") {
+    await userEvent.keyboard("{Escape}");
+    await waitForAnimationFrame();
+  }
+  if (trigger.getAttribute("aria-expanded") === "true") return;
+  await userEvent.click(trigger);
+  await waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("true"));
+}
+
+/** Waits for an open menu row and returns it; rows are never in the DOM while their menu is closed. */
+async function waitForMenuCommand(host: HTMLElement, command: string): Promise<HTMLElement> {
+  let found: HTMLElement | null = null;
+  await waitFor(() => {
+    found = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')]
+      .find((candidate) => text(candidate) === command || candidate.getAttribute("title") === command) ??
+      [...document.querySelectorAll<HTMLElement>(".ek-workbench__tool-popover:not([hidden]) button")]
+        .find((candidate) => text(candidate) === command || candidate.getAttribute("title") === command) ?? null;
+    expect(found, `Expected menu command ${command}`).toBeTruthy();
+  });
+  return found!;
+}
+
+/** Runs a project-menu command; the React menu renders its rows only while open. */
+async function clickProjectCommand(host: HTMLElement, command: string): Promise<void> {
+  const trigger = [...host.querySelectorAll<HTMLButtonElement>(".ek-workbench__default-toolbar button")]
+    .find((candidate) => candidate.getAttribute("aria-haspopup") === "menu");
+  if (!trigger) {
+    // Vue keeps its project actions in an inline region that its trigger reveals.
+    await clickByText(host, host.textContent?.includes("项目操作") ? "项目菜单" : "Project menu");
+    await clickByText(host, command);
+    return;
+  }
+  if (trigger!.getAttribute("aria-expanded") !== "true") {
+    await userEvent.click(trigger!);
+    await waitForAnimationFrame();
+    if (trigger!.getAttribute("aria-expanded") !== "true") {
+      const inline = host.querySelector<HTMLElement>(".ek-workbench__project-menu");
+      expect(inline, "Expected a project menu to open").toBeTruthy();
+      await clickByText(host, command);
+      return;
+    }
+  }
+  await userEvent.click(await waitForMenuCommand(host, command));
+  await waitForAnimationFrame();
+}
+
+function findMenuItem(host: HTMLElement, label: string): HTMLElement | null {
+  return [...host.ownerDocument.querySelectorAll<HTMLElement>('[role^="menuitem"]')]
+    .find((row) => text(row) === label || row.getAttribute("title") === label) ?? null;
 }
 
 async function verifyViewportToolsReachable(host: HTMLElement): Promise<void> {
@@ -1394,17 +1485,21 @@ async function verifyViewportToolsReachable(host: HTMLElement): Promise<void> {
   }
   for (const label of ["Viewport helpers", "Camera", "Node operations"]) {
     const trigger = strip.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!;
+    if (trigger.getAttribute("aria-expanded") === "true") await userEvent.keyboard("{Escape}");
     await userEvent.click(trigger);
-    const panel = document.getElementById(trigger.getAttribute("aria-controls")!)!;
-    expect(panel.getBoundingClientRect().bottom).toBeLessThanOrEqual(rect.bottom);
-    const lastButton = panel.querySelector<HTMLButtonElement>("button:last-child")!;
+    const rowFor = () =>
+      [...document.querySelectorAll<HTMLElement>('[role="menu"][aria-label="' + label + '"] [role^="menuitem"]')].at(-1) ??
+      // The Vue package still renders its menus as inline tool popovers.
+      [...document.querySelectorAll<HTMLElement>(".ek-workbench__tool-popover:not([hidden]) button")].at(-1) ?? null;
+    await waitFor(() => expect(rowFor()).toBeTruthy());
+    const lastButton = rowFor()!;
     lastButton.focus();
     lastButton.scrollIntoView({ block: "nearest" });
     const bounds = lastButton.getBoundingClientRect();
     expect(bounds.bottom).toBeLessThanOrEqual(rect.bottom);
     expect(lastButton.contains(document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2))).toBe(true);
     await userEvent.keyboard("{Escape}");
-    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    await waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("false"));
     expect(document.activeElement).toBe(trigger);
   }
 }
@@ -1567,7 +1662,7 @@ async function assertCameraLayout(host: HTMLElement): Promise<void> {
   await waitForAnimationFrame();
   assertChildrenInside(cameraToolbar, `Camera toolbar ${currentViewportLabel()}`);
   assertChildrenInside(cameraInspector!, `Camera inspector ${currentViewportLabel()}`);
-  if (cameraToolbar.classList.contains("ek-workbench__tool-popover")) await userEvent.keyboard("{Escape}");
+  if (cameraToolbar.getAttribute("role") === "dialog") await userEvent.keyboard("{Escape}");
 }
 
 async function assertLocalizedCameraLayout(host: HTMLElement): Promise<void> {
@@ -1578,7 +1673,7 @@ async function assertLocalizedCameraLayout(host: HTMLElement): Promise<void> {
   await waitForAnimationFrame();
   assertChildrenInside(cameraToolbar, `Localized camera toolbar ${currentViewportLabel()}`);
   assertChildrenInside(cameraInspector!, `Localized camera inspector ${currentViewportLabel()}`);
-  if (cameraToolbar.classList.contains("ek-workbench__tool-popover")) await userEvent.keyboard("{Escape}");
+  if (cameraToolbar.getAttribute("role") === "dialog") await userEvent.keyboard("{Escape}");
 }
 
 async function openCameraTools(host: HTMLElement, label: string): Promise<HTMLElement> {

@@ -110,6 +110,8 @@ const EN_WORKBENCH_MESSAGES = {
 
   "reactWorkbench.toolbar.controls.label": "Editor controls",
   "reactWorkbench.toolbar.project.label": "Project actions",
+  "reactWorkbench.toolbar.project.saving": "Saving project...",
+
   "reactWorkbench.toolbar.project.open.label": "Open",
   "reactWorkbench.toolbar.project.open.title": "Open project package",
   "reactWorkbench.toolbar.project.export.label": "Export",
@@ -120,7 +122,9 @@ const EN_WORKBENCH_MESSAGES = {
   "reactWorkbench.toolbar.history.undo.label": "Undo",
   "reactWorkbench.toolbar.history.undo.title": "Undo",
   "reactWorkbench.toolbar.history.redo.label": "Redo",
-  "reactWorkbench.toolbar.history.redo.title": "Redo",
+  "reactWorkbench.toolbar.history.redo.title": "Redo",  "reactWorkbench.toolbar.history.undo.reason": "No edits to undo.",
+  "reactWorkbench.toolbar.history.redo.reason": "No edits to redo.",
+
   "reactWorkbench.toolbar.transform.label": "Transform mode",
   "reactWorkbench.toolbar.transform.move.label": "Move",
   "reactWorkbench.toolbar.transform.move.title": "Move mode",
@@ -138,7 +142,10 @@ const EN_WORKBENCH_MESSAGES = {
   "reactWorkbench.toolbar.selection.label": "Selection tools",
   "reactWorkbench.toolbar.selection.marquee.label": "Marquee",
   "reactWorkbench.toolbar.selection.marquee.title": "Toggle marquee selection",
+  "reactWorkbench.toolbar.tools.label": "Viewport tools",
+  "reactWorkbench.toolbar.tools.full": "All viewport commands are visible.",
   "reactWorkbench.toolbar.helpers.label": "Viewport helpers",
+  "reactWorkbench.toolbar.helpers.toggleAll": "All helpers",
   "reactWorkbench.toolbar.helpers.grid.label": "Grid",
   "reactWorkbench.toolbar.helpers.grid.title": "Toggle viewport grid",
   "reactWorkbench.toolbar.helpers.floor.label": "Floor",
@@ -158,6 +165,8 @@ const EN_WORKBENCH_MESSAGES = {
   "reactWorkbench.toolbar.helpers.shadowCam.label": "Shadow cam",
   "reactWorkbench.toolbar.helpers.shadowCam.title": "Toggle shadow camera helpers",
   "reactWorkbench.toolbar.camera.label": "Camera",
+  "reactWorkbench.toolbar.camera.reset.reason": "Wait for the viewport to be ready.",
+
   "reactWorkbench.toolbar.camera.reset.label": "Reset",
   "reactWorkbench.toolbar.camera.reset.title": "Reset camera",
   "reactWorkbench.toolbar.camera.frameSelected.label": "Frame sel",
@@ -1370,6 +1379,8 @@ const ZH_CN_WORKBENCH_MESSAGES = {
 
   "reactWorkbench.toolbar.controls.label": "编辑器控件",
   "reactWorkbench.toolbar.project.label": "项目操作",
+  "reactWorkbench.toolbar.project.saving": "正在保存项目…",
+
   "reactWorkbench.toolbar.project.open.label": "打开",
   "reactWorkbench.toolbar.project.open.title": "打开项目包",
   "reactWorkbench.toolbar.project.export.label": "导出",
@@ -1380,7 +1391,9 @@ const ZH_CN_WORKBENCH_MESSAGES = {
   "reactWorkbench.toolbar.history.undo.label": "撤销",
   "reactWorkbench.toolbar.history.undo.title": "撤销",
   "reactWorkbench.toolbar.history.redo.label": "重做",
-  "reactWorkbench.toolbar.history.redo.title": "重做",
+  "reactWorkbench.toolbar.history.redo.title": "重做",  "reactWorkbench.toolbar.history.undo.reason": "没有可撤销的编辑。",
+  "reactWorkbench.toolbar.history.redo.reason": "没有可重做的编辑。",
+
   "reactWorkbench.toolbar.transform.label": "变换模式",
   "reactWorkbench.toolbar.transform.move.label": "移动",
   "reactWorkbench.toolbar.transform.move.title": "移动模式",
@@ -1398,7 +1411,10 @@ const ZH_CN_WORKBENCH_MESSAGES = {
   "reactWorkbench.toolbar.selection.label": "选择工具",
   "reactWorkbench.toolbar.selection.marquee.label": "框选",
   "reactWorkbench.toolbar.selection.marquee.title": "切换框选",
+  "reactWorkbench.toolbar.tools.label": "视口工具",
+  "reactWorkbench.toolbar.tools.full": "已显示全部视口命令。",
   "reactWorkbench.toolbar.helpers.label": "视口辅助",
+  "reactWorkbench.toolbar.helpers.toggleAll": "全部辅助",
   "reactWorkbench.toolbar.helpers.grid.label": "网格",
   "reactWorkbench.toolbar.helpers.grid.title": "切换视口网格",
   "reactWorkbench.toolbar.helpers.floor.label": "地面",
@@ -1418,6 +1434,8 @@ const ZH_CN_WORKBENCH_MESSAGES = {
   "reactWorkbench.toolbar.helpers.shadowCam.label": "阴影相机",
   "reactWorkbench.toolbar.helpers.shadowCam.title": "切换阴影相机辅助",
   "reactWorkbench.toolbar.camera.label": "相机",
+  "reactWorkbench.toolbar.camera.reset.reason": "等待视口就绪。",
+
   "reactWorkbench.toolbar.camera.reset.label": "重置",
   "reactWorkbench.toolbar.camera.reset.title": "重置相机",
   "reactWorkbench.toolbar.camera.frameSelected.label": "框选所选",

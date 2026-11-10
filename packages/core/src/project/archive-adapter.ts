@@ -24,7 +24,10 @@ export class FflateArchiveAdapter implements ArchiveAdapter {
     for (const entry of entries) {
       archive[entry.path] = copyBytes(entry.bytes);
     }
-    return zipSync(archive, { level: 6, mtime: new Date("1980-01-01T00:00:00.000Z") });
+    // Zip timestamps are local wall-clock. A fixed instant is recorded in two-hour steps, so
+    // 1980-01-01T12:00Z is 1980 in every zone from UTC-12 eastward; "now" would make packages
+    // depend on the exporter's clock and zone, which reads as 1979 west of UTC.
+    return zipSync(archive, { level: 6, mtime: new Date("1980-01-01T12:00:00.000Z") });
   }
 }
 

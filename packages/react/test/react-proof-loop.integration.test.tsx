@@ -91,12 +91,19 @@ describe("React proof-loop parity", () => {
 
       const toolbar = screen.getByLabelText("Editor controls");
       const viewport = screen.getByLabelText("3D viewport");
-      fireEvent.click(within(toolbar).getByRole("button", { name: "Project menu" }));
-      expect(within(toolbar).getByRole("button", { name: "Export" })).toBeTruthy();
+      const projectMenu = within(toolbar).getByRole("button", { name: "Project menu" });
+      fireEvent.click(projectMenu);
+      await act(async () => undefined);
+      expect(screen.getByRole("menuitem", { name: "Export", exact: true })).toBeTruthy();
+      fireEvent.keyDown(screen.getByRole("menuitem", { name: "Export", exact: true }), { key: "Escape" });
       expect(within(viewport).getByRole("button", { name: "Move", exact: true }).getAttribute("aria-pressed")).toBe("true");
-      fireEvent.click(within(viewport).getByRole("button", { name: "Node operations" }));
-      expect((within(viewport).getByRole("button", { name: "Duplicate" }) as HTMLButtonElement).disabled).toBe(true);
-      fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+      const nodeOperations = within(viewport).getByRole("button", { name: "Node operations" });
+      fireEvent.click(nodeOperations);
+      await act(async () => undefined);
+      const duplicate = screen.getByRole("menuitem", { name: /^Duplicate/ });
+      expect(duplicate.getAttribute("aria-disabled")).toBe("true");
+      fireEvent.keyDown(nodeOperations, { key: "Escape" });
+      expect(nodeOperations.getAttribute("aria-expanded")).toBe("false");
 
       const projectPanel = screen.getByLabelText("Project panel");
       const hierarchy = within(projectPanel).getByLabelText("Hierarchy");
@@ -202,6 +209,26 @@ async function clickButton(name: string): Promise<void> {
   if (panel) {
     fireEvent.click(document.querySelector(`[aria-controls="${panel.id}"]`)!);
     await act(async () => undefined);
+  }
+  if (!command) {
+    // A grouped menu only mounts its commands while open, so open the menu that holds the name:
+    // viewport menus from the tool strip, then the project menu from its toolbar trigger.
+    const triggers = [
+      ...document.querySelectorAll<HTMLElement>(".ek-workbench__viewport-tools button"),
+      ...document.querySelectorAll<HTMLElement>(".ek-workbench__default-toolbar button[aria-haspopup]")
+    ].filter((button) => button.getAttribute("aria-expanded") === "false");
+    for (const trigger of triggers) {
+      fireEvent.click(trigger);
+      await act(async () => undefined);
+      if ([...document.querySelectorAll("[role^=menuitem]")].some((item) => item.textContent?.startsWith(name))) break;
+    }
+  }
+  const menuItem = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')].find((item) => item.textContent?.startsWith(name));
+  if (menuItem) {
+    // Menu commands run on pointerup so a pressed toggle can keep its menu open.
+    fireEvent.pointerUp(menuItem);
+    await act(async () => undefined);
+    return;
   }
   const button = screen.getAllByRole("button", { name }).at(-1);
   expect(button, `Expected button ${name}`).toBeTruthy();

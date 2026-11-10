@@ -232,7 +232,9 @@ describe("React data source workspace", () => {
     expect(screen.getByText("Credential: Live token")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Project menu" }));
-    fireEvent.click(screen.getByRole("button", { name: "Export", exact: true }));
+    await act(async () => undefined);
+    // Project commands are menu rows; pressing one runs the export and closes the menu.
+    fireEvent.pointerUp(screen.getByRole("menuitem", { name: "Export", exact: true }));
 
     await screen.findAllByText("Project Export Payload Missing");
     expect(screen.getByText("Credential: Live token")).toBeTruthy();

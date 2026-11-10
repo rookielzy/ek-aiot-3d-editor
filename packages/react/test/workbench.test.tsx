@@ -101,23 +101,33 @@ describe("React EditorWorkbench", () => {
     expect(drawer.textContent).toContain("Project Archive Invalid");
   });
 
-  it("keeps project commands in a dismissible global menu with the locale switch", () => {
+  it("keeps project commands in a dismissible global menu with the locale switch", async () => {
     const editor = createEditor();
     render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} rightPanel={() => null} />);
     const trigger = screen.getByRole("button", { name: "Project menu" });
-    expect(screen.queryByRole("button", { name: "Export", exact: true })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Export", exact: true })).toBeNull();
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(trigger);
-    const menu = screen.getByRole("region", { name: "Project actions" });
-    expect(within(menu).getByRole("button", { name: "Open", exact: true })).toBeTruthy();
-    expect(within(menu).getByRole("button", { name: "Export partial", exact: true })).toBeTruthy();
-    fireEvent.change(within(menu).getByLabelText("Language"), { target: { value: "zh-CN" } });
+    await act(async () => { await Promise.resolve(); });
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    const menu = screen.getByRole("menu", { name: "Project actions" });
+    expect(within(menu).getByRole("menuitem", { name: "Open", exact: true })).toBeTruthy();
+    expect(within(menu).getByRole("menuitem", { name: "Export partial", exact: true })).toBeTruthy();
+    // Switching language re-renders the menu in place, so it stays open on the same layers.
+    fireEvent.change(screen.getByLabelText("Language"), { target: { value: "zh-CN" } });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByRole("menu", { name: "项目操作" })).toBeTruthy();
     expect(editor.getRuntime()).toBeTruthy();
     fireEvent.keyDown(screen.getByLabelText("语言"), { key: "Escape" });
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
     expect(document.activeElement).toBe(trigger);
     fireEvent.click(trigger);
+    await act(async () => { await Promise.resolve(); });
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    // A press outside the panel dismisses it without stealing focus from wherever the press landed.
     fireEvent.pointerDown(screen.getByLabelText("3D 视口"));
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).not.toBe(trigger);
   });
 
   it("opens status diagnostics, retains problems on close and recovers missing payloads", async () => {
@@ -143,53 +153,73 @@ describe("React EditorWorkbench", () => {
     expect(editor.exportProject().packageBytes).toBeTruthy();
   });
 
-  it("organizes nodes through dismissible viewport tools without losing selection on Escape", () => {
+  it("organizes nodes through dismissible viewport tools without losing selection on Escape", async () => {
     const editor = createEditor();
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
     editor.dispatch({ type: "select-object", objectId: "object-a" });
     render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} rightPanel={() => null} />);
     const viewport = within(screen.getByLabelText("3D viewport"));
     const trigger = viewport.getByRole("button", { name: "Node operations" });
-    const open = () => fireEvent.click(trigger);
-    const nodeTools = within(document.getElementById(trigger.getAttribute("aria-controls")!)!);
-    const command = (name: string) => fireEvent.click(nodeTools.getByRole("button", { name, exact: true }));
-    open();
-    expect((viewport.getByRole("button", { name: "Group", exact: true }) as HTMLButtonElement).disabled).toBe(true);
+    let lastMenu: HTMLElement | null = null;
+    const open = async () => {
+      fireEvent.click(trigger);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      lastMenu = screen.getByRole("menu", { name: "Node operations" });
+    };
+    const items = () => [...lastMenu!.querySelectorAll<HTMLElement>('[role^="menuitem"]')];
+    const command = (name: string) => {
+      const item = items().find((candidate) => candidate.textContent?.startsWith(name))!;
+      fireEvent.pointerUp(item);
+      return item;
+    };
+    await open();
+    expect((command("Group") as HTMLElement).getAttribute("aria-disabled")).toBe("true");
     command("Copy");
     expect(document.activeElement).toBe(trigger);
-    open();
+    await open();
     command("Paste");
     expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(2);
-    open();
+    await open();
     command("Duplicate");
     expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(3);
-    open();
+    await open();
     command("Delete");
     expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(2);
     clickToolbarCommand("Undo");
     expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(3);
     clickToolbarCommand("Redo");
     expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(2);
-    open();
+    await open();
     command("Select all");
-    open();
+    await open();
     command("Group");
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // Grouping leaves the selection on the new parent; the trigger is the target to ungroup from.
+    act(() => {
+      editor.dispatch({ type: "select-node", nodeId: editor.getSnapshot().selection.objectId! });
+    });
     expect(editor.getSnapshot().objects[editor.getSnapshot().selection.objectId!].children).toHaveLength(1);
-    open();
-    expect((viewport.getByRole("button", { name: "Ungroup", exact: true }) as HTMLButtonElement).disabled).toBe(false);
+    await open();
+    expect(items().find((candidate) => candidate.textContent?.startsWith("Ungroup"))!.getAttribute("aria-disabled")).toBe("false");
     command("Ungroup");
-    expect(Object.values(editor.getSnapshot().objects).every((object) => object.parentId === null)).toBe(true);
     const before = editor.getSnapshot();
-    open();
-    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    await open();
+    expect(document.activeElement).toBe(trigger);
+    // Escape with focus on the trigger belongs to the menu layer, not the workbench's scene keys.
+    fireEvent.keyDown(trigger, { key: "Escape" });
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
     expect(document.activeElement).toBe(trigger);
     expect(editor.getSnapshot()).toEqual(before);
-    open();
+    await open();
     command("Clear");
-    open();
-    expect((viewport.getByRole("button", { name: "Delete", exact: true }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.pointerDown(screen.getByLabelText("Inspector panel"));
+    await open();
+    expect(items().find((candidate) => candidate.textContent?.startsWith("Delete"))!.getAttribute("aria-disabled")).toBe("true");
+    // The menu yields when focus leaves it, e.g. when a pointer lands on the inspector panel.
+    fireEvent.blur(items()[0]!, { relatedTarget: screen.getByLabelText("Inspector panel") });
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
   });
 
@@ -358,11 +388,11 @@ describe("React EditorWorkbench", () => {
 
     clickToolbarCommand("Toggle viewport grid");
     expect(editor.viewportHelpers.get().visibility.grid).toBe(false);
-    expect(screen.getByTitle("Toggle viewport grid").getAttribute("aria-pressed")).toBe("false");
+    expect(toolbarCommand("Toggle viewport grid").checked).toBe("false");
 
     clickToolbarCommand("Toggle viewport floor");
     expect(editor.viewportHelpers.get().visibility.floor).toBe(true);
-    expect(screen.getByTitle("Toggle viewport floor").getAttribute("aria-pressed")).toBe("true");
+    expect(toolbarCommand("Toggle viewport floor").checked).toBe("true");
 
     for (const title of [
       "Toggle viewport axes",
@@ -372,7 +402,7 @@ describe("React EditorWorkbench", () => {
       "Toggle viewport floor"
     ]) {
       clickToolbarCommand(title);
-      expect(screen.getByTitle(title).getAttribute("aria-pressed")).toBe("false");
+      expect(toolbarCommand(title).checked).toBe("false");
     }
     expect(Object.values(editor.viewportHelpers.get().visibility)).toEqual([false, false, false, false, false, false, true, true, false]);
 
@@ -691,7 +721,8 @@ describe("React EditorWorkbench", () => {
     expect(screen.getByRole("button", { name: "Assets 1" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Project 0" })).toBeTruthy();
     expect(screen.getByTitle("Move mode").querySelector("svg")).toBeTruthy();
-    expect(screen.getByTitle("Export complete project").querySelector("svg")).toBeTruthy();
+    // Project commands live behind the project menu, which owns them from the shell's toolbar.
+    expect(screen.getByRole("button", { name: "Project menu" }).getAttribute("aria-haspopup")).toBe("menu");
     expect(screen.getByText("Robot arm")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Assets" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Project" })).toBeNull();
@@ -826,7 +857,7 @@ describe("React EditorWorkbench", () => {
 
     expect(onLocaleChange).toHaveBeenCalledWith("zh-CN");
     expect(screen.getByTitle("旋转模式").getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByTitle("切换视口网格").getAttribute("aria-pressed")).toBe("false");
+    expect(toolbarCommand("切换视口网格").checked).toBe("false");
     expect(editor.transformMode.get()).toBe("rotate");
     expect(editor.serialize()).toEqual(serializedBefore);
     expect(JSON.stringify(editor.serialize())).not.toContain("zh-CN");
@@ -866,6 +897,7 @@ describe("React EditorWorkbench", () => {
         rendererFactory={fakeRenderer}
         locale="zh-CN"
         localeSwitcherDisabled
+        showLocaleSwitcher={false}
         translate={(descriptor, locale) =>
           descriptor.key === "reactWorkbench.toolbar.project.open.label" && locale === "zh-CN"
             ? "载入工程"
@@ -876,12 +908,8 @@ describe("React EditorWorkbench", () => {
     );
 
     expect(screen.getByText("Custom 载入工程")).toBeTruthy();
-    const switcher = screen.getByLabelText("语言") as HTMLSelectElement;
-    expect(switcher.disabled).toBe(true);
-    const languageButton = screen.getByRole("button", { name: "English" }) as HTMLButtonElement;
-    expect(languageButton.disabled).toBe(true);
-    fireEvent.click(languageButton);
-    fireEvent.change(switcher, { target: { value: "en" } });
+    expect(screen.queryByLabelText("语言")).toBeNull();
+    expect(screen.queryByRole("button", { name: "English" })).toBeNull();
     expect(onLocaleChange).not.toHaveBeenCalled();
   });
 
@@ -1059,6 +1087,7 @@ describe("React EditorWorkbench", () => {
         rendererFactory={fakeRenderer}
         locale="zh-CN"
         localeSwitcherDisabled
+        showLocaleSwitcher={false}
         translate={(descriptor, locale) =>
           descriptor.key === "reactWorkbench.toolbar.project.open.label" && locale === "zh-CN"
             ? "宿主打开"
@@ -1865,13 +1894,50 @@ function createReplacementProblem(): ProjectProblem {
   };
 }
 
-function clickToolbarCommand(title: string): void {
+/**
+ * Activates a workbench command by its tooltip title, opening the project menu or viewport menu
+ * that holds it. Menu commands run on pointerup, so they are pressed the way a pointer presses them.
+ */
+const VIEWPORT_MENU_TITLES = ["Viewport helpers", "视口辅助", "Camera", "相机", "Node operations", "节点操作"];
+const PROJECT_MENU_TITLES = ["Project actions", "项目操作"];
+
+/**
+ * Reads a command's pressed state by title, opening its menu when the command is a menu item.
+ */
+function toolbarCommand(title: string) {
+  clickToolbarCommand(title, { activate: false });
+  const command = screen.getByTitle(title);
+  return {
+    role: command.getAttribute("role"),
+    pressed: command.getAttribute("aria-pressed"),
+    checked: command.getAttribute("aria-checked"),
+    disabled: command.getAttribute("aria-disabled")
+  };
+}
+
+function clickToolbarCommand(title: string, { activate = true } = {}): void {
+  // A menu renders its commands only while open, so a command that is not on screen yet is reached
+  // through its trigger first: viewport triggers name their menu, and the project trigger is titled
+  // after the menu it opens ("Project actions").
+  if (screen.queryAllByTitle(title).length === 0) {
+    for (const name of [...VIEWPORT_MENU_TITLES, ...PROJECT_MENU_TITLES]) {
+      const trigger = screen.queryByTitle(name);
+      if (trigger && trigger.getAttribute("aria-expanded") === "false") fireEvent.click(trigger);
+      if (screen.queryAllByTitle(title).length > 0) break;
+    }
+  }
   const button = screen.getByTitle(title);
-  const menu = button.closest<HTMLElement>(".ek-workbench__project-menu");
-  if (menu?.hidden) fireEvent.click(document.querySelector(`[aria-controls="${menu.id}"]`)!);
-  const panel = button.closest<HTMLElement>(".ek-workbench__tool-popover");
-  if (panel?.hidden) {
-    fireEvent.click(document.querySelector(`[aria-controls="${panel.id}"]`)!);
+  if (button.getAttribute("role") === "menuitem" || button.getAttribute("role") === "menuitemcheckbox") {
+    const panel = button.closest<HTMLElement>("[id]")!;
+    const trigger = document.querySelector<HTMLElement>(`[aria-controls="${panel.id}"]`);
+    if (trigger?.getAttribute("aria-expanded") === "false") fireEvent.click(trigger);
+    if (!activate) return;
+    fireEvent.pointerUp(button);
+    // A closed menu hands focus back to its trigger; drop it so Escape stays a menu-level key.
+    act(() => {
+      (document.activeElement as HTMLElement | null)?.blur();
+    });
+    return;
   }
   fireEvent.click(button);
 }

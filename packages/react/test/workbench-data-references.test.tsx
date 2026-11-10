@@ -153,7 +153,7 @@ describe("React data source references", () => {
 
     fireEvent.click(screen.getByTitle("Pump object"));
     fireEvent.click(screen.getByRole("button", { name: "Node operations" }));
-    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+    fireEvent.pointerUp(screen.getByRole("menuitem", { name: /^Duplicate/ }));
 
     const bindings = editor.getSnapshot().dataSources.bindings;
     expect(Object.keys(bindings)).toHaveLength(2);
