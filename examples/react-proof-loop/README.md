@@ -56,3 +56,7 @@ testable backend on `127.0.0.1:4310`. The Vite dev server proxies `/local-api`
 to it, so use `/local-api/api/devices` as a connection URL. Add
 `?scenario=empty`, `?scenario=missing-field`, `?scenario=slow`, or
 `?scenario=http-500` to exercise predictable response states.
+
+Step-by-step click-through instructions (connection → test request → query
+mapping → object binding → data preview, plus the failure-state experiments)
+are in [`docs/local-data-source-demo-walkthrough.md`](../../docs/local-data-source-demo-walkthrough.md).

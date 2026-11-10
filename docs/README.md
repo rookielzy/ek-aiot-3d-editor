@@ -12,6 +12,8 @@
 - 集成指南（React）：`./integration-react.md`
 - 集成指南（Vue）：`./integration-vue.md`
 - 交互与编辑能力：`./interactions.md`
+- 本地数据源测试验证：`./local-data-source-testing.md`
+- Demo 端到端验证引导（手把手）：`./local-data-source-demo-walkthrough.md`
 - FAQ：`./faq.md`
 - 维护指南：`./contributing.md`
 - 设计决策：`./decisions.md`
