@@ -1022,7 +1022,8 @@ describe("React EditorWorkbench", () => {
 
     openLeftPanelView("资源 2");
     const rows = within(screen.getByLabelText("资源工作区行"));
-    const rowText = rows.getByText("robot.glb").closest("li")!.textContent ?? "";
+    const rowElement = rows.getByText("robot.glb", { selector: ".ek-workbench__asset-label" }).closest("li")!;
+    const rowText = rowElement.textContent ?? "";
 
     expect(rowText).toContain("GLB");
     expect(rowText).toContain("缺失");
