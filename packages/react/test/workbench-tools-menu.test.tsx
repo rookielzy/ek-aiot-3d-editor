@@ -32,7 +32,7 @@ describe("React Workbench viewport command menus", () => {
 
     // A one-shot command closes its menu; the trigger reopens it with the refreshed state.
     const clearWhileOpen = within(menu).getByRole("menuitem", { name: /Clear/ });
-    fireEvent.pointerUp(clearWhileOpen);
+    fireEvent.click(clearWhileOpen);
 
 
     expect(screen.queryByRole("menu")).toBeNull();
@@ -72,7 +72,7 @@ describe("React Workbench viewport command menus", () => {
     const nodes = viewport.getByRole("button", { name: "Node operations" });
     fireEvent.click(nodes);
     const nodeMenu = screen.getByRole("menu", { name: "Node operations" });
-    fireEvent.pointerUp(within(nodeMenu).getByRole("menuitem", { name: /Duplicate/ }));
+    fireEvent.click(within(nodeMenu).getByRole("menuitem", { name: /Duplicate/ }));
     expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(2);
     expect(nodes.getAttribute("aria-expanded")).toBe("false");
     expect(document.activeElement).toBe(nodes);
@@ -218,7 +218,6 @@ describe("React Workbench project menu", () => {
     render(<EditorWorkbench editor={createEditor()} rendererFactory={fakeRenderer} rightPanel={() => null} />);
     const trigger = screen.getByRole("button", { name: "Project menu" });
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
-    fireEvent.click(trigger);
     await act(async () => { await Promise.resolve(); });
     const menu = screen.getByRole("menu", { name: "Project actions" });
     // Keyboard entry lands on the first command, so no pointer is needed to reach the rows.

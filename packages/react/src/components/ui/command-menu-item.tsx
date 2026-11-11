@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 /** Every row of a command menu carries a menuitem role; checkbox rows mark toggles. */
 export const MENU_ITEM = '[role^="menuitem"]';
@@ -53,8 +53,6 @@ export function CommandMenuItem({
   onReasonChange(reason: string | null, owner: HTMLElement | null): void;
 }): React.JSX.Element {
   const disabled = command.disabled === true;
-  // Whether the click that follows a pointerup is the same press and must not run the command twice.
-  const pressedRef = useRef(false);
   const reason = disabled ? command.disabledReason : undefined;
 
   return (
@@ -76,20 +74,8 @@ export function CommandMenuItem({
       onPointerLeave={() => onReasonChange(null, null)}
       onFocus={(event) => onReasonChange(reason ?? null, event.currentTarget)}
       onBlur={() => onReasonChange(null, null)}
-      // Handled on pointer/mouse up: Radix's deferred pointerdown-outside check runs after
-      // mousedown and would dismiss a menu whose pressed row is still mounted.
-      onPointerUp={(event) => {
-        if (disabled || event.button !== 0) return;
-        event.preventDefault();
-        pressedRef.current = true;
-        onActivate();
-      }}
-      // Keyboard activation; a pointer press already ran on pointerup, so a second dispatch of
-      // the same press must not run the command twice. `detail` is 0 for both, but only a press
-      // repeats the activation that pointerup already handled.
-      onClick={(event) => {
-        if (disabled || event.detail !== 0 || pressedRef.current) return;
-        pressedRef.current = false;
+      onClick={() => {
+        if (disabled) return;
         onActivate();
       }}
     >

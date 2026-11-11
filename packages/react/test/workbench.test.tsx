@@ -171,7 +171,7 @@ describe("React EditorWorkbench", () => {
     const items = () => [...lastMenu!.querySelectorAll<HTMLElement>('[role^="menuitem"]')];
     const command = (name: string) => {
       const item = items().find((candidate) => candidate.textContent?.startsWith(name))!;
-      fireEvent.pointerUp(item);
+      fireEvent.click(item);
       return item;
     };
     await open();
@@ -1932,7 +1932,7 @@ function clickToolbarCommand(title: string, { activate = true } = {}): void {
     const trigger = document.querySelector<HTMLElement>(`[aria-controls="${panel.id}"]`);
     if (trigger?.getAttribute("aria-expanded") === "false") fireEvent.click(trigger);
     if (!activate) return;
-    fireEvent.pointerUp(button);
+    fireEvent.click(button);
     // A closed menu hands focus back to its trigger; drop it so Escape stays a menu-level key.
     act(() => {
       (document.activeElement as HTMLElement | null)?.blur();

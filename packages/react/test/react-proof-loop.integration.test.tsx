@@ -225,8 +225,8 @@ async function clickButton(name: string): Promise<void> {
   }
   const menuItem = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')].find((item) => item.textContent?.startsWith(name));
   if (menuItem) {
-    // Menu commands run on pointerup so a pressed toggle can keep its menu open.
-    fireEvent.pointerUp(menuItem);
+    // Activate the visible command with the same click event used by the browser.
+    fireEvent.click(menuItem);
     await act(async () => undefined);
     return;
   }

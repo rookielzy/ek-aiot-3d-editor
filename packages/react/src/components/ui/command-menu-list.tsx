@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { CommandMenuItem, type MenuCommand } from "./command-menu-item";
-import type { CommandReason } from "./command-menu";
+import { moveCommandFocus, type CommandReason } from "./command-menu";
 
 /** A command row: a one-shot action or a toggle that keeps the menu open. */
 export interface CommandMenuCommand extends MenuCommand {
@@ -47,7 +47,7 @@ export function CommandMenu({
   group,
   listId,
   idPrefix,
-  onMoveFocus,
+  onMoveFocus = moveCommandFocus,
   onActivate,
   roving,
   onEscape,
@@ -58,7 +58,7 @@ export function CommandMenu({
   idPrefix: string;
   /** Id of the `role="menu"` list, so a trigger can point `aria-controls` at it. */
   listId?: string;
-  /** Roving focus is opt-in: the viewport menus move focus with arrows, the project menu starts on its first row. */
+  /** Allows the owner to track the focused command in addition to moving focus. */
   onMoveFocus?(list: HTMLElement, where: 1 | -1 | "first" | "last"): void;
   onActivate(commandKey: string): void;
   /** Command key that arrow-key navigation currently rests on. */
@@ -81,9 +81,15 @@ export function CommandMenu({
         onFocus={(event) => {
           // Landing on the list (keyboard entry) starts roving at its first command.
           if (event.target !== event.currentTarget) return;
-          onMoveFocus?.(event.currentTarget, "first");
+          onMoveFocus(event.currentTarget, "first");
         }}
         onKeyDown={(event) => {
+          if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+            event.preventDefault();
+            event.stopPropagation();
+            onMoveFocus(event.currentTarget, event.key === "Home" ? "first" : event.key === "End" ? "last" : event.key === "ArrowDown" ? 1 : -1);
+            return;
+          }
           if (event.key === "Escape") {
             event.preventDefault();
             onEscape();

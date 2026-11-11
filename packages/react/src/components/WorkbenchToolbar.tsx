@@ -250,7 +250,7 @@ export function WorkbenchToolbar({
         aria-haspopup="menu"
         aria-expanded={menuOpen}
         title={t("reactWorkbench.toolbar.project.label")}
-        aria-controls={menuOpen ? menuId : undefined}
+        aria-controls={menuOpen ? `${menuId}-list` : undefined}
         onClick={(event) => {
           if (menuOpen) {
             closeMenu();
@@ -264,6 +264,9 @@ export function WorkbenchToolbar({
         }}
         onKeyDown={(event) => {
           if (event.key !== "ArrowDown" || menuOpen) return;
+          event.preventDefault();
+          setMenuOpen(true);
+          enteringMenuRef.current = true;
           keyboardEntryRef.current = true;
         }}
       >
@@ -294,16 +297,11 @@ export function WorkbenchToolbar({
         >
           <CommandMenu
             group={{ key: "project", label: t("reactWorkbench.toolbar.project.label"), kind: "action", commands: projectCommands }}
-            listId={menuId}
+            listId={`${menuId}-list`}
             idPrefix={menuId}
             onActivate={() => closeMenu()}
             onEscape={() => closeMenu()}
             onTab={() => closeMenu({ restore: false })}
-            onMoveFocus={(panel) => {
-              // Opening from the keyboard lands on the first enabled command, like the viewport menus.
-              const first = [...panel.querySelectorAll<HTMLButtonElement>(MENU_ITEM)].find((item) => item.getAttribute("aria-disabled") !== "true");
-              first?.focus();
-            }}
           />
         </div>
       ) : null}

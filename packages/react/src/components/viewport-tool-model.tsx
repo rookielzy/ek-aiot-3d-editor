@@ -1,4 +1,4 @@
-import { createAuthoredCameraViewInput, type MessageDescriptor as WorkbenchMessageDescriptor } from "@ek-aiot/3d-editor-core";
+import { createAuthoredCameraViewInput, type MessageDescriptor } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
 import type { WorkbenchMessageKey } from "../i18n/workbench-i18n";
 import type { WorkbenchIconName } from "./WorkbenchIcon";
@@ -55,7 +55,7 @@ export function buildViewportToolEntries(
   const toolbar = context.model.toolbar;
   const disabled = toolbar.disabledReasons;
   const sign = (binding: string) => shortcut(binding, platform);
-  const describe = (reason: WorkbenchMessageDescriptor | undefined) => (reason ? context.i18n.t(reason) : undefined);
+  const describe = (reason: MessageDescriptor | undefined) => (reason ? context.i18n.t(reason) : undefined);
 
   const helpAllPressed = Object.values(toolbar.viewportHelpers).every(Boolean);
 

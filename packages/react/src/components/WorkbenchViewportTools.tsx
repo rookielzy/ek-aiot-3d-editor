@@ -75,8 +75,12 @@ export function WorkbenchViewportTools({ context, marqueeSelectionEnabled, onTog
     // Typed characters and scene shortcuts are swallowed for the whole open menu, whichever
     // element holds focus (the trigger after a pointer click, an item after arrow navigation).
     function stopSceneKeys(event: KeyboardEvent) {
-      if (event.target instanceof HTMLElement && event.target.closest(MENU_ITEM)) return;
-      if (event.key.length > 1) return;
+      if (!(event.target instanceof HTMLElement)) return;
+      const panel = document.getElementById(`${id}-${openMenu}`);
+      const trigger = document.getElementById(`${id}-${openMenu}-trigger`);
+      if (!panel?.contains(event.target) && !trigger?.contains(event.target)) return;
+      if (event.target.closest(MENU_ITEM)) return;
+      if (event.key.length > 1 || event.key === " " || event.isComposing) return;
       event.preventDefault();
       event.stopPropagation();
     }

@@ -11,7 +11,7 @@ export interface CommandMenuState {
   panelRef: (key: string) => (node: HTMLDivElement | null) => void;
   triggerRef: (key: string) => (node: HTMLElement | null) => void;
   rovingItems(panel: HTMLElement): HTMLElement[];
-  openMenu(key: string, options?: { enter?: boolean }): void;
+  openMenu(key: string): void;
   closeMenu(options?: { restore?: boolean }): void;
   toggleMenu(key: string): void;
   moveFocus(panel: HTMLElement | null, delta: 1 | -1 | "first" | "last"): void;
@@ -33,8 +33,6 @@ export function useCommandMenu(): CommandMenuState {
   const triggers = useRef(new Map<string, HTMLElement>());
   // Focus that Escape, Tab, or a one-shot command hands back once the panel has unmounted.
   const returning = useRef<(() => void) | null>(null);
-  // Moving focus from a trigger into its panel is not the user leaving the menu.
-  const entering = useRef(false);
 
   // Focus leaving is what dismisses a menu. The panel is portaled, so no wrapper element holds
   // the trigger and the menu together; these listeners name both elements explicitly instead.
@@ -43,14 +41,25 @@ export function useCommandMenu(): CommandMenuState {
     function onFocusOut(event: FocusEvent) {
       const panel = openRef.current ? panels.current.get(openRef.current) : null;
       const trigger = openRef.current ? triggers.current.get(openRef.current) : null;
-      if (!panel || !(event.target instanceof Node) || !panel.contains(event.target)) return;
+      if (!panel || !(event.target instanceof Node)) return;
+      if (!panel.contains(event.target) && !trigger?.contains(event.target)) return;
       // A destination inside the menu or back on its trigger is not leaving.
       const next = event.relatedTarget;
       if (next instanceof Node && (panel.contains(next) || Boolean(trigger?.contains(next)))) return;
       closeMenu({ restore: false });
     }
+    function onPointerDown(event: PointerEvent) {
+      const panel = openRef.current ? panels.current.get(openRef.current) : null;
+      const trigger = openRef.current ? triggers.current.get(openRef.current) : null;
+      if (!(event.target instanceof Node) || panel?.contains(event.target) || trigger?.contains(event.target)) return;
+      closeMenu({ restore: false });
+    }
     document.addEventListener("focusout", onFocusOut, true);
-    return () => document.removeEventListener("focusout", onFocusOut, true);
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      document.removeEventListener("focusout", onFocusOut, true);
+      document.removeEventListener("pointerdown", onPointerDown, true);
+    };
   }, [open]);
 
   useLayoutEffect(() => {
@@ -74,21 +83,9 @@ export function useCommandMenu(): CommandMenuState {
     };
   }
 
-  function rovingItems(panel: HTMLElement) {
-    // Disabled commands stay readable in the roving order's shortcuts but cannot take focus.
-    return [...panel.querySelectorAll<HTMLElement>(MENU_ITEM)].filter((item) => item.getAttribute("aria-disabled") !== "true");
-  }
-
-  function openMenu(key: string, options: { enter?: boolean } = {}) {
+  function openMenu(key: string) {
     setOpen(key);
     setRoving(null);
-    if (!options.enter) return;
-    entering.current = true;
-    window.requestAnimationFrame(() => {
-      entering.current = false;
-      const panel = panels.current.get(key);
-      if (panel && !panel.contains(document.activeElement)) moveFocus(panel, "first");
-    });
   }
 
   function closeMenu(options: { restore?: boolean } = {}) {
@@ -109,22 +106,9 @@ export function useCommandMenu(): CommandMenuState {
   }
 
   function moveFocus(panel: HTMLElement | null, delta: 1 | -1 | "first" | "last") {
-    if (!panel) return;
-    const items = rovingItems(panel);
-    if (items.length === 0) return;
-    const current = items.indexOf(document.activeElement as HTMLElement);
-    const next =
-      delta === "first"
-        ? 0
-        : delta === "last"
-          ? items.length - 1
-          : current < 0
-            ? delta === 1 ? 0 : items.length - 1
-            : (current + delta + items.length) % items.length;
-    const target = items[next];
+    const target = moveCommandFocus(panel, delta);
     if (!target) return;
     setRoving(target.dataset.command ?? null);
-    target.focus();
   }
 
   function focusItem(panel: HTMLElement | null, command: string) {
@@ -135,4 +119,21 @@ export function useCommandMenu(): CommandMenuState {
   }
 
   return { open, roving, openRef, panelRef, triggerRef, rovingItems, openMenu, closeMenu, toggleMenu, moveFocus, focusItem };
+}
+
+export function moveCommandFocus(panel: HTMLElement | null, delta: 1 | -1 | "first" | "last") {
+  if (!panel) return;
+  const items = rovingItems(panel);
+  if (items.length === 0) return;
+  const current = items.indexOf(document.activeElement as HTMLElement);
+  const next = delta === "first" ? 0 : delta === "last" ? items.length - 1
+    : current < 0 ? delta === 1 ? 0 : items.length - 1
+      : (current + delta + items.length) % items.length;
+  const target = items[next];
+  target?.focus();
+  return target;
+}
+
+function rovingItems(panel: HTMLElement) {
+  return [...panel.querySelectorAll<HTMLElement>(MENU_ITEM)].filter((item) => item.getAttribute("aria-disabled") !== "true");
 }
