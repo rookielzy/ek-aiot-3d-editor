@@ -66,6 +66,11 @@ export function normalizeNodeSelection(
           : nodeIds.includes(snapshot.selection.nodeId ?? "")
             ? snapshot.selection.nodeId
             : nodeIds[0] ?? null);
+      // Callers may name the node they tried to toggle even when the toggle removed it, or keep
+      // the node that was primary before; both would leave a primary outside the selection.
+      if (primaryNodeId !== null && !nodeIds.includes(primaryNodeId)) {
+        primaryNodeId = nodeIds[0] ?? null;
+      }
       break;
     }
     case "clear":
@@ -125,6 +130,9 @@ export function normalizeSelection(
         : objectIds.includes(snapshot.selection.objectId ?? "")
           ? snapshot.selection.objectId
           : objectIds[0] ?? null;
+      if (primaryObjectId !== null && !objectIds.includes(primaryObjectId)) {
+        primaryObjectId = objectIds[0] ?? null;
+      }
       break;
     }
     case "clear":

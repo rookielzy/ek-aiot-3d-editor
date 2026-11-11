@@ -97,6 +97,11 @@ export function isEditableTarget(target: unknown): boolean {
   if (role === "textbox") {
     return true;
   }
+  // Folding key events out of a text role are the browser's, not the scene's: a press inside a
+  // field must never add, replace, or clear the scene selection behind it.
+  if (role === "searchbox") {
+    return true;
+  }
   const tagName = element.tagName?.toLowerCase();
   return tagName === "input" || tagName === "textarea" || tagName === "select";
 }

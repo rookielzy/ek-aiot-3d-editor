@@ -513,6 +513,7 @@ export type {
   WorkbenchProblemItem,
   WorkbenchProjectModel,
   WorkbenchSelectionModel,
+  WorkbenchNodeCapability,
   WorkbenchStatusModel,
   WorkbenchToolbarModel
 } from "./workbench/workbench-model";
@@ -764,7 +765,8 @@ export {
   isImportedGlbMaterialAssignmentTarget
 } from "./imported-targets/slots";
 export {
-  buildWorkbenchModel
+  buildWorkbenchModel,
+  buildWorkbenchNodeCapability
 } from "./workbench/workbench-model";
 export {
   buildCameraSection

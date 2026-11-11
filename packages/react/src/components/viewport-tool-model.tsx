@@ -2,6 +2,7 @@ import { createAuthoredCameraViewInput, type MessageDescriptor } from "@ek-aiot/
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
 import type { WorkbenchMessageKey } from "../i18n/workbench-i18n";
 import type { WorkbenchIconName } from "./WorkbenchIcon";
+import { nodeToolGroup, platformShortcut } from "./node-tool-model";
 
 export interface ViewportToolCommand {
   key: string;
@@ -31,17 +32,6 @@ export type ViewportToolEntry =
   | { kind: "group"; key: string; label: WorkbenchMessageKey; groups: ViewportToolGroup[] }
   | { kind: "menu"; key: string; label: WorkbenchMessageKey; group: ViewportToolGroup };
 
-const MODIFIER = /^Ctrl\+/;
-const DELETE_KEYS = "Delete Backspace";
-
-function shortcut(binding: string, platform: string): string {
-  if (!MODIFIER.test(binding)) return binding;
-  const rest = binding.slice("Ctrl+".length);
-  const primary = platform.startsWith("Mac") ? "Meta" : "Control";
-  if (rest === "Z") return `${primary}+Z ${primary === "Meta" ? "Control" : "Meta"}+Z`;
-  if (rest === "Y") return `${primary}+Y`;
-  return `${primary}+${rest}`;
-}
 
 /**
  * Builds the viewport tool strip as direct commands plus the grouped menus that
@@ -49,12 +39,16 @@ function shortcut(binding: string, platform: string): string {
  */
 export function buildViewportToolEntries(
   context: ResolvedWorkbenchContext,
-  options: { marqueeSelectionEnabled: boolean; platform?: string; onToggleMarqueeSelection?(): void }
+  options: {
+    marqueeSelectionEnabled: boolean;
+    platform?: string;
+    onToggleMarqueeSelection?(): void;
+  }
 ): ViewportToolEntry[] {
   const { marqueeSelectionEnabled, platform = globalThis.navigator?.platform ?? "" } = options;
   const toolbar = context.model.toolbar;
   const disabled = toolbar.disabledReasons;
-  const sign = (binding: string) => shortcut(binding, platform);
+  const sign = (binding: string) => platformShortcut(binding, platform);
   const describe = (reason: MessageDescriptor | undefined) => (reason ? context.i18n.t(reason) : undefined);
 
   const helpAllPressed = Object.values(toolbar.viewportHelpers).every(Boolean);
@@ -328,92 +322,7 @@ export function buildViewportToolEntries(
         }
       ]
     },
-    {
-      kind: "action",
-      key: "node",
-      label: "reactWorkbench.toolbar.node.label",
-      commands: [
-        {
-          key: "copy",
-          icon: "copy",
-          label: "reactWorkbench.toolbar.node.copy.label",
-          title: "reactWorkbench.toolbar.node.copy.title",
-          shortcut: sign("Ctrl+C"),
-          disabledReason: describe(disabled?.canCopy),
-          disabled: !toolbar.canCopy,
-          onClick: () => context.runAction("copy")
-        },
-        {
-          key: "paste",
-          icon: "paste",
-          label: "reactWorkbench.toolbar.node.paste.label",
-          title: "reactWorkbench.toolbar.node.paste.title",
-          shortcut: sign("Ctrl+V"),
-          disabledReason: describe(disabled?.canPaste),
-          disabled: !toolbar.canPaste,
-          onClick: () => context.runAction("paste")
-        },
-        {
-          key: "duplicate",
-          icon: "duplicate",
-          label: "reactWorkbench.toolbar.node.duplicate.label",
-          title: "reactWorkbench.toolbar.node.duplicate.title",
-          shortcut: sign("Ctrl+D"),
-          disabledReason: describe(disabled?.canDuplicate),
-          disabled: !toolbar.canDuplicate,
-          onClick: () => context.runAction("duplicate")
-        },
-        {
-          key: "delete",
-          icon: "delete",
-          label: "reactWorkbench.toolbar.node.delete.label",
-          title: "reactWorkbench.toolbar.node.delete.title",
-          shortcut: DELETE_KEYS,
-          disabledReason: describe(disabled?.canDelete),
-          disabled: !toolbar.canDelete,
-          onClick: () => context.runAction("delete")
-        },
-        {
-          key: "group",
-          icon: "group",
-          label: "reactWorkbench.toolbar.node.group.label",
-          title: "reactWorkbench.toolbar.node.group.title",
-          shortcut: sign("Ctrl+G"),
-          disabledReason: describe(disabled?.canGroup),
-          disabled: !toolbar.canGroup,
-          onClick: () => context.runAction("group")
-        },
-        {
-          key: "ungroup",
-          icon: "ungroup",
-          label: "reactWorkbench.toolbar.node.ungroup.label",
-          title: "reactWorkbench.toolbar.node.ungroup.title",
-          shortcut: sign("Ctrl+Shift+G"),
-          disabledReason: describe(disabled?.canUngroup),
-          disabled: !toolbar.canUngroup,
-          onClick: () => context.runAction("ungroup")
-        },
-        {
-          key: "select-all",
-          icon: "select-all",
-          label: "reactWorkbench.toolbar.node.selectAll.label",
-          title: "reactWorkbench.toolbar.node.selectAll.title",
-          shortcut: sign("Ctrl+A"),
-          disabledReason: describe(disabled?.canSelectAll),
-          disabled: !toolbar.canSelectAll,
-          onClick: () => context.runAction("select-all")
-        },
-        {
-          key: "clear-selection",
-          icon: "clear-selection",
-          label: "reactWorkbench.toolbar.node.clear.label",
-          title: "reactWorkbench.toolbar.node.clear.title",
-          disabledReason: describe(disabled?.canClearSelection),
-          disabled: !toolbar.canClearSelection,
-          onClick: () => context.runAction("clear-selection")
-        }
-      ]
-    }
+    nodeToolGroup(context, { includeShortcuts: true })
   ];
 
   const grouped = (key: ViewportToolGroupKey) => groups.find((group) => group.key === key)!;

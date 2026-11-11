@@ -411,6 +411,12 @@
   min-width: 0;
 }
 
+.ek-workbench__hierarchy {
+  display: grid;
+  gap: var(--ek-workbench-space-2);
+  min-width: 0;
+}
+
 .ek-workbench__hierarchy-search {
   display: grid;
   gap: 0.35rem;
@@ -487,6 +493,73 @@
   border-color: #97c5ec;
   background: var(--ek-workbench-accent-soft);
   color: var(--ek-workbench-accent-strong);
+}
+
+/* Keyboard focus is the row's own, separate from selection: outline, never the selected fill. */
+.ek-workbench__tree-row:focus-visible {
+  outline: 2px solid var(--ek-workbench-accent-strong);
+  outline-offset: -2px;
+}
+
+.ek-workbench__tree-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 1.5rem;
+  min-height: var(--ek-workbench-control-height);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--ek-workbench-radius-sm);
+  background: transparent;
+  color: var(--ek-workbench-muted);
+  cursor: pointer;
+  opacity: 0;
+  /* Reachable by keyboard even while the pointer has not found the row yet. */
+  transition: opacity 120ms ease;
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.ek-workbench__tree-entry:hover .ek-workbench__tree-more,
+.ek-workbench__tree-more:focus-visible,
+.ek-workbench__tree-more[data-state="open"] {
+  opacity: 1;
+}
+
+.ek-workbench__tree-more:hover {
+  border-color: var(--ek-workbench-border);
+  background: var(--ek-workbench-surface-inset);
+  color: var(--ek-workbench-text);
+}
+
+/* The button is drawn over the row, so it never takes width from the tree. */
+.ek-workbench__tree-entry {
+  position: relative;
+}
+
+/* While the button is shown it sits over the row, so keep the label text clear of it. */
+.ek-workbench__tree-entry:focus-within .ek-workbench__tree-row,
+.ek-workbench__tree-entry:hover .ek-workbench__tree-row {
+  padding-right: calc(0.5rem + 1.6rem);
+}
+
+.ek-workbench__tree-more:focus-visible {
+  outline: 2px solid var(--ek-workbench-accent-strong);
+  outline-offset: -2px;
+}
+
+@media (hover: none) {
+  .ek-workbench__tree-more {
+    opacity: 1;
+  }
+}
+
+/* A row menu is the viewport's node menu: same list, aimed at the row it was opened from. */
+.ek-workbench__tree-menu {
+  min-width: 0;
 }
 
 .ek-workbench__tree-row span,

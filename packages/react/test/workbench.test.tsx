@@ -1159,18 +1159,19 @@ describe("React EditorWorkbench", () => {
     editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Robot arm", asset: { id: "asset-a" }, parentId: "group-a" });
     render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
     const hierarchy = within(screen.getByLabelText("Hierarchy"));
+    const row = (label: string) => hierarchy.queryByRole("treeitem", { name: label });
     const before = editor.getSnapshot();
     fireEvent.click(hierarchy.getByLabelText("Collapse Assembly"));
-    expect(hierarchy.queryByText("Robot arm")).toBeNull();
+    expect(row("Robot arm")).toBeNull();
     fireEvent.change(hierarchy.getByLabelText("Search hierarchy"), { target: { value: "  ROBOT  " } });
-    expect(hierarchy.getByText("Assembly")).toBeTruthy();
-    expect(hierarchy.getByText("Robot arm")).toBeTruthy();
+    expect(row("Assembly")).toBeTruthy();
+    expect(row("Robot arm")).toBeTruthy();
     fireEvent.change(hierarchy.getByLabelText("Search hierarchy"), { target: { value: "absent" } });
     expect(hierarchy.getByText("No matching nodes")).toBeTruthy();
     fireEvent.change(hierarchy.getByLabelText("Search hierarchy"), { target: { value: "" } });
-    expect(hierarchy.queryByText("Robot arm")).toBeNull();
+    expect(row("Robot arm")).toBeNull();
     fireEvent.click(hierarchy.getByLabelText("Expand Assembly"));
-    expect(hierarchy.getByText("Robot arm")).toBeTruthy();
+    expect(row("Robot arm")).toBeTruthy();
     expect(editor.getSnapshot()).toEqual(before);
   });
 
@@ -1182,12 +1183,12 @@ describe("React EditorWorkbench", () => {
     render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
     const hierarchy = within(screen.getByLabelText("Hierarchy"));
     const imported = Object.values(editor.getSnapshot().nodes).find((node) => node.kind === "imported")!;
-    const importedButton = () => hierarchy.getByRole("button", { name: new RegExp(`^${imported.name}\\s*imported`) });
+    const importedButton = () => hierarchy.getByRole("treeitem", { name: imported.name });
     fireEvent.click(hierarchy.getByText("Robot"));
     fireEvent.click(importedButton(), { ctrlKey: true });
     expect(editor.getSnapshot().selection.nodeIds).toEqual(["object-a", imported.id]);
     expect(screen.getByText("Selection 2 nodes")).toBeTruthy();
-    expect(importedButton().getAttribute("aria-pressed")).toBe("true");
+    expect(importedButton().getAttribute("aria-selected")).toBe("true");
     fireEvent.click(importedButton(), { metaKey: true });
     expect(editor.getSnapshot().selection.nodeIds).toEqual(["object-a"]);
     fireEvent.click(importedButton(), { shiftKey: true });
@@ -1196,12 +1197,12 @@ describe("React EditorWorkbench", () => {
     expect(editor.getSnapshot().selection.nodeIds).toEqual(["object-a"]);
     fireEvent.click(hierarchy.getByLabelText("Collapse Robot"));
     act(() => { editor.dispatch({ type: "select-node", nodeId: imported.id }); });
-    expect(importedButton().getAttribute("aria-pressed")).toBe("true");
+    expect(importedButton().getAttribute("aria-selected")).toBe("true");
     expect(screen.getByText(`Selection ${imported.name}`)).toBeTruthy();
     expect(screen.getByLabelText("Position X")).toBeTruthy();
     clickToolbarCommand("Clear selection");
     expect(editor.getSnapshot().selection.nodeIds).toEqual([]);
-    expect(importedButton().getAttribute("aria-pressed")).toBe("false");
+    expect(importedButton().getAttribute("aria-selected")).toBe("false");
   });
 
   it("focuses a double-clicked row through the existing runtime camera", async () => {

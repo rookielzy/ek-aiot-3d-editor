@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { CommandMenuItem, type MenuCommand } from "./command-menu-item";
 import { moveCommandFocus, type CommandReason } from "./command-menu";
 
@@ -41,7 +41,8 @@ export function ShortcutHint({ shortcut }: { shortcut: string }): React.JSX.Elem
  *
  * The list owns `role="menu"` and is focusable so keyboard entry lands somewhere useful: Radix
  * renders the popover panel itself as `tabIndex -1`, and a container outside the tab order could
- * not receive focus at all. Entering the list hands focus to the first enabled command.
+ * not receive focus at all. A menu opened from the keyboard enters itself and lands on the first
+ * enabled command; every other entry hands focus there once.
  */
 export function CommandMenu({
   group,
@@ -51,7 +52,8 @@ export function CommandMenu({
   onActivate,
   roving,
   onEscape,
-  onTab
+  onTab,
+  claimEntry
 }: {
   group: CommandMenuGroup;
   /** Id prefix of the owning menu, used to tie disabled rows to the reason tooltip. */
@@ -65,13 +67,48 @@ export function CommandMenu({
   roving?: string | null;
   onEscape(): void;
   onTab(): void;
+  /**
+   * Claims focus for a menu whose trigger keeps it.
+   *
+   * A trigger that stays focused — a row whose menu opens from a keystroke, say — leaves nobody to
+   * move focus into the portaled panel. When this is set, the menu takes focus as soon as it holds
+   * an available command, once per mount.
+   */
+  claimEntry?: boolean;
 }): React.JSX.Element {
   const [reason, setReason] = useState<CommandReason | null>(null);
+  const entered = useRef(false);
+  const list = useRef<HTMLDivElement | null>(null);
+  const claimed = useRef(false);
   const tooltipId = (commandKey: string) => `${idPrefix}-${commandKey}-reason`;
+  const entry = (): void => {
+    const target = list.current;
+    if (target) onMoveFocus(target, "first");
+  };
+
+  useEffect(() => {
+    if (!claimEntry || claimed.current) return;
+    const target = list.current;
+    if (!target) return;
+    const available = (): HTMLElement | undefined =>
+      [...target.querySelectorAll<HTMLElement>('[role^="menuitem"]')].find((item) => item.getAttribute("aria-disabled") !== "true");
+    const claim = (): void => {
+      if (claimed.current || (document.activeElement instanceof Node && target.contains(document.activeElement))) return;
+      const item = available();
+      if (!item) return;
+      claimed.current = true;
+      item.focus();
+    };
+    claim();
+    const frame = requestAnimationFrame(claim);
+    return () => cancelAnimationFrame(frame);
+  }, [claimEntry, group]);
+
   return (
     <>
       <strong className="ek-workbench__menu-group" aria-hidden="true">{group.label}</strong>
       <div
+        ref={list}
         className="ek-workbench__menu-list"
         id={listId}
         role="menu"
@@ -79,9 +116,11 @@ export function CommandMenu({
         aria-orientation="vertical"
         tabIndex={-1}
         onFocus={(event) => {
-          // Landing on the list (keyboard entry) starts roving at its first command.
-          if (event.target !== event.currentTarget) return;
-          onMoveFocus(event.currentTarget, "first");
+          // Entering the menu — on the list itself (`tabIndex -1` lets focus land here) — starts
+          // roving at its first command. Focus moving between commands stays where it is.
+          if (event.target !== event.currentTarget || entered.current) return;
+          entered.current = true;
+          entry();
         }}
         onKeyDown={(event) => {
           if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {

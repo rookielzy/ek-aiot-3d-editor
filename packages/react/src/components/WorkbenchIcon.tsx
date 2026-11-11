@@ -10,6 +10,7 @@ import {
   Cube,
   Cursor,
   Database,
+  DotsThree,
   DownloadSimple,
   Eye,
   FileArrowUp,
@@ -47,6 +48,7 @@ export type WorkbenchIconName =
   | "hover"
   | "lights"
   | "marquee"
+  | "more"
   | "move"
   | "open"
   | "paste"
@@ -81,6 +83,7 @@ const ICONS = {
   hover: Cursor,
   lights: Hand,
   marquee: SelectionAll,
+  more: DotsThree,
   move: ArrowsOutCardinal,
   open: FileArrowUp,
   paste: UploadSimple,

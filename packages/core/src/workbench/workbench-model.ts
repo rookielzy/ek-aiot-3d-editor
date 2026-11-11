@@ -128,6 +128,16 @@ export interface WorkbenchSelectionModel {
   cameraViewId: string | null;
 }
 
+/** Per-node capability, the same rules the toolbar applies to a selection. */
+export interface WorkbenchNodeCapability {
+  canCopy: boolean;
+  canDuplicate: boolean;
+  canDelete: boolean;
+  canGroup: boolean;
+  canUngroup: boolean;
+  reasons: Partial<Record<"copy" | "duplicate" | "delete" | "group" | "ungroup", MessageDescriptor>>;
+}
+
 export interface WorkbenchToolbarModel {
   disabledReasons?: Partial<Record<Extract<keyof WorkbenchToolbarModel, `can${string}`>, MessageDescriptor>>;
   canUndo: boolean;
@@ -606,6 +616,55 @@ function nodeSubtreeIncludesKind(snapshot: SceneSnapshot, nodeId: string, kind: 
     return true;
   }
   return node.children.some((childId) => nodeSubtreeIncludesKind(snapshot, childId, kind));
+}
+
+/**
+ * Which node commands apply to one node, answered without a selection.
+ *
+ * The toolbar answers for the current selection. A hierarchy row menu must answer for its own row,
+ * which the user may not have selected, so it asks this instead and gets the same rules and the same
+ * reason descriptors the toolbar would produce for that node. An action is available exactly when a
+ * durable command can name that node, because an entry that cannot act would only look enabled.
+ */
+export function buildWorkbenchNodeCapability(snapshot: SceneSnapshot, nodeId: string): WorkbenchNodeCapability {
+  const node: SceneNode | undefined = snapshot.nodes[nodeId];
+  const reason = (key: string, fallback: string): MessageDescriptor => createDisplayMessageDescriptor({
+    namespace: "workbench", path: `toolbar.disabled.${key}`, field: "reason", fallback
+  });
+  const selectNode = reason("selectNode", "Select a node first.");
+  const cameraSelection = reason("cameraSelection", "Camera nodes cannot be copied or grouped.");
+  const objectId = node?.kind === "object" ? node.objectId : node?.kind === "imported" ? node.ownerObjectId : null;
+  const isObject = Boolean(objectId && snapshot.objects[objectId!]);
+  // Cameras cannot be copied, so a camera — itself, or one the node carries with it — blocks those
+  // actions. A light is copied on its own, whether or not the scene parks a camera under it.
+  const copyUnit = node?.kind === "object" || node?.kind === "imported" ? nodeId : null;
+  const includesCamera = node?.kind === "camera" || (copyUnit !== null && nodeSubtreeIncludesKind(snapshot, copyUnit, "camera"));
+  const canUngroup = node?.kind === "group"
+    || (node?.kind === "object" && snapshot.objects[node.objectId].children.length > 0);
+
+  const capability: WorkbenchNodeCapability = {
+    // A light is copied through its own node, and an object through its object, so only a camera
+    // in the subtree — or the node itself — blocks these.
+    canCopy: Boolean(node) && !includesCamera,
+    canDuplicate: Boolean(node) && !includesCamera,
+    canDelete: isObject,
+    canGroup: false,
+    canUngroup,
+    reasons: {}
+  };
+  if (!capability.canCopy) capability.reasons.copy = includesCamera ? cameraSelection : selectNode;
+  if (!capability.canDuplicate) capability.reasons.duplicate = includesCamera ? cameraSelection : selectNode;
+  if (!capability.canDelete) {
+    capability.reasons.delete = node?.kind === "light"
+      ? reason("deleteLight", "Remove lights from the inspector.")
+      : node?.kind === "camera"
+        ? reason("deleteCamera", "Remove camera views from the inspector.")
+        : selectNode;
+  }
+  // Grouping is a multi-node action, so it is never available from a single node's menu.
+  if (!capability.canGroup) capability.reasons.group = reason("group", "Select at least two nodes to group.");
+  if (!capability.canUngroup) capability.reasons.ungroup = reason("ungroup", "Select a group or an object with children.");
+  return capability;
 }
 
 function buildWorkbenchProject(
