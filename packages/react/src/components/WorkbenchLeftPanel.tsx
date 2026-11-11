@@ -47,7 +47,7 @@ export function WorkbenchLeftPanel({
       >
         <div className="ek-workbench__section-header">
           <h2>{t("reactWorkbench.leftPanel.assets.label")}</h2>
-          <span>{assetCounts ? `${assetCounts.visible}/${assetCounts.total}` : 0}</span>
+          {assetCounts ? <span>{`${assetCounts.visible}/${assetCounts.total}`}</span> : null}
         </div>
         <WorkbenchAssets context={context} onCountChange={setAssetCounts} />
       </section>

@@ -4,6 +4,7 @@ import type {
   AssetWorkspacePayloadStatus,
   AssetWorkspaceStatus,
   GlbImportDiagnostic,
+  GlbImportRemapSummary,
   GlbImportStatus,
   MessageDescriptor,
   ProjectProblem,
@@ -74,13 +75,17 @@ export function renderStatusMessage(i18n: WorkbenchI18n, message: LocalizedStatu
   });
 }
 
+/** Core text that carries a descriptor when it is translatable and a plain string when it is not. */
+export function descriptorMessage(descriptor: MessageDescriptor | undefined, fallback: string): LocalizedStatusMessage {
+  return descriptor ? descriptorStatusMessage(descriptor) : rawStatusMessage(fallback);
+}
+
+export function renderDescriptor(descriptor: MessageDescriptor | undefined, text: string, i18n: WorkbenchI18n): string {
+  return descriptor ? i18n.t(descriptor) : text;
+}
+
 export function diagnosticStatusMessage(diagnostic: WorkbenchAssetImportDiagnostic | undefined): LocalizedStatusMessage | undefined {
-  if (!diagnostic) {
-    return undefined;
-  }
-  return diagnostic.titleDescriptor
-    ? descriptorStatusMessage(diagnostic.titleDescriptor)
-    : rawStatusMessage(diagnostic.title);
+  return diagnostic ? descriptorMessage(diagnostic.titleDescriptor, diagnostic.title) : undefined;
 }
 
 export function glbDiagnosticStatusMessage(diagnostic: GlbImportDiagnostic | undefined): LocalizedStatusMessage | undefined {
@@ -102,14 +107,12 @@ export function projectProblemStatusMessage(problem: ProjectProblem | undefined)
   if (!problem) {
     return undefined;
   }
-  return problem.display?.titleDescriptor
-    ? descriptorStatusMessage(problem.display.titleDescriptor)
-    : rawStatusMessage(problem.display?.title ?? problem.message);
+  return descriptorMessage(problem.display?.titleDescriptor, problem.display?.title ?? problem.message);
 }
 
 export function reimportSummaryStatusMessage(
   fileName: string,
-  summary: { exactTargetCount: number; remappedTargetCount: number; newTargetCount: number; unresolvedTargetCount: number } | undefined
+  summary: GlbImportRemapSummary | undefined
 ): LocalizedStatusMessage {
   if (!summary) {
     return localizedStatusMessage("reactWorkbench.leftPanel.assets.reimport.success", "Reimported {fileName}", { fileName });
@@ -117,32 +120,67 @@ export function reimportSummaryStatusMessage(
   return localizedStatusMessage(
     "reactWorkbench.leftPanel.assets.reimport.summary",
     "{exactTargetCount} exact · {remappedTargetCount} remapped · {newTargetCount} new · {unresolvedTargetCount} unresolved",
-    summary
+    { ...summary }
   );
 }
 
 export function formatImportDiagnostic(i18n: WorkbenchI18n, diagnostic: WorkbenchAssetImportDiagnostic): string {
-  return diagnostic.titleDescriptor ? i18n.t(diagnostic.titleDescriptor) : diagnostic.title;
+  return renderDescriptor(diagnostic.titleDescriptor, diagnostic.title, i18n);
 }
 
 export function formatAssetKind(i18n: WorkbenchI18n, value: AssetKind): string {
-  return i18n.t(assetKindMessageKeys[value]);
+  return formatted(i18n, assetKindMessageKeys, value);
 }
 
 export function formatWorkspaceStatus(i18n: WorkbenchI18n, value: AssetWorkspaceStatus): string {
-  return i18n.t(workspaceStatusMessageKeys[value]);
+  return formatted(i18n, workspaceStatusMessageKeys, value);
 }
 
 export function formatPayloadStatus(i18n: WorkbenchI18n, value: AssetWorkspacePayloadStatus): string {
-  return i18n.t(payloadStatusMessageKeys[value]);
+  return formatted(i18n, payloadStatusMessageKeys, value);
 }
 
 export function formatPackageStatus(i18n: WorkbenchI18n, value: AssetWorkspacePackageStatus): string {
-  return i18n.t(packageStatusMessageKeys[value]);
+  return formatted(i18n, packageStatusMessageKeys, value);
 }
 
 export function formatImportStatus(i18n: WorkbenchI18n, value: GlbImportStatus): string {
-  return i18n.t(importStatusMessageKeys[value]);
+  return formatted(i18n, importStatusMessageKeys, value);
+}
+
+function formatted<T extends string>(i18n: WorkbenchI18n, keys: Readonly<Record<T, WorkbenchMessageKey>>, value: T): string {
+  return i18n.t(keys[value]);
+}
+
+/**
+ * How an asset's file is maintained: a GLB is re-imported and its targets remapped, every other
+ * payload is replaced in place. An unregistered asset has no file to re-import into.
+ */
+export interface AssetMaintenanceAction {
+  mode: "replace" | "reimport";
+  labelKey: WorkbenchMessageKey;
+  hintKey: WorkbenchMessageKey;
+  ariaKey: WorkbenchMessageKey;
+}
+
+export function assetMaintenanceAction(asset: { kind: AssetKind; registered: boolean }): AssetMaintenanceAction | null {
+  if (!asset.registered) {
+    return null;
+  }
+  if (asset.kind === "glb") {
+    return {
+      mode: "reimport",
+      labelKey: "reactWorkbench.leftPanel.assets.reimport.label",
+      hintKey: "reactWorkbench.leftPanel.assets.reimport.hint",
+      ariaKey: "reactWorkbench.leftPanel.assets.reimport.aria"
+    };
+  }
+  return {
+    mode: "replace",
+    labelKey: "reactWorkbench.leftPanel.assets.replace.label",
+    hintKey: "reactWorkbench.leftPanel.assets.replace.hint",
+    ariaKey: "reactWorkbench.leftPanel.assets.replace.aria"
+  };
 }
 
 function normalizeDiagnosticCodePath(code: string): string {

@@ -1,5 +1,5 @@
-import { createEditor, type RendererLike } from "@ek-aiot/3d-editor-core";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { AssetResolverBridge, createEditor, type RendererLike } from "@ek-aiot/3d-editor-core";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
 
@@ -23,10 +23,13 @@ function openAssetsView(label = "Assets"): void {
   fireEvent.click(button!);
 }
 
-function assetRow(assetLabel: string, rowsLabel = "Asset workspace rows"): HTMLElement {
-  const rows = screen.getByLabelText(rowsLabel);
-  const label = within(rows).getByText(assetLabel, { selector: ".ek-workbench__asset-label" });
-  return label.closest("li") as HTMLElement;
+/** The row that carries an asset's own controls: the list item holding its details disclosure. */
+function assetRow(assetLabel: string, detailsToggle = /details for/): HTMLElement {
+  const rows = [...screen.getAllByRole("button", { name: detailsToggle })]
+    .map((button) => button.closest("li"))
+    .filter((row): row is HTMLElement => row !== null && (row.textContent ?? "").includes(assetLabel));
+  expect(rows).toHaveLength(1);
+  return rows[0]!;
 }
 
 describe("React asset workspace row interactions", () => {
@@ -47,22 +50,24 @@ describe("React asset workspace row interactions", () => {
 
     const row = assetRow("Hero image");
     const toggle = within(row).getByRole("button", { name: "Show details for Hero image" });
-    const details = row.querySelector(".ek-workbench__asset-details") as HTMLElement;
+    const detailsId = toggle.getAttribute("aria-controls")!;
+    const details = () => document.getElementById(detailsId) as HTMLElement;
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    expect(toggle.getAttribute("aria-controls")).toBe(details.id);
-    expect(details.hidden).toBe(true);
-    // The file action stays reachable in the DOM so the label stays unique whether open or closed.
+    expect(details()).toBeTruthy();
+    expect(details().hidden).toBe(true);
+    expect(details().hasAttribute("hidden")).toBe(true);
+    // The file action stays reachable in the DOM so its label stays unique whether open or closed.
     expect(within(row).getByLabelText("Replace Hero image")).toBeTruthy();
 
     fireEvent.click(toggle);
     expect(within(row).getByRole("button", { name: "Hide details for Hero image" }).getAttribute("aria-expanded")).toBe("true");
-    expect(details.hidden).toBe(false);
-    expect(details.textContent).toContain("Payload");
-    expect(details.textContent).toContain("No scene references");
-    expect(within(details).getByText("2")).toBeTruthy();
+    expect(details().hidden).toBe(false);
+    expect(details().textContent).toContain("Payload");
+    expect(details().textContent).toContain("No scene references");
+    expect(within(details()).getByText("2")).toBeTruthy();
 
     fireEvent.click(within(row).getByRole("button", { name: "Hide details for Hero image" }));
-    expect(details.hidden).toBe(true);
+    expect(details().hidden).toBe(true);
   });
 
   it("opens the row menu and runs the row's own file action", async () => {
@@ -81,14 +86,13 @@ describe("React asset workspace row interactions", () => {
     const menu = screen.getByRole("menu", { name: "Asset actions for Manual label" });
     expect(within(menu).getByRole("menuitem", { name: /Replace file/ })).toBeTruthy();
 
-    // The menu action forwards to the row's single maintenance input instead of duplicating it.
-    const input = within(row).getByLabelText("Replace Manual label") as HTMLInputElement;
-    const click = vi.spyOn(input, "click").mockImplementation(() => undefined);
+    // The menu routes to the row's single maintenance input instead of duplicating it.
     fireEvent.click(within(menu).getByRole("menuitem", { name: /Replace file/ }));
-    expect(click).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("menu")).toBeNull();
+    const detailsId = within(row).getByRole("button", { name: "Hide details for Manual label" }).getAttribute("aria-controls")!;
+    expect(document.getElementById(detailsId)!.hidden).toBe(false);
 
-    input.click = click.getMockImplementation()!;
+    const input = within(row).getByLabelText("Replace Manual label");
     fireEvent.change(input, { target: { files: [new File([new Uint8Array([2])], "next.png", { type: "image/png" })] } });
     await act(async () => {
       await vi.waitFor(() => expect(replaceAsset).toHaveBeenCalledWith(expect.objectContaining({ assetId: "image-a", label: "next.png" })));
@@ -140,13 +144,41 @@ describe("React asset workspace row interactions", () => {
     vi.unstubAllGlobals();
   });
 
+  it("keeps recovery actions for missing assets that the filters hide", async () => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a", label: "Recovery box" } });
+    render(
+      <EditorWorkbench
+        editor={editor}
+        resolver={new AssetResolverBridge(() => null)}
+        rendererFactory={fakeRenderer}
+        rightPanel={() => null}
+      />
+    );
+    await act(async () => { await editor.getRuntime()?.project(); });
+    openAssetsView();
+
+    const visibleRecovery = within(assetRow("Recovery box")).getByLabelText("Missing asset recovery");
+    expect((visibleRecovery.querySelector("input") as HTMLInputElement)).toBeTruthy();
+
+    // A filter that hides the row must not take its repair action away with it.
+    fireEvent.change(screen.getByLabelText("Search assets"), { target: { value: "no such payload" } });
+    expect(screen.getByText("No matching assets. Adjust search or filters.")).toBeTruthy();
+    const hiddenRecovery = screen.getByLabelText("Missing asset recovery");
+    expect(within(hiddenRecovery).getByText("Hidden by the current filters")).toBeTruthy();
+    const input = hiddenRecovery.querySelector("input")!;
+    fireEvent.change(input, { target: { files: [new File([new Uint8Array([1, 2, 3])], "recovered.glb", { type: "model/gltf-binary" })] } });
+    await waitFor(() => expect(screen.getByLabelText("Asset recovery status").textContent).toContain("Replaced with recovered.glb"));
+    expect(editor.getSnapshot().assets["asset-a"]).toBeTruthy();
+  });
+
   it("localizes the summary disclosure and row menu in zh-CN", () => {
     const editor = createEditor();
     editor.dispatch({ type: "register-asset", asset: { id: "image-a", kind: "image", label: "主图", source: new Uint8Array([1]) } });
     render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} locale="zh-CN" />);
     openAssetsView("资源");
 
-    const row = assetRow("主图", "资源工作区行");
+    const row = assetRow("主图", /的详情/);
     const toggle = within(row).getByRole("button", { name: "展开 主图 的详情" });
     fireEvent.click(toggle);
     expect(within(row).getByRole("button", { name: "收起 主图 的详情" }).getAttribute("aria-expanded")).toBe("true");

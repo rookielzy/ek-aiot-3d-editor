@@ -14,7 +14,7 @@ import {
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
 import type { WorkbenchMessageKey } from "../i18n/workbench-i18n";
 import {
-  descriptorStatusMessage,
+  assetMaintenanceAction,
   diagnosticStatusMessage,
   formatAssetKind,
   formatImportStatus,
@@ -27,7 +27,9 @@ import {
   projectProblemStatusMessage,
   reimportSummaryStatusMessage,
   rawStatusMessage,
+  renderDescriptor,
   renderStatusMessage,
+  type AssetMaintenanceAction,
   type AssetRecoveryState,
   type LocalizedStatusMessage
 } from "./asset-workspace-status";
@@ -39,7 +41,7 @@ import { WorkbenchIcon } from "./WorkbenchIcon";
 type AssetQueueStatus = "queued" | "importing" | "succeeded" | "failed";
 type AssetStatusFilter = "all" | AssetWorkspaceStatus;
 type AssetKindFilter = "all" | AssetKind;
-type AssetMaintenanceMode = "replace" | "reimport";
+type AssetPickedFile = (assetId: string, file: File, mode: AssetMaintenanceAction["mode"]) => Promise<void>;
 
 interface AssetQueueItem {
   id: string;
@@ -62,6 +64,9 @@ export interface AssetListCounts {
  * offers — in that order, top to bottom. A row reads as a summary (name, kind, status, relation)
  * and opens into the rest of the record, so the list stays scannable while every detail the
  * inspector can act on stays one press away.
+ *
+ * Filter, sort, expansion, import queue and maintenance feedback are view state owned here; the
+ * durable record stays the editor's scene snapshot.
  */
 export function WorkbenchAssets({ context, onCountChange }: {
   context: ResolvedWorkbenchContext;
@@ -83,10 +88,12 @@ export function WorkbenchAssets({ context, onCountChange }: {
   const model = context.model;
   const t = context.i18n.t;
   const workspace = model.assets.workspace;
-  const workspaceAssetIdKey = (workspace?.items ?? []).map((item) => item.id).join("\n");
-  const workspaceAssetIds = useMemo(() => new Set(
-    workspaceAssetIdKey ? workspaceAssetIdKey.split("\n") : []
-  ), [workspaceAssetIdKey]);
+  const workspaceAssetIdKey = (workspace?.items ?? []).map((item) => item.id).join("\u0000");
+  const workspaceAssetIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const id of workspaceAssetIdKey ? workspaceAssetIdKey.split("\u0000") : []) ids.add(id);
+    return ids;
+  }, [workspaceAssetIdKey]);
   const visibleAssets = useMemo(() => {
     const items = workspace?.items ?? [];
     const filtered = filterAssetWorkspaceItems(items, {
@@ -157,6 +164,12 @@ export function WorkbenchAssets({ context, onCountChange }: {
     const resultsByQueueId = new Map(queueItems.map((item, index) => [item.id, results[index]]));
     setQueue((current) => current.map((item) => {
       const result = resultsByQueueId.get(item.id);
+      if (!item.diagnostics.length && !result) {
+        // No per-file result: report the file as failed rather than leaving it "importing".
+        return queuedIds.has(item.id)
+          ? { ...item, status: "failed", detail: localizedStatusMessage("reactWorkbench.leftPanel.assets.queue.failedDetail", "Import failed") }
+          : item;
+      }
       if (!result) {
         return item;
       }
@@ -186,11 +199,7 @@ export function WorkbenchAssets({ context, onCountChange }: {
     void importAssetFiles(Array.from(event.dataTransfer.files ?? []));
   }
 
-  async function maintainAsset(assetId: string, event: ChangeEvent<HTMLInputElement>, mode: AssetMaintenanceMode) {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = "";
-    if (!file) return;
-
+  async function maintainAsset(assetId: string, file: File, mode: AssetMaintenanceAction["mode"]) {
     const recoveringMissing = model.assets.missing.some((item) => item.assetId === assetId);
     const token = Symbol(assetId);
     maintenanceTokens.current[assetId] = token;
@@ -250,8 +259,9 @@ export function WorkbenchAssets({ context, onCountChange }: {
     }
   }
 
-  // A missing payload is fixed next to the row that reports it; anything the filters hide keeps
-  // its recovery action available below the list rather than disappearing with its row.
+  // Core reports every missing payload in `assets.missing`, whatever the filters show. A missing
+  // asset that is still listed carries its recovery action inside its row; the ones the filters
+  // hide keep their action below the list instead of losing it with their row.
   const visibleIds = new Set(visibleAssets.map((asset) => asset.id));
   const recoveryByAsset = new Map<string, WorkbenchMissingAssetItem[]>();
   for (const item of model.assets.missing) {
@@ -259,11 +269,7 @@ export function WorkbenchAssets({ context, onCountChange }: {
     entries.push(item);
     recoveryByAsset.set(item.assetId, entries);
   }
-  // A missing payload keeps its recovery next to its row. When filters hide that row, the label
-  // would land twice in the same section, so unfiltered failures stay in the row alone.
-  const orphanRecovery = workspace
-    ? model.assets.missing.filter((item) => !visibleIds.has(item.assetId) && !workspaceAssetIds.has(item.assetId))
-    : [];
+  const hiddenRecovery = model.assets.missing.filter((item) => !visibleIds.has(item.assetId));
 
   return (
     <div className="ek-workbench__assets">
@@ -349,21 +355,21 @@ export function WorkbenchAssets({ context, onCountChange }: {
               asset={asset}
               recoveryState={recoveryState}
               recovery={recoveryByAsset.get(asset.id) ?? []}
-              onMaintain={maintainAsset}
+              onPicked={maintainAsset}
             />
           ))}
         </ul>
       )}
-      {orphanRecovery.length > 0 ? (
+      {hiddenRecovery.length > 0 ? (
         <div className="ek-workbench__recovery-list" aria-label={t("reactWorkbench.leftPanel.assets.recovery.label")}>
           <small className="ek-workbench__recovery-note">{t("reactWorkbench.leftPanel.assets.recovery.orphan")}</small>
-          {orphanRecovery.map((item) => (
+          {hiddenRecovery.map((item) => (
             <RecoveryAction
               key={item.problemId}
               context={context}
               item={item}
               message={recoveryState[item.assetId]}
-              onMaintain={maintainAsset}
+              onPicked={maintainAsset}
             />
           ))}
         </div>
@@ -383,20 +389,27 @@ export function WorkbenchAssets({ context, onCountChange }: {
   );
 }
 
-/** The missing-payload action, rendered where the problem is reported. */
-function RecoveryAction({ context, item, message, onMaintain }: {
+/** The missing-payload action, rendered where its problem is reported. */
+function RecoveryAction({ context, item, message, onPicked }: {
   context: ResolvedWorkbenchContext;
   item: WorkbenchMissingAssetItem;
   message: LocalizedStatusMessage | undefined;
-  onMaintain: (assetId: string, event: ChangeEvent<HTMLInputElement>, mode: AssetMaintenanceMode) => Promise<void>;
+  onPicked: AssetPickedFile;
 }) {
   const t = context.i18n.t;
   return (
     <label className="ek-workbench__file-action" data-severity={item.severity}>
       <span>{item.actionLabelDescriptor ? t(item.actionLabelDescriptor) : item.actionLabel ?? t("reactWorkbench.leftPanel.assets.replace.label")}</span>
       <strong>{item.label}</strong>
-      <small role="status">{message ? renderStatusMessage(context.i18n, message) : (item.titleDescriptor ? t(item.titleDescriptor) : item.title)}</small>
-      <input type="file" onChange={(event) => void onMaintain(item.assetId, event, "replace")} />
+      <small role="status">{message ? renderStatusMessage(context.i18n, message) : renderDescriptor(item.titleDescriptor, item.title, context.i18n)}</small>
+      <input
+        type="file"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          event.currentTarget.value = "";
+          if (file) void onPicked(item.assetId, file, "replace");
+        }}
+      />
     </label>
   );
 }
@@ -405,33 +418,27 @@ function RecoveryAction({ context, item, message, onMaintain }: {
  * One asset: a summary a reader can scan, a details panel they can open, and a menu that holds
  * this asset's file actions so the controls are reachable without the details being open.
  */
-function AssetRow({ context, asset, recoveryState, recovery, onMaintain }: {
+function AssetRow({ context, asset, recoveryState, recovery, onPicked }: {
   context: ResolvedWorkbenchContext;
   asset: AssetWorkspaceItem;
   recoveryState: AssetRecoveryState;
   recovery: readonly WorkbenchMissingAssetItem[];
-  onMaintain: (assetId: string, event: ChangeEvent<HTMLInputElement>, mode: AssetMaintenanceMode) => Promise<void>;
+  onPicked: AssetPickedFile;
 }) {
   const t = context.i18n.t;
   const [expanded, setExpanded] = useState(false);
   const id = useId();
   const menu = useCommandMenu();
-  const row = useRef<HTMLLIElement | null>(null);
   const panel = useRef<HTMLDivElement | null>(null);
   const moreId = `${id}-more`;
   const menuLabel = t("reactWorkbench.leftPanel.assets.maintenance.menu", { assetLabel: asset.label });
   const status = recoveryState[asset.id];
-  const mode: AssetMaintenanceMode | null = asset.registered ? (asset.kind === "glb" ? "reimport" : "replace") : null;
+  const maintenance = assetMaintenanceAction(asset);
   const open = menu.open === asset.id;
   const detailId = `${id}-details`;
 
   function closeMenu(restore = true) {
     menu.closeMenu({ restore });
-  }
-
-  function pickFile(next: AssetMaintenanceMode) {
-    closeMenu(false);
-    row.current?.querySelector<HTMLInputElement>(`input[data-maintenance="${next}"]`)?.click();
   }
 
   const commands: CommandMenuCommand[] = [
@@ -447,22 +454,22 @@ function AssetRow({ context, asset, recoveryState, recovery, onMaintain }: {
         setExpanded((current) => !current);
       }
     },
-    ...(mode
+    ...(maintenance
       ? [{
           key: "file",
-          label: mode === "reimport"
+          label: maintenance.mode === "reimport"
             ? t("reactWorkbench.leftPanel.assets.maintenance.reimport")
             : t("reactWorkbench.leftPanel.assets.maintenance.replace"),
-          title: mode === "reimport"
-            ? t("reactWorkbench.leftPanel.assets.reimport.label")
-            : t("reactWorkbench.leftPanel.assets.replace.label"),
+          title: t(maintenance.labelKey),
           icon: <WorkbenchIcon name="open" />,
           kind: "action" as const,
-          onClick: () => pickFile(mode)
+          // The details region owns the single file input for this row; the menu only opens it,
+          // so every route into the action lands on the same control.
+          onClick: () => {
+            closeMenu(false);
+            setExpanded(true);
+          }
         }]
-      : []),
-    ...(mode
-      ? []
       : [{
           key: "none",
           label: t("reactWorkbench.leftPanel.assets.maintenance.empty"),
@@ -476,7 +483,6 @@ function AssetRow({ context, asset, recoveryState, recovery, onMaintain }: {
   return (
     <li
       className="ek-workbench__asset-row"
-      ref={row}
       data-missing={asset.missing ? "true" : undefined}
       data-severity={asset.highestProblemSeverity ?? undefined}
       data-status={asset.status}
@@ -491,7 +497,7 @@ function AssetRow({ context, asset, recoveryState, recovery, onMaintain }: {
           aria-label={t(expanded
             ? "reactWorkbench.leftPanel.assets.details.hide"
             : "reactWorkbench.leftPanel.assets.details.show", { assetLabel: asset.label })}
-          title={asset.label}
+          title={t("reactWorkbench.leftPanel.assets.details.label", { assetLabel: asset.label })}
           onClick={() => setExpanded((current) => !current)}
         >
           <WorkbenchIcon name="data" />
@@ -571,15 +577,16 @@ function AssetRow({ context, asset, recoveryState, recovery, onMaintain }: {
           <span>{formatPayloadStatus(context.i18n, asset.payloadStatus)}</span>
           <span>{formatPackageStatus(context.i18n, asset.packageStatus)}</span>
           {asset.importStatus ? <span>{formatImportStatus(context.i18n, asset.importStatus)}</span> : null}
+          {asset.referenced ? null : <span>{t("reactWorkbench.leftPanel.assets.unreferenced")}</span>}
         </div>
         <p className="ek-workbench__asset-meta">
-          {asset.referenced
-            ? t("reactWorkbench.leftPanel.assets.refs", { count: asset.referenceCount })
-            : t("reactWorkbench.leftPanel.assets.unreferenced")}
+          {t("reactWorkbench.leftPanel.assets.details.summary", {
+            referenceCount: asset.referenceCount,
+            problemCount: asset.problemCount,
+            payloadStatus: formatPayloadStatus(context.i18n, asset.payloadStatus),
+          })}
           {asset.references.length > 0 ? ` · ${asset.references.map((reference) => labelReference(context, reference)).join(", ")}` : ""}
-          {asset.problemCount ? ` · ${t("reactWorkbench.leftPanel.assets.problemCount", { count: asset.problemCount })}` : ""}
         </p>
-
       </div>
       {asset.missing && recovery.length > 0 ? (
         <div className="ek-workbench__recovery-list" aria-label={t("reactWorkbench.leftPanel.assets.recovery.label")}>
@@ -589,32 +596,38 @@ function AssetRow({ context, asset, recoveryState, recovery, onMaintain }: {
               context={context}
               item={item}
               message={recoveryState[item.assetId]}
-              onMaintain={onMaintain}
+              onPicked={onPicked}
             />
           ))}
         </div>
       ) : null}
-      <AssetDetails context={context} asset={asset} id={detailId} expanded={expanded} status={status} onMaintain={onMaintain} />
+      <AssetDetails
+        context={context}
+        asset={asset}
+        maintenance={maintenance}
+        id={detailId}
+        expanded={expanded}
+        onPicked={(file) => onPicked(asset.id, file, maintenance?.mode ?? "replace")}
+      />
       {status ? <small className="ek-workbench__asset-status" role="status">{renderStatusMessage(context.i18n, status)}</small> : null}
     </li>
   );
 }
 
-function AssetDetails({ context, asset, id, expanded, status, onMaintain }: {
+function AssetDetails({ context, asset, maintenance, id, expanded, onPicked }: {
   context: ResolvedWorkbenchContext;
   asset: AssetWorkspaceItem;
+  maintenance: AssetMaintenanceAction | null;
   id: string;
   expanded: boolean;
-  status: LocalizedStatusMessage | undefined;
-  onMaintain: (assetId: string, event: ChangeEvent<HTMLInputElement>, mode: AssetMaintenanceMode) => Promise<void>;
+  onPicked(file: File): void;
 }) {
   const t = context.i18n.t;
-  const mode: AssetMaintenanceMode = asset.kind === "glb" ? "reimport" : "replace";
   return (
     <div className="ek-workbench__asset-details" id={id} hidden={!expanded}>
       <dl className="ek-workbench__asset-facts">
         <div>
-          <dt>{t("reactWorkbench.leftPanel.assets.details.payload")}</dt>
+          <dt>{t("reactWorkbench.leftPanel.assets.sort.payload")}</dt>
           <dd>{formatPayloadStatus(context.i18n, asset.payloadStatus)}</dd>
         </div>
         {asset.payload?.byteSize !== undefined ? (
@@ -630,7 +643,7 @@ function AssetDetails({ context, asset, id, expanded, status, onMaintain }: {
           </div>
         ) : null}
         <div>
-          <dt>{t("reactWorkbench.leftPanel.assets.details.remark")}</dt>
+          <dt>{t("reactWorkbench.leftPanel.assets.sort.status")}</dt>
           <dd>{asset.importStatus ? formatImportStatus(context.i18n, asset.importStatus) : t("reactWorkbench.leftPanel.assets.importStatus.notApplicable")}</dd>
         </div>
       </dl>
@@ -649,12 +662,15 @@ function AssetDetails({ context, asset, id, expanded, status, onMaintain }: {
         )}
       </div>
       {asset.problems.length > 0 ? (
+        <h3>{t("reactWorkbench.leftPanel.assets.details.problems")}</h3>
+      ) : null}
+      {asset.problems.length > 0 ? (
         <ul className="ek-workbench__asset-diagnostics" aria-label={t("reactWorkbench.leftPanel.assets.diagnostics.label", { assetLabel: asset.label })}>
           {asset.problems.map((problem) => (
             <li key={problem.id} data-severity={problem.severity}>
-              <strong>{problem.titleDescriptor ? t(problem.titleDescriptor) : problem.title}</strong>
+              <strong>{renderDescriptor(problem.titleDescriptor, problem.title, context.i18n)}</strong>
               {problem.detailDescriptor || problem.detail ? (
-                <small>{problem.detailDescriptor ? t(problem.detailDescriptor) : problem.detail}</small>
+                <small>{renderDescriptor(problem.detailDescriptor, problem.detail ?? "", context.i18n)}</small>
               ) : null}
             </li>
           ))}
@@ -665,24 +681,20 @@ function AssetDetails({ context, asset, id, expanded, status, onMaintain }: {
           {t("reactWorkbench.leftPanel.assets.details.missing")}
         </p>
       ) : null}
-      {asset.registered ? (
+      {maintenance ? (
         <label className="ek-workbench__asset-replace">
-          <span>{mode === "reimport"
-            ? t("reactWorkbench.leftPanel.assets.reimport.label")
-            : asset.actionLabelDescriptor ? t(asset.actionLabelDescriptor) : asset.actionLabel ?? t("reactWorkbench.leftPanel.assets.replace.label")}</span>
-          <small>
-            {mode === "reimport"
-              ? t("reactWorkbench.leftPanel.assets.reimport.hint")
-              : t("reactWorkbench.leftPanel.assets.replace.hint")}
-          </small>
+          <span>{maintenance.mode === "replace" && asset.actionLabelDescriptor ? t(asset.actionLabelDescriptor) : t(maintenance.labelKey)}</span>
+          <small>{t(maintenance.hintKey)}</small>
           <input
-            data-maintenance={mode}
+            data-maintenance={maintenance.mode}
             type="file"
-            accept={mode === "reimport" ? REIMPORT_ACCEPT : undefined}
-            aria-label={mode === "reimport"
-              ? t("reactWorkbench.leftPanel.assets.reimport.aria", { assetLabel: asset.label })
-              : t("reactWorkbench.leftPanel.assets.replace.aria", { assetLabel: asset.label })}
-            onChange={(event) => void onMaintain(asset.id, event, mode)}
+            accept={maintenance.mode === "reimport" ? REIMPORT_ACCEPT : undefined}
+            aria-label={t(maintenance.ariaKey, { assetLabel: asset.label })}
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              event.currentTarget.value = "";
+              if (file) onPicked(file);
+            }}
           />
         </label>
       ) : null}
@@ -691,7 +703,7 @@ function AssetDetails({ context, asset, id, expanded, status, onMaintain }: {
 }
 
 function labelReference(context: ResolvedWorkbenchContext, reference: AssetReferenceLocation): string {
-  return reference.labelDescriptor ? context.i18n.t(reference.labelDescriptor) : reference.label;
+  return renderDescriptor(reference.labelDescriptor, reference.label, context.i18n);
 }
 
 /** Every file in the batch keeps its own line: a batch that half-succeeds never reads as success. */

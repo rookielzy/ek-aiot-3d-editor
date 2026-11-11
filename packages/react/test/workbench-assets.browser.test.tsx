@@ -1,4 +1,4 @@
-import { createEditor, type RendererLike } from "@ek-aiot/3d-editor-core";
+import { AssetResolverBridge, createEditor, type RendererLike } from "@ek-aiot/3d-editor-core";
 import type { CSSProperties } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -48,6 +48,8 @@ describe("React asset workspace browser verification", () => {
     expect(imported.ok).toBe(true);
     // A registered asset without a payload keeps the maintenance affordance visible.
     editor.dispatch({ type: "register-asset", asset: { id: "broken-texture", kind: "texture", label: "Broken texture" } });
+    // An asset whose payload cannot be resolved never projects and needs a recovery action.
+    editor.dispatch({ type: "import-glb", objectId: "box", name: "Recovery box", asset: { id: "box-asset", label: "Missing box" } });
     const host = document.createElement("div");
     host.id = "app";
     document.body.append(host);
@@ -56,6 +58,7 @@ describe("React asset workspace browser verification", () => {
       <EditorWorkbench
         editor={editor}
         locale="en"
+        resolver={new AssetResolverBridge(() => null)}
         rendererFactory={paintedRenderer}
         style={{ height: "100vh", "--ek-workbench-accent": "rgb(123, 45, 67)" } as CSSProperties}
       />,
@@ -71,9 +74,11 @@ describe("React asset workspace browser verification", () => {
       .find((section) => section.getClientRects().length > 0
         && section.querySelector(".ek-workbench__asset-import") !== null)!;
     const rows = () => assetsPanel().querySelector<HTMLElement>('[aria-label="Asset workspace rows"]')!;
+    // Rows are addressed through the control a user presses: the details disclosure names its asset.
     const rowFor = (label: string) => {
-      const found = [...rows().querySelectorAll<HTMLElement>(".ek-workbench__asset-row")]
-        .find((item) => item.querySelector(".ek-workbench__asset-label")?.textContent === label);
+      const found = [...rows().querySelectorAll<HTMLElement>("li")]
+        .find((item) => [...item.querySelectorAll<HTMLButtonElement>("button")]
+          .some((button) => button.getAttribute("aria-label")?.endsWith(` ${label}`)));
       expect(found, `Expected asset row ${label}`).toBeTruthy();
       return found!;
     };
@@ -112,11 +117,11 @@ describe("React asset workspace browser verification", () => {
 
       // Details expand from the summary row and expose the maintenance file action.
       const brokenRow = rowFor("Broken texture");
-      const toggle = brokenRow.querySelector<HTMLButtonElement>(".ek-workbench__asset-summary")!;
-      expect(toggle.getAttribute("aria-expanded")).toBe("false");
+      const toggle = brokenRow.querySelector<HTMLButtonElement>('[aria-expanded="false"][aria-controls]')!;
+      expect(toggle).toBeTruthy();
       await userEvent.click(toggle);
       await waitFor(() => expect(toggle.getAttribute("aria-expanded")).toBe("true"));
-      const details = brokenRow.querySelector<HTMLElement>(".ek-workbench__asset-details")!;
+      const details = document.getElementById(toggle.getAttribute("aria-controls")!)!;
       expect(details.hidden).toBe(false);
       const replaceInput = brokenRow.querySelector<HTMLInputElement>('input[aria-label="Replace Broken texture"]')!;
       expect(replaceInput.getBoundingClientRect().width).toBeGreaterThan(0);
@@ -126,13 +131,38 @@ describe("React asset workspace browser verification", () => {
       await userEvent.upload(replaceInput, new File([new Uint8Array([7, 8, 9])], "fixed.png", { type: "image/png" }));
       await waitFor(() => expect(text(brokenRow)).toContain("Replaced with fixed.png"));
 
+      // A filter that hides a missing asset keeps its repair action below the list.
+      await editor.getRuntime()?.project();
+      const missingRow = rowFor("Missing box");
+      await userEvent.click(missingRow.querySelector<HTMLButtonElement>('[aria-expanded="false"][aria-controls]')!);
+      await userEvent.fill(search, "no such asset");
+      await waitFor(() => expect(assetsPanel().querySelector('[aria-label="Asset workspace rows"]')).toBeNull());
+      const hiddenRecovery = assetsPanel().querySelector<HTMLElement>('[aria-label="Missing asset recovery"]')!;
+      expect(text(hiddenRecovery)).toContain("Hidden by the current filters");
+      expect(hiddenRecovery.querySelector("input")).toBeTruthy();
+      await userEvent.clear(search);
+      await waitFor(() => expect(rowFor("Missing box").querySelector("[role=\"status\"]")).toBeTruthy());
+
+      // The row menu lands on the same file control as the expanded details.
+      await userEvent.click(page.getByRole("button", { name: "Asset actions for Missing box" }));
+      await expect.element(page.getByRole("menu")).toBeVisible();
+      await userEvent.click(page.getByRole("menuitem", { name: /Reimport GLB and remap targets/ }));
+      await expect.element(page.getByRole("menu")).not.toBeInTheDocument();
+      // The list re-renders when the menu closes, so the control is looked up fresh.
+      const picker = rowFor("Missing box").querySelector<HTMLInputElement>('input[aria-label="Reimport Missing box"]')!;
+      expect(picker.getBoundingClientRect().width).toBeGreaterThan(0);
+      await userEvent.upload(picker, new File([bytes], "recovered.glb", { type: "model/gltf-binary" }));
+      // The reimport reports its remap summary on the asset it repaired and removes the recovery action.
+      await waitFor(() => expect(text(rowFor("Missing box"))).toContain("0 unresolved"));
+      await waitFor(() => expect(rowFor("Missing box").querySelector('[aria-label="Missing asset recovery"]')).toBeNull());
+
       // The row menu survives every acceptance width, keeps the theme, and leaves the scene alone.
       const before = editor.getSnapshot();
       for (const [width, height] of WIDTHS) {
         await page.viewport(width, height);
         await waitForAnimationFrame();
-        const menuButton = rowFor("Broken texture").querySelector<HTMLButtonElement>(".ek-workbench__asset-more")!;
-        expect(menuButton.getBoundingClientRect().width).toBeGreaterThan(0);
+        const menuButton = page.getByRole("button", { name: "Asset actions for Broken texture" });
+        expect(menuButton.element().getBoundingClientRect().width).toBeGreaterThan(0);
         await userEvent.click(menuButton);
         await expect.element(page.getByRole("menu", { name: "Asset actions for Broken texture" })).toBeVisible();
         const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
@@ -142,7 +172,7 @@ describe("React asset workspace browser verification", () => {
         expect(menuRect.right).toBeLessThanOrEqual(width);
         expect(menuRect.bottom).toBeLessThanOrEqual(height);
         expect(getComputedStyle(menu).getPropertyValue("--ek-workbench-accent").trim()).toBe("rgb(123, 45, 67)");
-        const triggerRect = menuButton.getBoundingClientRect();
+        const triggerRect = menuButton.element().getBoundingClientRect();
         expect(Math.abs(menuRect.left - triggerRect.left)).toBeLessThan(300);
         expect(Math.abs(menuRect.top - triggerRect.bottom)).toBeLessThan(80);
         if (CAPTURE) {
@@ -150,7 +180,7 @@ describe("React asset workspace browser verification", () => {
         }
         await userEvent.keyboard("{Escape}");
         await expect.element(page.getByRole("menu")).not.toBeInTheDocument();
-        expect(document.activeElement).toBe(rowFor("Broken texture").querySelector(".ek-workbench__asset-more"));
+        expect(document.activeElement).toBe(menuButton.element());
 
         // No horizontal overflow at any acceptance width, including the long label.
         expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
