@@ -1,8 +1,7 @@
 import {
   collectNodeSubtreeIds,
   createClipboardPayload,
-  createNodeClipboardPayload,
-  getTopLevelNodeIds
+  createNodeClipboardPayload
 } from "@ek-aiot/3d-editor-core";
 import type {
   Command,
@@ -71,8 +70,13 @@ export interface NodeToolOptions {
 export function nodeCommand(action: NodeCommandAction, snapshot: SceneSnapshot, nodeId?: string): Command | null {
   const node = snapshot.nodes[nodeId ?? snapshot.selection.nodeId ?? ""];
   switch (action) {
-    case "duplicate":
-      return withObjectIds(node, (objectIds) => ({ type: "duplicate-objects", objectIds }));
+    case "duplicate": {
+      const payload = node ? nodeClipboardPayload(snapshot, node.id) : null;
+      if (!payload) return null;
+      return payload.kind === "ek-aiot-3d-editor-nodes"
+        ? { type: "paste-objects", payload }
+        : { type: "duplicate-objects", objectIds: payload.rootObjectIds };
+    }
     case "delete":
       return withObjectIds(node, (objectIds) => ({ type: "delete-objects", objectIds }));
     case "group":
@@ -98,11 +102,15 @@ export function nodeCommand(action: NodeCommandAction, snapshot: SceneSnapshot, 
 export function nodeClipboardPayload(snapshot: SceneSnapshot, nodeId: string): EditorClipboardPayload | null {
   const node = snapshot.nodes[nodeId];
   if (!node) return null;
-  if (node.kind === "object" || node.kind === "imported") {
-    return createClipboardPayload(snapshot, targetObjectIds(node));
-  }
-  // A light or a camera is a node of its own, so it copies through its own node subtree.
-  return createNodeClipboardPayload(snapshot, getTopLevelNodeIds(snapshot, collectNodeSubtreeIds(snapshot, nodeId)));
+  // Imported targets act on their owning object, including its expanded targets and overrides.
+  const root = node.kind === "imported"
+    ? Object.values(snapshot.nodes).find((candidate) => candidate.kind === "object" && candidate.objectId === node.ownerObjectId)
+    : node;
+  if (!root) return null;
+  const objectOnly = collectNodeSubtreeIds(snapshot, root.id).every((id) => snapshot.nodes[id].kind === "object");
+  return root.kind === "object" && objectOnly
+    ? createClipboardPayload(snapshot, [root.objectId])
+    : createNodeClipboardPayload(snapshot, [root.id]);
 }
 
 /**

@@ -222,6 +222,54 @@ describe("Workbench hierarchy browsing", () => {
     expect(editor.getSnapshot().objects[created[0]!]!.name).toBe("Robot arm");
   });
 
+  it.each(["Assembly", "Key light"])("duplicates the %s row without copying the current selection", async (label) => {
+    const setupResult = setup();
+    await flush();
+    await act(async () => { setupResult.editor.dispatch({ type: "select-node", nodeId: "object-b" }); });
+    await flush();
+    const before = setupResult.editor.getSnapshot();
+    await act(async () => { row(label).focus(); press("ContextMenu"); });
+    await flush();
+    await act(async () => {
+      fireEvent.click(within(screen.getByRole("menu", { name: `Actions for ${label}` })).getByRole("menuitem", { name: /^Duplicate/ }));
+    });
+    const created = Object.values(setupResult.editor.getSnapshot().nodes).filter((node) => !before.nodes[node.id]);
+    expect(created.some((node) => node.name === label)).toBe(true);
+    expect(created.some((node) => node.name === "Conveyor")).toBe(false);
+    if (label === "Assembly") expect(created.some((node) => node.name === "Robot arm")).toBe(true);
+    expect(screen.queryByRole("menu")).toBeNull();
+    await act(async () => { setupResult.editor.undo(); });
+    expect(Object.keys(setupResult.editor.getSnapshot().nodes)).toEqual(Object.keys(before.nodes));
+  });
+
+  it.each(["Copy", "Duplicate"])("preserves imported targets and material overrides through row %s", async (action) => {
+    const editor = createEditor();
+    editor.dispatch({ type: "import-glb", objectId: "object-a", name: "Robot", asset: {
+      id: "asset-a", metadata: attachGlbImportManifestMetadata(undefined, manifest())
+    }, expandImportedTargets: true });
+    editor.dispatch({ type: "set-material", target: {
+      kind: "material-slot", objectId: "object-a", slotId: "glb:object-a/slot:meshes/0/primitives/0:material-0"
+    }, material: { color: "#ff0000" } });
+    render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} rightPanel={() => null} />);
+    await flush();
+    await act(async () => { row("Robot").focus(); press("ContextMenu"); });
+    await flush();
+    await act(async () => {
+      fireEvent.click(within(screen.getByRole("menu", { name: "Actions for Robot" })).getByRole("menuitem", { name: new RegExp(`^${action}`) }));
+    });
+    if (action === "Copy") {
+      expect(editor.getSnapshot().selection.nodeIds).toEqual([]);
+      await act(async () => { expect(editor.operations.paste().ok).toBe(true); });
+    }
+    const snapshot = editor.getSnapshot();
+    const created = Object.values(snapshot.objects).find((object) => object.id !== "object-a");
+    expect(created).toBeDefined();
+    expect(Object.values(snapshot.nodes).some((node) => node.kind === "imported" && node.ownerObjectId === created?.id)).toBe(true);
+    const assignment = Object.values(snapshot.materials.assignments).find((item) => item.target.objectId === created?.id);
+    expect(assignment).toBeDefined();
+    expect(snapshot.materials.definitions[assignment!.materialId].override.color).toBe("#ff0000");
+  });
+
   it("explains why a node command is unavailable without selecting the row", async () => {
     const { editor } = setup();
     await flush();

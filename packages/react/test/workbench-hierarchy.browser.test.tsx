@@ -1,4 +1,5 @@
 import { createEditor, type RendererLike } from "@ek-aiot/3d-editor-core";
+import type { CSSProperties } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
@@ -57,7 +58,7 @@ describe("React hierarchy browser verification", () => {
         editor={editor}
         locale="en"
         rendererFactory={paintedRenderer}
-        style={{ height: "100vh" }}
+        style={{ height: "100vh", "--ek-workbench-accent": "rgb(123, 45, 67)" } as CSSProperties}
       />,
     );
     cleanup = () => {
@@ -185,7 +186,12 @@ describe("React hierarchy browser verification", () => {
         await userEvent.keyboard("{ContextMenu}");
         await expect.element(page.getByRole("menu", { name: "Actions for Robot" })).toBeVisible();
         const menuRect = hierarchy().ownerDocument.querySelector<HTMLElement>('[role="menu"]')!.getBoundingClientRect();
+        expect(menuRect.top).toBeGreaterThanOrEqual(0);
         expect(menuRect.left).toBeGreaterThanOrEqual(0);
+        const triggerRect = hierarchy().querySelector<HTMLElement>('[aria-label="Actions for Robot"]')!.getBoundingClientRect();
+        expect(Math.abs(menuRect.top - triggerRect.bottom)).toBeLessThan(80);
+        expect(Math.abs(menuRect.left - triggerRect.left)).toBeLessThan(300);
+        expect(getComputedStyle(document.querySelector<HTMLElement>('[role="menu"]')!).getPropertyValue("--ek-workbench-accent").trim()).toBe("rgb(123, 45, 67)");
         expect(menuRect.right).toBeLessThanOrEqual(width);
         expect(menuRect.bottom).toBeLessThanOrEqual(height);
         const longRow = row(mesh.name);

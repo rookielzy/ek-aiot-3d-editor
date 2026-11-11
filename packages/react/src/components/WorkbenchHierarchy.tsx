@@ -300,6 +300,7 @@ export function WorkbenchHierarchy({ context }: { context: ResolvedWorkbenchCont
             <PopoverTrigger asChild>
               <button
                 type="button"
+                id={`${id}-${row.id}-more`}
                 className="ek-workbench__tree-more"
                 aria-label={moreLabel}
                 title={moreLabel}
@@ -425,40 +426,38 @@ function RowMenu({ context, row, nodeId, idPrefix, panelRef, roving, onMoveFocus
   }));
   const label = t("reactWorkbench.leftPanel.hierarchy.more", { label: row.label });
   return (
-    <Popover open onOpenChange={(next) => { if (!next) onDismiss(); }}>
-      <PopoverContent
-        // Focus belongs to the row that opened the menu, so Radix neither takes nor returns it.
-        onOpenAutoFocus={(event) => event.preventDefault()}
-        onCloseAutoFocus={(event) => event.preventDefault()}
-        onPointerDownOutside={(event) => event.preventDefault()}
-        onFocusOutside={(event) => event.preventDefault()}
-        onEscapeKeyDown={(event) => event.preventDefault()}
-        ref={panelRef}
-        className="ek-workbench__menu ek-workbench__tree-menu"
-        data-state="open"
-        style={getPortalTheme(document.getElementById(`${idPrefix}-more`) ?? null)}
-        onKeyDown={(event) => {
-          if (event.defaultPrevented) return;
-          if (event.key === "Escape") {
-            event.preventDefault();
-            onDismiss();
-          } else if (event.key === "Tab") {
-            onDismiss();
-          }
-        }}
-      >
-        <CommandMenu
-          group={{ key: "node", label, kind: group.kind, commands }}
-          idPrefix={`${idPrefix}-menu`}
-          onMoveFocus={onMoveFocus}
-          onActivate={onActivate}
-          roving={roving}
-          onEscape={onDismiss}
-          onTab={onDismiss}
-          // The row keeps focus while its menu is open, so the menu has to claim focus itself.
-          claimEntry
-        />
-      </PopoverContent>
-    </Popover>
+    <PopoverContent
+      // Focus belongs to the row that opened the menu, so Radix neither takes nor returns it.
+      onOpenAutoFocus={(event) => event.preventDefault()}
+      onCloseAutoFocus={(event) => event.preventDefault()}
+      onPointerDownOutside={(event) => event.preventDefault()}
+      onFocusOutside={(event) => event.preventDefault()}
+      onEscapeKeyDown={(event) => event.preventDefault()}
+      ref={panelRef}
+      className="ek-workbench__menu ek-workbench__tree-menu"
+      data-state="open"
+      style={getPortalTheme(document.getElementById(`${idPrefix}-more`) ?? null)}
+      onKeyDown={(event) => {
+        if (event.defaultPrevented) return;
+        if (event.key === "Escape") {
+          event.preventDefault();
+          onDismiss();
+        } else if (event.key === "Tab") {
+          onDismiss();
+        }
+      }}
+    >
+      <CommandMenu
+        group={{ key: "node", label, kind: group.kind, commands }}
+        idPrefix={`${idPrefix}-menu`}
+        onMoveFocus={onMoveFocus}
+        onActivate={onActivate}
+        roving={roving}
+        onEscape={onDismiss}
+        onTab={onDismiss}
+        // The row keeps focus while its menu is open, so the menu has to claim focus itself.
+        claimEntry
+      />
+    </PopoverContent>
   );
 }

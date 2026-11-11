@@ -52,3 +52,27 @@ Blocked by: 01
 范围说明：按规格未新增拖拽重排、重命名或新的持久化字段；场景树菜单不包含「全选/清除/粘贴」（属于全局或剪贴板命令）。
 
 跨框架说明：本任务只改 React；Vue 场景树仍使用 `aria-pressed` 行（非 `treeitem`），因此 `proof-loop-demo.browser.test.tsx` 的行断言按 `framework` 读取属性（React 读 `aria-selected`，Vue 读 `aria-pressed`），既有行为不变。
+
+
+2026-11-11：修复 `b97c90c` code review 的四项问题。
+
+- 行菜单内容复用所属行的 `Popover`，移除没有 Trigger/Anchor 的内层实例；为更多按钮补齐主题查找所需的 ID，使 portal 继承当前编辑器的样式变量。
+- 行 Copy 对含 imported target 或其他非对象后代的子树使用 `createNodeClipboardPayload`，保留导入节点与材质槽覆盖；普通纯对象子树继续使用既有对象剪贴板路径。Imported target 延续作用于 owner object 的菜单语义。
+- 灯光、分组及含导入节点的 Duplicate 使用节点 payload 和既有 `paste-objects` 命令，不临时改写 selection、不覆盖剪贴板，并保留撤销语义。
+- 新增 4 个适配器回归用例：灯光/分组复制及撤销、行 Copy/Paste 与 Duplicate 保留导入节点和红色材质槽覆盖。浏览器用例新增菜单顶部非负、邻近触发按钮和自定义主题变量断言。
+
+复现证据：
+- 修复前从 `packages/react` 运行 `pnpm exec vitest run --root ../.. packages/react/test/workbench-hierarchy.test.tsx --maxWorkers 1`：新增 4 项失败，原有 10 项通过。
+- 修复前运行单 Chromium hierarchy 浏览器用例：菜单顶部为 `-376.671875px`，新增可见区域断言失败；移除内层 Popover 后位置断言通过，主题断言仍失败（实际为空字符串，预期 `rgb(123, 45, 67)`），补齐触发按钮 ID 后通过。
+
+本轮验证（测试均从 `packages/react` 发起）：
+- 设置 `VITE_CAPTURE_HIERARCHY=1` 后运行 `pnpm exec vitest run --root ../.. --config vitest.browser.config.ts packages/react/test/workbench-hierarchy.browser.test.tsx`：3 个浏览器实例 / 3 tests passed。
+- `pnpm run typecheck`（`packages/react`）：通过，使用仓库已有脚本。
+- `pnpm run build`（`examples/react-proof-loop`）：类型检查与 Vite 生产构建通过；保留大于 500 kB 的 chunk 提示，未为此次修复调整拆包。
+- 更新 `packages/react/test/__screenshots__/hierarchy-menu/{1440,1920,1100}-en.png`，菜单已实际显示在触发按钮旁；三档截图均已视觉检查。
+- 中间一轮并行执行出现旧适配器用例超时与后续选择断言连带失败；新增命令回归当轮均通过。最终单文件复跑全部通过，见下项。
+
+- 最终运行 `pnpm exec vitest run --root ../.. packages/react/test/workbench-hierarchy.test.tsx --maxWorkers 1 --reporter verbose`：14 tests passed（新增 4 项 + 原有 10 项）；耗时 106.91s，测试执行 11.33s，其余主要为导入、转换与环境初始化。原有用例仍输出 React `act(...)` 提示，本轮新增用例已包装状态更新。
+- `pnpm exec vitest run --root ../.. --maxWorkers 1` 全量常规测试及随后包含 hierarchy/workbench/tools-menu 的三文件运行，均因长时间没有文件结果而主动中止，不宣称全量回归通过。本轮没有重新运行完整浏览器套件。
+
+验证环境说明：仓库没有 `.opencode/skills` 中列出的测试技能，也没有 `bun run check` 脚本；沿用已有 Vitest / pnpm 配置，不增加工具链迁移。
