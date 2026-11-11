@@ -119,6 +119,8 @@ describe("React asset workspace browser verification", () => {
       const brokenRow = rowFor("Broken texture");
       const toggle = brokenRow.querySelector<HTMLButtonElement>('[aria-expanded="false"][aria-controls]')!;
       expect(toggle).toBeTruthy();
+      await expect.element(page.getByText("No scene references", { exact: true }).first()).not.toBeVisible();
+      expect(document.getElementById(toggle.getAttribute("aria-controls")!)!.getClientRects()).toHaveLength(0);
       await userEvent.click(toggle);
       await waitFor(() => expect(toggle.getAttribute("aria-expanded")).toBe("true"));
       const details = document.getElementById(toggle.getAttribute("aria-controls")!)!;
@@ -151,6 +153,7 @@ describe("React asset workspace browser verification", () => {
       // The list re-renders when the menu closes, so the control is looked up fresh.
       const picker = rowFor("Missing box").querySelector<HTMLInputElement>('input[aria-label="Reimport Missing box"]')!;
       expect(picker.getBoundingClientRect().width).toBeGreaterThan(0);
+      expect(document.activeElement).toBe(picker);
       await userEvent.upload(picker, new File([bytes], "recovered.glb", { type: "model/gltf-binary" }));
       // The reimport reports its remap summary on the asset it repaired and removes the recovery action.
       await waitFor(() => expect(text(rowFor("Missing box"))).toContain("0 unresolved"));

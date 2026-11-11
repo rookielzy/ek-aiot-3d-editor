@@ -985,6 +985,7 @@ describe("proof-loop starter demo browser verification", () => {
       const runtime = editor.getRuntime();
       runtime!.frameAll();
       const canvas = host.querySelector("canvas");
+      if (framework === "React") await userEvent.click(page.getByRole("button", { name: "Show details for Missing box", exact: true }));
       await page.getByLabelText("Reimport Missing box", { exact: true }).upload(modelFile("updated.glb"));
       await waitFor(() => expect(text(section(host, "Asset workspace rows"))).toContain("remapped"));
       expect(editor.getSnapshot().objects.box.asset.id).toBe("box-asset");
@@ -1005,11 +1006,13 @@ describe("proof-loop starter demo browser verification", () => {
         expect(failedRow?.textContent).toContain("Unsupported asset type");
         expect(Object.values(editor.getSnapshot().assets).some((asset) => asset.kind === "image" && asset.label === "reference.png")).toBe(true);
       });
+      if (framework === "React") await userEvent.click(page.getByRole("button", { name: "Show details for reference.png", exact: true }));
       await page.getByLabelText("Replace reference.png", { exact: true }).upload(new File([new Uint8Array([4, 5])], "replaced.png", { type: "image/png" }));
       await waitFor(() => expect(text(section(host, "Asset workspace rows"))).toContain("Replaced with replaced.png"));
       await page.getByLabelText("Search assets", { exact: true }).fill("does-not-exist");
       await waitFor(() => expect(text(section(host, "Assets"))).toContain("No matching assets"));
       await page.getByLabelText("Search assets", { exact: true }).clear();
+      if (framework === "React") await userEvent.click(page.getByRole("button", { name: "Show details for reference.png", exact: true }));
       for (const [width, height] of [[1440, 900], [1920, 1080], [1100, 800]]) {
         await page.viewport(width, height);
         const panel = section(host, "Project panel");

@@ -881,6 +881,10 @@
   border-left: 2px solid var(--ek-workbench-border);
 }
 
+.ek-workbench__asset-details[hidden] {
+  display: none;
+}
+
 .ek-workbench__asset-facts {
   display: grid;
   gap: 0.15rem;

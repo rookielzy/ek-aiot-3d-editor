@@ -67,3 +67,22 @@ Blocked by: 01
 - 收尾时移除了 4 个未被引用的新 i18n 键（`details.action/remark/fileName + 载荷` 相关），保留的键均在组件中使用，React/Vue 两侧键集仍一致。
 
 补充验证（同上命令，全部通过）：`npx vitest run` → 159 files / 1410 tests；`npx vitest run --config vitest.browser.config.ts` → 42 files / 153 tests；`npx vitest run packages/react/test/workbench.test.tsx` → 65 passed；`npx vitest run packages/react/test/workbench-assets.test.tsx` → 6 passed；三包类型检查通过。
+
+2026-11-11（二次代码审查）：以 `cd358ef...790bded` 为范围，分别核对 Standards 与 Spec，修复以下问题：
+
+- Spec / P1：`.ek-workbench__asset-details` 的 `display: grid` 覆盖浏览器默认的 `[hidden]` 样式，导致折叠状态仍显示详情和维护控件。添加资源详情专用 `[hidden]` 规则；浏览器断言实际不可见且无布局矩形，而非仅检查 DOM 属性。
+- Spec / P2：维护菜单关闭后没有将焦点交给文件输入框，详情切换命令也没有恢复焦点。维护操作现在在详情展开、菜单卸载后的 layout effect 中聚焦该行唯一的维护输入；详情切换后归还菜单触发按钮。覆盖首次展开、已经展开及详情切换路径。
+- Standards：修正新增菜单事件处理中的两处 `else`，使用提前返回。未发现需要扩展本次范围的架构或持久化问题。
+- 既有 proof-loop 浏览器测试此前直接操作折叠详情中的文件输入，依赖了上述 CSS 缺陷；改为通过可见详情开关展开后再进行维护，搜索清空导致资源行重建后同样先展开。
+- 重新生成并查看 `packages/react/test/__screenshots__/assets/{1100,1440,1920}-en.png`，确认摘要折叠、展开详情、维护反馈及菜单布局。
+
+验证环境说明：仓库没有 `.opencode/skills` 测试技能目录和 `bun run check` 脚本。本次沿用 pnpm/Vitest，测试命令均从 `packages/react` 启动。根目录 `pnpm build` 未匹配到项目；React 包 `pnpm build` 因 Windows 默认 shell 不提供 `rm` 失败。改用包目录 `pnpm exec vite build --emptyOutDir false` 验证生产 JS/CSS 构建，并单独运行类型检查；未将其宣称为完整声明发布构建。
+
+本次验证结果（测试命令工作目录均为 `packages/react`）：
+- `pnpm exec vitest run --root ../.. packages/react/test/workbench-assets.test.tsx`：6 passed。
+- `pnpm exec vitest run --root ../.. --config vitest.browser.config.ts packages/react/test/workbench-assets.browser.test.tsx --project chromium`：1 passed；设置 `VITE_CAPTURE_ASSETS=1` 再运行，同样通过并生成三档截图。
+- `pnpm exec vitest run --root ../.. --config vitest.browser.config.ts`：150 passed / 3 failed，失败均为修正前的同一 proof-loop 资源维护测试（三浏览器配置），尝试聚焦仍折叠的文件输入。运行中的全量测试保留启动时加载的测试模块。
+- 修正测试后执行 `pnpm exec vitest run --root ../.. --config vitest.browser.config.ts packages/react/test/proof-loop-demo.browser.test.tsx -t 'maintains React assets'`：3 passed / 63 skipped。
+- React 包 `pnpm typecheck`、`pnpm exec vite build --emptyOutDir false` 通过；`examples/react-proof-loop` 中 `pnpm build`（含示例类型检查）通过。
+- `pnpm exec vitest run --root ../.. --maxWorkers 2`：1409 passed / 1 failed（159 files）；唯一失败是基础工作台控件测试超过默认 10 秒。使用 `pnpm exec vitest run --root ../.. packages/react/test/workbench.test.tsx -t 'renders default workbench controls'` 单独复跑：1 passed / 64 skipped（测试耗时 6.63 秒）。未修改超时阈值；本次全量首次运行不宣称全绿。
+- `git -c core.whitespace=cr-at-eol diff --check` 通过（CSS 原文件使用 CRLF）。

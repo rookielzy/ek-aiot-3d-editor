@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type RefObject } from "react";
 import {
   filterAssetWorkspaceItems,
   sortAssetWorkspaceItems,
@@ -430,12 +430,20 @@ function AssetRow({ context, asset, recoveryState, recovery, onPicked }: {
   const id = useId();
   const menu = useCommandMenu();
   const panel = useRef<HTMLDivElement | null>(null);
+  const maintenanceInput = useRef<HTMLInputElement | null>(null);
+  const focusMaintenance = useRef(false);
   const moreId = `${id}-more`;
   const menuLabel = t("reactWorkbench.leftPanel.assets.maintenance.menu", { assetLabel: asset.label });
   const status = recoveryState[asset.id];
   const maintenance = assetMaintenanceAction(asset);
   const open = menu.open === asset.id;
   const detailId = `${id}-details`;
+
+  useLayoutEffect(() => {
+    if (open || !expanded || !focusMaintenance.current) return;
+    focusMaintenance.current = false;
+    maintenanceInput.current?.focus();
+  }, [open, expanded]);
 
   function closeMenu(restore = true) {
     menu.closeMenu({ restore });
@@ -450,7 +458,7 @@ function AssetRow({ context, asset, recoveryState, recovery, onPicked }: {
       icon: <WorkbenchIcon name="data" />,
       kind: "action",
       onClick: () => {
-        closeMenu(false);
+        closeMenu();
         setExpanded((current) => !current);
       }
     },
@@ -466,6 +474,7 @@ function AssetRow({ context, asset, recoveryState, recovery, onPicked }: {
           // The details region owns the single file input for this row; the menu only opens it,
           // so every route into the action lands on the same control.
           onClick: () => {
+            focusMaintenance.current = true;
             closeMenu(false);
             setExpanded(true);
           }
@@ -525,8 +534,8 @@ function AssetRow({ context, asset, recoveryState, recovery, onPicked }: {
               data-state={open ? "open" : "closed"}
               onPointerDown={(event) => event.preventDefault()}
               onClick={() => {
-                if (open) closeMenu();
-                else menu.openMenu(asset.id);
+                if (open) return closeMenu();
+                menu.openMenu(asset.id);
               }}
             >
               <WorkbenchIcon name="more" />
@@ -551,7 +560,9 @@ function AssetRow({ context, asset, recoveryState, recovery, onPicked }: {
                 if (event.key === "Escape") {
                   event.preventDefault();
                   closeMenu();
-                } else if (event.key === "Tab") {
+                  return;
+                }
+                if (event.key === "Tab") {
                   closeMenu(false);
                 }
               }}
@@ -607,6 +618,7 @@ function AssetRow({ context, asset, recoveryState, recovery, onPicked }: {
         maintenance={maintenance}
         id={detailId}
         expanded={expanded}
+        inputRef={maintenanceInput}
         onPicked={(file) => onPicked(asset.id, file, maintenance?.mode ?? "replace")}
       />
       {status ? <small className="ek-workbench__asset-status" role="status">{renderStatusMessage(context.i18n, status)}</small> : null}
@@ -614,12 +626,13 @@ function AssetRow({ context, asset, recoveryState, recovery, onPicked }: {
   );
 }
 
-function AssetDetails({ context, asset, maintenance, id, expanded, onPicked }: {
+function AssetDetails({ context, asset, maintenance, id, expanded, inputRef, onPicked }: {
   context: ResolvedWorkbenchContext;
   asset: AssetWorkspaceItem;
   maintenance: AssetMaintenanceAction | null;
   id: string;
   expanded: boolean;
+  inputRef: RefObject<HTMLInputElement | null>;
   onPicked(file: File): void;
 }) {
   const t = context.i18n.t;
@@ -686,6 +699,7 @@ function AssetDetails({ context, asset, maintenance, id, expanded, onPicked }: {
           <span>{maintenance.mode === "replace" && asset.actionLabelDescriptor ? t(asset.actionLabelDescriptor) : t(maintenance.labelKey)}</span>
           <small>{t(maintenance.hintKey)}</small>
           <input
+            ref={inputRef}
             data-maintenance={maintenance.mode}
             type="file"
             accept={maintenance.mode === "reimport" ? REIMPORT_ACCEPT : undefined}

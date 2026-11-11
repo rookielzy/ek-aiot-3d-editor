@@ -93,6 +93,18 @@ describe("React asset workspace row interactions", () => {
     expect(document.getElementById(detailsId)!.hidden).toBe(false);
 
     const input = within(row).getByLabelText("Replace Manual label");
+    expect(document.activeElement).toBe(input);
+    // Routing must also work when the details are already expanded.
+    fireEvent.click(openButton);
+    fireEvent.click(screen.getByRole("menuitem", { name: /Replace file/ }));
+    expect(document.activeElement).toBe(input);
+
+    fireEvent.click(openButton);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Hide details for Manual label" }));
+    expect(document.activeElement).toBe(openButton);
+    fireEvent.click(openButton);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Show details for Manual label" }));
+    expect(document.activeElement).toBe(openButton);
     fireEvent.change(input, { target: { files: [new File([new Uint8Array([2])], "next.png", { type: "image/png" })] } });
     await act(async () => {
       await vi.waitFor(() => expect(replaceAsset).toHaveBeenCalledWith(expect.objectContaining({ assetId: "image-a", label: "next.png" })));
