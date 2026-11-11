@@ -31,7 +31,7 @@ Blocked by: 01
 2026-11-10：用户批准任务粒度、依赖和验收边界，发布规划；实现未开始。
 
 
-2026-11-11：实现完成（分支 `master`，本任务改动未单独提交前的提交见下）。
+2026-11-11：实现完成，提交 `b97c90c feat(react): keyboard navigation and node menus in the hierarchy`。
 
 实现要点：
 - `packages/react/src/components/WorkbenchHierarchy.tsx`：行改为 `role="treeitem"`（`aria-selected`、父节点 `aria-expanded`、`aria-level`、`aria-haspopup="menu"`、`aria-keyshortcuts="ContextMenu Shift+F10"`），树为 `role="tree"` + 嵌套 `role="group"`，roving tabindex 与真实 DOM 焦点。行内处理上下/左右/Home/End/Enter/Space/ContextMenu/Shift+F10，`preventDefault + stopPropagation` 保证场景快捷键不叠加；Escape 只在树内取消浏览焦点，不清除选择。搜索时保持祖先展示、单次渲染匹配节点（搜索态不再嵌套渲染子行），选中节点时自动展开祖先并在搜索命中不到时清空搜索。
