@@ -64,6 +64,7 @@ import {
 } from "@ek-aiot/3d-editor-core";
 import type { WorkbenchI18n, WorkbenchMessageKey, WorkbenchMessageValues } from "../i18n/workbench-i18n";
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
+import { DataFieldProblems } from "./DataFieldProblems";
 import { DataParameterValueInput } from "./DataParameterValueInput";
 import {
   DATA_MAPPING_PROBLEM_MESSAGE_KEYS,
@@ -73,6 +74,9 @@ import {
   formatDataQueryProblem,
   PARAMETER_TYPE_MESSAGE_KEYS
 } from "./data-query-problem-messages";
+import { Button } from "./ui/Button";
+import { Dialog } from "./ui/Dialog";
+import { Input } from "./ui/Input";
 import { WorkbenchSelect } from "./ui/WorkbenchSelect";
 
 export interface DataQueryEditorProps {
@@ -168,17 +172,13 @@ export function DataQueryEditor({
   const [sampleError, setSampleError] = useState<WorkbenchMessageKey | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
   const [discardOpen, setDiscardOpen] = useState(false);
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
-  const cancelRef = useRef<HTMLButtonElement>(null);
-  const discardRef = useRef<HTMLButtonElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
-  const keepEditingRef = useRef<HTMLButtonElement>(null);
+  const pathRef = useRef<HTMLInputElement>(null);
   const pendingCloseRef = useRef<(() => void) | null>(null);
   const t = context.i18n.t;
-  const discardId = useId();
   const rootSuggestionListId = useId();
   const suggestionListId = useId();
+  const problemId = useId();
 
   const service = context.editor.getDataService?.() ?? null;
   const subscribe = useCallback(
@@ -229,7 +229,19 @@ export function DataQueryEditor({
     const items = form.mode === "array" ? Array.isArray(root) ? root.slice(0, 20) : [] : [root];
     return [...new Set(items.flatMap(collectPathSuggestions))].slice(0, 120);
   }, [sample, form.rootPath, form.mode]);
-  const dirty = serializeQueryForm(form) !== form.baseline;
+  const responseSampleText = useMemo(() =>
+    sample?.source === "request" ? JSON.stringify(sample.body, null, 2) : "",
+    [sample]
+  );
+  const dirty = serializeQueryForm(form) !== form.baseline
+    || form.parameters.some((parameter) => parameter.override || parameter.overrideText !== "")
+    || sampleText !== responseSampleText;
+  const nameErrors = fieldErrors("name");
+  const pathErrors = fieldErrors("path");
+  const parameterErrors = fieldErrors("parameters");
+  const summaryProblems = problems.filter((problem) =>
+    problem.field !== "name" && problem.field !== "path" && problem.field !== "parameters"
+  );
   const referenceModel = useMemo(
     () => queryId ? buildDataQueryReferenceModel(context.snapshot, queryId) : null,
     [context.snapshot, queryId]
@@ -273,30 +285,21 @@ export function DataQueryEditor({
     };
   }, [service]);
 
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog || dialog.open) {
-      return;
-    }
-    if (typeof dialog.showModal === "function") {
-      dialog.showModal();
-      return;
-    }
-    // Nonvisual DOM hosts do not implement the modal dialog API.
-    dialog.setAttribute("open", "");
-  }, []);
-
-  useEffect(() => {
-    if (discardOpen) {
-      keepEditingRef.current?.focus();
-      return;
-    }
-    nameRef.current?.focus();
-  }, [discardOpen]);
-
   function updateForm(patch: Partial<QueryFormState>): void {
     setProblems([]);
     setForm((current) => ({ ...current, ...patch }));
+  }
+
+  function fieldErrors(field: "name" | "path" | "parameters"): string[] {
+    const saveErrors = problems.filter((problem) => problem.field === field)
+      .map((problem) => t(DATA_QUERY_DEFINITION_PROBLEM_MESSAGE_KEYS[problem.code], {
+        detail: problem.message,
+        parameterName: problem.parameterName ?? "",
+        propertyKey: problem.propertyKey ?? ""
+      }));
+    const testErrors = run?.problems.filter((problem) => problem.field === field)
+      .map((problem) => formatDataQueryProblem(context.i18n, problem)) ?? [];
+    return [...saveErrors, ...testErrors];
   }
 
   function updateRequestForm(patch: Partial<QueryFormState>): void {
@@ -494,15 +497,6 @@ export function DataQueryEditor({
     action();
   }
 
-  function cancelDialog(): void {
-    if (discardOpen) {
-      pendingCloseRef.current = null;
-      setDiscardOpen(false);
-      return;
-    }
-    requestClose();
-  }
-
   function discardChanges(): void {
     const action = pendingCloseRef.current ?? onClose;
     pendingCloseRef.current = null;
@@ -532,6 +526,9 @@ export function DataQueryEditor({
     const result = buildSaveDataQueryCommand(context.snapshot, definition, { queryId });
     if (!result.ok) {
       setProblems(result.problems);
+      const field = result.problems[0]?.field;
+      if (field === "name") nameRef.current?.focus();
+      if (field === "path") pathRef.current?.focus();
       return;
     }
     const previousIds = new Set(Object.keys(context.snapshot.dataSources.queries));
@@ -555,50 +552,31 @@ export function DataQueryEditor({
     : t("dataSources.queryEditor.newTitle", { connection: connection?.name ?? "" });
 
   return (
-    <dialog
-      ref={dialogRef}
+    <Dialog
       className="ek-workbench__query-editor"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t("dataSources.queryEditor.label")}
-      onKeyDownCapture={(event) => {
-        event.stopPropagation();
-        if (event.key === "Escape") {
-          event.preventDefault();
-          cancelDialog();
-          return;
-        }
-        if (event.key !== "Tab") {
-          return;
-        }
-        const first = discardOpen ? keepEditingRef.current : closeRef.current;
-        const last = discardOpen ? discardRef.current : cancelRef.current ?? closeRef.current;
-        if (event.shiftKey && event.target === first) {
-          event.preventDefault();
-          last?.focus();
-          return;
-        }
-        if (!event.shiftKey && event.target === last) {
-          event.preventDefault();
-          first?.focus();
-        }
-      }}
-      onCancel={(event) => {
-        event.preventDefault();
-        cancelDialog();
-      }}
+      label={t("dataSources.queryEditor.label")}
+      title={title}
+      headerActions={<Button data-dialog-dismiss onClick={() => requestClose()}>{t("dataSources.queryEditor.close")}</Button>}
+      onDismiss={() => requestClose()}
+      initialFocus={nameRef}
+      discard={discardOpen ? {
+        title: t("dataSources.queryEditor.discard.title"),
+        description: t("dataSources.queryEditor.discard.description"),
+        keepLabel: t("dataSources.queryEditor.discard.keep"),
+        discardLabel: t("dataSources.queryEditor.discard.confirm"),
+        onKeepEditing: () => {
+          pendingCloseRef.current = null;
+          setDiscardOpen(false);
+        },
+        onDiscard: discardChanges
+      } : undefined}
     >
-      <div className="ek-workbench__query-editor-header" inert={discardOpen ? true : undefined}>
-        <h3>{title}</h3>
-        <button ref={closeRef} type="button" onClick={() => requestClose()}>{t("dataSources.queryEditor.close")}</button>
-      </div>
-
       {!connection ? (
         <p className="ek-workbench__request-warning" role="alert">
           {t("dataSources.queryEditor.connectionMissing")}
         </p>
       ) : (
-        <div className="ek-workbench__query-editor-form" inert={discardOpen ? true : undefined}>
+        <div className="ek-workbench__query-editor-form">
           <section
             className="ek-workbench__query-section"
             role="group"
@@ -607,14 +585,17 @@ export function DataQueryEditor({
             <h4>{t("dataSources.queryEditor.connectionSection")}</h4>
             <label className="ek-workbench__field">
               <span>{t("dataSources.queryEditor.name")}</span>
-              <input
+              <Input
                 ref={nameRef}
                 type="text"
                 aria-label={t("dataSources.queryEditor.name")}
+                aria-invalid={nameErrors.length > 0}
+                aria-describedby={nameErrors.length > 0 ? `${problemId}-name` : undefined}
                 value={form.name}
                 onChange={(event) => updateForm({ name: event.target.value })}
               />
             </label>
+            <DataFieldProblems id={`${problemId}-name`} messages={nameErrors} />
           </section>
 
           {referenceModel && referenceCount > 0 ? (
@@ -633,11 +614,11 @@ export function DataQueryEditor({
                       <strong>{binding.objectName}</strong>
                       <small>{t("dataSources.queryEditor.referenceDevice", { deviceId: binding.deviceId })}</small>
                     </div>
-                    <button
+                    <Button
                       type="button"
                       aria-label={t("dataSources.queryEditor.selectReferenceAria", { name: binding.objectName })}
                       onClick={() => selectReferencedObject(binding.objectNodeId)}
-                    >{t("dataSources.queryEditor.select")}</button>
+                    >{t("dataSources.queryEditor.select")}</Button>
                   </li>
                 ))}
               </ul>
@@ -688,7 +669,7 @@ export function DataQueryEditor({
                   { value: "GET", label: "GET" },
                   { value: "POST", label: "POST" }
                 ]}
-                onChange={(next) => changeMethod(next as DataQueryMethod)}
+                onChange={changeMethod}
               />
             </label>
             {form.method === "POST" ? (
@@ -708,14 +689,18 @@ export function DataQueryEditor({
 
             <label className="ek-workbench__field">
               <span>{t("dataSources.request.path")}</span>
-              <input
+              <Input
+                ref={pathRef}
                 type="text"
                 aria-label={t("dataSources.request.path")}
+                aria-invalid={pathErrors.length > 0}
+                aria-describedby={pathErrors.length > 0 ? `${problemId}-path` : undefined}
                 placeholder={t("dataSources.request.pathPlaceholder")}
                 value={form.path}
                 onChange={(event) => updateRequestForm({ path: event.target.value })}
               />
             </label>
+            <DataFieldProblems id={`${problemId}-path`} messages={pathErrors} />
             <div className="ek-workbench__request-preview">
               <span>{t("dataSources.request.preview")}</span>
               {requestUrlPreview(context, connectionId, form, parameterDrafts, overrides)}
@@ -729,36 +714,36 @@ export function DataQueryEditor({
                 const row = index + 1;
                 return (
                   <div key={header.id} className="ek-workbench__request-header-row">
-                    <input
+                    <Input
                       type="text"
                       aria-label={t("dataSources.request.header.name", { index: row })}
                       placeholder={t("dataSources.request.header.name", { index: row })}
                       value={header.name}
                       onChange={(event) => updateHeader(header.id, { name: event.target.value })}
                     />
-                    <input
+                    <Input
                       type="text"
                       aria-label={t("dataSources.request.header.value", { index: row })}
                       placeholder={t("dataSources.request.header.value", { index: row })}
                       value={header.value}
                       onChange={(event) => updateHeader(header.id, { value: event.target.value })}
                     />
-                    <button
+                    <Button
                       type="button"
                       aria-label={t("dataSources.request.header.remove", { index: row })}
                       onClick={() => removeHeader(header.id)}
-                    >{t("dataSources.request.header.removeLabel")}</button>
+                    >{t("dataSources.request.header.removeLabel")}</Button>
                   </div>
                 );
               })}
-              <button type="button" onClick={addHeader}>{t("dataSources.request.headers.add")}</button>
+              <Button type="button" onClick={addHeader}>{t("dataSources.request.headers.add")}</Button>
             </fieldset>
 
             <div className="ek-workbench__query-inline">
               {form.method === "GET" ? (
                 <label className="ek-workbench__field">
                   <span>{t("dataSources.queryEditor.refreshInterval")}</span>
-                  <input
+                  <Input
                     type="number"
                     min={1}
                     step={1}
@@ -771,7 +756,7 @@ export function DataQueryEditor({
               ) : null}
               <label className="ek-workbench__field">
                 <span>{t("dataSources.queryEditor.maxAge")}</span>
-                <input
+                <Input
                   type="number"
                   min={1}
                   step={1}
@@ -788,8 +773,12 @@ export function DataQueryEditor({
                 : t("dataSources.queryEditor.updatePolicyHint")}
             </p>
 
-            <fieldset className="ek-workbench__request-parameters">
+            <fieldset
+              className="ek-workbench__request-parameters"
+              aria-describedby={parameterErrors.length > 0 ? `${problemId}-parameters` : undefined}
+            >
               <legend>{t("dataSources.request.parameters")}</legend>
+              <DataFieldProblems id={`${problemId}-parameters`} messages={parameterErrors} />
               {form.parameters.length === 0 ? <small>{t("dataSources.request.parameters.empty")}</small> : null}
               {form.parameters.map((parameter, index) => (
                 <ParameterRow
@@ -804,7 +793,7 @@ export function DataQueryEditor({
                   onRemove={() => removeParameter(parameter.id)}
                 />
               ))}
-              <button type="button" onClick={addParameter}>{t("dataSources.request.parameters.add")}</button>
+              <Button type="button" onClick={addParameter}>{t("dataSources.request.parameters.add")}</Button>
             </fieldset>
 
             <fieldset className="ek-workbench__query-success">
@@ -827,7 +816,7 @@ export function DataQueryEditor({
                       label: t(SUCCESS_TYPE_MESSAGE_KEYS[type])
                     }))}
                     onChange={(next) => updateRequestForm({
-                      successType: next as QuerySuccessValueType
+                      successType: next
                     })}
                   />
                 </label>
@@ -850,8 +839,8 @@ export function DataQueryEditor({
             </fieldset>
 
             <div className="ek-workbench__request-actions">
-              <button type="submit" disabled={!service || running}>{t("dataSources.request.run")}</button>
-              {running ? <button type="button" onClick={cancelRun}>{t("dataSources.request.cancel")}</button> : null}
+              <Button type="submit" disabled={!service || running}>{t("dataSources.request.run")}</Button>
+              {running ? <Button type="button" onClick={cancelRun}>{t("dataSources.request.cancel")}</Button> : null}
             </div>
           </form>
 
@@ -884,7 +873,7 @@ export function DataQueryEditor({
                     { value: "array", label: t(MODE_MESSAGE_KEYS.array) },
                     { value: "single", label: t(MODE_MESSAGE_KEYS.single) }
                   ]}
-                  onChange={(next) => changeMode(next as QueryFormState["mode"])}
+                  onChange={changeMode}
                 />
               </label>
               {form.mode === "single" ? (
@@ -899,7 +888,7 @@ export function DataQueryEditor({
                       { value: "literal", label: t(IDENTITY_KIND_MESSAGE_KEYS.literal) }
                     ]}
                     onChange={(next) => updateForm({
-                      identityKind: next as QueryFormState["identityKind"]
+                      identityKind: next
                     })}
                   />
                 </label>
@@ -924,7 +913,7 @@ export function DataQueryEditor({
                       { value: "number", label: t(VALUE_TYPE_MESSAGE_KEYS.number) }
                     ]}
                     onChange={(next) => updateForm({
-                      identityValueType: next as QueryFormState["identityValueType"]
+                      identityValueType: next
                     })}
                   />
                 </label>
@@ -947,7 +936,7 @@ export function DataQueryEditor({
             ) : (
               <label className="ek-workbench__field">
                 <span>{t("dataSources.mapping.identity.literalField")}</span>
-                <input
+                <Input
                   type="text"
                   aria-label={t("dataSources.mapping.identity.literalField")}
                   value={form.identityLiteral}
@@ -989,9 +978,9 @@ export function DataQueryEditor({
                   })}
                 />
               ))}
-              <button type="button" onClick={() => updateForm({
+              <Button type="button" onClick={() => updateForm({
                 properties: [...form.properties, createQueryPropertyForm()]
-              })}>{t("dataSources.mapping.property.add")}</button>
+              })}>{t("dataSources.mapping.property.add")}</Button>
             </fieldset>
 
             <fieldset className="ek-workbench__query-observed">
@@ -1014,7 +1003,7 @@ export function DataQueryEditor({
                       label: t(TIME_FORMAT_MESSAGE_KEYS[format])
                     }))}
                     onChange={(next) => updateForm({
-                      observedFormat: next as DataTimeFormat
+                      observedFormat: next
                     })}
                   />
                 </label>
@@ -1032,7 +1021,7 @@ export function DataQueryEditor({
               />
               {form.qualityEntries.map((entry, index) => (
                 <div key={entry.id} className="ek-workbench__query-map-entry">
-                  <input
+                  <Input
                     type="text"
                     aria-label={t("dataSources.mapping.quality.from", { index: index + 1 })}
                     placeholder={t("dataSources.mapping.mapValueError")}
@@ -1047,22 +1036,39 @@ export function DataQueryEditor({
                       label: t(QUALITY_MESSAGE_KEYS[quality])
                     }))}
                     onChange={(next) => updateQualityEntry(entry.id, {
-                      quality: next as DataQuality
+                      quality: next
                     })}
                   />
-                  <button
+                  <Button
                     type="button"
                     aria-label={t("dataSources.mapping.quality.remove", { index: index + 1 })}
                     onClick={() => updateForm({
                       qualityEntries: form.qualityEntries.filter((candidate) => candidate.id !== entry.id)
                     })}
-                  >{t("dataSources.mapping.property.removeLabel")}</button>
+                  >{t("dataSources.mapping.property.removeLabel")}</Button>
                 </div>
               ))}
-              <button type="button" onClick={() => updateForm({
+              <Button type="button" onClick={() => updateForm({
                 qualityEntries: [...form.qualityEntries, createQueryQualityEntryForm()]
-              })}>{t("dataSources.mapping.quality.add")}</button>
+              })}>{t("dataSources.mapping.quality.add")}</Button>
             </fieldset>
+            {showValidation && (mappingBuild.problems.length > 0 || (mappingValidation && !mappingValidation.ok)) ? (
+              <div className="ek-workbench__connection-problems" role="alert" aria-label={t("dataSources.queryEditor.problems")}>
+                <strong>{t("dataSources.queryEditor.problems")}</strong>
+                <ul>
+                  {mappingBuild.problems.map((problem, index) => (
+                    <li key={`${problem.field}-${index}`}>{t(problem.messageKey)}</li>
+                  ))}
+                  {mappingValidation && !mappingValidation.ok
+                    ? mappingValidation.problems.map((problem, index) => (
+                        <li key={`${problem.code}-${index}`}>
+                          {t(DATA_QUERY_DEFINITION_PROBLEM_MESSAGE_KEYS[problem.code], { detail: problem.message })}
+                        </li>
+                      ))
+                    : null}
+                </ul>
+              </div>
+            ) : null}
           </section>
 
           <section className="ek-workbench__query-section" role="group" aria-label={t("dataSources.queryEditor.previewSection")}>
@@ -1085,7 +1091,7 @@ export function DataQueryEditor({
               />
             </label>
             <div className="ek-workbench__request-actions">
-              <button type="button" onClick={applyExample}>{t("dataSources.sample.apply")}</button>
+              <Button type="button" onClick={applyExample}>{t("dataSources.sample.apply")}</Button>
             </div>
             {sampleError ? <p className="ek-workbench__request-warning" role="alert">{t(sampleError)}</p> : null}
 
@@ -1101,29 +1107,12 @@ export function DataQueryEditor({
             />
           </section>
 
-          {showValidation && (mappingBuild.problems.length > 0 || (mappingValidation && !mappingValidation.ok)) ? (
-            <div className="ek-workbench__connection-problems" role="alert" aria-label={t("dataSources.queryEditor.problems")}>
-              <strong>{t("dataSources.queryEditor.problems")}</strong>
-              <ul>
-                {mappingBuild.problems.map((problem, index) => (
-                  <li key={`${problem.field}-${index}`}>{t(problem.messageKey)}</li>
-                ))}
-                {mappingValidation && !mappingValidation.ok
-                  ? mappingValidation.problems.map((problem, index) => (
-                      <li key={`${problem.code}-${index}`}>
-                        {t(DATA_QUERY_DEFINITION_PROBLEM_MESSAGE_KEYS[problem.code], { detail: problem.message })}
-                      </li>
-                    ))
-                  : null}
-              </ul>
-            </div>
-          ) : null}
 
-          {problems.length > 0 ? (
+          {summaryProblems.length > 0 ? (
             <div className="ek-workbench__connection-problems" role="alert" aria-label={t("dataSources.queryEditor.problems")}>
               <strong>{t("dataSources.queryEditor.problems")}</strong>
               <ul>
-                {problems.map((problem, index) => (
+                {summaryProblems.map((problem, index) => (
                   <li key={`${problem.field}-${problem.code}-${index}`}>
                     {t(DATA_QUERY_DEFINITION_PROBLEM_MESSAGE_KEYS[problem.code], {
                       detail: problem.message,
@@ -1137,36 +1126,19 @@ export function DataQueryEditor({
           ) : null}
 
           <div className="ek-workbench__connection-form-actions">
-            <button type="button" onClick={save}>{t("dataSources.queryEditor.save")}</button>
-            <button ref={cancelRef} type="button" onClick={() => requestClose()}>{t("dataSources.queryEditor.cancel")}</button>
+            <Button type="button" onClick={save}>{t("dataSources.queryEditor.save")}</Button>
+            <Button data-dialog-dismiss className="ek-ui-button--quiet" onClick={() => requestClose()}>{t("dataSources.queryEditor.cancel")}</Button>
           </div>
         </div>
       )}
 
-      {discardOpen ? (
-        <div
-          className="ek-workbench__connection-discard"
-          role="alertdialog"
-          aria-label={t("dataSources.queryEditor.discard.title")}
-          aria-describedby={`${discardId}-description`}
-        >
-          <strong>{t("dataSources.queryEditor.discard.title")}</strong>
-          <p id={`${discardId}-description`}>{t("dataSources.queryEditor.discard.description")}</p>
-          <div className="ek-workbench__connection-discard-actions">
-            <button ref={keepEditingRef} type="button" onClick={() => {
-              setDiscardOpen(false);
-            }}>{t("dataSources.queryEditor.discard.keep")}</button>
-            <button ref={discardRef} type="button" onClick={discardChanges}>{t("dataSources.queryEditor.discard.confirm")}</button>
-          </div>
-        </div>
-      ) : null}
       <datalist id={rootSuggestionListId}>
         {rootSuggestions.map((suggestion) => <option key={suggestion} value={suggestion} />)}
       </datalist>
       <datalist id={suggestionListId}>
         {suggestions.map((suggestion) => <option key={suggestion} value={suggestion} />)}
       </datalist>
-    </dialog>
+    </Dialog>
   );
 }
 
@@ -1226,7 +1198,7 @@ function ParameterRow({
     <div className="ek-workbench__request-parameter" role="group" aria-label={t("dataSources.request.parameter.group", { index })}>
       <label className="ek-workbench__field">
         <span>{t("dataSources.request.parameter.name", { index })}</span>
-        <input
+        <Input
           type="text"
           aria-label={t("dataSources.request.parameter.name", { index })}
           value={parameter.name}
@@ -1242,7 +1214,7 @@ function ParameterRow({
             value: type,
             label: t(PARAMETER_TYPE_MESSAGE_KEYS[type])
           }))}
-          onChange={(next) => onChangeType(next as DataParameterType)}
+          onChange={onChangeType}
         />
       </label>
       <label className="ek-workbench__field">
@@ -1256,7 +1228,7 @@ function ParameterRow({
             { value: "query", label: t("dataSources.request.parameter.location.query") },
             { value: "body", label: t("dataSources.request.parameter.location.body") }
           ]}
-          onChange={(next) => onChangeLocation(next as DataParameterLocationInput)}
+          onChange={onChangeLocation}
         />
       </label>
       <div className="ek-workbench__request-parameter-value">
@@ -1314,11 +1286,11 @@ function ParameterRow({
           </label>
         ) : null}
       </div>
-      <button
+      <Button
         type="button"
         aria-label={t("dataSources.request.parameter.remove", { index })}
         onClick={onRemove}
-      >{t("dataSources.request.parameter.label.remove")}</button>
+      >{t("dataSources.request.parameter.label.remove")}</Button>
       {usage ? (
         <p className="ek-workbench__query-usage" role="status">
           {t("dataSources.queryEditor.parameterUsage", {
@@ -1363,7 +1335,7 @@ function PropertyRow({
       <div className="ek-workbench__query-inline">
         <label className="ek-workbench__field">
           <span>{t("dataSources.mapping.property.key", { index })}</span>
-          <input
+          <Input
             type="text"
             aria-label={t("dataSources.mapping.property.key", { index })}
             value={property.key}
@@ -1372,7 +1344,7 @@ function PropertyRow({
         </label>
         <label className="ek-workbench__field">
           <span>{t("dataSources.mapping.property.label", { index })}</span>
-          <input
+          <Input
             type="text"
             aria-label={t("dataSources.mapping.property.label", { index })}
             value={property.label}
@@ -1388,7 +1360,7 @@ function PropertyRow({
               value: type,
               label: t(PROPERTY_TYPE_MESSAGE_KEYS[type])
             }))}
-            onChange={(next) => onChangeType(next as QueryPropertyForm["type"])}
+            onChange={onChangeType}
           />
         </label>
       </div>
@@ -1408,12 +1380,12 @@ function PropertyRow({
               value: kind,
               label: t(TRANSFORM_MESSAGE_KEYS[kind])
             }))}
-            onChange={(next) => onChangeTransform(next as QueryPropertyForm["transformKind"])}
+            onChange={onChangeTransform}
           />
         </label>
         <label className="ek-workbench__field">
           <span>{t("dataSources.mapping.property.unit", { index })}</span>
-          <input
+          <Input
             type="text"
             aria-label={t("dataSources.mapping.property.unit", { index })}
             value={property.unit}
@@ -1435,7 +1407,7 @@ function PropertyRow({
           <>
             <label className="ek-workbench__field">
               <span>{t("dataSources.mapping.property.rangeMin", { index })}</span>
-              <input
+              <Input
                 type="number"
                 step="any"
                 aria-label={t("dataSources.mapping.property.rangeMin", { index })}
@@ -1445,7 +1417,7 @@ function PropertyRow({
             </label>
             <label className="ek-workbench__field">
               <span>{t("dataSources.mapping.property.rangeMax", { index })}</span>
-              <input
+              <Input
                 type="number"
                 step="any"
                 aria-label={t("dataSources.mapping.property.rangeMax", { index })}
@@ -1457,7 +1429,7 @@ function PropertyRow({
         ) : null}
         <label className="ek-workbench__field">
           <span>{t("dataSources.mapping.property.allowed", { index })}</span>
-          <input
+          <Input
             type="text"
             aria-label={t("dataSources.mapping.property.allowed", { index })}
             value={property.allowedText}
@@ -1470,7 +1442,7 @@ function PropertyRow({
         <div className="ek-workbench__query-inline">
           <label className="ek-workbench__field">
             <span>{t("dataSources.mapping.property.factor", { index })}</span>
-            <input
+            <Input
               type="number"
               step="any"
               aria-label={t("dataSources.mapping.property.factor", { index })}
@@ -1480,7 +1452,7 @@ function PropertyRow({
           </label>
           <label className="ek-workbench__field">
             <span>{t("dataSources.mapping.property.offset", { index })}</span>
-            <input
+            <Input
               type="number"
               step="any"
               aria-label={t("dataSources.mapping.property.offset", { index })}
@@ -1495,7 +1467,7 @@ function PropertyRow({
           <legend>{t("dataSources.mapping.map.entries")}</legend>
           {property.mapEntries.map((entry, entryIndex) => (
             <div key={entry.id} className="ek-workbench__query-map-entry">
-              <input
+              <Input
                 type="text"
                 aria-label={t("dataSources.mapping.map.from", { index: entryIndex + 1 })}
                 placeholder={t("dataSources.mapping.mapValueError")}
@@ -1509,14 +1481,14 @@ function PropertyRow({
                 i18n={i18n}
                 onChange={(value) => onUpdateEntry(entry.id, { to: value })}
               />
-              <button
+              <Button
                 type="button"
                 aria-label={t("dataSources.mapping.map.remove", { index: entryIndex + 1 })}
                 onClick={() => onRemoveEntry(entry.id)}
-              >{t("dataSources.mapping.property.removeLabel")}</button>
+              >{t("dataSources.mapping.property.removeLabel")}</Button>
             </div>
           ))}
-          <button type="button" onClick={onAddEntry}>{t("dataSources.mapping.map.add")}</button>
+          <Button type="button" onClick={onAddEntry}>{t("dataSources.mapping.map.add")}</Button>
         </fieldset>
       ) : null}
       {usage ? (
@@ -1526,9 +1498,9 @@ function PropertyRow({
           })}
         </p>
       ) : null}
-      <button type="button" aria-label={t("dataSources.mapping.property.remove", { index })} onClick={onRemove}>
+      <Button type="button" aria-label={t("dataSources.mapping.property.remove", { index })} onClick={onRemove}>
         {t("dataSources.mapping.property.removeLabel")}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -1587,7 +1559,7 @@ function MapOutputInput({
     );
   }
   return (
-    <input
+    <Input
       type={type === "number" ? "number" : "text"}
       step={type === "number" ? "any" : undefined}
       aria-label={t("dataSources.mapping.map.to", { index })}
@@ -1613,7 +1585,7 @@ function PathField({
   return (
     <label className="ek-workbench__field">
       <span>{label}</span>
-      <input
+      <Input
         type="text"
         list={suggestionListId}
         aria-label={label}
@@ -1627,6 +1599,7 @@ function PathField({
 
 function RunSummary({ run, i18n }: { run: DataQueryRunState; i18n: WorkbenchI18n }) {
   const t = i18n.t;
+  const problems = run.problems.filter((problem) => problem.field !== "path" && problem.field !== "parameters");
   return (
     <section className="ek-workbench__request-result" aria-label={t("dataSources.request.result")} data-status={run.status}>
       <div className="ek-workbench__request-result-header">
@@ -1637,9 +1610,9 @@ function RunSummary({ run, i18n }: { run: DataQueryRunState; i18n: WorkbenchI18n
           <small>{t("dataSources.request.response.durationValue", { milliseconds: run.elapsedMs })}</small>
         ) : null}
       </div>
-      {run.problems.length > 0 ? (
+      {problems.length > 0 ? (
         <ul className="ek-workbench__request-problems" aria-label={t("dataSources.request.problems")}>
-          {run.problems.map((problem, index) => (
+          {problems.map((problem, index) => (
             <li key={`${problem.code}-${index}`}>{formatDataQueryProblem(i18n, problem)}</li>
           ))}
         </ul>

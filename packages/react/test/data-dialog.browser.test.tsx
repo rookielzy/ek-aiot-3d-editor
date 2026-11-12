@@ -82,6 +82,10 @@ it("keeps the connection dialog usable, focused, and draft-safe in the real work
     expect(reopened.querySelector('[role="alert"]')).toBeTruthy();
     expect(document.activeElement).toBe(url);
     expect(editor.getSnapshot().dataSources.connections).toEqual({});
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => reopened.querySelector('[role="alertdialog"]')).toBeTruthy();
+    await userEvent.click(button(reopened, "Keep editing"));
+    expect(document.activeElement).toBe(url);
   } finally {
     root.unmount();
     editor.dispose();
@@ -127,17 +131,25 @@ it("keeps the request tester modal, draft-safe, and returns focus to its row tri
     expect(dialog.contains(document.activeElement)).toBe(true);
     path.focus();
     expect(document.activeElement).toBe(path);
+    await userEvent.fill(path, "https://elsewhere.example.test/devices");
+    await userEvent.click(button(dialog, "Run request"));
+    await expect.element(page.getByRole("textbox", { name: EN.requestPath }))
+      .toHaveAccessibleDescription("Use a relative path, not an absolute URL.");
+    await expect.element(page.getByRole("group", { name: EN.requestResult })).toHaveTextContent("Failed");
     await userEvent.fill(path, "/devices/plant-1");
     // A typed draft survives the discard prompt: Escape asks, keeping edits
     // returns focus to the draft, and only "Discard changes" closes the modal.
-    await userEvent.click(button(dialog, EN.closeRequest));
+    await userEvent.keyboard("{Escape}");
     const prompt = await waitForElement<HTMLElement>(dialog, '[role="alertdialog"]');
     expect(prompt.textContent).toContain(EN.discardTitle);
     // The panel behind is inert while the prompt is up, so the prompt's own
     // controls own the tab order.
     const keep = button(prompt, EN.keepEditing);
     const discard = button(prompt, EN.discardChanges);
-    keep.focus();
+    await expect.poll(() => document.activeElement).toBe(keep);
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(document.activeElement).toBe(discard);
+    await userEvent.keyboard("{Tab}");
     expect(document.activeElement).toBe(keep);
     await userEvent.click(keep);
     await expect.poll(() => dialog.querySelector('[role="alertdialog"]')).toBeNull();
@@ -187,8 +199,8 @@ it("keeps every query configuration section rendered and the dialog inside the v
   });
 }, 30_000);
 
-it("keeps the connection dialog inside the viewport for a very long connection name", async () => {
-  const longName = "Plant-Api-".repeat(12);
+it("keeps connection editing and the request tester usable with a long unbroken name", async () => {
+  const longName = "PlantApi".repeat(15);
   expect(longName).toHaveLength(120);
 
   await withWorkbench("en", async ({ host }) => {
@@ -215,6 +227,14 @@ it("keeps the connection dialog inside the viewport for a very long connection n
     await userEvent.keyboard("{Escape}");
     await expect.poll(() => host.querySelector(`dialog[aria-label="${EN.editTitle}"]`)).toBeNull();
     await expect.poll(() => document.activeElement).toBe(button(host, `Edit ${longName}`));
+
+    const trigger = button(host, EN.testAria(longName));
+    await userEvent.click(trigger);
+    const tester = await waitForDialog(host, EN.requestLabel);
+    const close = button(tester, EN.closeRequest);
+    expect(close.getBoundingClientRect().right).toBeLessThanOrEqual(tester.getBoundingClientRect().right);
+    await userEvent.click(close);
+    await expect.poll(() => document.activeElement).toBe(trigger);
   });
 }, 30_000);
 

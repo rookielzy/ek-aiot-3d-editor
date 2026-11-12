@@ -162,6 +162,7 @@ export function EditorWorkbench({
     }
 
     function onKeyDown(event: KeyboardEvent) {
+      if (event.target instanceof Element && event.target.closest(".ek-workbench__dialog[open]")) return;
       if (closeTopLayer(event)) {
         return;
       }

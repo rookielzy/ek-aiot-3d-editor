@@ -32,6 +32,7 @@ import {
 } from "./data-query-problem-messages";
 import { Button } from "./ui/Button";
 import { Dialog } from "./ui/Dialog";
+import { DataFieldProblems } from "./DataFieldProblems";
 import { Input } from "./ui/Input";
 import { WorkbenchSelect } from "./ui/WorkbenchSelect";
 
@@ -79,8 +80,7 @@ export function DataQueryTester({
   const dataState = useSyncExternalStore(subscribe, getState, getState);
   const [draft, setDraft] = useState<TesterDraft>({ method: "GET", readOnly: true, path: "", parameters: [] });
   const pathRef = useRef<HTMLInputElement>(null);
-  const keepEditingRef = useRef<HTMLButtonElement>(null);
-  const discardId = useId();
+  const problemId = useId();
   const t = context.i18n.t;
   const connection = context.snapshot.dataSources.connections[connectionId];
 
@@ -90,14 +90,6 @@ export function DataQueryTester({
       service?.invalidateQueryRuns();
     };
   }, [service, connectionId]);
-
-  useEffect(() => {
-    if (discardRequested) {
-      keepEditingRef.current?.focus();
-      return;
-    }
-    pathRef.current?.focus();
-  }, [discardRequested]);
 
   if (!connection) {
     return null;
@@ -114,6 +106,10 @@ export function DataQueryTester({
   }, { overrides });
   const run = dataState.run?.connectionId === connectionId ? dataState.run : null;
   const running = run?.status === "running";
+  const pathErrors = run?.problems.filter((problem) => problem.field === "path")
+    .map((problem) => formatDataQueryProblem(context.i18n, problem)) ?? [];
+  const parameterErrors = run?.problems.filter((problem) => problem.field === "parameters")
+    .map((problem) => formatDataQueryProblem(context.i18n, problem)) ?? [];
 
   function updateDraft(patch: Partial<TesterDraft>): void {
     service?.invalidateQueryRuns();
@@ -164,6 +160,7 @@ export function DataQueryTester({
     if (!service || running) {
       return;
     }
+    if (!preview.ok && preview.problems[0]?.field === "path") pathRef.current?.focus();
     service.invalidateQueryRuns();
     void service.executeQueryDraft({
       connectionId,
@@ -182,15 +179,22 @@ export function DataQueryTester({
 
   return (
     <Dialog
-      open
       onDismiss={onRequestClose}
       label={t("dataSources.request.label")}
       title={t("dataSources.request.title", { name: connection.name })}
       className="ek-workbench__request-dialog"
-      headerActions={<Button onClick={onRequestClose}>{t("dataSources.request.close")}</Button>}
-      hasNestedLayer={discardRequested}
+      headerActions={<Button data-dialog-dismiss onClick={onRequestClose}>{t("dataSources.request.close")}</Button>}
+      initialFocus={pathRef}
+      discard={discardRequested ? {
+        title: t("dataSources.form.discard.title"),
+        description: t("dataSources.request.discardDescription"),
+        keepLabel: t("dataSources.form.discard.keep"),
+        discardLabel: t("dataSources.form.discard.confirm"),
+        onKeepEditing,
+        onDiscard: onClose
+      } : undefined}
     >
-      <div className="ek-workbench__dialog-content" inert={discardRequested ? true : undefined}>
+      <div className="ek-workbench__dialog-content">
         <TesterSection label={t("dataSources.request.connectionSection")}>
           <p className="ek-workbench__request-hint">{t("dataSources.request.draftHint")}</p>
           <p className="ek-workbench__request-connection">{connection.baseUrl}</p>
@@ -213,7 +217,7 @@ export function DataQueryTester({
                   { value: "GET", label: "GET" },
                   { value: "POST", label: "POST" }
                 ]}
-                onChange={(next) => updateMethod(next as DataQueryMethod)}
+                onChange={updateMethod}
               />
             </label>
             {draft.method === "POST" ? (
@@ -236,11 +240,14 @@ export function DataQueryTester({
                 ref={pathRef}
                 type="text"
                 aria-label={t("dataSources.request.path")}
+                aria-invalid={pathErrors.length > 0}
+                aria-describedby={pathErrors.length > 0 ? `${problemId}-path` : undefined}
                 placeholder={t("dataSources.request.pathPlaceholder")}
                 value={draft.path}
                 onChange={(event) => updateDraft({ path: event.target.value })}
               />
             </label>
+            <DataFieldProblems id={`${problemId}-path`} messages={pathErrors} />
             <div className="ek-workbench__request-preview">
               <span>{t("dataSources.request.preview")}</span>
               {preview.ok
@@ -258,8 +265,12 @@ export function DataQueryTester({
                 : <small>{t("dataSources.request.previewPending")}</small>}
             </div>
 
-            <fieldset className="ek-workbench__request-parameters">
+            <fieldset
+              className="ek-workbench__request-parameters"
+              aria-describedby={parameterErrors.length > 0 ? `${problemId}-parameters` : undefined}
+            >
               <legend>{t("dataSources.request.parameters")}</legend>
+              <DataFieldProblems id={`${problemId}-parameters`} messages={parameterErrors} />
               {draft.parameters.length === 0 ? <small>{t("dataSources.request.parameters.empty")}</small> : null}
               {draft.parameters.map((parameter, index) => {
                 const row = index + 1;
@@ -288,7 +299,7 @@ export function DataQueryTester({
                           value: type,
                           label: t(PARAMETER_TYPE_MESSAGE_KEYS[type])
                         }))}
-                        onChange={(next) => changeParameterType(parameter.id, next as DataParameterType)}
+                        onChange={(next) => changeParameterType(parameter.id, next)}
                       />
                     </label>
                     <label className="ek-workbench__field">
@@ -302,7 +313,7 @@ export function DataQueryTester({
                           { value: "query", label: t("dataSources.request.parameter.location.query") },
                           { value: "body", label: t("dataSources.request.parameter.location.body") }
                         ]}
-                        onChange={(next) => updateLocation(parameter.id, next as DataParameterLocationInput)}
+                        onChange={(next) => updateLocation(parameter.id, next)}
                       />
                     </label>
                     <div className="ek-workbench__request-parameter-value">
@@ -385,31 +396,6 @@ export function DataQueryTester({
           {!running && !run ? <p className="ek-workbench__request-hint">{t("dataSources.request.noResult")}</p> : null}
         </TesterSection>
       </div>
-
-      {discardRequested ? (
-        <div
-          className="ek-workbench__connection-discard"
-          role="alertdialog"
-          aria-label={t("dataSources.form.discard.title")}
-          aria-describedby={`${discardId}-description`}
-          onKeyDown={(event) => {
-            // Escape acts on the top-most layer: the prompt asks for editing
-            // again instead of re-requesting the same close.
-            if (event.key === "Escape") {
-              event.preventDefault();
-              event.stopPropagation();
-              onKeepEditing();
-            }
-          }}
-        >
-          <strong>{t("dataSources.form.discard.title")}</strong>
-          <p id={`${discardId}-description`}>{t("dataSources.request.discardDescription")}</p>
-          <div className="ek-workbench__connection-discard-actions">
-            <Button ref={keepEditingRef} onClick={onKeepEditing}>{t("dataSources.form.discard.keep")}</Button>
-            <Button onClick={onClose}>{t("dataSources.form.discard.confirm")}</Button>
-          </div>
-        </div>
-      ) : null}
     </Dialog>
   );
 }
@@ -432,6 +418,7 @@ function TesterSection({ label, children }: { label: string; children: ReactNode
 
 function RequestRunResult({ run, i18n }: { run: DataQueryRunState; i18n: WorkbenchI18n }) {
   const t = i18n.t;
+  const problems = run.problems.filter((problem) => problem.field !== "path" && problem.field !== "parameters");
   return (
     <div
       className="ek-workbench__request-result"
@@ -451,9 +438,9 @@ function RequestRunResult({ run, i18n }: { run: DataQueryRunState; i18n: Workben
         </small>
         <small>{t("dataSources.request.sessionOnly")}</small>
       </div>
-      {run.problems.length > 0 ? (
+      {problems.length > 0 ? (
         <ul className="ek-workbench__request-problems" aria-label={t("dataSources.request.problems")}>
-          {run.problems.map((problem, index) => (
+          {problems.map((problem, index) => (
             <li key={`${problem.code}-${problem.parameterName ?? ""}-${index}`}>
               {formatDataQueryProblem(i18n, problem)}
             </li>

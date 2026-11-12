@@ -218,7 +218,7 @@ describe("React data source workspace", () => {
 
   it("keeps host credential labels when project feedback rebuilds the workbench model", async () => {
     const editor = createEditor({
-      credentials: [{ ref: "credential-live", label: "Live token", available: true }]
+      credentials: [{ ref: "ek-select-empty", label: "Live token", available: true }]
     });
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
     render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} rightPanel={() => null} />);
@@ -230,6 +230,8 @@ describe("React data source workspace", () => {
     selectWorkbenchOption(screen.getByLabelText("Authentication"), "Bearer token");
     selectWorkbenchOption(screen.getByLabelText("Credential"), "Live token");
     fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
+    expect(Object.values(editor.getSnapshot().dataSources.connections)[0]?.auth)
+      .toEqual({ kind: "bearer", credentialRef: "ek-select-empty" });
     expect(screen.getByText("Credential: Live token")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Project menu" }));

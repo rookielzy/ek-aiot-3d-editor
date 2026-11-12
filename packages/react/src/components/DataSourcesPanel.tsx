@@ -123,15 +123,11 @@ function DataSourcesSession({
   const authRef = useRef<HTMLButtonElement>(null);
   const credentialRef = useRef<HTMLButtonElement>(null);
   const timeoutRef = useRef<HTMLInputElement>(null);
-  const keepEditingRef = useRef<HTMLButtonElement>(null);
   const newButtonRef = useRef<HTMLButtonElement>(null);
   const editButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const requestButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const newQueryButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const queryButtonRefs = useRef(new Map<string, HTMLButtonElement>());
-  // Where focus returns after "Keep editing" dismisses a discard prompt: the
-  // control the user was last editing, captured when the prompt opened.
-  const draftFocusRef = useRef<HTMLElement | null>(null);
   const t = context.i18n.t;
   const model = context.model.dataSources;
   const credentials = context.editor.getDataCredentials?.() ?? [];
@@ -140,18 +136,6 @@ function DataSourcesSession({
     connection.id,
     buildDataConnectionReferenceModel(context.snapshot, connection.id).bindings.map((binding) => binding.objectName)
   ]));
-  const formKey = form
-    ? `${form.mode.kind}:${form.mode.kind === "edit" ? form.mode.connectionId : ""}`
-    : null;
-
-  useEffect(() => {
-    // The request tester focuses its own first field so a draft survives the
-    // connection form's field but never steals the tester's starting point.
-    if (formKey && !discardOpen && !requestConnectionId) {
-      nameRef.current?.focus();
-    }
-  }, [formKey, discardOpen, requestConnectionId]);
-
   useEffect(() => {
     if (!focusTarget) {
       return;
@@ -171,18 +155,8 @@ function DataSourcesSession({
   }, [focusTarget]);
 
   useEffect(() => {
-    if (!discardOpen) {
-      return;
-    }
-    // The prompt owns focus while it is open; "Keep editing" then returns to
-    // the field that held focus when the prompt opened.
-    keepEditingRef.current?.focus();
-  }, [discardOpen]);
-
-  useEffect(() => {
     const field = problems[0]?.field;
-    // The discard prompt owns focus while it is open.
-    if (!field || discardOpen) {
+    if (!field) {
       return;
     }
     switch (field) {
@@ -199,7 +173,7 @@ function DataSourcesSession({
         nameRef.current?.focus();
         break;
     }
-  }, [problems, discardOpen]);
+  }, [problems]);
 
   useEffect(() => {
     if (requestConnectionId && !context.snapshot.dataSources.connections[requestConnectionId]) {
@@ -306,15 +280,6 @@ function DataSourcesSession({
     setFocusTarget(editing ? { kind: "connection", connectionId: editing } : { kind: "new" });
   }
 
-  /**
-   * The form dialog collects every dismissal route (Cancel, Escape, the native
-   * `cancel` event) so an unsaved draft always reaches the discard prompt and a
-   * saved flow never reopens a closed draft.
-   */
-  function dismissForm() {
-    requestClose(closeForm);
-  }
-
   function openRequest(connection: DataConnectionListItem) {
     setForm(null);
     setQueryEditor(null);
@@ -339,8 +304,6 @@ function DataSourcesSession({
     const dirty = form ? isFormDirty(form) : requestConnectionId ? requestDirty : false;
     if (dirty) {
       pendingCloseRef.current = action;
-      const active = document.activeElement;
-      draftFocusRef.current = active instanceof HTMLElement ? active : nameRef.current;
       setDiscardOpen(true);
       return;
     }
@@ -348,14 +311,6 @@ function DataSourcesSession({
   }
 
   function keepEditing() {
-    const target = draftFocusRef.current;
-    pendingCloseRef.current = null;
-    draftFocusRef.current = null;
-    setDiscardOpen(false);
-    target?.focus();
-  }
-
-  function keepRequestEditing() {
     pendingCloseRef.current = null;
     setDiscardOpen(false);
   }
@@ -365,10 +320,6 @@ function DataSourcesSession({
     pendingCloseRef.current = null;
     setDiscardOpen(false);
     action?.();
-  }
-
-  function handleRequestClose() {
-    requestClose(closeRequest);
   }
 
   function saveForm(event: FormEvent<HTMLFormElement>) {
@@ -572,6 +523,7 @@ function DataSourcesSession({
       </label>
       {form ? (
         <DataConnectionForm
+          key={form.mode.kind === "edit" ? form.mode.connectionId : undefined}
           form={form}
           credentials={credentials}
           problems={problems}
@@ -580,11 +532,10 @@ function DataSourcesSession({
           authRef={authRef}
           credentialRef={credentialRef}
           timeoutRef={timeoutRef}
-          keepEditingRef={keepEditingRef}
           discardOpen={discardOpen}
           onChange={(patch) => setForm((current) => current ? { ...current, ...patch } : current)}
           onSubmit={saveForm}
-          onCancel={dismissForm}
+          onCancel={() => requestClose(closeForm)}
           onKeepEditing={keepEditing}
           onDiscard={discardChanges}
           i18n={context.i18n}
@@ -594,10 +545,10 @@ function DataSourcesSession({
           key={requestConnectionId}
           context={context}
           connectionId={requestConnectionId}
-          onRequestClose={handleRequestClose}
+          onRequestClose={() => requestClose(closeRequest)}
           onClose={closeRequest}
           discardRequested={discardOpen}
-          onKeepEditing={keepRequestEditing}
+          onKeepEditing={keepEditing}
           onDraftChange={setRequestDirty}
         />
       ) : null}
@@ -837,7 +788,6 @@ function DataConnectionForm({
   authRef,
   credentialRef,
   timeoutRef,
-  keepEditingRef,
   discardOpen,
   onChange,
   onSubmit,
@@ -854,7 +804,6 @@ function DataConnectionForm({
   authRef: RefObject<HTMLButtonElement | null>;
   credentialRef: RefObject<HTMLButtonElement | null>;
   timeoutRef: RefObject<HTMLInputElement | null>;
-  keepEditingRef: RefObject<HTMLButtonElement | null>;
   discardOpen: boolean;
   onChange(patch: Partial<DataFormState>): void;
   onSubmit(event: FormEvent<HTMLFormElement>): void;
@@ -881,15 +830,22 @@ function DataConnectionForm({
 
   return (
     <Dialog
-      open
       className="ek-workbench__connection-dialog"
       label={title}
       title={title}
       onDismiss={onCancel}
-      hasNestedLayer={discardOpen}
+      initialFocus={nameRef}
+      discard={discardOpen ? {
+        title: t("dataSources.form.discard.title"),
+        description: t("dataSources.form.discard.description"),
+        keepLabel: t("dataSources.form.discard.keep"),
+        discardLabel: t("dataSources.form.discard.confirm"),
+        onKeepEditing,
+        onDiscard
+      } : undefined}
     >
       <form className="ek-workbench__connection-form" aria-label={title} onSubmit={onSubmit} noValidate>
-        <div className="ek-workbench__dialog-content" inert={discardOpen ? true : undefined}>
+        <div className="ek-workbench__dialog-content">
           <fieldset className="ek-workbench__form-section" aria-label={t("dataSources.form.section.connection")}>
             <legend>{t("dataSources.form.section.connection")}</legend>
             <label className="ek-workbench__field">
@@ -960,7 +916,7 @@ function DataConnectionForm({
                   { value: "bearer", label: t("dataSources.form.auth.bearer") },
                   { value: "api-key", label: t("dataSources.form.auth.apiKey") }
                 ]}
-                onChange={(next) => onChange({ authKind: next as DataConnectionAuth["kind"] })}
+                onChange={(next) => onChange({ authKind: next })}
               />
             </label>
 
@@ -1064,34 +1020,9 @@ function DataConnectionForm({
 
           <div className="ek-workbench__connection-form-actions">
             <Button type="submit">{t("dataSources.form.save")}</Button>
-            <Button className="ek-ui-button--quiet" onClick={onCancel}>{t("dataSources.form.cancel")}</Button>
+            <Button data-dialog-dismiss className="ek-ui-button--quiet" onClick={onCancel}>{t("dataSources.form.cancel")}</Button>
           </div>
         </div>
-
-        {discardOpen ? (
-          <div
-            className="ek-workbench__connection-discard"
-            role="alertdialog"
-            aria-label={t("dataSources.form.discard.title")}
-            aria-describedby={`${id}-discard-description`}
-            onKeyDown={(event) => {
-              // Escape acts on the top-most layer: the prompt asks for editing
-              // again instead of re-requesting the same close.
-              if (event.key === "Escape") {
-                event.preventDefault();
-                event.stopPropagation();
-                onKeepEditing();
-              }
-            }}
-          >
-            <strong>{t("dataSources.form.discard.title")}</strong>
-            <p id={`${id}-discard-description`}>{t("dataSources.form.discard.description")}</p>
-            <div className="ek-workbench__connection-discard-actions">
-              <Button ref={keepEditingRef} onClick={onKeepEditing}>{t("dataSources.form.discard.keep")}</Button>
-              <Button onClick={onDiscard}>{t("dataSources.form.discard.confirm")}</Button>
-            </div>
-          </div>
-        ) : null}
       </form>
     </Dialog>
   );

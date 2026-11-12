@@ -1,225 +1,137 @@
-import { useCallback, useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { createContext, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { Button } from "./Button";
 import { cn } from "./utils";
 import "./ui.css";
 
-export interface DialogProps {
-  open: boolean;
-  /**
-   * The user asked to close the dialog. The owning component decides what that
-   * means while an unsaved draft exists, so Escape and the native `cancel`
-   * event never close the dialog behind its back.
-   */
+export const DialogPortalContainer = createContext<HTMLDialogElement | null>(null);
+
+interface DialogProps {
   onDismiss(): void;
   label: string;
-  descriptionId?: string;
   title: ReactNode;
   headerActions?: ReactNode;
   className?: string;
-  /**
-   * Track whether an in-dialog confirmation layer (for example a discard
-   * prompt) is currently on top. While it is, Escape belongs to that layer and
-   * is left for the owning component to handle.
-   */
-  hasNestedLayer?: boolean;
+  initialFocus: RefObject<HTMLElement | null>;
+  discard?: {
+    title: string;
+    description: string;
+    keepLabel: string;
+    discardLabel: string;
+    onKeepEditing(): void;
+    onDiscard(): void;
+  };
   children: ReactNode;
 }
 
-const FOCUSABLE_SELECTOR = [
-  "a[href]",
-  "button:not([disabled])",
-  "input:not([disabled])",
-  "select:not([disabled])",
-  "textarea:not([disabled])",
-  "[tabindex]:not([tabindex=\"-1\"])"
-].join(",");
+const FOCUSABLE_SELECTOR = "a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]";
 
-function focusableIn(dialog: HTMLDialogElement): HTMLElement[] {
-  return Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
-    (element) => !element.closest("[inert]")
-  );
-}
+export function Dialog({ onDismiss, label, title, headerActions, className, initialFocus, discard, children }: DialogProps) {
+  const [dialog, setDialog] = useState<HTMLDialogElement | null>(null);
+  const lastFocused = useRef<HTMLElement>(null);
+  const keepEditingRef = useRef<HTMLButtonElement>(null);
+  const descriptionId = useId();
+  const confirming = discard !== undefined;
 
-/**
- * Modal editing surface for longer data flows.
- *
- * Dismissal is always routed through `onDismiss`: the native `cancel` event and
- * Escape are intercepted so unsaved work reaches the owning component's discard
- * flow instead of closing the dialog silently. Keystrokes stop propagating so
- * workbench shortcuts do not act behind the modal. Focus stays inside the
- * dialog for pointer-free operation.
- */
-export function Dialog({
-  open,
-  onDismiss,
-  label,
-  descriptionId,
-  title,
-  headerActions,
-  className,
-  hasNestedLayer = false,
-  children
-}: DialogProps) {
-  const ref = useRef<HTMLDialogElement>(null);
-  // Where focus sat when the user last acted inside the dialog, so a
-  // confirmation layer can hand focus back to the same control.
-  const returnFocusRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    const dialog = ref.current;
-    if (!dialog) {
+  useLayoutEffect(() => {
+    if (!dialog) return;
+    if (!dialog.open) {
+      if (typeof dialog.showModal === "function") {
+        dialog.showModal();
+      }
+      // Nonvisual DOM hosts do not implement showModal().
+      if (!dialog.open) dialog.setAttribute("open", "");
+      initialFocus.current?.focus();
       return;
     }
-    if (open) {
-      if (!dialog.open) {
-        if (typeof dialog.showModal === "function") {
-          dialog.showModal();
-        } else {
-          // Nonvisual DOM hosts do not implement the modal dialog API.
-          dialog.setAttribute("open", "");
-        }
-      }
+    if (confirming) {
+      keepEditingRef.current?.focus();
       return;
     }
-    if (dialog.open) {
-      if (typeof dialog.close === "function") {
-        dialog.close();
-      } else {
-        dialog.removeAttribute("open");
-      }
-    }
-  }, [open]);
-
-  const selectLayer = useCallback((active: HTMLElement) => {
-    if (active === document.body || active === ref.current) {
-      return;
-    }
-    returnFocusRef.current = active;
-  }, []);
-
-  useEffect(() => {
-    if (!open || typeof document === "undefined") {
-      return;
-    }
-    const dialog = ref.current;
-    function handleFocusIn(event: FocusEvent): void {
-      const target = event.target;
-      if (!(target instanceof HTMLElement)) {
-        return;
-      }
-      // Tabbing past the last control moves focus to the page body; modal
-      // focus must stay inside the dialog instead.
-      if (target === document.body && dialog) {
-        const focusable = focusableIn(dialog);
-        if (focusable.length > 0) {
-          focusable[0].focus();
-        }
-        return;
-      }
-      selectLayer(target);
-    }
-    function handlePointerDown(event: PointerEvent): void {
-      if (event.target instanceof HTMLElement) {
-        selectLayer(event.target);
-      }
-    }
-    const options = { capture: true };
-    document.addEventListener("focusin", handleFocusIn, options);
-    document.addEventListener("pointerdown", handlePointerDown, options);
-    return () => {
-      document.removeEventListener("focusin", handleFocusIn, options);
-      document.removeEventListener("pointerdown", handlePointerDown, options);
-    };
-  }, [open, selectLayer]);
+    const previous = lastFocused.current;
+    (previous?.isConnected ? previous : initialFocus.current)?.focus();
+  }, [dialog, confirming, initialFocus]);
 
   function handleKeyDown(event: KeyboardEvent<HTMLDialogElement>): void {
     event.stopPropagation();
-    const dialog = ref.current;
-    if (!dialog) {
-      return;
-    }
-    const textEntry =
-      event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement
-        ? event.target
-        : null;
-    // Input methods compose text: keys reach neither our layers nor the
-    // workbench shortcuts behind the dialog.
-    if (event.nativeEvent.isComposing && textEntry) {
-      return;
-    }
-    // The dialog handles keys only once the event bubbled out of the focused
-    // control, so a confirmation layer inside it gets Escape first.
-    const target = event.target;
-    if (target !== dialog && dialog.contains(target as Node)) {
-      return;
-    }
+    if (event.defaultPrevented || event.nativeEvent.isComposing || event.keyCode === 229) return;
+
     if (event.key === "Escape") {
-      // A confirmation layer inside the dialog handles its own Escape so the
-      // key acts on the top-most layer only: the browser must not close the
-      // dialog, but the event still has to reach that layer.
-      if (hasNestedLayer) {
-        return;
-      }
-      // On an input the first Escape only exits text entry; that is what input
-      // method composition and Chinese/Japanese users expect.
-      if (textEntry) {
-        textEntry.blur();
-        return;
-      }
       event.preventDefault();
-      onDismiss();
+      dismissTopLayer();
       return;
     }
-    if (event.key !== "Tab") {
-      return;
-    }
-    const focusable = focusableIn(dialog);
-    if (focusable.length === 0) {
-      return;
-    }
+    if (event.key !== "Tab") return;
+
+    const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+      .filter((element) => element.tabIndex >= 0 && !element.closest("[inert], [hidden], [aria-hidden='true']"));
     const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    // The dialog element itself is a browser tab stop (document.activeElement),
-    // so it cycles at the same edge as the last control.
-    const active = event.target instanceof HTMLElement ? event.target : null;
-    const inside = active === dialog || (active ? dialog.contains(active) : false);
-    if (!inside) {
+    const last = focusable.at(-1);
+    if (event.shiftKey && (event.target === first || event.target === event.currentTarget)) {
       event.preventDefault();
-      (event.shiftKey ? last : first).focus();
+      last?.focus();
       return;
     }
-    if (event.shiftKey && (active === first || active === dialog)) {
+    if (!event.shiftKey && (event.target === last || event.target === event.currentTarget)) {
       event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && (active === last || active === dialog)) {
-      event.preventDefault();
-      first.focus();
+      first?.focus();
     }
   }
 
-  function handleCancel(event: { preventDefault(): void }): void {
-    // The browser would close natively and skip the draft guard.
-    event.preventDefault();
-    if (!hasNestedLayer) {
-      onDismiss();
+  function dismissTopLayer(): void {
+    if (discard) {
+      discard.onKeepEditing();
+      return;
     }
+    onDismiss();
   }
 
   return (
     <dialog
-      ref={ref}
+      ref={setDialog}
       role="dialog"
       aria-modal="true"
       aria-label={label}
-      aria-describedby={descriptionId}
       className={cn("ek-workbench__dialog", className)}
+      onFocus={(event) => {
+        // Opening the discard prompt from a button should resume at the previous control.
+        if (!confirming && event.target instanceof HTMLElement
+          && event.target !== event.currentTarget && !event.target.hasAttribute("data-dialog-dismiss")) {
+          lastFocused.current = event.target;
+        }
+      }}
       onKeyDown={handleKeyDown}
-      onCancel={handleCancel}
+      onCancel={(event) => {
+        event.preventDefault();
+        dismissTopLayer();
+      }}
     >
-      <div className="ek-workbench__dialog-header">
-        <h3>{title}</h3>
-        {headerActions}
-      </div>
-      {children}
+      <DialogPortalContainer.Provider value={dialog}>
+        <div className="ek-workbench__dialog-scroll">
+          <div inert={confirming}>
+            <div className="ek-workbench__dialog-header">
+              <h3>{title}</h3>
+              {headerActions}
+            </div>
+            {children}
+          </div>
+          {discard ? (
+            <div
+              className="ek-workbench__connection-discard"
+              role="alertdialog"
+              aria-modal="true"
+              aria-label={discard.title}
+              aria-describedby={descriptionId}
+            >
+              <strong>{discard.title}</strong>
+              <p id={descriptionId}>{discard.description}</p>
+              <div className="ek-workbench__connection-discard-actions">
+                <Button ref={keepEditingRef} onClick={discard.onKeepEditing}>{discard.keepLabel}</Button>
+                <Button onClick={discard.onDiscard}>{discard.discardLabel}</Button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </DialogPortalContainer.Provider>
     </dialog>
   );
 }

@@ -1,7 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { createEditor, type RendererLike } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
 
@@ -28,7 +28,7 @@ it("asks before discarding an edited query draft and keeps it when asked", async
       connectionId: "c",
       name: "Query",
       path: "/pumps",
-      parameters: [],
+      parameters: [{ name: "region", type: "string", defaultValue: "north" }],
       mapping: {
         mode: "single",
         root: [],
@@ -91,6 +91,21 @@ it("asks before discarding an edited query draft and keeps it when asked", async
     expect(document.activeElement).toBe(editQuery());
     expect(editor.getHistoryState()).toEqual(history);
     expect(editor.getSnapshot().dataSources.queries.q.name).toBe("Query");
+
+    const beforeOverrides = editor.serialize();
+    await userEvent.click(editQuery());
+    await page.getByRole("checkbox", { name: "Override parameter 1" }).click();
+    const testValue = page.getByRole("textbox", { name: "Parameter 1 test value" });
+    await testValue.fill("south");
+    await userEvent.keyboard("{Escape}");
+    await page.getByRole("button", { name: "Keep editing" }).click();
+    await expect.element(testValue).toHaveValue("south");
+    await expect.element(testValue).toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    await page.getByRole("button", { name: "Discard changes" }).click();
+    await expect.element(page.getByRole("dialog", { name: "Query configuration" })).not.toBeInTheDocument();
+    expect(editor.serialize()).toEqual(beforeOverrides);
+    expect(editor.getHistoryState()).toEqual(history);
   } finally {
     root.unmount();
     editor.dispose();

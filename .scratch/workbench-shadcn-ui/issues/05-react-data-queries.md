@@ -66,3 +66,16 @@ Blocked by: 01
 ### 未完成项
 
 - 无。Vue 侧数据面板（任务 11）不在本任务范围；Vue 词表已同步新增键以保持 i18n 奇偶校验。
+
+### 2026-11-12 复审修复
+
+- 在 Chromium 复现下拉选项渲染到原生模态框外、Escape 同时关闭查询对话框的问题。下拉选项现在在当前对话框内呈现，键盘和鼠标均可选择。所有选项统一编码，空选项与宿主提供的凭证引用可以区分。
+- 连接、请求测试和查询共用草稿确认层。Tab 在当前层内循环，Escape 逐层处理并避开输入法组合事件，继续编辑恢复到原控件。示例 JSON 和测试参数覆盖值也纳入草稿保护。
+- 查询名称、请求路径及参数的错误移到对应控件或字段组旁。映射错误汇总移到映射区，整体请求失败保留在测试结果中。超长连接名可以换行，关闭按钮保持可达。
+
+#### 复审验证
+
+- 从 `packages/react` 执行 `pnpm exec vitest run --root ../.. --maxWorkers 3 packages/react`，30 个文件、274 项全部通过。首轮全仓 jsdom 检查有 1424 项通过，1 项因字段错误与结果区重复显示同一消息而失败。移除重复提示后复跑了完整 React jsdom 套件。
+- 从 `packages/react` 执行 `pnpm exec vitest run --root ../.. --config vitest.browser.config.ts packages/react/test/query-editor-focus.browser.test.tsx packages/react/test/data-dialog.browser.test.tsx packages/react/test/data-dialog-drafts.browser.test.tsx`，六个 Chromium 视口共 18 个文件、42 项全部通过。中文输入法以合成的组合键盘事件覆盖。
+- 完整 React Chromium 回归在 `--project chromium packages/react/test` 下因浏览器与 Vitest 服务连接超时而中止。从同一目录用 `pnpm exec vitest run --root ../.. --config vitest.browser.config.ts --project chromium packages/react/test/http-data-source.browser.test.tsx packages/react/test/inspector-controls.browser.test.tsx packages/react/test/cross-framework-data.browser.test.tsx` 独立复跑，3 个文件、8 项全部通过。
+- `pnpm --filter @ek-aiot/3d-editor-core run build`、`pnpm --filter @ek-aiot/3d-editor-react run build`、`pnpm --filter @ek-aiot/3d-editor-react run typecheck` 和 `pnpm --filter @ek-aiot/react-proof-loop run build` 均通过。Windows 上以 Git Bash 运行仓库构建脚本。
