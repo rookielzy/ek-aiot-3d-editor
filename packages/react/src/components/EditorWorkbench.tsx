@@ -13,7 +13,7 @@ import { WorkbenchStatusBar } from "./WorkbenchStatusBar";
 import { WorkbenchToolbar } from "./WorkbenchToolbar";
 import { WorkbenchViewportTools } from "./WorkbenchViewportTools";
 import { closeTopLayer } from "./ui/command-layer";
-import type { DataProblemTarget } from "./WorkbenchProblemsDrawer";
+import type { PanelLocateRequest, ProblemLocateRequest } from "./problem-locate";
 import { createWorkbenchRenderer } from "./workbench-renderer";
 import "./workbench.css";
 
@@ -124,6 +124,7 @@ export function EditorWorkbench({
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [dataLocate, setDataLocate] = useState<{ connectionId: string; queryId: string } | null>(null);
   const [dataFieldFocus, setDataFieldFocus] = useState<{ nodeId: string; propertyKey: string } | null>(null);
+  const [panelFocus, setPanelFocus] = useState<PanelLocateRequest | null>(null);
   const [objectOperationNotice, setObjectOperationNotice] = useState<string | null>(null);
   const panels = useWorkbenchPanelWidths(rootRef);
   const [marqueeSelectionEnabled, setMarqueeSelectionEnabled] = useState(false);
@@ -222,21 +223,40 @@ export function EditorWorkbench({
   const hasToolbar = showDefaultToolbar || toolbar;
   const renderLeftPanel = leftPanel ?? sidePanel;
 
-  function locateDataTarget(target: DataProblemTarget): void {
-    if (target.kind === "data-query") {
+  function locateProblem(request: ProblemLocateRequest): void {
+    if (request.kind === "asset") {
+      setActiveView("assets");
+      setLeftCollapsed(false);
+      setPanelFocus({ kind: "asset", assetId: request.assetId });
+      return;
+    }
+    if (request.kind === "node") {
+      session.dispatch({
+        type: "select-nodes",
+        mode: "replace",
+        nodeIds: [request.nodeId],
+        primaryNodeId: request.nodeId
+      });
+      setDataFieldFocus(null);
+      setActiveView("scene");
+      setLeftCollapsed(false);
+      setPanelFocus({ kind: "node", nodeId: request.nodeId });
+      return;
+    }
+    if (request.kind === "data-query") {
       setActiveView("data");
       setLeftCollapsed(false);
-      setDataLocate({ connectionId: target.connectionId, queryId: target.queryId });
+      setDataLocate({ connectionId: request.connectionId, queryId: request.queryId });
       return;
     }
     session.dispatch({
       type: "select-nodes",
       mode: "replace",
-      nodeIds: [target.nodeId],
-      primaryNodeId: target.nodeId
+      nodeIds: [request.nodeId],
+      primaryNodeId: request.nodeId
     });
-    setDataFieldFocus(target.kind === "data-field"
-      ? { nodeId: target.nodeId, propertyKey: target.propertyKey }
+    setDataFieldFocus(request.kind === "data-field"
+      ? { nodeId: request.nodeId, propertyKey: request.propertyKey }
       : null);
   }
 
@@ -340,6 +360,8 @@ export function EditorWorkbench({
             activeView={activeView}
             dataLocate={dataLocate}
             onDataLocateHandled={() => setDataLocate(null)}
+            focus={panelFocus}
+            onFocusHandled={() => setPanelFocus(null)}
           />
         )}
       </aside>
@@ -385,7 +407,7 @@ export function EditorWorkbench({
       ) : null}
       <footer className="ek-workbench__status" aria-label={t("reactWorkbench.shell.status.label")}>
         {status ? status(workbench) : (
-          <WorkbenchStatusBar context={workbench} onLocateDataTarget={locateDataTarget} />
+          <WorkbenchStatusBar context={workbench} onLocateProblem={locateProblem} />
         )}
       </footer>
     </main>

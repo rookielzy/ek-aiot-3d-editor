@@ -1550,6 +1550,16 @@
   cursor: pointer;
 }
 .ek-workbench__problems-drawer li { overflow-wrap: anywhere; }
+.ek-workbench__problems-drawer .ek-workbench__problems-summary { color: var(--ek-workbench-muted); font-size: 11px; }
+.ek-workbench__problem-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.ek-workbench__problem-head small { color: var(--ek-workbench-muted); font-size: 11px; }
+.ek-workbench__problem-facts { display: grid; gap: 2px; margin: 2px 0 0; }
+.ek-workbench__problem-facts > div { display: flex; gap: 6px; }
+.ek-workbench__problem-facts dt { flex: 0 0 auto; min-width: 56px; color: var(--ek-workbench-muted); font-size: 11px; }
+.ek-workbench__problem-facts dd { margin: 0; font-size: 11px; }
+.ek-workbench__problem-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.ek-workbench__problem-results { margin-top: 8px; border-top: 1px solid var(--ek-workbench-border); padding-top: 4px; }
+.ek-workbench__problem-results p { margin: 0; font-size: 11px; }
 .ek-workbench__status { display: block; max-height: 42dvh; }
 button.ek-workbench__status-chip { cursor: pointer; font: inherit; }
 

@@ -306,7 +306,9 @@ describe("React object data preview", () => {
     fireEvent.click(screen.getByRole("button", { name: "Problem details" }));
     const drawer = screen.getByRole("region", { name: "Problem details" });
     expect(drawer.textContent).toContain("Data query");
-    fireEvent.click(within(drawer).getByRole("button", { name: "Locate" }));
+    const queryProblem = [...drawer.querySelectorAll("li")]
+      .find((item) => item.textContent?.includes("Data query"));
+    fireEvent.click(within(queryProblem!).getByRole("button", { name: "Locate" }));
     const dialog = await screen.findByRole("dialog", { name: "Query configuration" });
     expect(within(dialog).getByDisplayValue("Pump status")).toBeTruthy();
 

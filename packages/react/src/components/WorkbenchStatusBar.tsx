@@ -1,14 +1,21 @@
 import { useId, useRef, useState } from "react";
-import { WorkbenchProblemsDrawer, type DataProblemTarget } from "./WorkbenchProblemsDrawer";
+import { WorkbenchProblemsDrawer } from "./WorkbenchProblemsDrawer";
+import type { ProblemLocateRequest } from "./problem-locate";
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
 import { problemToneFromCounts } from "./workbench-model-helpers";
 
 export interface WorkbenchStatusBarProps {
   context: ResolvedWorkbenchContext;
-  onLocateDataTarget?(target: DataProblemTarget): void;
+  onLocateProblem?(request: ProblemLocateRequest): void;
 }
 
-export function WorkbenchStatusBar({ context, onLocateDataTarget }: WorkbenchStatusBarProps) {
+/**
+ * The status line: what the project, the assets, the runtime and the problem region are, in one
+ * place, whether or not the problem region is open. Everything here is read from the model, so a
+ * dismissed drawer leaves the same summaries behind — and problems are only cleared by being
+ * fixed, never by the region that reports them closing.
+ */
+export function WorkbenchStatusBar({ context, onLocateProblem }: WorkbenchStatusBarProps) {
   const [open, setOpen] = useState(false);
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
@@ -25,11 +32,12 @@ export function WorkbenchStatusBar({ context, onLocateDataTarget }: WorkbenchSta
   const projectStatusLabel = project.statusLabelDescriptor
     ? t(project.statusLabelDescriptor)
     : project.statusLabel;
-  const problemTone = problemToneFromCounts(context.model.problems.bySeverity, status.problemCount);
+  const bySeverity = context.model.problems.bySeverity;
+  const problemTone = problemToneFromCounts(bySeverity, status.problemCount);
 
   return (
     <>
-      <WorkbenchProblemsDrawer context={context} id={id} open={open} onLocateDataTarget={onLocateDataTarget} onClose={() => { setOpen(false); trigger.current?.focus(); }} />
+      <WorkbenchProblemsDrawer context={context} id={id} open={open} onLocate={onLocateProblem} onClose={() => { setOpen(false); trigger.current?.focus(); }} />
       <div className="ek-workbench__default-status">
         <span className="ek-workbench__status-chip" data-tone={status.selectionCount > 0 ? "active" : "neutral"}>
           <strong>{t("reactWorkbench.status.group.selection")}</strong>
@@ -79,16 +87,25 @@ export function WorkbenchStatusBar({ context, onLocateDataTarget }: WorkbenchSta
           <span id={`${id}-count`}>{t("reactWorkbench.status.problems", { count: status.problemCount })}</span>
         </button>
         {status.problemCount > 0 ? (
-          <span className="ek-workbench__status-chip" data-tone={problemTone}>
-            <span>
-              {t("reactWorkbench.status.problemBreakdown", {
-                authoredCount: status.authoredProblemCount,
-                runtimeCount: status.runtimeProblemCount,
-                dataCount: status.dataProblemCount,
-                projectCount: status.projectProblemCount
-              })}
+          <>
+            <span className="ek-workbench__status-chip" data-tone={problemTone}>
+              <span>{t("reactWorkbench.status.severitySummary", {
+                errorCount: bySeverity.error,
+                warningCount: bySeverity.warning,
+                infoCount: bySeverity.info
+              })}</span>
             </span>
-          </span>
+            <span className="ek-workbench__status-chip" data-tone={problemTone}>
+              <span>
+                {t("reactWorkbench.status.problemBreakdown", {
+                  authoredCount: status.authoredProblemCount,
+                  runtimeCount: status.runtimeProblemCount,
+                  dataCount: status.dataProblemCount,
+                  projectCount: status.projectProblemCount
+                })}
+              </span>
+            </span>
+          </>
         ) : null}
       </div>
     </>

@@ -24,7 +24,6 @@ import {
   formatWorkspaceStatus,
   glbDiagnosticStatusMessage,
   localizedStatusMessage,
-  projectProblemStatusMessage,
   reimportSummaryStatusMessage,
   rawStatusMessage,
   renderDescriptor,
@@ -37,6 +36,7 @@ import { CommandMenu, type CommandMenuCommand } from "./ui/command-menu-list";
 import { useCommandMenu } from "./ui/command-menu";
 import { Popover, PopoverContent, PopoverTrigger, getPortalTheme } from "./ui/Popover";
 import { WorkbenchIcon } from "./WorkbenchIcon";
+import { replaceAssetFile, serializeAssetMaintenance } from "./asset-maintenance";
 
 type AssetQueueStatus = "queued" | "importing" | "succeeded" | "failed";
 type AssetStatusFilter = "all" | AssetWorkspaceStatus;
@@ -68,15 +68,19 @@ export interface AssetListCounts {
  * Filter, sort, expansion, import queue and maintenance feedback are view state owned here; the
  * durable record stays the editor's scene snapshot.
  */
-export function WorkbenchAssets({ context, onCountChange }: {
+export function WorkbenchAssets({ context, onCountChange, locate, onLocateHandled }: {
   context: ResolvedWorkbenchContext;
   /** Reports the visible/total counts so the section header can state them. */
   onCountChange?(counts: AssetListCounts): void;
+  /** An asset another region asked this workspace to reveal; cleared by the owner once handled. */
+  locate?: { assetId: string } | null;
+  onLocateHandled?(): void;
 }) {
   const [recoveryState, setRecoveryState] = useState<AssetRecoveryState>({});
   const [recoverySuccessState, setRecoverySuccessState] = useState<AssetRecoveryState>({});
   const maintenanceTokens = useRef<Record<string, symbol>>({});
-  const pendingMaintenance = useRef<Record<string, Promise<void>>>({});
+  const summaryElements = useRef(new Map<string, HTMLButtonElement>());
+  const pendingLocate = useRef<string | null>(null);
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<AssetKindFilter>("all");
   const [status, setStatus] = useState<AssetStatusFilter>("all");
@@ -120,6 +124,28 @@ export function WorkbenchAssets({ context, onCountChange }: {
   useEffect(() => {
     onCountChange?.({ visible: visibleAssets.length, total: totalCount });
   }, [onCountChange, totalCount, visibleAssets.length]);
+
+  // A locate request names an asset the filters may be hiding; the request is answered by dropping
+  // them, then focusing that asset's row once it exists.
+  useEffect(() => {
+    if (!locate) return;
+    onLocateHandled?.();
+    if (!workspaceAssetIds.has(locate.assetId)) return;
+    setQuery("");
+    setKind("all");
+    setStatus("all");
+    pendingLocate.current = locate.assetId;
+  }, [locate, onLocateHandled, workspaceAssetIds]);
+
+  useLayoutEffect(() => {
+    const target = pendingLocate.current;
+    if (!target) return;
+    const element = summaryElements.current.get(target);
+    if (!element) return;
+    pendingLocate.current = null;
+    element.focus();
+    element.scrollIntoView?.({ block: "nearest" });
+  });
 
   async function importAssetFiles(files: readonly File[]) {
     if (files.length === 0) {
@@ -217,45 +243,36 @@ export function WorkbenchAssets({ context, onCountChange }: {
 
     // Core reimport commits after asynchronous analysis. Serialize per asset so an
     // older analysis cannot commit after the latest file, across all entry points.
-    const previous = pendingMaintenance.current[assetId];
-    let finish!: () => void;
-    const pending = new Promise<void>((resolve) => { finish = resolve; });
-    pendingMaintenance.current[assetId] = pending;
     try {
-      if (previous) await previous;
-      if (maintenanceTokens.current[assetId] !== token) return;
-      let message: LocalizedStatusMessage;
-      let replaced = false;
-      try {
-        if (mode === "reimport") {
-          const result = await context.assets.reimportGlbAsset({ assetId, source: file });
-          message = result.ok
-            ? reimportSummaryStatusMessage(file.name, result.remap?.summary)
-            : glbDiagnosticStatusMessage(result.diagnostics[0]) ??
-              (result.commandResult?.error ? rawStatusMessage(result.commandResult.error) : localizedStatusMessage("reactWorkbench.leftPanel.assets.reimport.failed", "Reimport failed"));
-        } else {
-          const result = await context.assets.replaceAsset({ assetId, source: file, label: file.name, mimeType: file.type });
-          if (result.ok) {
-            await context.runtime?.project();
-            replaced = true;
+      await serializeAssetMaintenance(context.editor, assetId, async () => {
+        if (maintenanceTokens.current[assetId] !== token) return;
+        let message: LocalizedStatusMessage;
+        let replaced = false;
+        try {
+          if (mode === "reimport") {
+            const result = await context.assets.reimportGlbAsset({ assetId, source: file });
+            message = result.ok
+              ? reimportSummaryStatusMessage(file.name, result.remap?.summary)
+              : glbDiagnosticStatusMessage(result.diagnostics[0]) ??
+                (result.commandResult?.error ? rawStatusMessage(result.commandResult.error) : localizedStatusMessage("reactWorkbench.leftPanel.assets.reimport.failed", "Reimport failed"));
+          } else {
+            const outcome = await replaceAssetFile(context, assetId, file);
+            replaced = outcome.replaced;
+            message = outcome.message;
           }
-          message = result.ok
-            ? localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.success", "Replaced with {fileName}", { fileName: file.name })
-            : projectProblemStatusMessage(result.problems[0]) ?? localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.failed", "Replacement failed");
+          context.refreshProblems();
+        } catch (error) {
+          message = rawStatusMessage(error instanceof Error ? error.message : String(error));
         }
-        context.refreshProblems();
-      } catch (error) {
-        message = rawStatusMessage(error instanceof Error ? error.message : String(error));
-      }
-      if (maintenanceTokens.current[assetId] !== token) return;
-      delete maintenanceTokens.current[assetId];
-      setRecoveryState((current) => ({ ...current, [assetId]: message }));
-      if (replaced && recoveringMissing) {
-        setRecoverySuccessState((current) => ({ ...current, [assetId]: message }));
-      }
+        if (maintenanceTokens.current[assetId] !== token) return;
+        delete maintenanceTokens.current[assetId];
+        setRecoveryState((current) => ({ ...current, [assetId]: message }));
+        if (replaced && recoveringMissing) {
+          setRecoverySuccessState((current) => ({ ...current, [assetId]: message }));
+        }
+      });
     } finally {
-      finish();
-      if (pendingMaintenance.current[assetId] === pending) delete pendingMaintenance.current[assetId];
+      if (maintenanceTokens.current[assetId] === token) delete maintenanceTokens.current[assetId];
     }
   }
 
@@ -356,6 +373,10 @@ export function WorkbenchAssets({ context, onCountChange }: {
               recoveryState={recoveryState}
               recovery={recoveryByAsset.get(asset.id) ?? []}
               onPicked={maintainAsset}
+              registerSummary={(element) => {
+                if (element) summaryElements.current.set(asset.id, element);
+                else summaryElements.current.delete(asset.id);
+              }}
             />
           ))}
         </ul>
@@ -418,12 +439,14 @@ function RecoveryAction({ context, item, message, onPicked }: {
  * One asset: a summary a reader can scan, a details panel they can open, and a menu that holds
  * this asset's file actions so the controls are reachable without the details being open.
  */
-function AssetRow({ context, asset, recoveryState, recovery, onPicked }: {
+function AssetRow({ context, asset, recoveryState, recovery, onPicked, registerSummary }: {
   context: ResolvedWorkbenchContext;
   asset: AssetWorkspaceItem;
   recoveryState: AssetRecoveryState;
   recovery: readonly WorkbenchMissingAssetItem[];
   onPicked: AssetPickedFile;
+  /** Publishes this row's summary control so an external locate request can land focus on it. */
+  registerSummary?(element: HTMLButtonElement | null): void;
 }) {
   const t = context.i18n.t;
   const [expanded, setExpanded] = useState(false);
@@ -500,6 +523,7 @@ function AssetRow({ context, asset, recoveryState, recovery, onPicked }: {
       <div className="ek-workbench__asset-summary-row">
         <button
           type="button"
+          ref={registerSummary}
           className="ek-workbench__asset-summary"
           aria-expanded={expanded}
           aria-controls={detailId}

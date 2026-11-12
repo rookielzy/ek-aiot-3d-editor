@@ -3,12 +3,16 @@ import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
 import { DataSourcesPanel } from "./DataSourcesPanel";
 import { WorkbenchAssets, type AssetListCounts } from "./WorkbenchAssets";
 import { WorkbenchHierarchy } from "./WorkbenchHierarchy";
+import type { PanelLocateRequest } from "./problem-locate";
 
 export interface WorkbenchLeftPanelProps {
   context: ResolvedWorkbenchContext;
   activeView: WorkbenchPanelView;
   dataLocate?: { connectionId: string; queryId: string } | null;
   onDataLocateHandled?(): void;
+  /** A problem's target that one of these regions can reveal and focus. */
+  focus?: PanelLocateRequest | null;
+  onFocusHandled?(): void;
 }
 
 export type WorkbenchPanelView = "scene" | "assets" | "data" | "project";
@@ -17,11 +21,17 @@ export function WorkbenchLeftPanel({
   context,
   activeView,
   dataLocate,
-  onDataLocateHandled
+  onDataLocateHandled,
+  focus,
+  onFocusHandled
 }: WorkbenchLeftPanelProps) {
   const model = context.model;
   const t = context.i18n.t;
   const [assetCounts, setAssetCounts] = useState<AssetListCounts | null>(null);
+  // Each region only hears about the requests it can carry out, so a stale request for the other
+  // region cannot make it steal focus when it mounts.
+  const sceneFocus = focus?.kind === "node" ? { nodeId: focus.nodeId } : null;
+  const assetLocate = focus?.kind === "asset" ? { assetId: focus.assetId } : null;
 
   return (
     <div className="ek-workbench__default-left-panel">
@@ -37,7 +47,7 @@ export function WorkbenchLeftPanel({
             totalCount: model.hierarchy.totalCount
           })}</span>
         </div>
-        <WorkbenchHierarchy context={context} />
+        <WorkbenchHierarchy context={context} focus={sceneFocus} onFocusHandled={onFocusHandled} />
       </section>
 
       <section
@@ -49,7 +59,7 @@ export function WorkbenchLeftPanel({
           <h2>{t("reactWorkbench.leftPanel.assets.label")}</h2>
           {assetCounts ? <span>{`${assetCounts.visible}/${assetCounts.total}`}</span> : null}
         </div>
-        <WorkbenchAssets context={context} onCountChange={setAssetCounts} />
+        <WorkbenchAssets context={context} onCountChange={setAssetCounts} locate={assetLocate} onLocateHandled={onFocusHandled} />
       </section>
 
       <section

@@ -15,10 +15,17 @@ interface VisibleRow {
 
 const SELECT_KEYS = new Set(["ArrowDown", "ArrowUp", "Home", "End", "ArrowLeft", "ArrowRight", "Enter", " "]);
 
-export function WorkbenchHierarchy({ context }: { context: ResolvedWorkbenchContext }) {
+export function WorkbenchHierarchy({ context, focus, onFocusHandled }: {
+  context: ResolvedWorkbenchContext;
+  /** A node another region asked this tree to reveal; cleared by the owner once it is handled. */
+  focus?: { nodeId: string } | null;
+  onFocusHandled?(): void;
+}) {
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [focusId, setFocusId] = useState<string | null>(null);
+  /** Bumped per external focus request so a repeat request re-runs the same land-and-focus pass. */
+  const [focusTick, setFocusTick] = useState(0);
   /** The row whose menu is open, and the selection the panel showed before that row was previewed. */
   const [nodeMenu, setNodeMenu] = useState<string | null>(null);
   const [rowActionsOpen, setRowActionsOpen] = useState<string | null>(null);
@@ -76,8 +83,10 @@ export function WorkbenchHierarchy({ context }: { context: ResolvedWorkbenchCont
     const target = pendingFocus.current;
     if (!target) return;
     pendingFocus.current = null;
-    rowElements.current.get(target)?.focus();
-  }, [focusId, visibleIds]);
+    const element = rowElements.current.get(target);
+    element?.focus();
+    element?.scrollIntoView?.({ block: "nearest" });
+  }, [focusId, visibleIds, focusTick]);
 
   // Roving focus is UI memory: when its row moves or vanishes, the selection or the first row
   // takes over instead of leaving the tree without a tab stop.
@@ -85,6 +94,29 @@ export function WorkbenchHierarchy({ context }: { context: ResolvedWorkbenchCont
     if (!focusId || visibleIds.includes(focusId)) return;
     setFocusId(selection.nodeId && visibleIds.includes(selection.nodeId) ? selection.nodeId : visibleIds[0] ?? null);
   }, [focusId, selection.nodeId, visibleIds]);
+
+  // Another region asked this tree to reveal a node — the row has to exist before it can be focused,
+  // so a search that hides it is cleared and its ancestors are opened first. The request is handled
+  // once; leaving it in place would fight the user's own navigation afterwards.
+  useEffect(() => {
+    if (!focus) return;
+    onFocusHandled?.();
+    const row = rows.get(focus.nodeId);
+    if (!row) return;
+    if (search && !matches.has(row.id)) setQuery("");
+    setCollapsed((current) => {
+      const next = new Set(current);
+      let parent = row.parentId ? rows.get(row.parentId) : undefined;
+      while (parent) {
+        next.delete(parent.id);
+        parent = parent.parentId ? rows.get(parent.parentId) : undefined;
+      }
+      return next;
+    });
+    setFocusId(row.id);
+    pendingFocus.current = row.id;
+    setFocusTick((tick) => tick + 1);
+  }, [focus, rows, matches, search, onFocusHandled]);
 
   useEffect(() => {
     if (previousSelection.current === selectionKey) return;
