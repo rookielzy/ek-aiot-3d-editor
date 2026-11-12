@@ -123,7 +123,7 @@ export function EditorWorkbench({
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [dataLocate, setDataLocate] = useState<{ connectionId: string; queryId: string } | null>(null);
-  const [dataFieldFocus, setDataFieldFocus] = useState<{ nodeId: string; propertyKey: string } | null>(null);
+  const [dataDetailFocus, setDataDetailFocus] = useState<{ nodeId: string; propertyKey?: string } | null>(null);
   const [panelFocus, setPanelFocus] = useState<PanelLocateRequest | null>(null);
   const [objectOperationNotice, setObjectOperationNotice] = useState<string | null>(null);
   const panels = useWorkbenchPanelWidths(rootRef);
@@ -237,7 +237,7 @@ export function EditorWorkbench({
         nodeIds: [request.nodeId],
         primaryNodeId: request.nodeId
       });
-      setDataFieldFocus(null);
+      setDataDetailFocus(null);
       setActiveView("scene");
       setLeftCollapsed(false);
       setPanelFocus({ kind: "node", nodeId: request.nodeId });
@@ -255,9 +255,9 @@ export function EditorWorkbench({
       nodeIds: [request.nodeId],
       primaryNodeId: request.nodeId
     });
-    setDataFieldFocus(request.kind === "data-field"
+    setDataDetailFocus(request.kind === "data-field"
       ? { nodeId: request.nodeId, propertyKey: request.propertyKey }
-      : null);
+      : { nodeId: request.nodeId });
   }
 
   return (
@@ -348,8 +348,8 @@ export function EditorWorkbench({
         ) : null}
         <DataDetailCard
           context={workbench}
-          focusField={dataFieldFocus?.nodeId === workbench.selection.nodeId
-            ? dataFieldFocus
+          locate={dataDetailFocus?.nodeId === workbench.selection.nodeId
+            ? dataDetailFocus
             : null}
         />
       </section>

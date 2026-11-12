@@ -374,8 +374,11 @@ export function WorkbenchAssets({ context, onCountChange, locate, onLocateHandle
               recovery={recoveryByAsset.get(asset.id) ?? []}
               onPicked={maintainAsset}
               registerSummary={(element) => {
-                if (element) summaryElements.current.set(asset.id, element);
-                else summaryElements.current.delete(asset.id);
+                if (element) {
+                  summaryElements.current.set(asset.id, element);
+                  return;
+                }
+                summaryElements.current.delete(asset.id);
               }}
             />
           ))}

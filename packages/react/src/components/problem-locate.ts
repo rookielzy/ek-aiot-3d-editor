@@ -71,21 +71,13 @@ function assetIdOf(target: ProblemTarget): string | null {
 
 /** The node itself, not the branch that contains it: a container row matches by its children. */
 function deepestProblemRow(problem: WorkbenchProblemItem, model: WorkbenchModel): WorkbenchHierarchyRow | null {
-  let best: WorkbenchHierarchyRow | null = null;
-  for (const row of model.hierarchy.rows) {
-    if (!row.problemIds.includes(problem.id)) continue;
-    if (!best) {
-      best = row;
-      continue;
-    }
-    if (row.depth > best.depth) {
-      best = row;
-      continue;
-    }
+  return model.hierarchy.rows.reduce<WorkbenchHierarchyRow | null>((best, row) => {
+    if (!row.problemIds.includes(problem.id)) return best;
+    if (!best || row.depth > best.depth) return row;
     // Same depth: the row that carries the problem's own object is the more precise target.
     if (row.depth === best.depth && problem.objectId && row.objectId === problem.objectId && best.objectId !== problem.objectId) {
-      best = row;
+      return row;
     }
-  }
-  return best;
+    return best;
+  }, null);
 }

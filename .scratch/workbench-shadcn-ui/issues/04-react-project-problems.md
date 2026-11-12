@@ -76,3 +76,23 @@ Blocked by: 03
 
 - `material` / `imported-material-slot` 目标在本壳层没有可进入的区域，因此不给 `Locate` 按钮。这正是验收项「只提供当前能力支持的目标操作」要的行为，而不是缺陷。
 - `assetId + user-action` 的问题即使资源未出现在资源面板列表里也保留文件输入：`replaceAsset` 按 assetId 直接改文档，不依赖列表；此时没有可定位处，但恢复动作本身仍然真实可用。
+
+**独立 code review 与修复（2026-11-11）**
+
+审查范围：`git diff da5f6bc...61a2bda`，按 Standards / Spec 两轴并行审查。
+
+- Standards：确认 3 处低优先级风格问题，已移除替换结果的多余可变变量、将资源行 ref 注册改为 early return，并用 reduce 表达层级行选择；保持原有定位优先级。
+- Spec：确认 1 项 P2 数据定位缺陷，包含两种表现：字段 Locate 只滚动而未转移键盘焦点；当前选中对象的详情关闭后，对象 Locate 无法重新打开。现在对象与字段均生成独立定位请求，详情卡重新打开并聚焦字段或卡片；已处理请求不会在后续普通选择时再次抢焦点。
+- 回归：扩充真实 EditorWorkbench 的既有数据预览测试，覆盖同一对象/字段连续两次关闭后重新定位及目标区域内焦点。修复前两个测试失败，修复后通过。
+- 导入目标跨对象误定位的初步疑点经复核撤回：正常生成的 importKey 带 owner 前缀，复制时也会重映射，没有可复现依据，因此没有扩大修改。
+- `.opencode/skills` 及其指定测试技能在当前仓库中不存在；按当前 Vitest 配置与规格的用户可见行为边界验证。
+
+验证（命令从 `packages/react` 执行，根脚本除外）：
+
+- `pnpm exec vitest run --root ../.. packages/react/test/workbench-data-preview.test.tsx`：14/14 通过；最终焦点请求去重调整后，使用 `-t 'reopens dismissed details each time|reports a device that is absent'` 复跑两个相关用例，2/2 通过。
+- `pnpm typecheck`（React 包）：通过。
+- `pnpm exec vitest run --root ../.. --config vitest.browser.config.ts packages/react/test/workbench-problems.browser.test.tsx`：三套浏览器配置 3/3 通过。
+- 同命令运行 `packages/react/test/object-data-details.browser.test.tsx`：真实 GLB 数据详情三套配置 3/3 通过。
+- 根 `pnpm typecheck` 被现有 core build 脚本的 `rm` 在 Windows cmd 中不可用阻断；没有修改工具链，也未宣称全仓构建或根检查通过。根目录无 `bun run check` 脚本。
+- `git diff --check`：通过。
+- 全量常规回归：从 React 包执行 pnpm exec vitest run --root ../.. --reporter=dot，160 个文件、1417 个用例，1409 通过，8 个用例超过默认 10 秒限制（3 个 React 文件），无断言失败。随后仅对这 8 个用例使用 --maxWorkers=1 串行复跑，保持原 10 秒限制，8/8 全部通过；未修改测试超时配置。

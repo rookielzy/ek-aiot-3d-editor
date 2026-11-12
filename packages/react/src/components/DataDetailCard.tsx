@@ -33,36 +33,41 @@ const QUALITY_MESSAGE_KEYS = {
 
 export function DataDetailCard({
   context,
-  focusField
+  locate
 }: {
   context: ResolvedWorkbenchContext;
-  focusField?: { propertyKey: string } | null;
+  locate?: { propertyKey?: string } | null;
 }) {
   const service = context.editor.getDataService?.() ?? null;
   const dataState = context.dataState;
   const [closedNodeId, setClosedNodeId] = useState<string | null>(null);
   const cardRef = useRef<HTMLElement>(null);
+  const handledLocate = useRef<typeof locate>(null);
   const t = context.i18n.t;
-  const focusFieldKey = focusField?.propertyKey;
+  const propertyKey = locate?.propertyKey;
 
   const selection = context.selection;
   const nodeId = selection.count === 1 ? selection.nodeId : null;
   const node = nodeId ? context.snapshot.nodes[nodeId] ?? null : null;
   const binding = nodeId ? context.snapshot.dataSources.bindings[nodeId] ?? null : null;
 
-  // Each locate request can reopen the card, including repeated requests for the same field.
+  // Each locate request can reopen the card, including repeated requests for the same object or field.
   useEffect(() => {
     setClosedNodeId(null);
-  }, [dataState.preview.enabled, nodeId, service, focusField]);
+  }, [dataState.preview.enabled, nodeId, service, locate]);
 
   useEffect(() => {
-    if (!focusFieldKey) {
+    if (!locate || handledLocate.current === locate) {
       return;
     }
     const field = [...cardRef.current?.querySelectorAll<HTMLElement>("[data-field-key]") ?? []]
-      .find((candidate) => candidate.dataset.fieldKey === focusFieldKey);
-    field?.scrollIntoView?.({ block: "nearest" });
-  }, [focusField, nodeId, closedNodeId]);
+      .find((candidate) => candidate.dataset.fieldKey === propertyKey);
+    const target = field ?? cardRef.current;
+    if (!target) return;
+    handledLocate.current = locate;
+    target.focus();
+    target.scrollIntoView?.({ block: "nearest" });
+  }, [locate, nodeId, closedNodeId]);
 
   if (
     !service ||
@@ -100,6 +105,7 @@ export function DataDetailCard({
   return (
     <section
       ref={cardRef}
+      tabIndex={-1}
       className="ek-workbench__detail-card"
       role="region"
       aria-label={t("dataBinding.card.label")}
@@ -144,9 +150,10 @@ export function DataDetailCard({
           {model.fields.map((field) => (
             <div
               key={field.key}
+              tabIndex={-1}
               data-status={field.status}
               data-field-key={field.key}
-              data-focused={field.key === focusFieldKey ? "true" : undefined}
+              data-focused={field.key === propertyKey ? "true" : undefined}
               data-history={field.historyValue !== null ? "true" : undefined}
             >
               <dt>

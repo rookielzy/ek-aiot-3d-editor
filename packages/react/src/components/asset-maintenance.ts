@@ -54,14 +54,12 @@ export async function replaceAssetFile(
   file: File
 ): Promise<{ replaced: boolean; message: LocalizedStatusMessage }> {
   const result = await host.assets.replaceAsset({ assetId, source: file, label: file.name, mimeType: file.type });
-  let replaced = false;
   if (result.ok) {
     await host.runtime?.project();
-    replaced = true;
   }
   host.refreshProblems();
   return {
-    replaced,
+    replaced: result.ok,
     message: result.ok
       ? localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.success", "Replaced with {fileName}", { fileName: file.name })
       : projectProblemStatusMessage(result.problems[0]) ??

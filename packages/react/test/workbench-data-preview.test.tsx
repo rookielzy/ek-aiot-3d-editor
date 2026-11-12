@@ -260,6 +260,7 @@ describe("React object data preview", () => {
       const reopened = await screen.findByRole("region", { name: "Device details" });
       expect(editor.getSnapshot().selection.nodeId).toBe("object-a");
       expect(reopened.querySelector('[data-field-key="flow"]')?.getAttribute("data-focused")).toBe("true");
+      expect(reopened.contains(document.activeElement)).toBe(true);
     }
 
     view.unmount();
@@ -282,6 +283,19 @@ describe("React object data preview", () => {
     expect(detailValue(card, "Temperature")).toBe("—");
     expect(detailValue(card, "Running")).toBe("—");
     expect(previewStatus()).toBe("Error");
+
+    for (const attempt of [1, 2]) {
+      fireEvent.click(screen.getByRole("button", { name: "Close device details" }));
+      fireEvent.click(screen.getByRole("button", { name: "Problem details" }));
+      const drawer = screen.getByRole("region", { name: "Problem details" });
+      const problem = within(drawer).getAllByRole("listitem")
+        .find((item) => item.textContent?.includes("Data object"));
+      expect(problem, `object problem for locate attempt ${attempt}`).toBeTruthy();
+      fireEvent.click(within(problem!).getByRole("button", { name: "Locate" }));
+      const reopened = await screen.findByRole("region", { name: "Device details" });
+      expect(within(reopened).getByText("Device not in current result")).toBeTruthy();
+      expect(reopened.contains(document.activeElement)).toBe(true);
+    }
 
     view.unmount();
     editor.dispose();
