@@ -24,6 +24,10 @@ import { DataQueryEditor } from "./DataQueryEditor";
 import { DataQueryBindingsDialog } from "./DataQueryBindingsDialog";
 import { DataQueryTester } from "./DataQueryTester";
 import { DATA_QUERY_DEFINITION_PROBLEM_MESSAGE_KEYS } from "./data-query-problem-messages";
+import { Dialog } from "./ui/Dialog";
+import { Button } from "./ui/Button";
+import { Input } from "./ui/Input";
+import { WorkbenchSelect } from "./ui/WorkbenchSelect";
 
 type DataFormMode =
   | { kind: "create" }
@@ -112,11 +116,12 @@ function DataSourcesSession({
   const [status, setStatus] = useState<StatusMessage | null>(null);
   const [focusTarget, setFocusTarget] = useState<FocusTarget | null>(null);
   const [discardOpen, setDiscardOpen] = useState(false);
+  const [requestDirty, setRequestDirty] = useState(false);
   const pendingCloseRef = useRef<(() => void) | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const baseUrlRef = useRef<HTMLInputElement>(null);
-  const authRef = useRef<HTMLSelectElement>(null);
-  const credentialRef = useRef<HTMLSelectElement>(null);
+  const authRef = useRef<HTMLButtonElement>(null);
+  const credentialRef = useRef<HTMLButtonElement>(null);
   const timeoutRef = useRef<HTMLInputElement>(null);
   const keepEditingRef = useRef<HTMLButtonElement>(null);
   const newButtonRef = useRef<HTMLButtonElement>(null);
@@ -124,7 +129,9 @@ function DataSourcesSession({
   const requestButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const newQueryButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const queryButtonRefs = useRef(new Map<string, HTMLButtonElement>());
-  const discardId = useId();
+  // Where focus returns after "Keep editing" dismisses a discard prompt: the
+  // control the user was last editing, captured when the prompt opened.
+  const draftFocusRef = useRef<HTMLElement | null>(null);
   const t = context.i18n.t;
   const model = context.model.dataSources;
   const credentials = context.editor.getDataCredentials?.() ?? [];
@@ -138,10 +145,12 @@ function DataSourcesSession({
     : null;
 
   useEffect(() => {
-    if (formKey && !discardOpen) {
+    // The request tester focuses its own first field so a draft survives the
+    // connection form's field but never steals the tester's starting point.
+    if (formKey && !discardOpen && !requestConnectionId) {
       nameRef.current?.focus();
     }
-  }, [formKey, discardOpen]);
+  }, [formKey, discardOpen, requestConnectionId]);
 
   useEffect(() => {
     if (!focusTarget) {
@@ -162,14 +171,18 @@ function DataSourcesSession({
   }, [focusTarget]);
 
   useEffect(() => {
-    if (discardOpen) {
-      keepEditingRef.current?.focus();
+    if (!discardOpen) {
+      return;
     }
+    // The prompt owns focus while it is open; "Keep editing" then returns to
+    // the field that held focus when the prompt opened.
+    keepEditingRef.current?.focus();
   }, [discardOpen]);
 
   useEffect(() => {
     const field = problems[0]?.field;
-    if (!field) {
+    // The discard prompt owns focus while it is open.
+    if (!field || discardOpen) {
       return;
     }
     switch (field) {
@@ -186,7 +199,7 @@ function DataSourcesSession({
         nameRef.current?.focus();
         break;
     }
-  }, [problems]);
+  }, [problems, discardOpen]);
 
   useEffect(() => {
     if (requestConnectionId && !context.snapshot.dataSources.connections[requestConnectionId]) {
@@ -293,16 +306,29 @@ function DataSourcesSession({
     setFocusTarget(editing ? { kind: "connection", connectionId: editing } : { kind: "new" });
   }
 
+  /**
+   * The form dialog collects every dismissal route (Cancel, Escape, the native
+   * `cancel` event) so an unsaved draft always reaches the discard prompt and a
+   * saved flow never reopens a closed draft.
+   */
+  function dismissForm() {
+    requestClose(closeForm);
+  }
+
   function openRequest(connection: DataConnectionListItem) {
     setForm(null);
     setQueryEditor(null);
     setProblems([]);
     setStatus(null);
+    setRequestDirty(false);
     setRequestConnectionId(connection.id);
   }
 
   function closeRequest() {
     const connectionId = requestConnectionId;
+    pendingCloseRef.current = null;
+    setDiscardOpen(false);
+    setRequestDirty(false);
     setRequestConnectionId(null);
     if (connectionId) {
       setFocusTarget({ kind: "request", connectionId });
@@ -310,8 +336,11 @@ function DataSourcesSession({
   }
 
   function requestClose(action: () => void) {
-    if (form && isFormDirty(form)) {
+    const dirty = form ? isFormDirty(form) : requestConnectionId ? requestDirty : false;
+    if (dirty) {
       pendingCloseRef.current = action;
+      const active = document.activeElement;
+      draftFocusRef.current = active instanceof HTMLElement ? active : nameRef.current;
       setDiscardOpen(true);
       return;
     }
@@ -319,9 +348,16 @@ function DataSourcesSession({
   }
 
   function keepEditing() {
+    const target = draftFocusRef.current;
+    pendingCloseRef.current = null;
+    draftFocusRef.current = null;
+    setDiscardOpen(false);
+    target?.focus();
+  }
+
+  function keepRequestEditing() {
     pendingCloseRef.current = null;
     setDiscardOpen(false);
-    nameRef.current?.focus();
   }
 
   function discardChanges() {
@@ -329,6 +365,10 @@ function DataSourcesSession({
     pendingCloseRef.current = null;
     setDiscardOpen(false);
     action?.();
+  }
+
+  function handleRequestClose() {
+    requestClose(closeRequest);
   }
 
   function saveForm(event: FormEvent<HTMLFormElement>) {
@@ -510,13 +550,15 @@ function DataSourcesSession({
     setFocusTarget({ kind: "newQuery", connectionId: query.connectionId });
   }
 
+  const dialogOpen = Boolean(form || requestConnectionId || queryEditor || bindingsQueryId);
+
   return (
     <div className="ek-workbench__data-panel">
       <div className="ek-workbench__section-header">
         <h2>{t("dataSources.panel.label")}</h2>
         <span>{t("dataSources.panel.count", { visibleCount: visibleConnections.length, totalCount: model.totalCount })}</span>
       </div>
-      <button ref={newButtonRef} type="button" inert={queryEditor || bindingsQueryId ? true : undefined} onClick={() => requestClose(openCreate)}>{t("dataSources.new")}</button>
+      <button ref={newButtonRef} type="button" inert={dialogOpen ? true : undefined} onClick={() => requestClose(openCreate)}>{t("dataSources.new")}</button>
       <label className="ek-workbench__field ek-workbench__field--search">
         <span>{t("dataSources.search.label")}</span>
         <input
@@ -525,7 +567,7 @@ function DataSourcesSession({
           placeholder={t("dataSources.search.placeholder")}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          inert={queryEditor || bindingsQueryId ? true : undefined}
+          inert={dialogOpen ? true : undefined}
         />
       </label>
       {form ? (
@@ -538,9 +580,13 @@ function DataSourcesSession({
           authRef={authRef}
           credentialRef={credentialRef}
           timeoutRef={timeoutRef}
+          keepEditingRef={keepEditingRef}
+          discardOpen={discardOpen}
           onChange={(patch) => setForm((current) => current ? { ...current, ...patch } : current)}
           onSubmit={saveForm}
-          onCancel={() => requestClose(closeForm)}
+          onCancel={dismissForm}
+          onKeepEditing={keepEditing}
+          onDiscard={discardChanges}
           i18n={context.i18n}
         />
       ) : requestConnectionId ? (
@@ -548,23 +594,12 @@ function DataSourcesSession({
           key={requestConnectionId}
           context={context}
           connectionId={requestConnectionId}
+          onRequestClose={handleRequestClose}
           onClose={closeRequest}
+          discardRequested={discardOpen}
+          onKeepEditing={keepRequestEditing}
+          onDraftChange={setRequestDirty}
         />
-      ) : null}
-      {discardOpen ? (
-        <div
-          className="ek-workbench__connection-discard"
-          role="alertdialog"
-          aria-label={t("dataSources.form.discard.title")}
-          aria-describedby={`${discardId}-description`}
-        >
-          <strong>{t("dataSources.form.discard.title")}</strong>
-          <p id={`${discardId}-description`}>{t("dataSources.form.discard.description")}</p>
-          <div className="ek-workbench__connection-discard-actions">
-            <button ref={keepEditingRef} type="button" onClick={keepEditing}>{t("dataSources.form.discard.keep")}</button>
-            <button type="button" onClick={discardChanges}>{t("dataSources.form.discard.confirm")}</button>
-          </div>
-        </div>
       ) : null}
       {status ? (
         <p className="ek-workbench__data-status" role="status">{t(status.key, status.values)}</p>
@@ -577,7 +612,7 @@ function DataSourcesSession({
       ) : visibleConnections.length === 0 ? (
         <p className="ek-workbench__empty" role="status">{t("dataSources.noMatches")}</p>
       ) : (
-        <ul className="ek-workbench__connection-list" aria-label={t("dataSources.list.label")} inert={queryEditor || bindingsQueryId ? true : undefined}>
+        <ul className="ek-workbench__connection-list" aria-label={t("dataSources.list.label")} inert={dialogOpen ? true : undefined}>
           {visibleConnections.map((connection) => (
             <ConnectionRow
               key={connection.id}
@@ -802,9 +837,13 @@ function DataConnectionForm({
   authRef,
   credentialRef,
   timeoutRef,
+  keepEditingRef,
+  discardOpen,
   onChange,
   onSubmit,
   onCancel,
+  onKeepEditing,
+  onDiscard,
   i18n
 }: {
   form: DataFormState;
@@ -812,12 +851,16 @@ function DataConnectionForm({
   problems: readonly DataConnectionProblem[];
   nameRef: RefObject<HTMLInputElement | null>;
   baseUrlRef: RefObject<HTMLInputElement | null>;
-  authRef: RefObject<HTMLSelectElement | null>;
-  credentialRef: RefObject<HTMLSelectElement | null>;
+  authRef: RefObject<HTMLButtonElement | null>;
+  credentialRef: RefObject<HTMLButtonElement | null>;
   timeoutRef: RefObject<HTMLInputElement | null>;
+  keepEditingRef: RefObject<HTMLButtonElement | null>;
+  discardOpen: boolean;
   onChange(patch: Partial<DataFormState>): void;
   onSubmit(event: FormEvent<HTMLFormElement>): void;
   onCancel(): void;
+  onKeepEditing(): void;
+  onDiscard(): void;
   i18n: WorkbenchI18n;
 }) {
   const t = i18n.t;
@@ -837,174 +880,220 @@ function DataConnectionForm({
   const summaryProblems = problems.filter((problem) => problem.field === "connection" || problem.field === "headers");
 
   return (
-    <form className="ek-workbench__connection-form" aria-label={title} onSubmit={onSubmit} noValidate>
-      <h3>{title}</h3>
-      <label className="ek-workbench__field">
-        <span>{t("dataSources.form.name")}</span>
-        <input
-          ref={nameRef}
-          type="text"
-          required
-          aria-label={t("dataSources.form.name")}
-          aria-required="true"
-          aria-invalid={fieldProblems("name").length > 0}
-          aria-describedby={describedBy("name")}
-          value={form.name}
-          onChange={(event) => onChange({ name: event.target.value })}
-        />
-      </label>
-      {fieldError("name") ? <small id={`${id}-name-error`} role="alert">{fieldError("name")}</small> : null}
+    <Dialog
+      open
+      className="ek-workbench__connection-dialog"
+      label={title}
+      title={title}
+      onDismiss={onCancel}
+      hasNestedLayer={discardOpen}
+    >
+      <form className="ek-workbench__connection-form" aria-label={title} onSubmit={onSubmit} noValidate>
+        <div className="ek-workbench__dialog-content" inert={discardOpen ? true : undefined}>
+          <fieldset className="ek-workbench__form-section" aria-label={t("dataSources.form.section.connection")}>
+            <legend>{t("dataSources.form.section.connection")}</legend>
+            <label className="ek-workbench__field">
+              <span>{t("dataSources.form.name")}</span>
+              <Input
+                ref={nameRef}
+                type="text"
+                required
+                aria-label={t("dataSources.form.name")}
+                aria-required="true"
+                aria-invalid={fieldProblems("name").length > 0}
+                aria-describedby={describedBy("name")}
+                value={form.name}
+                onChange={(event) => onChange({ name: event.target.value })}
+              />
+            </label>
+            {fieldError("name") ? <small id={`${id}-name-error`} role="alert">{fieldError("name")}</small> : null}
 
-      <label className="ek-workbench__field">
-        <span>{t("dataSources.form.baseUrl")}</span>
-        <input
-          ref={baseUrlRef}
-          type="text"
-          required
-          aria-label={t("dataSources.form.baseUrl")}
-          aria-required="true"
-          aria-invalid={fieldProblems("baseUrl").length > 0}
-          aria-describedby={describedBy("baseUrl")}
-          value={form.baseUrl}
-          onChange={(event) => onChange({ baseUrl: event.target.value })}
-        />
-        <small>{t("dataSources.form.baseUrlHint")}</small>
-      </label>
-      {fieldError("baseUrl") ? <small id={`${id}-baseUrl-error`} role="alert">{fieldError("baseUrl")}</small> : null}
+            <label className="ek-workbench__field">
+              <span>{t("dataSources.form.baseUrl")}</span>
+              <Input
+                ref={baseUrlRef}
+                type="text"
+                required
+                aria-label={t("dataSources.form.baseUrl")}
+                aria-required="true"
+                aria-invalid={fieldProblems("baseUrl").length > 0}
+                aria-describedby={describedBy("baseUrl")}
+                value={form.baseUrl}
+                onChange={(event) => onChange({ baseUrl: event.target.value })}
+              />
+              <small>{t("dataSources.form.baseUrlHint")}</small>
+            </label>
+            {fieldError("baseUrl") ? <small id={`${id}-baseUrl-error`} role="alert">{fieldError("baseUrl")}</small> : null}
 
-      <label className="ek-workbench__field">
-        <span>{t("dataSources.form.auth")}</span>
-        <select
-          ref={authRef}
-          aria-label={t("dataSources.form.auth")}
-          aria-invalid={fieldProblems("auth").length > 0}
-          value={form.authKind}
-          onChange={(event) => onChange({ authKind: event.target.value as DataConnectionAuth["kind"] })}
-        >
-          <option value="none">{t("dataSources.form.auth.none")}</option>
-          <option value="bearer">{t("dataSources.form.auth.bearer")}</option>
-          <option value="api-key">{t("dataSources.form.auth.apiKey")}</option>
-        </select>
-      </label>
+            <label className="ek-workbench__field">
+              <span>{t("dataSources.form.timeout")}</span>
+              <Input
+                ref={timeoutRef}
+                type="number"
+                min="0.001"
+                step="0.001"
+                inputMode="decimal"
+                required
+                aria-label={t("dataSources.form.timeout")}
+                aria-required="true"
+                aria-invalid={fieldProblems("timeoutMs").length > 0}
+                aria-describedby={describedBy("timeoutMs")}
+                value={form.timeoutSeconds}
+                onChange={(event) => onChange({ timeoutSeconds: event.target.value })}
+              />
+            </label>
+            {fieldError("timeoutMs") ? <small id={`${id}-timeoutMs-error`} role="alert">{fieldError("timeoutMs")}</small> : null}
+          </fieldset>
 
-      {form.authKind === "api-key" ? (
-        <label className="ek-workbench__field">
-          <span>{t("dataSources.form.apiKeyHeader")}</span>
-          <input
-            type="text"
-            aria-label={t("dataSources.form.apiKeyHeader")}
-            aria-invalid={fieldProblems("auth").length > 0}
-            value={form.apiKeyHeader}
-            onChange={(event) => onChange({ apiKeyHeader: event.target.value })}
-          />
-          <small>{t("dataSources.form.apiKeyHeaderHint")}</small>
-        </label>
-      ) : null}
+          <fieldset className="ek-workbench__form-section" aria-label={t("dataSources.form.section.authentication")}>
+            <legend>{t("dataSources.form.section.authentication")}</legend>
+            <label className="ek-workbench__field">
+              <span>{t("dataSources.form.auth")}</span>
+              <WorkbenchSelect
+                ref={authRef}
+                aria-label={t("dataSources.form.auth")}
+                aria-invalid={fieldProblems("auth").length > 0}
+                aria-describedby={describedBy("auth")}
+                value={form.authKind}
+                options={[
+                  { value: "none", label: t("dataSources.form.auth.none") },
+                  { value: "bearer", label: t("dataSources.form.auth.bearer") },
+                  { value: "api-key", label: t("dataSources.form.auth.apiKey") }
+                ]}
+                onChange={(next) => onChange({ authKind: next as DataConnectionAuth["kind"] })}
+              />
+            </label>
 
-      {form.authKind !== "none" ? (
-        <label className="ek-workbench__field">
-          <span>{t("dataSources.form.credential")}</span>
-          <select
-            ref={credentialRef}
-            aria-label={t("dataSources.form.credential")}
-            aria-invalid={fieldProblems("auth").length > 0}
-            value={form.credentialRef}
-            onChange={(event) => onChange({ credentialRef: event.target.value })}
-          >
-            <option value="">{t("dataSources.form.credential.placeholder")}</option>
-            {credentials.map((credential) => (
-              <option key={credential.ref} value={credential.ref}>
-                {credential.available
-                  ? credential.label
-                  : t("dataSources.form.credential.unavailable", { label: credential.label })}
-              </option>
-            ))}
-            {missingCredential ? (
-              <option value={form.credentialRef}>{t("dataSources.form.credential.missing", { ref: form.credentialRef })}</option>
+            {form.authKind === "api-key" ? (
+              <label className="ek-workbench__field">
+                <span>{t("dataSources.form.apiKeyHeader")}</span>
+                <Input
+                  type="text"
+                  aria-label={t("dataSources.form.apiKeyHeader")}
+                  aria-invalid={fieldProblems("auth").length > 0}
+                  aria-describedby={describedBy("auth")}
+                  value={form.apiKeyHeader}
+                  onChange={(event) => onChange({ apiKeyHeader: event.target.value })}
+                />
+                <small>{t("dataSources.form.apiKeyHeaderHint")}</small>
+              </label>
             ) : null}
-          </select>
-          {credentials.length === 0 ? <small>{t("dataSources.form.credential.empty")}</small> : null}
-          {missingCredential ? <small data-state="missing">{t("dataSources.form.credential.missing", { ref: form.credentialRef })}</small> : null}
-          {unavailableCredential ? <small data-state="missing">{t("dataSources.form.credential.unavailable", { label: selectedCredential?.label ?? "" })}</small> : null}
-        </label>
-      ) : null}
-      {fieldError("auth") ? <small id={`${id}-auth-error`} role="alert">{fieldError("auth")}</small> : null}
 
-      <fieldset className="ek-workbench__connection-headers">
-        <legend>{t("dataSources.form.headers")}</legend>
-        <small>{t("dataSources.form.headers.hint")}</small>
-        {form.headers.length === 0 ? <small>{t("dataSources.form.headers.empty")}</small> : null}
-        {form.headers.map((header, index) => {
-          const row = index + 1;
-          const updateHeader = (patch: Partial<DataFormHeader>) => onChange({
-            headers: form.headers.map((entry) => entry.id === header.id ? { ...entry, ...patch } : entry)
-          });
-          return (
-            <div key={header.id} className="ek-workbench__connection-header-row">
-              <input
-                type="text"
-                aria-label={`${t("dataSources.form.headers.name")} ${row}`}
-                placeholder={t("dataSources.form.headers.name")}
-                value={header.name}
-                onChange={(event) => updateHeader({ name: event.target.value })}
-              />
-              <input
-                type="text"
-                aria-label={`${t("dataSources.form.headers.value")} ${row}`}
-                placeholder={t("dataSources.form.headers.value")}
-                value={header.value}
-                onChange={(event) => updateHeader({ value: event.target.value })}
-              />
-              <button
-                type="button"
-                aria-label={t("dataSources.form.headers.removeAria", { index: row })}
-                onClick={() => onChange({ headers: form.headers.filter((entry) => entry.id !== header.id) })}
-              >{t("dataSources.form.headers.remove")}</button>
+            {form.authKind !== "none" ? (
+              <label className="ek-workbench__field">
+                <span>{t("dataSources.form.credential")}</span>
+                <WorkbenchSelect
+                  ref={credentialRef}
+                  aria-label={t("dataSources.form.credential")}
+                  aria-invalid={fieldProblems("auth").length > 0}
+                  aria-describedby={describedBy("auth")}
+                  value={form.credentialRef}
+                  options={[
+                    { value: "", label: t("dataSources.form.credential.placeholder") },
+                    ...credentials.map((credential) => ({
+                      value: credential.ref,
+                      label: credential.available
+                        ? credential.label
+                        : t("dataSources.form.credential.unavailable", { label: credential.label })
+                    })),
+                    ...(missingCredential
+                      ? [{ value: form.credentialRef, label: t("dataSources.form.credential.missing", { ref: form.credentialRef }) }]
+                      : [])
+                  ]}
+                  onChange={(next) => onChange({ credentialRef: next })}
+                />
+                {credentials.length === 0 ? <small>{t("dataSources.form.credential.empty")}</small> : null}
+                {missingCredential ? <small data-state="missing">{t("dataSources.form.credential.missing", { ref: form.credentialRef })}</small> : null}
+                {unavailableCredential ? <small data-state="missing">{t("dataSources.form.credential.unavailable", { label: selectedCredential?.label ?? "" })}</small> : null}
+              </label>
+            ) : null}
+            {fieldError("auth") ? <small id={`${id}-auth-error`} role="alert">{fieldError("auth")}</small> : null}
+          </fieldset>
+
+          <fieldset className="ek-workbench__form-section" aria-label={t("dataSources.form.section.headers")}>
+            <legend>{t("dataSources.form.section.headers")}</legend>
+            <div className="ek-workbench__connection-headers">
+              {form.headers.length === 0 ? <small>{t("dataSources.form.headers.empty")}</small> : null}
+              {form.headers.map((header, index) => {
+                const row = index + 1;
+                const updateHeader = (patch: Partial<DataFormHeader>) => onChange({
+                  headers: form.headers.map((entry) => entry.id === header.id ? { ...entry, ...patch } : entry)
+                });
+                return (
+                  <div key={header.id} className="ek-workbench__connection-header-row">
+                    <Input
+                      type="text"
+                      aria-label={`${t("dataSources.form.headers.name")} ${row}`}
+                      placeholder={t("dataSources.form.headers.name")}
+                      value={header.name}
+                      onChange={(event) => updateHeader({ name: event.target.value })}
+                    />
+                    <Input
+                      type="text"
+                      aria-label={`${t("dataSources.form.headers.value")} ${row}`}
+                      placeholder={t("dataSources.form.headers.value")}
+                      value={header.value}
+                      onChange={(event) => updateHeader({ value: event.target.value })}
+                    />
+                    <Button
+                      aria-label={t("dataSources.form.headers.removeAria", { index: row })}
+                      onClick={() => onChange({ headers: form.headers.filter((entry) => entry.id !== header.id) })}
+                    >{t("dataSources.form.headers.remove")}</Button>
+                  </div>
+                );
+              })}
+              <Button onClick={() => onChange({ headers: [...form.headers, createFormHeader()] })}>
+                {t("dataSources.form.headers.add")}
+              </Button>
+              <small>{t("dataSources.form.headers.hint")}</small>
             </div>
-          );
-        })}
-        <button type="button" onClick={() => onChange({ headers: [...form.headers, createFormHeader()] })}>
-          {t("dataSources.form.headers.add")}
-        </button>
-      </fieldset>
+          </fieldset>
 
-      <label className="ek-workbench__field">
-        <span>{t("dataSources.form.timeout")}</span>
-        <input
-          ref={timeoutRef}
-          type="number"
-          min="0.001"
-          step="0.001"
-          inputMode="decimal"
-          required
-          aria-label={t("dataSources.form.timeout")}
-          aria-required="true"
-          aria-invalid={fieldProblems("timeoutMs").length > 0}
-          aria-describedby={describedBy("timeoutMs")}
-          value={form.timeoutSeconds}
-          onChange={(event) => onChange({ timeoutSeconds: event.target.value })}
-        />
-      </label>
-      {fieldError("timeoutMs") ? <small id={`${id}-timeoutMs-error`} role="alert">{fieldError("timeoutMs")}</small> : null}
+          {summaryProblems.length > 0 ? (
+            <div className="ek-workbench__connection-problems" role="alert" aria-label={t("dataSources.form.problems")}>
+              <strong>{t("dataSources.form.problems")}</strong>
+              <ul>
+                {summaryProblems.map((problem, index) => (
+                  <li key={`${problem.field}-${problem.code}-${index}`}>
+                    {t(PROBLEM_MESSAGE_KEYS[problem.code], { detail: problem.message })}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
-      {summaryProblems.length > 0 ? (
-        <div className="ek-workbench__connection-problems" role="alert" aria-label={t("dataSources.form.problems")}>
-          <strong>{t("dataSources.form.problems")}</strong>
-          <ul>
-            {summaryProblems.map((problem, index) => (
-              <li key={`${problem.field}-${problem.code}-${index}`}>
-                {t(PROBLEM_MESSAGE_KEYS[problem.code], { detail: problem.message })}
-              </li>
-            ))}
-          </ul>
+          <div className="ek-workbench__connection-form-actions">
+            <Button type="submit">{t("dataSources.form.save")}</Button>
+            <Button className="ek-ui-button--quiet" onClick={onCancel}>{t("dataSources.form.cancel")}</Button>
+          </div>
         </div>
-      ) : null}
 
-      <div className="ek-workbench__connection-form-actions">
-        <button type="submit">{t("dataSources.form.save")}</button>
-        <button type="button" onClick={onCancel}>{t("dataSources.form.cancel")}</button>
-      </div>
-    </form>
+        {discardOpen ? (
+          <div
+            className="ek-workbench__connection-discard"
+            role="alertdialog"
+            aria-label={t("dataSources.form.discard.title")}
+            aria-describedby={`${id}-discard-description`}
+            onKeyDown={(event) => {
+              // Escape acts on the top-most layer: the prompt asks for editing
+              // again instead of re-requesting the same close.
+              if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                onKeepEditing();
+              }
+            }}
+          >
+            <strong>{t("dataSources.form.discard.title")}</strong>
+            <p id={`${id}-discard-description`}>{t("dataSources.form.discard.description")}</p>
+            <div className="ek-workbench__connection-discard-actions">
+              <Button ref={keepEditingRef} onClick={onKeepEditing}>{t("dataSources.form.discard.keep")}</Button>
+              <Button onClick={onDiscard}>{t("dataSources.form.discard.confirm")}</Button>
+            </div>
+          </div>
+        ) : null}
+      </form>
+    </Dialog>
   );
 }
 

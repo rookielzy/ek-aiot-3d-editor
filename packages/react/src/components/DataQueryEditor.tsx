@@ -73,6 +73,7 @@ import {
   formatDataQueryProblem,
   PARAMETER_TYPE_MESSAGE_KEYS
 } from "./data-query-problem-messages";
+import { WorkbenchSelect } from "./ui/WorkbenchSelect";
 
 export interface DataQueryEditorProps {
   context: ResolvedWorkbenchContext;
@@ -598,16 +599,23 @@ export function DataQueryEditor({
         </p>
       ) : (
         <div className="ek-workbench__query-editor-form" inert={discardOpen ? true : undefined}>
-          <label className="ek-workbench__field">
-            <span>{t("dataSources.queryEditor.name")}</span>
-            <input
-              ref={nameRef}
-              type="text"
-              aria-label={t("dataSources.queryEditor.name")}
-              value={form.name}
-              onChange={(event) => updateForm({ name: event.target.value })}
-            />
-          </label>
+          <section
+            className="ek-workbench__query-section"
+            role="group"
+            aria-label={t("dataSources.queryEditor.connectionSection")}
+          >
+            <h4>{t("dataSources.queryEditor.connectionSection")}</h4>
+            <label className="ek-workbench__field">
+              <span>{t("dataSources.queryEditor.name")}</span>
+              <input
+                ref={nameRef}
+                type="text"
+                aria-label={t("dataSources.queryEditor.name")}
+                value={form.name}
+                onChange={(event) => updateForm({ name: event.target.value })}
+              />
+            </label>
+          </section>
 
           {referenceModel && referenceCount > 0 ? (
             <section
@@ -658,6 +666,7 @@ export function DataQueryEditor({
 
           <form
             className="ek-workbench__query-section"
+            role="group"
             aria-label={t("dataSources.queryEditor.requestSection")}
             onSubmit={runRequest}
             noValidate
@@ -672,14 +681,15 @@ export function DataQueryEditor({
 
             <label className="ek-workbench__field">
               <span>{t("dataSources.request.method")}</span>
-              <select
+              <WorkbenchSelect
                 aria-label={t("dataSources.request.method")}
                 value={form.method}
-                onChange={(event) => changeMethod(event.target.value as DataQueryMethod)}
-              >
-                <option value="GET">GET</option>
-                <option value="POST">POST</option>
-              </select>
+                options={[
+                  { value: "GET", label: "GET" },
+                  { value: "POST", label: "POST" }
+                ]}
+                onChange={(next) => changeMethod(next as DataQueryMethod)}
+              />
             </label>
             {form.method === "POST" ? (
               <>
@@ -809,17 +819,17 @@ export function DataQueryEditor({
                 />
                 <label className="ek-workbench__field">
                   <span>{t("dataSources.request.success.type")}</span>
-                  <select
+                  <WorkbenchSelect
                     aria-label={t("dataSources.request.success.type")}
                     value={form.successType}
-                    onChange={(event) => updateRequestForm({
-                      successType: event.target.value as QuerySuccessValueType
+                    options={(["string", "number", "boolean", "null"] as const).map((type) => ({
+                      value: type,
+                      label: t(SUCCESS_TYPE_MESSAGE_KEYS[type])
+                    }))}
+                    onChange={(next) => updateRequestForm({
+                      successType: next as QuerySuccessValueType
                     })}
-                  >
-                    {(["string", "number", "boolean", "null"] as const).map((type) => (
-                      <option key={type} value={type}>{t(SUCCESS_TYPE_MESSAGE_KEYS[type])}</option>
-                    ))}
-                  </select>
+                  />
                 </label>
                 {form.successType !== "null" ? (
                   <label className="ek-workbench__field">
@@ -843,10 +853,18 @@ export function DataQueryEditor({
               <button type="submit" disabled={!service || running}>{t("dataSources.request.run")}</button>
               {running ? <button type="button" onClick={cancelRun}>{t("dataSources.request.cancel")}</button> : null}
             </div>
-            {run ? <RunSummary run={run} i18n={context.i18n} /> : null}
           </form>
 
-          <section className="ek-workbench__query-section" aria-label={t("dataSources.queryEditor.mappingSection")}>
+          <section
+            className="ek-workbench__query-section"
+            role="group"
+            aria-label={t("dataSources.queryEditor.testSection")}
+          >
+            <h4>{t("dataSources.queryEditor.testSection")}</h4>
+            {run ? <RunSummary run={run} i18n={context.i18n} /> : null}
+          </section>
+
+          <section className="ek-workbench__query-section" role="group" aria-label={t("dataSources.queryEditor.mappingSection")}>
             <h4>{t("dataSources.queryEditor.mappingSection")}</h4>
             <PathField
               label={t("dataSources.mapping.root")}
@@ -859,29 +877,31 @@ export function DataQueryEditor({
             <div className="ek-workbench__query-inline">
               <label className="ek-workbench__field">
                 <span>{t("dataSources.mapping.mode")}</span>
-                <select
+                <WorkbenchSelect
                   aria-label={t("dataSources.mapping.mode")}
                   value={form.mode}
-                  onChange={(event) => changeMode(event.target.value as QueryFormState["mode"])}
-                >
-                  <option value="array">{t(MODE_MESSAGE_KEYS.array)}</option>
-                  <option value="single">{t(MODE_MESSAGE_KEYS.single)}</option>
-                </select>
+                  options={[
+                    { value: "array", label: t(MODE_MESSAGE_KEYS.array) },
+                    { value: "single", label: t(MODE_MESSAGE_KEYS.single) }
+                  ]}
+                  onChange={(next) => changeMode(next as QueryFormState["mode"])}
+                />
               </label>
               {form.mode === "single" ? (
                 <label className="ek-workbench__field">
                   <span>{t("dataSources.mapping.identity.kind")}</span>
-                  <select
+                  <WorkbenchSelect
                     aria-label={t("dataSources.mapping.identity.kind")}
                     value={form.identityKind}
-                    onChange={(event) => updateForm({
-                      identityKind: event.target.value as QueryFormState["identityKind"]
+                    options={[
+                      { value: "path", label: t(IDENTITY_KIND_MESSAGE_KEYS.path) },
+                      { value: "parameter", label: t(IDENTITY_KIND_MESSAGE_KEYS.parameter) },
+                      { value: "literal", label: t(IDENTITY_KIND_MESSAGE_KEYS.literal) }
+                    ]}
+                    onChange={(next) => updateForm({
+                      identityKind: next as QueryFormState["identityKind"]
                     })}
-                  >
-                    <option value="path">{t(IDENTITY_KIND_MESSAGE_KEYS.path)}</option>
-                    <option value="parameter">{t(IDENTITY_KIND_MESSAGE_KEYS.parameter)}</option>
-                    <option value="literal">{t(IDENTITY_KIND_MESSAGE_KEYS.literal)}</option>
-                  </select>
+                  />
                 </label>
               ) : null}
             </div>
@@ -896,33 +916,33 @@ export function DataQueryEditor({
                 />
                 <label className="ek-workbench__field">
                   <span>{t("dataSources.mapping.identity.valueType")}</span>
-                  <select
+                  <WorkbenchSelect
                     aria-label={t("dataSources.mapping.identity.valueType")}
                     value={form.identityValueType}
-                    onChange={(event) => updateForm({
-                      identityValueType: event.target.value as QueryFormState["identityValueType"]
+                    options={[
+                      { value: "string", label: t(VALUE_TYPE_MESSAGE_KEYS.string) },
+                      { value: "number", label: t(VALUE_TYPE_MESSAGE_KEYS.number) }
+                    ]}
+                    onChange={(next) => updateForm({
+                      identityValueType: next as QueryFormState["identityValueType"]
                     })}
-                  >
-                    <option value="string">{t(VALUE_TYPE_MESSAGE_KEYS.string)}</option>
-                    <option value="number">{t(VALUE_TYPE_MESSAGE_KEYS.number)}</option>
-                  </select>
+                  />
                 </label>
               </div>
             ) : form.identityKind === "parameter" ? (
               <label className="ek-workbench__field">
                 <span>{t("dataSources.mapping.identity.parameterField")}</span>
-                <select
+                <WorkbenchSelect
                   aria-label={t("dataSources.mapping.identity.parameterField")}
                   value={form.identityParameter}
-                  onChange={(event) => updateForm({ identityParameter: event.target.value })}
-                >
-                  <option value="">{t("dataSources.mapping.identity.parameterEmpty")}</option>
-                  {form.parameters
-                    .filter((parameter) => parameter.name.trim() && parameter.type !== "boolean")
-                    .map((parameter) => (
-                      <option key={parameter.id} value={parameter.name.trim()}>{parameter.name.trim()}</option>
-                    ))}
-                </select>
+                  options={[
+                    { value: "", label: t("dataSources.mapping.identity.parameterEmpty") },
+                    ...form.parameters
+                      .filter((parameter) => parameter.name.trim() && parameter.type !== "boolean")
+                      .map((parameter) => ({ value: parameter.name.trim(), label: parameter.name.trim() }))
+                  ]}
+                  onChange={(next) => updateForm({ identityParameter: next })}
+                />
               </label>
             ) : (
               <label className="ek-workbench__field">
@@ -986,17 +1006,17 @@ export function DataQueryEditor({
                 />
                 <label className="ek-workbench__field">
                   <span>{t("dataSources.mapping.observedAt.format")}</span>
-                  <select
+                  <WorkbenchSelect
                     aria-label={t("dataSources.mapping.observedAt.format")}
                     value={form.observedFormat}
-                    onChange={(event) => updateForm({
-                      observedFormat: event.target.value as DataTimeFormat
+                    options={(["iso", "unix-seconds", "unix-milliseconds"] as const).map((format) => ({
+                      value: format,
+                      label: t(TIME_FORMAT_MESSAGE_KEYS[format])
+                    }))}
+                    onChange={(next) => updateForm({
+                      observedFormat: next as DataTimeFormat
                     })}
-                  >
-                    {(["iso", "unix-seconds", "unix-milliseconds"] as const).map((format) => (
-                      <option key={format} value={format}>{t(TIME_FORMAT_MESSAGE_KEYS[format])}</option>
-                    ))}
-                  </select>
+                  />
                 </label>
               </div>
             </fieldset>
@@ -1019,17 +1039,17 @@ export function DataQueryEditor({
                     value={entry.from}
                     onChange={(event) => updateQualityEntry(entry.id, { from: event.target.value })}
                   />
-                  <select
+                  <WorkbenchSelect
                     aria-label={t("dataSources.mapping.quality.value", { index: index + 1 })}
                     value={entry.quality}
-                    onChange={(event) => updateQualityEntry(entry.id, {
-                      quality: event.target.value as DataQuality
+                    options={(["good", "uncertain", "bad", "unknown"] as const).map((quality) => ({
+                      value: quality,
+                      label: t(QUALITY_MESSAGE_KEYS[quality])
+                    }))}
+                    onChange={(next) => updateQualityEntry(entry.id, {
+                      quality: next as DataQuality
                     })}
-                  >
-                    {(["good", "uncertain", "bad", "unknown"] as const).map((quality) => (
-                      <option key={quality} value={quality}>{t(QUALITY_MESSAGE_KEYS[quality])}</option>
-                    ))}
-                  </select>
+                  />
                   <button
                     type="button"
                     aria-label={t("dataSources.mapping.quality.remove", { index: index + 1 })}
@@ -1045,7 +1065,7 @@ export function DataQueryEditor({
             </fieldset>
           </section>
 
-          <section className="ek-workbench__query-section" aria-label={t("dataSources.queryEditor.previewSection")}>
+          <section className="ek-workbench__query-section" role="group" aria-label={t("dataSources.queryEditor.previewSection")}>
             <h4>{t("dataSources.queryEditor.previewSection")}</h4>
             <SampleStatus
               sample={sample}
@@ -1215,28 +1235,29 @@ function ParameterRow({
       </label>
       <label className="ek-workbench__field">
         <span>{t("dataSources.request.parameter.type", { index })}</span>
-        <select
+        <WorkbenchSelect
           aria-label={t("dataSources.request.parameter.type", { index })}
           value={parameter.type}
-          onChange={(event) => onChangeType(event.target.value as DataParameterType)}
-        >
-          {(["string", "number", "boolean"] as const).map((type) => (
-            <option key={type} value={type}>{t(PARAMETER_TYPE_MESSAGE_KEYS[type])}</option>
-          ))}
-        </select>
+          options={(["string", "number", "boolean"] as const).map((type) => ({
+            value: type,
+            label: t(PARAMETER_TYPE_MESSAGE_KEYS[type])
+          }))}
+          onChange={(next) => onChangeType(next as DataParameterType)}
+        />
       </label>
       <label className="ek-workbench__field">
         <span>{t("dataSources.request.parameter.location", { index })}</span>
-        <select
+        <WorkbenchSelect
           aria-label={t("dataSources.request.parameter.location", { index })}
           value={parameter.location}
-          onChange={(event) => onChangeLocation(event.target.value as DataParameterLocationInput)}
-        >
-          <option value="auto">{t("dataSources.request.parameter.location.auto")}</option>
-          <option value="path">{t("dataSources.request.parameter.location.path")}</option>
-          <option value="query">{t("dataSources.request.parameter.location.query")}</option>
-          <option value="body">{t("dataSources.request.parameter.location.body")}</option>
-        </select>
+          options={[
+            { value: "auto", label: t("dataSources.request.parameter.location.auto") },
+            { value: "path", label: t("dataSources.request.parameter.location.path") },
+            { value: "query", label: t("dataSources.request.parameter.location.query") },
+            { value: "body", label: t("dataSources.request.parameter.location.body") }
+          ]}
+          onChange={(next) => onChangeLocation(next as DataParameterLocationInput)}
+        />
       </label>
       <div className="ek-workbench__request-parameter-value">
         <label className="ek-workbench__field">
@@ -1360,15 +1381,15 @@ function PropertyRow({
         </label>
         <label className="ek-workbench__field">
           <span>{t("dataSources.mapping.property.type", { index })}</span>
-          <select
+          <WorkbenchSelect
             aria-label={t("dataSources.mapping.property.type", { index })}
             value={property.type}
-            onChange={(event) => onChangeType(event.target.value as QueryPropertyForm["type"])}
-          >
-            {(["number", "string", "boolean"] as const).map((type) => (
-              <option key={type} value={type}>{t(PROPERTY_TYPE_MESSAGE_KEYS[type])}</option>
-            ))}
-          </select>
+            options={(["number", "string", "boolean"] as const).map((type) => ({
+              value: type,
+              label: t(PROPERTY_TYPE_MESSAGE_KEYS[type])
+            }))}
+            onChange={(next) => onChangeType(next as QueryPropertyForm["type"])}
+          />
         </label>
       </div>
       <PathField
@@ -1380,15 +1401,15 @@ function PropertyRow({
       <div className="ek-workbench__query-inline">
         <label className="ek-workbench__field">
           <span>{t("dataSources.mapping.property.transform", { index })}</span>
-          <select
+          <WorkbenchSelect
             aria-label={t("dataSources.mapping.property.transform", { index })}
             value={property.transformKind}
-            onChange={(event) => onChangeTransform(event.target.value as QueryPropertyForm["transformKind"])}
-          >
-            {(["raw", "number", "scale", "map"] as const).map((kind) => (
-              <option key={kind} value={kind}>{t(TRANSFORM_MESSAGE_KEYS[kind])}</option>
-            ))}
-          </select>
+            options={(["raw", "number", "scale", "map"] as const).map((kind) => ({
+              value: kind,
+              label: t(TRANSFORM_MESSAGE_KEYS[kind])
+            }))}
+            onChange={(next) => onChangeTransform(next as QueryPropertyForm["transformKind"])}
+          />
         </label>
         <label className="ek-workbench__field">
           <span>{t("dataSources.mapping.property.unit", { index })}</span>
@@ -1554,14 +1575,15 @@ function MapOutputInput({
   const t = i18n.t;
   if (type === "boolean") {
     return (
-      <select
+      <WorkbenchSelect
         aria-label={t("dataSources.mapping.map.to", { index })}
         value={entry.to === "true" ? "true" : "false"}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="true">{t("dataSources.request.boolean.true")}</option>
-        <option value="false">{t("dataSources.request.boolean.false")}</option>
-      </select>
+        options={[
+          { value: "true", label: t("dataSources.request.boolean.true") },
+          { value: "false", label: t("dataSources.request.boolean.false") }
+        ]}
+        onChange={(next) => onChange(next)}
+      />
     );
   }
   return (

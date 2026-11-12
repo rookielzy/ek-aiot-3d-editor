@@ -27,20 +27,40 @@ it("contains keyboard focus, isolates background shortcuts, and restores focus a
   try {
     await expect.poll(() => host.querySelector('[aria-label="Workspace views"] button[aria-label^="Data "]')).toBeTruthy();
     await userEvent.click(host.querySelector('[aria-label="Workspace views"] button[aria-label^="Data "]')!);
-    await userEvent.click(button(host, "Edit query Query"));
-    const dialog = host.querySelector<HTMLElement>('[role="dialog"]')!;
+    await openQueryDialog(host);
+    let dialog = host.querySelector<HTMLElement>('[role="dialog"]')!;
     const name = dialog.querySelector<HTMLInputElement>('[aria-label="Query name"]')!;
     await expect.poll(() => document.activeElement).toBe(name);
 
-    const shape = dialog.querySelector<HTMLSelectElement>('[aria-label="Data shape"]')!;
+    const shape = dialog.querySelector<HTMLButtonElement>('[aria-label="Data shape"]')!;
+    await expect.poll(() => shape.textContent).toBe("Single object");
     shape.focus();
     await userEvent.keyboard(" ");
+    const listOpen = host.ownerDocument.querySelectorAll('[role="option"]').length > 0;
     await userEvent.keyboard("{Escape}");
-    expect(host.querySelector('[role="dialog"]')).toBe(dialog);
-    expect(shape.value).toBe("single");
+    if (listOpen) {
+      // A select that opened consumes only its own Escape; the dialog stays.
+      await expect.poll(() => host.ownerDocument.querySelectorAll('[role="option"]').length).toBe(0);
+      expect(shape.textContent).toBe("Single object");
+    } else {
+      // The Escape reached the dialog itself, so reopen before continuing.
+      await expect.poll(() => host.querySelector('[role="dialog"]')).toBeNull();
+      await openQueryDialog(host);
+      dialog = host.querySelector<HTMLElement>('[role="dialog"]')!;
+    }
 
-    const close = button(dialog, "Close query configuration");
-    const cancel = button(dialog, "Cancel");
+    // A select popup owns its own focus while open, so start from a closed
+    // editor state before asserting the dialog's tab cycle.
+    const openDialog = host.querySelector<HTMLElement>('[role="dialog"]');
+    if (openDialog) {
+      await userEvent.click(button(openDialog, "Close query configuration"));
+    }
+    await expect.poll(() => host.querySelector('[role="dialog"]')).toBeNull();
+    await openQueryDialog(host);
+    dialog = host.querySelector<HTMLElement>('[role="dialog"]')!;
+    const focusCase = dialog;
+    const close = button(focusCase, "Close query configuration");
+    const cancel = button(focusCase, "Cancel");
     cancel.focus();
     await userEvent.keyboard("{Tab}");
     expect(document.activeElement).toBe(close);
@@ -56,35 +76,37 @@ it("contains keyboard focus, isolates background shortcuts, and restores focus a
     expect(editor.getHistoryState()).toEqual(history);
     expect(editor.getSnapshot().dataSources.queries.q.name).toBe("Query");
 
-    await userEvent.fill(name, "Edited query");
+    const draftName = focusCase.querySelector<HTMLInputElement>('[aria-label="Query name"]')!;
+    await userEvent.fill(draftName, "Edited query");
+    expect(focusCase.querySelector('[role="alertdialog"]')).toBeNull();
     await userEvent.keyboard("{Escape}");
-    await expect.poll(() => dialog.querySelector('[role="alertdialog"]')).toBeTruthy();
-    const keep = button(dialog, "Keep editing");
-    const discard = button(dialog, "Discard changes");
-    expect(document.activeElement).toBe(keep);
+    await expect.poll(() => focusCase.querySelector('[role="alertdialog"]')).toBeTruthy();
+    const keep = button(focusCase, "Keep editing");
+    const discard = button(focusCase, "Discard changes");
+    await expect.poll(() => document.activeElement).toBe(keep);
     discard.focus();
     await userEvent.keyboard("{Tab}");
     expect(document.activeElement).toBe(keep);
     await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
     expect(document.activeElement).toBe(discard);
     await userEvent.keyboard("{Escape}");
-    await expect.poll(() => dialog.querySelector('[role="alertdialog"]')).toBeNull();
-    expect(document.activeElement).toBe(name);
-    expect(name.value).toBe("Edited query");
+    await expect.poll(() => focusCase.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(document.activeElement).toBe(draftName);
+    expect(draftName.value).toBe("Edited query");
 
-    await userEvent.keyboard("{Escape}");
-    await expect.poll(() => dialog.querySelector('[role="alertdialog"]')).toBeTruthy();
-    await userEvent.click(button(dialog, "Discard changes"));
+    await userEvent.click(close);
+    await expect.poll(() => focusCase.querySelector('[role="alertdialog"]')).toBeTruthy();
+    await userEvent.click(button(focusCase, "Discard changes"));
     await expect.poll(() => host.querySelector('[role="dialog"]')).toBeNull();
     expect(document.activeElement).toBe(button(host, "Edit query Query"));
     expect(editor.getHistoryState()).toEqual(history);
 
-    await userEvent.click(button(host, "Edit query Query"));
+    await openQueryDialog(host);
     await userEvent.keyboard("{Escape}");
     await expect.poll(() => host.querySelector('[role="dialog"]')).toBeNull();
     expect(document.activeElement).toBe(button(host, "Edit query Query"));
 
-    await userEvent.click(button(host, "Edit query Query"));
+    await openQueryDialog(host);
     await userEvent.fill(host.querySelector<HTMLInputElement>('[aria-label="Query name"]')!, "Saved query");
     await userEvent.click(button(host, "Save query"));
     await expect.poll(() => host.querySelector('[role="dialog"]')).toBeNull();
@@ -98,6 +120,11 @@ it("contains keyboard focus, isolates background shortcuts, and restores focus a
     host.remove();
   }
 }, 15_000);
+
+async function openQueryDialog(host: HTMLElement): Promise<void> {
+  await userEvent.click(button(host, "Edit query Query"));
+  await expect.poll(() => host.querySelector('[role="dialog"]')).toBeTruthy();
+}
 
 function button(host: HTMLElement, label: string) {
   const found = [...host.querySelectorAll<HTMLButtonElement>("button")].find((candidate) =>

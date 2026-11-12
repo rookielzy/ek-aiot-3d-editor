@@ -1,10 +1,12 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
   useSyncExternalStore,
-  type FormEvent
+  type FormEvent,
+  type ReactNode
 } from "react";
 import {
   buildDataQueryRequest,
@@ -28,11 +30,21 @@ import {
   formatDataQueryProblem,
   PARAMETER_TYPE_MESSAGE_KEYS
 } from "./data-query-problem-messages";
+import { Button } from "./ui/Button";
+import { Dialog } from "./ui/Dialog";
+import { Input } from "./ui/Input";
+import { WorkbenchSelect } from "./ui/WorkbenchSelect";
 
 export interface DataQueryTesterProps {
   context: ResolvedWorkbenchContext;
   connectionId: string;
+  /** Asked to close: the panel decides whether an unsaved draft needs a prompt. */
+  onRequestClose(): void;
+  /** Close for real and drop the draft. */
   onClose(): void;
+  discardRequested: boolean;
+  onKeepEditing(): void;
+  onDraftChange(dirty: boolean): void;
 }
 
 const EMPTY_SERVICE_STATE: DataServiceState = Object.freeze({
@@ -41,22 +53,34 @@ const EMPTY_SERVICE_STATE: DataServiceState = Object.freeze({
   run: null
 });
 
-export function DataQueryTester({ context, connectionId, onClose }: DataQueryTesterProps) {
+interface TesterDraft {
+  method: DataQueryMethod;
+  readOnly: boolean;
+  path: string;
+  parameters: QueryParameterForm[];
+}
+
+/**
+ * Manual request tester. Its draft is window state: it never enters the scene
+ * snapshot and is dropped when the dialog closes.
+ */
+export function DataQueryTester({
+  context,
+  connectionId,
+  onRequestClose,
+  onClose,
+  discardRequested,
+  onKeepEditing,
+  onDraftChange
+}: DataQueryTesterProps) {
   const service = context.editor.getDataService?.() ?? null;
-  const subscribe = useCallback(
-    (listener: () => void) => service?.subscribe(listener) ?? (() => {}),
-    [service]
-  );
-  const getState = useCallback(
-    () => service?.getState() ?? EMPTY_SERVICE_STATE,
-    [service]
-  );
+  const subscribe = useCallback((listener: () => void) => service?.subscribe(listener) ?? (() => {}), [service]);
+  const getState = useCallback(() => service?.getState() ?? EMPTY_SERVICE_STATE, [service]);
   const dataState = useSyncExternalStore(subscribe, getState, getState);
-  const [method, setMethod] = useState<DataQueryMethod>("GET");
-  const [readOnly, setReadOnly] = useState(true);
-  const [path, setPath] = useState("");
-  const [parameters, setParameters] = useState<QueryParameterForm[]>([]);
+  const [draft, setDraft] = useState<TesterDraft>({ method: "GET", readOnly: true, path: "", parameters: [] });
   const pathRef = useRef<HTMLInputElement>(null);
+  const keepEditingRef = useRef<HTMLButtonElement>(null);
+  const discardId = useId();
   const t = context.i18n.t;
   const connection = context.snapshot.dataSources.connections[connectionId];
 
@@ -68,44 +92,50 @@ export function DataQueryTester({ context, connectionId, onClose }: DataQueryTes
   }, [service, connectionId]);
 
   useEffect(() => {
+    if (discardRequested) {
+      keepEditingRef.current?.focus();
+      return;
+    }
     pathRef.current?.focus();
-  }, []);
+  }, [discardRequested]);
 
   if (!connection) {
     return null;
   }
 
-  const parameterDrafts = toQueryParameterDrafts(parameters);
-  const overrides = collectQueryOverrides(parameters);
+  const parameterDrafts = toQueryParameterDrafts(draft.parameters);
+  const overrides = collectQueryOverrides(draft.parameters);
   const preview = buildDataQueryRequest(context.snapshot, {
     connectionId,
-    method,
-    readOnly,
-    path,
+    method: draft.method,
+    readOnly: draft.readOnly,
+    path: draft.path,
     parameters: parameterDrafts
   }, { overrides });
   const run = dataState.run?.connectionId === connectionId ? dataState.run : null;
   const running = run?.status === "running";
 
-  function invalidateRuns(): void {
+  function updateDraft(patch: Partial<TesterDraft>): void {
     service?.invalidateQueryRuns();
+    const next = { ...draft, ...patch };
+    setDraft(next);
+    onDraftChange(isDirtyDraft(next));
   }
 
   function addParameter(): void {
-    invalidateRuns();
-    setParameters((current) => [...current, createQueryParameterForm()]);
+    updateDraft({ parameters: [...draft.parameters, createQueryParameterForm()] });
   }
 
   function updateParameter(id: string, patch: Partial<QueryParameterForm>): void {
-    invalidateRuns();
-    setParameters((current) => current.map((parameter) =>
-      parameter.id === id ? { ...parameter, ...patch } : parameter
-    ));
+    updateDraft({
+      parameters: draft.parameters.map((parameter) =>
+        parameter.id === id ? { ...parameter, ...patch } : parameter
+      )
+    });
   }
 
   function removeParameter(id: string): void {
-    invalidateRuns();
-    setParameters((current) => current.filter((parameter) => parameter.id !== id));
+    updateDraft({ parameters: draft.parameters.filter((parameter) => parameter.id !== id) });
   }
 
   function changeParameterType(id: string, type: DataParameterType): void {
@@ -113,25 +143,16 @@ export function DataQueryTester({ context, connectionId, onClose }: DataQueryTes
     updateParameter(id, { type, defaultText: initialText, overrideText: initialText });
   }
 
-  function updatePath(value: string): void {
-    invalidateRuns();
-    setPath(value);
-  }
-
   function updateMethod(next: DataQueryMethod): void {
-    invalidateRuns();
-    setMethod(next);
-    setReadOnly(next === "GET");
-    if (next === "GET") {
-      setParameters((current) => current.map((parameter) =>
-        parameter.location === "body" ? { ...parameter, location: "auto" } : parameter
-      ));
-    }
-  }
-
-  function updateReadOnly(value: boolean): void {
-    invalidateRuns();
-    setReadOnly(value);
+    updateDraft({
+      method: next,
+      readOnly: next === "GET",
+      parameters: next === "GET"
+        ? draft.parameters.map((parameter) =>
+          parameter.location === "body" ? { ...parameter, location: "auto" } : parameter
+        )
+        : draft.parameters
+    });
   }
 
   function updateLocation(id: string, location: DataParameterLocationInput): void {
@@ -146,9 +167,9 @@ export function DataQueryTester({ context, connectionId, onClose }: DataQueryTes
     service.invalidateQueryRuns();
     void service.executeQueryDraft({
       connectionId,
-      method,
-      readOnly,
-      path,
+      method: draft.method,
+      readOnly: draft.readOnly,
+      path: draft.path,
       parameters: parameterDrafts
     }, { overrides }).result;
   }
@@ -160,194 +181,251 @@ export function DataQueryTester({ context, connectionId, onClose }: DataQueryTes
   }
 
   return (
-    <section className="ek-workbench__request" aria-label={t("dataSources.request.label")}>
-      <div className="ek-workbench__section-header">
-        <h3>{t("dataSources.request.title", { name: connection.name })}</h3>
-        <button type="button" onClick={onClose}>{t("dataSources.request.close")}</button>
-      </div>
-      <p className="ek-workbench__request-hint">{t("dataSources.request.draftHint")}</p>
-      {!service ? (
-        <p className="ek-workbench__request-warning" role="alert">{t("dataSources.request.unavailable")}</p>
-      ) : !dataState.executorAvailable ? (
-        <p className="ek-workbench__request-warning" role="status">{t("dataSources.request.executorMissing")}</p>
-      ) : null}
+    <Dialog
+      open
+      onDismiss={onRequestClose}
+      label={t("dataSources.request.label")}
+      title={t("dataSources.request.title", { name: connection.name })}
+      className="ek-workbench__request-dialog"
+      headerActions={<Button onClick={onRequestClose}>{t("dataSources.request.close")}</Button>}
+      hasNestedLayer={discardRequested}
+    >
+      <div className="ek-workbench__dialog-content" inert={discardRequested ? true : undefined}>
+        <TesterSection label={t("dataSources.request.connectionSection")}>
+          <p className="ek-workbench__request-hint">{t("dataSources.request.draftHint")}</p>
+          <p className="ek-workbench__request-connection">{connection.baseUrl}</p>
+        </TesterSection>
 
-      <form className="ek-workbench__request-form" aria-label={t("dataSources.request.label")} onSubmit={runRequest} noValidate>
-        <label className="ek-workbench__field">
-          <span>{t("dataSources.request.method")}</span>
-          <select
-            aria-label={t("dataSources.request.method")}
-            value={method}
-            onChange={(event) => updateMethod(event.target.value as DataQueryMethod)}
-          >
-            <option value="GET">GET</option>
-            <option value="POST">POST</option>
-          </select>
-        </label>
-        {method === "POST" ? (
-          <>
-            <label className="ek-workbench__request-check">
-              <input
-                type="checkbox"
-                aria-label={t("dataSources.request.readOnlyConfirm")}
-                checked={readOnly}
-                onChange={(event) => updateReadOnly(event.target.checked)}
-              />
-              <span>{t("dataSources.request.readOnlyConfirm")}</span>
-            </label>
-            <p className="ek-workbench__request-hint">{t("dataSources.request.postManualHint")}</p>
-          </>
+        {!service ? (
+          <p className="ek-workbench__request-warning" role="alert">{t("dataSources.request.unavailable")}</p>
+        ) : !dataState.executorAvailable ? (
+          <p className="ek-workbench__request-warning" role="status">{t("dataSources.request.executorMissing")}</p>
         ) : null}
-        <label className="ek-workbench__field">
-          <span>{t("dataSources.request.path")}</span>
-          <input
-            ref={pathRef}
-            type="text"
-            aria-label={t("dataSources.request.path")}
-            placeholder={t("dataSources.request.pathPlaceholder")}
-            value={path}
-            onChange={(event) => updatePath(event.target.value)}
-          />
-        </label>
-        <div className="ek-workbench__request-preview">
-          <span>{t("dataSources.request.preview")}</span>
-          {preview.ok
-            ? (
-              <>
-                <span data-method={preview.summary.method}>{preview.summary.method}</span>
-                <code>{preview.summary.url}</code>
-                {preview.summary.body !== null ? (
-                  <pre className="ek-workbench__request-payload" aria-label={t("dataSources.request.bodyPreview")}>
-                    {JSON.stringify(preview.summary.body, null, 2)}
-                  </pre>
-                ) : null}
-              </>
-            )
-            : <small>{t("dataSources.request.previewPending")}</small>}
-        </div>
 
-        <fieldset className="ek-workbench__request-parameters">
-          <legend>{t("dataSources.request.parameters")}</legend>
-          {parameters.length === 0 ? <small>{t("dataSources.request.parameters.empty")}</small> : null}
-          {parameters.map((parameter, index) => {
-            const row = index + 1;
-            return (
-              <div
-                key={parameter.id}
-                className="ek-workbench__request-parameter"
-                role="group"
-                aria-label={t("dataSources.request.parameter.group", { index: row })}
-              >
-                <label className="ek-workbench__field">
-                  <span>{t("dataSources.request.parameter.name", { index: row })}</span>
+        <TesterSection label={t("dataSources.request.section.request")}>
+          <form className="ek-workbench__request-form" aria-label={t("dataSources.request.label")} onSubmit={runRequest} noValidate>
+            <label className="ek-workbench__field">
+              <span>{t("dataSources.request.method")}</span>
+              <WorkbenchSelect
+                aria-label={t("dataSources.request.method")}
+                value={draft.method}
+                options={[
+                  { value: "GET", label: "GET" },
+                  { value: "POST", label: "POST" }
+                ]}
+                onChange={(next) => updateMethod(next as DataQueryMethod)}
+              />
+            </label>
+            {draft.method === "POST" ? (
+              <>
+                <label className="ek-workbench__request-check">
                   <input
-                    type="text"
-                    aria-label={t("dataSources.request.parameter.name", { index: row })}
-                    value={parameter.name}
-                    onChange={(event) => updateParameter(parameter.id, { name: event.target.value })}
+                    type="checkbox"
+                    aria-label={t("dataSources.request.readOnlyConfirm")}
+                    checked={draft.readOnly}
+                    onChange={(event) => updateDraft({ readOnly: event.target.checked })}
                   />
+                  <span>{t("dataSources.request.readOnlyConfirm")}</span>
                 </label>
-                <label className="ek-workbench__field">
-                  <span>{t("dataSources.request.parameter.type", { index: row })}</span>
-                  <select
-                    aria-label={t("dataSources.request.parameter.type", { index: row })}
-                    value={parameter.type}
-                    onChange={(event) => changeParameterType(parameter.id, event.target.value as DataParameterType)}
+                <p className="ek-workbench__request-hint">{t("dataSources.request.postManualHint")}</p>
+              </>
+            ) : null}
+            <label className="ek-workbench__field">
+              <span>{t("dataSources.request.path")}</span>
+              <Input
+                ref={pathRef}
+                type="text"
+                aria-label={t("dataSources.request.path")}
+                placeholder={t("dataSources.request.pathPlaceholder")}
+                value={draft.path}
+                onChange={(event) => updateDraft({ path: event.target.value })}
+              />
+            </label>
+            <div className="ek-workbench__request-preview">
+              <span>{t("dataSources.request.preview")}</span>
+              {preview.ok
+                ? (
+                  <>
+                    <span data-method={preview.summary.method}>{preview.summary.method}</span>
+                    <code>{preview.summary.url}</code>
+                    {preview.summary.body !== null ? (
+                      <pre className="ek-workbench__request-payload" aria-label={t("dataSources.request.bodyPreview")}>
+                        {JSON.stringify(preview.summary.body, null, 2)}
+                      </pre>
+                    ) : null}
+                  </>
+                )
+                : <small>{t("dataSources.request.previewPending")}</small>}
+            </div>
+
+            <fieldset className="ek-workbench__request-parameters">
+              <legend>{t("dataSources.request.parameters")}</legend>
+              {draft.parameters.length === 0 ? <small>{t("dataSources.request.parameters.empty")}</small> : null}
+              {draft.parameters.map((parameter, index) => {
+                const row = index + 1;
+                return (
+                  <div
+                    key={parameter.id}
+                    className="ek-workbench__request-parameter"
+                    role="group"
+                    aria-label={t("dataSources.request.parameter.group", { index: row })}
                   >
-                    {(["string", "number", "boolean"] as const).map((type) => (
-                      <option key={type} value={type}>{t(PARAMETER_TYPE_MESSAGE_KEYS[type])}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="ek-workbench__field">
-                  <span>{t("dataSources.request.parameter.location", { index: row })}</span>
-                  <select
-                    aria-label={t("dataSources.request.parameter.location", { index: row })}
-                    value={parameter.location}
-                    onChange={(event) => updateLocation(parameter.id, event.target.value as DataParameterLocationInput)}
-                  >
-                    <option value="auto">{t("dataSources.request.parameter.location.auto")}</option>
-                    <option value="path">{t("dataSources.request.parameter.location.path")}</option>
-                    <option value="query">{t("dataSources.request.parameter.location.query")}</option>
-                    <option value="body">{t("dataSources.request.parameter.location.body")}</option>
-                  </select>
-                </label>
-                <div className="ek-workbench__request-parameter-value">
-                  <label className="ek-workbench__field">
-                    <span>{t("dataSources.request.parameter.label.default")}</span>
-                    <DataParameterValueInput
-                      id={`${parameter.id}-default`}
-                      type={parameter.type}
-                      value={parameter.defaultText}
-                      disabled={!parameter.useDefault}
-                      label={t("dataSources.request.parameter.default", { index: row })}
-                      trueLabel={t("dataSources.request.boolean.true")}
-                      falseLabel={t("dataSources.request.boolean.false")}
-                      onChange={(value) => updateParameter(parameter.id, { defaultText: value })}
-                    />
-                  </label>
-                  <label className="ek-workbench__request-check">
-                    <input
-                      type="checkbox"
-                      aria-label={t("dataSources.request.parameter.useDefault", { index: row })}
-                      checked={parameter.useDefault}
-                      onChange={(event) => updateParameter(parameter.id, { useDefault: event.target.checked })}
-                    />
-                    <span>{t("dataSources.request.parameter.useDefault", { index: row })}</span>
-                  </label>
-                </div>
-                <div className="ek-workbench__request-parameter-value">
-                  <label className="ek-workbench__request-check">
-                    <input
-                      type="checkbox"
-                      aria-label={t("dataSources.request.parameter.override", { index: row })}
-                      checked={parameter.override}
-                      onChange={(event) => updateParameter(parameter.id, {
-                        override: event.target.checked,
-                        ...(event.target.checked && parameter.type === "boolean" && !parameter.overrideText
-                          ? { overrideText: "false" }
-                          : {})
-                      })}
-                    />
-                    <span>{t("dataSources.request.parameter.label.override")}</span>
-                  </label>
-                  {parameter.override ? (
                     <label className="ek-workbench__field">
-                      <span>{t("dataSources.request.parameter.testValue", { index: row })}</span>
-                      <DataParameterValueInput
-                        id={`${parameter.id}-override`}
-                        type={parameter.type}
-                        value={parameter.overrideText}
-                        disabled={false}
-                        label={t("dataSources.request.parameter.testValue", { index: row })}
-                        trueLabel={t("dataSources.request.boolean.true")}
-                        falseLabel={t("dataSources.request.boolean.false")}
-                        onChange={(value) => updateParameter(parameter.id, { overrideText: value })}
+                      <span>{t("dataSources.request.parameter.name", { index: row })}</span>
+                      <Input
+                        type="text"
+                        aria-label={t("dataSources.request.parameter.name", { index: row })}
+                        value={parameter.name}
+                        onChange={(event) => updateParameter(parameter.id, { name: event.target.value })}
                       />
                     </label>
-                  ) : null}
-                </div>
-                <button
-                  type="button"
-                  aria-label={t("dataSources.request.parameter.remove", { index: row })}
-                  onClick={() => removeParameter(parameter.id)}
-                >{t("dataSources.request.parameter.label.remove")}</button>
-              </div>
-            );
-          })}
-          <button type="button" onClick={addParameter}>{t("dataSources.request.parameters.add")}</button>
-        </fieldset>
+                    <label className="ek-workbench__field">
+                      <span>{t("dataSources.request.parameter.type", { index: row })}</span>
+                      <WorkbenchSelect
+                        aria-label={t("dataSources.request.parameter.type", { index: row })}
+                        value={parameter.type}
+                        options={(["string", "number", "boolean"] as const).map((type) => ({
+                          value: type,
+                          label: t(PARAMETER_TYPE_MESSAGE_KEYS[type])
+                        }))}
+                        onChange={(next) => changeParameterType(parameter.id, next as DataParameterType)}
+                      />
+                    </label>
+                    <label className="ek-workbench__field">
+                      <span>{t("dataSources.request.parameter.location", { index: row })}</span>
+                      <WorkbenchSelect
+                        aria-label={t("dataSources.request.parameter.location", { index: row })}
+                        value={parameter.location}
+                        options={[
+                          { value: "auto", label: t("dataSources.request.parameter.location.auto") },
+                          { value: "path", label: t("dataSources.request.parameter.location.path") },
+                          { value: "query", label: t("dataSources.request.parameter.location.query") },
+                          { value: "body", label: t("dataSources.request.parameter.location.body") }
+                        ]}
+                        onChange={(next) => updateLocation(parameter.id, next as DataParameterLocationInput)}
+                      />
+                    </label>
+                    <div className="ek-workbench__request-parameter-value">
+                      <label className="ek-workbench__field">
+                        <span>{t("dataSources.request.parameter.label.default")}</span>
+                        <DataParameterValueInput
+                          id={`${parameter.id}-default`}
+                          type={parameter.type}
+                          value={parameter.defaultText}
+                          disabled={!parameter.useDefault}
+                          label={t("dataSources.request.parameter.default", { index: row })}
+                          trueLabel={t("dataSources.request.boolean.true")}
+                          falseLabel={t("dataSources.request.boolean.false")}
+                          onChange={(value) => updateParameter(parameter.id, { defaultText: value })}
+                        />
+                      </label>
+                      <label className="ek-workbench__request-check">
+                        <input
+                          type="checkbox"
+                          aria-label={t("dataSources.request.parameter.useDefault", { index: row })}
+                          checked={parameter.useDefault}
+                          onChange={(event) => updateParameter(parameter.id, { useDefault: event.target.checked })}
+                        />
+                        <span>{t("dataSources.request.parameter.useDefault", { index: row })}</span>
+                      </label>
+                    </div>
+                    <div className="ek-workbench__request-parameter-value">
+                      <label className="ek-workbench__request-check">
+                        <input
+                          type="checkbox"
+                          aria-label={t("dataSources.request.parameter.override", { index: row })}
+                          checked={parameter.override}
+                          onChange={(event) => updateParameter(parameter.id, {
+                            override: event.target.checked,
+                            ...(event.target.checked && parameter.type === "boolean" && !parameter.overrideText
+                              ? { overrideText: "false" }
+                              : {})
+                          })}
+                        />
+                        <span>{t("dataSources.request.parameter.label.override")}</span>
+                      </label>
+                      {parameter.override ? (
+                        <label className="ek-workbench__field">
+                          <span>{t("dataSources.request.parameter.testValue", { index: row })}</span>
+                          <DataParameterValueInput
+                            id={`${parameter.id}-override`}
+                            type={parameter.type}
+                            value={parameter.overrideText}
+                            disabled={false}
+                            label={t("dataSources.request.parameter.testValue", { index: row })}
+                            trueLabel={t("dataSources.request.boolean.true")}
+                            falseLabel={t("dataSources.request.boolean.false")}
+                            onChange={(value) => updateParameter(parameter.id, { overrideText: value })}
+                          />
+                        </label>
+                      ) : null}
+                    </div>
+                    <Button
+                      aria-label={t("dataSources.request.parameter.remove", { index: row })}
+                      onClick={() => removeParameter(parameter.id)}
+                    >{t("dataSources.request.parameter.label.remove")}</Button>
+                  </div>
+                );
+              })}
+              <Button onClick={addParameter}>{t("dataSources.request.parameters.add")}</Button>
+            </fieldset>
 
-        <div className="ek-workbench__request-actions">
-          <button type="submit" disabled={!service || running}>{t("dataSources.request.run")}</button>
-          {running ? (
-            <button type="button" onClick={cancelRequest}>{t("dataSources.request.cancel")}</button>
-          ) : null}
+            <div className="ek-workbench__request-actions">
+              <Button type="submit" disabled={!service || running}>{t("dataSources.request.run")}</Button>
+              {running ? (
+                <Button onClick={cancelRequest}>{t("dataSources.request.cancel")}</Button>
+              ) : null}
+            </div>
+          </form>
+        </TesterSection>
+
+        <TesterSection label={t("dataSources.request.resultSection")}>
+          {running ? <p className="ek-workbench__request-running" role="status">{t("dataSources.request.running")}</p> : null}
+          {run ? <RequestRunResult run={run} i18n={context.i18n} /> : null}
+          {!running && !run ? <p className="ek-workbench__request-hint">{t("dataSources.request.noResult")}</p> : null}
+        </TesterSection>
+      </div>
+
+      {discardRequested ? (
+        <div
+          className="ek-workbench__connection-discard"
+          role="alertdialog"
+          aria-label={t("dataSources.form.discard.title")}
+          aria-describedby={`${discardId}-description`}
+          onKeyDown={(event) => {
+            // Escape acts on the top-most layer: the prompt asks for editing
+            // again instead of re-requesting the same close.
+            if (event.key === "Escape") {
+              event.preventDefault();
+              event.stopPropagation();
+              onKeepEditing();
+            }
+          }}
+        >
+          <strong>{t("dataSources.form.discard.title")}</strong>
+          <p id={`${discardId}-description`}>{t("dataSources.request.discardDescription")}</p>
+          <div className="ek-workbench__connection-discard-actions">
+            <Button ref={keepEditingRef} onClick={onKeepEditing}>{t("dataSources.form.discard.keep")}</Button>
+            <Button onClick={onClose}>{t("dataSources.form.discard.confirm")}</Button>
+          </div>
         </div>
-      </form>
+      ) : null}
+    </Dialog>
+  );
+}
 
-      {running ? <p className="ek-workbench__request-running" role="status">{t("dataSources.request.running")}</p> : null}
-      {run ? <RequestRunResult run={run} i18n={context.i18n} /> : null}
+function isDirtyDraft(draft: TesterDraft): boolean {
+  return draft.method !== "GET"
+    || !draft.readOnly
+    || draft.path.length > 0
+    || draft.parameters.length > 0;
+}
+
+function TesterSection({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <section className="ek-workbench__request-section" role="group" aria-label={label}>
+      <h4>{label}</h4>
+      {children}
     </section>
   );
 }
@@ -355,7 +433,7 @@ export function DataQueryTester({ context, connectionId, onClose }: DataQueryTes
 function RequestRunResult({ run, i18n }: { run: DataQueryRunState; i18n: WorkbenchI18n }) {
   const t = i18n.t;
   return (
-    <section
+    <div
       className="ek-workbench__request-result"
       aria-label={t("dataSources.request.result")}
       data-status={run.status}
@@ -384,7 +462,7 @@ function RequestRunResult({ run, i18n }: { run: DataQueryRunState; i18n: Workben
       ) : null}
       {run.request ? <RequestSummary run={run} i18n={i18n} /> : null}
       {run.response ? <ResponseDetails run={run} i18n={i18n} /> : null}
-    </section>
+    </div>
   );
 }
 

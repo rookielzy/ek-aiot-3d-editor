@@ -2109,6 +2109,89 @@ button.ek-workbench__status-chip { cursor: pointer; font: inherit; }
   opacity: 0.55;
 }
 
+/* Shared data-section dialog: roomy space for longer connection, request, and
+   mapping flows while keeping the panel visible behind the backdrop. */
+.ek-workbench__dialog {
+  position: fixed;
+  z-index: 40;
+  top: max(3.5rem, 6vh);
+  left: max(1.5rem, 5vw);
+  right: max(1.5rem, 5vw);
+  bottom: auto;
+  width: auto;
+  max-width: 68rem;
+  max-height: min(88vh, 54rem);
+  margin-inline: auto;
+  margin-block: 0;
+  color: var(--ek-workbench-text);
+  overflow: auto;
+  padding: var(--ek-workbench-space-4);
+  border: 1px solid var(--ek-workbench-border-strong, var(--ek-workbench-border));
+  border-radius: var(--ek-workbench-radius-md, 8px);
+  background: var(--ek-workbench-panel-bg);
+  box-shadow: 0 18px 48px #10182833;
+}
+
+.ek-workbench__dialog::backdrop {
+  background: #10182826;
+}
+
+.ek-workbench__connection-dialog {
+  max-width: 44rem;
+}
+
+.ek-workbench__request-dialog {
+  max-width: 52rem;
+}
+
+.ek-workbench__dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ek-workbench-space-3);
+  margin-bottom: var(--ek-workbench-space-3);
+}
+
+.ek-workbench__dialog-header h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.ek-workbench__dialog-content {
+  display: grid;
+  gap: var(--ek-workbench-space-3);
+}
+
+.ek-workbench__form-section,
+.ek-workbench__request-section {
+  display: grid;
+  gap: var(--ek-workbench-space-2);
+  min-width: 0;
+  padding: var(--ek-workbench-space-3);
+  border: 1px solid var(--ek-workbench-border);
+  border-radius: var(--ek-workbench-radius-sm);
+  background: var(--ek-workbench-surface, var(--ek-workbench-panel-bg));
+}
+
+.ek-workbench__form-section legend,
+.ek-workbench__request-section > h4 {
+  margin: 0;
+  padding: 0 var(--ek-workbench-space-1, 0.25rem);
+  color: var(--ek-workbench-text-muted, var(--ek-workbench-text));
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ek-workbench__request-connection {
+  margin: 0;
+  font-family: var(--ek-workbench-font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
 .ek-workbench__query-editor::backdrop {
   background: #10182826;
 }

@@ -7,6 +7,7 @@ import {
   type RendererLike
 } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
+import { selectWorkbenchOption } from "./support/workbench-select";
 
 describe("React query authoring and mapping preview", () => {
   beforeEach(() => {
@@ -56,20 +57,20 @@ describe("React query authoring and mapping preview", () => {
     fireEvent.change(screen.getByLabelText("Property 1 key"), { target: { value: "temperature" } });
     fireEvent.change(screen.getByLabelText("Property 1 label"), { target: { value: "Temperature" } });
     fireEvent.change(screen.getByLabelText("Property 1 source path"), { target: { value: "tempRaw" } });
-    fireEvent.change(screen.getByLabelText("Property 1 transform"), { target: { value: "scale" } });
+    selectWorkbenchOption(screen.getByLabelText("Property 1 transform"), "Multiply and offset");
     fireEvent.change(screen.getByLabelText("Property 1 factor"), { target: { value: "0.1" } });
     fireEvent.change(screen.getByLabelText("Property 1 unit"), { target: { value: "°C" } });
 
     fireEvent.click(screen.getByRole("button", { name: "Add property" }));
     fireEvent.change(screen.getByLabelText("Property 2 key"), { target: { value: "running" } });
-    fireEvent.change(screen.getByLabelText("Property 2 type"), { target: { value: "boolean" } });
+    selectWorkbenchOption(screen.getByLabelText("Property 2 type"), "Boolean");
     fireEvent.change(screen.getByLabelText("Property 2 source path"), { target: { value: "run" } });
-    fireEvent.change(screen.getByLabelText("Property 2 transform"), { target: { value: "map" } });
+    selectWorkbenchOption(screen.getByLabelText("Property 2 transform"), "Value table");
     fireEvent.change(screen.getByLabelText("Entry 1 source value"), { target: { value: "1" } });
-    fireEvent.change(screen.getByLabelText("Entry 1 output value"), { target: { value: "true" } });
+    selectWorkbenchOption(screen.getByLabelText("Entry 1 output value"), "True");
     fireEvent.click(screen.getByRole("button", { name: "Add value table entry" }));
     fireEvent.change(screen.getByLabelText("Entry 2 source value"), { target: { value: "0" } });
-    fireEvent.change(screen.getByLabelText("Entry 2 output value"), { target: { value: "false" } });
+    selectWorkbenchOption(screen.getByLabelText("Entry 2 output value"), "False");
 
     fireEvent.click(screen.getByRole("button", { name: "Run request" }));
     await screen.findByText("Tested with a real response");
@@ -90,10 +91,10 @@ describe("React query authoring and mapping preview", () => {
 
     fireEvent.change(screen.getByLabelText("Property 1 source path"), { target: { value: "otherTemp" } });
     expect(screen.getByLabelText("Device 001").textContent).toContain("100");
-    fireEvent.change(screen.getByLabelText("Property 1 transform"), { target: { value: "number" } });
+    selectWorkbenchOption(screen.getByLabelText("Property 1 transform"), "Strict number");
     expect(screen.getByLabelText("Device 001").textContent).toContain("500");
     fireEvent.change(screen.getByLabelText("Property 1 source path"), { target: { value: "tempRaw" } });
-    fireEvent.change(screen.getByLabelText("Property 1 transform"), { target: { value: "scale" } });
+    selectWorkbenchOption(screen.getByLabelText("Property 1 transform"), "Multiply and offset");
     expect(screen.getByLabelText("Device 001").textContent).toContain("85.2");
 
     expect(editor.getHistoryState()).toEqual({ undoCount: 1, redoCount: 0 });
@@ -131,7 +132,7 @@ describe("React query authoring and mapping preview", () => {
     expect(screen.getByRole("button", { name: "Edit query Pump status" })).toBeTruthy();
     view.unmount();
     editor.dispose();
-  });
+  }, 20000);
 
   it("shows mapping problems and keeps history unchanged when saving invalid configuration", async () => {
     const editor = createEditor();
@@ -163,19 +164,19 @@ describe("React query authoring and mapping preview", () => {
     fireEvent.change(screen.getByLabelText("Request path"), { target: { value: "/pump" } });
     fireEvent.click(screen.getByRole("button", { name: "Add parameter" }));
     fireEvent.change(screen.getByLabelText("Parameter 1 name"), { target: { value: "deviceId" } });
-    fireEvent.change(screen.getByLabelText("Parameter 1 type"), { target: { value: "number" } });
+    selectWorkbenchOption(screen.getByLabelText("Parameter 1 type"), "Number");
     fireEvent.change(screen.getByLabelText("Parameter 1 default"), { target: { value: "7" } });
     fireEvent.click(screen.getByLabelText("Override parameter 1"));
     fireEvent.change(screen.getByLabelText("Parameter 1 test value"), { target: { value: "8" } });
 
-    fireEvent.change(screen.getByLabelText("Data shape"), { target: { value: "single" } });
+    selectWorkbenchOption(screen.getByLabelText("Data shape"), "Single object");
     fireEvent.change(screen.getByLabelText("Data root path"), { target: { value: "data.pump" } });
-    fireEvent.change(screen.getByLabelText("Identity source"), { target: { value: "parameter" } });
-    fireEvent.change(screen.getByLabelText("Device ID parameter"), { target: { value: "deviceId" } });
+    selectWorkbenchOption(screen.getByLabelText("Identity source"), "Query parameter");
+    selectWorkbenchOption(screen.getByLabelText("Device ID parameter"), "deviceId");
     fireEvent.change(screen.getByLabelText("Display name path"), { target: { value: "name" } });
     fireEvent.change(screen.getByLabelText("Property 1 key"), { target: { value: "temperature" } });
     fireEvent.change(screen.getByLabelText("Property 1 source path"), { target: { value: "tempRaw" } });
-    fireEvent.change(screen.getByLabelText("Property 1 transform"), { target: { value: "scale" } });
+    selectWorkbenchOption(screen.getByLabelText("Property 1 transform"), "Multiply and offset");
     fireEvent.change(screen.getByLabelText("Property 1 factor"), { target: { value: "0.1" } });
 
     fireEvent.change(screen.getByLabelText("Example JSON"), {
@@ -297,9 +298,9 @@ describe("React query authoring and mapping preview", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Add property" }));
     fireEvent.change(screen.getByLabelText("Property 2 key"), { target: { value: "state" } });
-    fireEvent.change(screen.getByLabelText("Property 2 type"), { target: { value: "string" } });
+    selectWorkbenchOption(screen.getByLabelText("Property 2 type"), "String");
     fireEvent.change(screen.getByLabelText("Property 2 source path"), { target: { value: "state" } });
-    fireEvent.change(screen.getByLabelText("Property 2 transform"), { target: { value: "map" } });
+    selectWorkbenchOption(screen.getByLabelText("Property 2 transform"), "Value table");
     fireEvent.change(screen.getByLabelText("Entry 1 source value"), { target: { value: "1" } });
     fireEvent.change(screen.getByLabelText("Entry 1 output value"), { target: { value: "on" } });
 

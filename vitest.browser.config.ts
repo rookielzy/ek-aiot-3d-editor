@@ -36,6 +36,26 @@ export default defineConfig({
           name: "chromium-mobile",
           sequence: { groupOrder: 2 },
           viewport: { width: 390, height: 900 }
+        },
+        // Acceptance sizes from .scratch/workbench-shadcn-ui/spec.md (Testing Decisions).
+        // Kept last so the existing instances keep their ordering and coverage.
+        {
+          browser: "chromium",
+          name: "chromium-1440",
+          sequence: { groupOrder: 3 },
+          viewport: { width: 1440, height: 900 }
+        },
+        {
+          browser: "chromium",
+          name: "chromium-1920",
+          sequence: { groupOrder: 4 },
+          viewport: { width: 1920, height: 1080 }
+        },
+        {
+          browser: "chromium",
+          name: "chromium-1100",
+          sequence: { groupOrder: 5 },
+          viewport: { width: 1100, height: 800 }
         }
       ]
     }

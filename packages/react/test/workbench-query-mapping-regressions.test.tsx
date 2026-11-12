@@ -10,6 +10,7 @@ import {
   type RendererLike
 } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
+import { selectWorkbenchOption } from "./support/workbench-select";
 
 const editors: EditorWithGlbImport[] = [];
 
@@ -50,7 +51,7 @@ describe("React query mapping regressions", () => {
       pump: { id: "single", reading: 42.6, sampledAt: "2026-10-26T00:00:00Z" }
     } });
 
-    fireEvent.change(screen.getByLabelText("Data shape"), { target: { value: "single" } });
+    selectWorkbenchOption(screen.getByLabelText("Data shape"), "Single object");
     fireEvent.change(screen.getByLabelText("Data root path"), { target: { value: "data.pump" } });
     expect(suggestionsFor("Property 1 source path")).toContain("reading");
     expect(suggestionsFor("Property 1 source path")).not.toContain("tempRaw");
@@ -193,7 +194,7 @@ describe("React query mapping regressions", () => {
     openQuery("Query");
     fireEvent.change(screen.getByLabelText("Property 1 minimum"), { target: { value: "0" } });
     fireEvent.change(screen.getByLabelText("Property 1 maximum"), { target: { value: "50" } });
-    fireEvent.change(screen.getByLabelText("Property 1 type"), { target: { value: type } });
+    selectWorkbenchOption(screen.getByLabelText("Property 1 type"), type === "string" ? "String" : "Boolean");
     expect(screen.queryByLabelText("Property 1 minimum")).toBeNull();
     applyExample({ data: { items: [{ id: "001", tempRaw: type === "string" ? "running" : true }] } });
     expect(screen.getByLabelText("Device 001").textContent).toContain(type === "string" ? "running" : "true");

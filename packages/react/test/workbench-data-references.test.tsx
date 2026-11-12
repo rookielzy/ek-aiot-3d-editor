@@ -8,6 +8,7 @@ import {
   type RendererLike
 } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
+import { selectWorkbenchOption } from "./support/workbench-select";
 
 describe("React data source references", () => {
   beforeEach(() => {
@@ -115,8 +116,8 @@ describe("React data source references", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Edit query Pump status" }));
     const dialog = screen.getByRole("dialog", { name: "Query configuration" });
-    fireEvent.change(within(dialog).getByLabelText("Property 1 type"), { target: { value: "string" } });
-    fireEvent.change(within(dialog).getByLabelText("Parameter 1 type"), { target: { value: "number" } });
+    selectWorkbenchOption(within(dialog).getByLabelText("Property 1 type"), "String");
+    selectWorkbenchOption(within(dialog).getByLabelText("Parameter 1 type"), "Number");
 
     expect(within(dialog).getByText(
       "Property temperature is used by an object binding and its type changed. Saving is blocked until those bindings are updated."

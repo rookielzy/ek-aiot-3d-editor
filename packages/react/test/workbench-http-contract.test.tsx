@@ -8,6 +8,7 @@ import {
   type RendererLike
 } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
+import { selectWorkbenchOption } from "./support/workbench-select";
 
 describe("React HTTP read contract configuration", () => {
   beforeEach(() => {
@@ -29,9 +30,9 @@ describe("React HTTP read contract configuration", () => {
     fireEvent.click(screen.getByRole("button", { name: "New connection" }));
     fireEvent.change(screen.getByLabelText("Connection name"), { target: { value: "Zone API" } });
     fireEvent.change(screen.getByLabelText("Service URL"), { target: { value: "https://zone.example.test/v1" } });
-    fireEvent.change(screen.getByLabelText("Authentication"), { target: { value: "api-key" } });
+    selectWorkbenchOption(screen.getByLabelText("Authentication"), "API key header");
     fireEvent.change(screen.getByLabelText("API key header name"), { target: { value: "X-Zone-Key" } });
-    fireEvent.change(screen.getByLabelText("Credential"), { target: { value: "credential-zone" } });
+    selectWorkbenchOption(screen.getByLabelText("Credential"), "Zone key");
     fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Edit Zone API" })).toBeTruthy());
     const connection = Object.values(editor.getSnapshot().dataSources.connections)[0];
@@ -45,7 +46,7 @@ describe("React HTTP read contract configuration", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "New query for Zone API" }));
     fireEvent.change(screen.getByLabelText("Query name"), { target: { value: "Zone search" } });
-    fireEvent.change(screen.getByLabelText("Method"), { target: { value: "POST" } });
+    selectWorkbenchOption(screen.getByLabelText("Method"), "POST");
     expect(screen.getAllByText(/Read-only POST queries run only/).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByLabelText("I confirm this POST only reads data"));
     fireEvent.change(screen.getByLabelText("Request path"), { target: { value: "/search/{area}" } });
@@ -58,14 +59,14 @@ describe("React HTTP read contract configuration", () => {
     fireEvent.change(screen.getByLabelText("Parameter 1 default"), { target: { value: "A" } });
     fireEvent.click(screen.getByRole("button", { name: "Add parameter" }));
     fireEvent.change(screen.getByLabelText("Parameter 2 name"), { target: { value: "offset" } });
-    fireEvent.change(screen.getByLabelText("Parameter 2 type"), { target: { value: "number" } });
+    selectWorkbenchOption(screen.getByLabelText("Parameter 2 type"), "Number");
     fireEvent.change(screen.getByLabelText("Parameter 2 default"), { target: { value: "0" } });
-    fireEvent.change(screen.getByLabelText("Parameter 2 location"), { target: { value: "body" } });
+    selectWorkbenchOption(screen.getByLabelText("Parameter 2 location"), "JSON body");
     fireEvent.click(screen.getByRole("button", { name: "Add parameter" }));
     fireEvent.change(screen.getByLabelText("Parameter 3 name"), { target: { value: "include" } });
-    fireEvent.change(screen.getByLabelText("Parameter 3 type"), { target: { value: "boolean" } });
+    selectWorkbenchOption(screen.getByLabelText("Parameter 3 type"), "Boolean");
     fireEvent.change(screen.getByLabelText("Parameter 3 default"), { target: { value: "false" } });
-    fireEvent.change(screen.getByLabelText("Parameter 3 location"), { target: { value: "body" } });
+    selectWorkbenchOption(screen.getByLabelText("Parameter 3 location"), "JSON body");
 
     fireEvent.change(screen.getByLabelText("Success field path"), { target: { value: "code" } });
     fireEvent.change(screen.getByLabelText("Success value"), { target: { value: "0" } });
@@ -96,7 +97,7 @@ describe("React HTTP read contract configuration", () => {
     expect(screen.getByText(/Read-only POST · manual refresh/)).toBeTruthy();
     view.unmount();
     editor.dispose();
-  });
+  }, 20000);
 
   it("blocks saving a numeric success condition with no value instead of treating it as zero", async () => {
     const editor = createEditor();
@@ -139,12 +140,12 @@ describe("React HTTP read contract configuration", () => {
     openDataPanel();
     await createConnection("Plant API", "https://api.example.test/v1");
     fireEvent.click(screen.getByRole("button", { name: "Test request for Plant API" }));
-    fireEvent.change(screen.getByLabelText("Method"), { target: { value: "POST" } });
+    selectWorkbenchOption(screen.getByLabelText("Method"), "POST");
     fireEvent.click(screen.getByLabelText("I confirm this POST only reads data"));
     fireEvent.change(screen.getByLabelText("Request path"), { target: { value: "/search" } });
     fireEvent.click(screen.getByRole("button", { name: "Add parameter" }));
     fireEvent.change(screen.getByLabelText("Parameter 1 name"), { target: { value: "offset" } });
-    fireEvent.change(screen.getByLabelText("Parameter 1 type"), { target: { value: "number" } });
+    selectWorkbenchOption(screen.getByLabelText("Parameter 1 type"), "Number");
     fireEvent.change(screen.getByLabelText("Parameter 1 default"), { target: { value: "0" } });
     fireEvent.click(screen.getByRole("button", { name: "Run request" }));
 

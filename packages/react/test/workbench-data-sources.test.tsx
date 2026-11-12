@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEditor, type RendererLike } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
+import { selectWorkbenchOption, workbenchOptionLabels } from "./support/workbench-select";
 
 describe("React data source workspace", () => {
   beforeEach(() => {
@@ -129,9 +130,9 @@ describe("React data source workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "New connection" }));
     fireEvent.change(screen.getByLabelText("Connection name"), { target: { value: "Host API" } });
     fireEvent.change(screen.getByLabelText("Service URL"), { target: { value: "https://host.example.test" } });
-    fireEvent.change(screen.getByLabelText("Authentication"), { target: { value: "bearer" } });
-    expect(screen.getByRole("option", { name: "Host token" })).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Credential"), { target: { value: "credential-host" } });
+    selectWorkbenchOption(screen.getByLabelText("Authentication"), "Bearer token");
+    expect(workbenchOptionLabels(screen.getByLabelText("Credential"))).toContain("Host token");
+    selectWorkbenchOption(screen.getByLabelText("Credential"), "Host token");
     fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
 
     expect(screen.getByText("Credential: Host token")).toBeTruthy();
@@ -226,8 +227,8 @@ describe("React data source workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "New connection" }));
     fireEvent.change(screen.getByLabelText("Connection name"), { target: { value: "Live API" } });
     fireEvent.change(screen.getByLabelText("Service URL"), { target: { value: "https://live.example.test" } });
-    fireEvent.change(screen.getByLabelText("Authentication"), { target: { value: "bearer" } });
-    fireEvent.change(screen.getByLabelText("Credential"), { target: { value: "credential-live" } });
+    selectWorkbenchOption(screen.getByLabelText("Authentication"), "Bearer token");
+    selectWorkbenchOption(screen.getByLabelText("Credential"), "Live token");
     fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
     expect(screen.getByText("Credential: Live token")).toBeTruthy();
 
@@ -338,8 +339,8 @@ describe("React data source workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "New connection" }));
     fireEvent.change(screen.getByLabelText("Connection name"), { target: { value: "Retired API" } });
     fireEvent.change(screen.getByLabelText("Service URL"), { target: { value: "https://retired.example.test" } });
-    fireEvent.change(screen.getByLabelText("Authentication"), { target: { value: "bearer" } });
-    fireEvent.change(screen.getByLabelText("Credential"), { target: { value: "credential-retired" } });
+    selectWorkbenchOption(screen.getByLabelText("Authentication"), "Bearer token");
+    selectWorkbenchOption(screen.getByLabelText("Credential"), "Retired token (unavailable)");
     expect(screen.getAllByText("Retired token (unavailable)").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
 
@@ -367,13 +368,13 @@ describe("React data source workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "New connection" }));
     fireEvent.change(screen.getByLabelText("Connection name"), { target: { value: "Offline API" } });
     fireEvent.change(screen.getByLabelText("Service URL"), { target: { value: "https://offline.example.test" } });
-    fireEvent.change(screen.getByLabelText("Authentication"), { target: { value: "bearer" } });
+    selectWorkbenchOption(screen.getByLabelText("Authentication"), "Bearer token");
     expect(screen.getByText("The host provides no credentials. Save without authentication or configure credentials in the host.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
     expect(screen.getByText("Select a credential or disable authentication.")).toBeTruthy();
     expect(editor.getSnapshot().dataSources.connections).toEqual({});
 
-    fireEvent.change(screen.getByLabelText("Authentication"), { target: { value: "none" } });
+    selectWorkbenchOption(screen.getByLabelText("Authentication"), "No authentication");
     fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
     expect(Object.values(editor.getSnapshot().dataSources.connections)[0]?.auth).toEqual({ kind: "none" });
   });

@@ -25,6 +25,8 @@
   font: inherit;
 }
 .ek-ui-button { cursor: pointer; }
+.ek-ui-button--quiet { background: transparent; border-color: transparent; color: var(--ek-ui-muted); }
+.ek-ui-button--quiet:hover:not(:disabled) { background: var(--ek-workbench-surface, #f6f8fb); border-color: var(--ek-ui-border); color: var(--ek-ui-text); }
 .ek-ui-input:focus-visible, .ek-ui-button:focus-visible, .ek-ui-switch:focus-visible {
   outline: 2px solid var(--ek-ui-accent);
   outline-offset: 2px;

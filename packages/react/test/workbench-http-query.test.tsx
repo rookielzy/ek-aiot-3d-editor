@@ -9,6 +9,7 @@ import {
   type RendererLike
 } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
+import { selectWorkbenchOption } from "./support/workbench-select";
 
 describe("React manual HTTP request tester", () => {
   beforeEach(() => {
@@ -111,7 +112,7 @@ describe("React manual HTTP request tester", () => {
     await waitFor(() => expect(screen.getByText("Enter a value for areaId.")).toBeTruthy());
     expect(executor).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByLabelText("Parameter 1 type"), { target: { value: "number" } });
+    selectWorkbenchOption(screen.getByLabelText("Parameter 1 type"), "Number");
     fireEvent.click(screen.getByLabelText("Use default for parameter 1"));
     fireEvent.click(screen.getByRole("button", { name: "Run request" }));
     await waitFor(() => expect(screen.getByText("The value for areaId does not match its type.")).toBeTruthy());

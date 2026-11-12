@@ -11,6 +11,7 @@ import {
   type RendererLike
 } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
+import { selectWorkbenchOption } from "./support/workbench-select";
 
 describe("React object binding authoring", () => {
   beforeEach(() => {
@@ -250,7 +251,7 @@ describe("React object binding authoring", () => {
     fireEvent.change(within(dialog).getByLabelText("Property 1 key"), { target: { value: "temperature" } });
     fireEvent.change(within(dialog).getByLabelText("Property 1 label"), { target: { value: "Temperature" } });
     fireEvent.change(within(dialog).getByLabelText("Property 1 source path"), { target: { value: "tempRaw" } });
-    fireEvent.change(within(dialog).getByLabelText("Property 1 transform"), { target: { value: "scale" } });
+    selectWorkbenchOption(within(dialog).getByLabelText("Property 1 transform"), "Multiply and offset");
     fireEvent.change(within(dialog).getByLabelText("Property 1 factor"), { target: { value: "0.1" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Save query" }));
 
