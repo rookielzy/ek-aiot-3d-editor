@@ -32,6 +32,9 @@ import type { WorkbenchI18n, WorkbenchMessageKey, WorkbenchMessageValues } from 
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
 import { DataParameterValueInput } from "./DataParameterValueInput";
 import { DataQueryEditor } from "./DataQueryEditor";
+import { Button } from "./ui/Button";
+import { Input } from "./ui/Input";
+import { WorkbenchSelect } from "./ui/WorkbenchSelect";
 import {
   DATA_MAPPING_PROBLEM_MESSAGE_KEYS,
   formatDataQueryProblem,
@@ -43,6 +46,10 @@ export interface DataBindingFormProps {
   objectNodeId: string;
   fixedQueryId?: string | null;
   onDirtyChange?(dirty: boolean): void;
+  /** Set while the owner confirmed that the open draft is discarded. */
+  discardOpen?: boolean;
+  /** Status shown when the owner discarded the open draft. */
+  discardStatusKey?: WorkbenchMessageKey;
 }
 
 interface DetailDraft {
@@ -123,7 +130,9 @@ export function DataBindingForm({
   context,
   objectNodeId,
   fixedQueryId = null,
-  onDirtyChange
+  onDirtyChange,
+  discardOpen = false,
+  discardStatusKey
 }: DataBindingFormProps) {
   const snapshot = context.snapshot;
   const savedBinding = snapshot.dataSources.bindings[objectNodeId] ?? null;
@@ -149,6 +158,20 @@ export function DataBindingForm({
   const lastSavedSignatureRef = useRef(savedSignature);
   const id = useId();
   const t = context.i18n.t;
+
+  // The owner's discard decision for this object runs this after the guard closes,
+  // so the draft returns to the saved binding and the outcome is announced.
+  const discardStatusRef = useRef(discardStatusKey);
+  discardStatusRef.current = discardStatusKey;
+  const previousDiscardOpenRef = useRef(discardOpen);
+  useEffect(() => {
+    if (previousDiscardOpenRef.current && !discardOpen) {
+      resetDraft();
+      const key = discardStatusRef.current;
+      if (key) setStatus({ key });
+    }
+    previousDiscardOpenRef.current = discardOpen;
+  }, [discardOpen]);
 
   const query = draft.queryId ? snapshot.dataSources.queries[draft.queryId] ?? null : null;
   const connection = query ? snapshot.dataSources.connections[query.connectionId] ?? null : null;
@@ -535,6 +558,7 @@ export function DataBindingForm({
       : current);
   }
 
+  /** Restores the saved binding; also what "Discard changes" leaves behind. */
   function resetDraft(): void {
     endTrialForThisObject();
     const next = createDraft(snapshot, objectNodeId, fixedQueryId);
@@ -595,436 +619,457 @@ export function DataBindingForm({
       >
         <p className="ek-workbench__binding-description">{t("dataBinding.section.description")}</p>
 
-        {fixedQueryId ? (
-          <p className="ek-workbench__binding-fixed-query">
-            <span>{t("dataBinding.form.query")}</span>
-            <strong>{query?.name ?? fixedQueryId}</strong>
-          </p>
-        ) : (
-          <label className="ek-workbench__field">
-            <span>{t("dataBinding.form.query")}</span>
-            <select
-              aria-label={t("dataBinding.form.query")}
-              value={draft.queryId}
-              onChange={(event) => changeQuery(event.target.value)}
-            >
-              <option value="">{t("dataBinding.form.query.placeholder")}</option>
-              {queries.map((item) => (
-                <option key={item.id} value={item.id}>{queryOptionLabel(item, snapshot)}</option>
-              ))}
-            </select>
-          </label>
-        )}
-        {!fixedQueryId && queries.length === 0 ? (
-          <p className="ek-workbench__binding-hint">{t("dataBinding.form.query.empty")}</p>
-        ) : null}
-        {!fixedQueryId ? (
-          connections.length === 0 ? (
-            <p className="ek-workbench__binding-hint">{t("dataBinding.form.query.noConnections")}</p>
-          ) : (
-            <div className="ek-workbench__binding-query-create">
-              {connections.length > 1 ? (
-                <label className="ek-workbench__field">
-                  <span>{t("dataBinding.form.query.connection")}</span>
-                  <select
-                    aria-label={t("dataBinding.form.query.connection")}
-                    value={queryConnectionId}
-                    onChange={(event) => setNewQueryConnectionId(event.target.value)}
-                  >
-                    {connections.map((connection) => (
-                      <option key={connection.id} value={connection.id}>{connection.name}</option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-              <button
-                type="button"
-                disabled={!queryConnectionId}
-                onClick={() => setQueryEditorOpen(true)}
-              >{t("dataBinding.form.query.create")}</button>
-            </div>
-          )
-        ) : null}
-
-        <label className="ek-workbench__field">
-          <span>{t("dataBinding.form.device")}</span>
-          <input
-            type="text"
-            aria-label={t("dataBinding.form.device")}
-            placeholder={t("dataBinding.form.device.placeholder")}
-            value={draft.deviceId}
-            onChange={(event) => updateDraft({ deviceId: event.target.value })}
-          />
-        </label>
-        <div className="ek-workbench__binding-candidates">
-          <button
-            type="button"
-            disabled={!service || !query || candidates.status === "loading"}
-            onClick={() => { void loadCandidates(); }}
-          >{candidates.status === "loading"
-              ? t("dataBinding.form.device.loading")
-              : t("dataBinding.form.device.load")}</button>
-          {candidatesStale ? (
-            <small role="status">{t("dataBinding.form.device.stale")}</small>
-          ) : candidates.status === "error" ? (
-            <small role="alert">
-              {candidates.problems.length > 0
-                ? candidates.problems.map((problem) => formatDataQueryProblem(context.i18n, problem)).join(" ")
-                : candidates.message ?? t("dataBinding.problem.candidatesFailed")}
-            </small>
-          ) : candidates.status === "ready" ? (
-            currentCandidates.length === 0 ? (
-              <small role="status">{t("dataBinding.form.device.none")}</small>
+        {fixedQueryId ? null : (
+          <section className="ek-workbench__form-section" aria-label={t("dataBinding.form.section.query")}>
+            <label className="ek-workbench__field">
+              <span>{t("dataBinding.form.section.query")}</span>
+              <WorkbenchSelect
+                aria-label={t("dataBinding.form.query")}
+                value={draft.queryId}
+                options={[
+                  { value: "", label: t("dataBinding.form.query.placeholder") },
+                  ...queries.map((item) => ({ value: item.id, label: queryOptionLabel(item, snapshot) }))
+                ]}
+                onChange={changeQuery}
+              />
+            </label>
+            {queries.length === 0 ? (
+              <p className="ek-workbench__binding-hint">{t("dataBinding.form.query.empty")}</p>
+            ) : null}
+            {connections.length === 0 ? (
+              <p className="ek-workbench__binding-hint">{t("dataBinding.form.query.noConnections")}</p>
             ) : (
-              <label className="ek-workbench__field">
-                <span>{t("dataBinding.form.device.candidates")}</span>
-                <select
-                  aria-label={t("dataBinding.form.device.candidates")}
-                  value={currentCandidates.some((entity) => entity.entityId === draft.deviceId) ? draft.deviceId : ""}
-                  onChange={(event) => updateDraft({ deviceId: event.target.value })}
-                >
-                  <option value="">{t("dataBinding.form.device.placeholder")}</option>
-                  {currentCandidates.map((entity) => (
-                    <option key={entity.entityId} value={entity.entityId}>
-                      {entity.displayName ? `${entity.displayName} (${entity.entityId})` : entity.entityId}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )
-          ) : null}
-        </div>
+              <div className="ek-workbench__binding-query-create">
+                {connections.length > 1 ? (
+                  <label className="ek-workbench__field">
+                    <span>{t("dataBinding.form.query.connection")}</span>
+                    <WorkbenchSelect
+                      aria-label={t("dataBinding.form.query.connection")}
+                      value={queryConnectionId}
+                      options={connections.map((connection) => ({
+                        value: connection.id,
+                        label: connection.name
+                      }))}
+                      onChange={setNewQueryConnectionId}
+                    />
+                  </label>
+                ) : null}
+                <Button
+                  className="ek-ui-button--quiet"
+                  disabled={!queryConnectionId}
+                  onClick={() => setQueryEditorOpen(true)}
+                >{t("dataBinding.form.query.create")}</Button>
+              </div>
+            )}
+          </section>
+        )}
 
-        <fieldset className="ek-workbench__binding-parameters">
-          <legend>{t("dataBinding.form.parameters")}</legend>
+        <section className="ek-workbench__form-section" aria-label={t("dataBinding.form.section.device")}>
+          <label className="ek-workbench__field">
+            <span>{t("dataBinding.form.device")}</span>
+            <Input
+              type="text"
+              aria-label={t("dataBinding.form.device")}
+              placeholder={t("dataBinding.form.device.placeholder")}
+              value={draft.deviceId}
+              onChange={(event) => updateDraft({ deviceId: event.target.value })}
+            />
+          </label>
+          <div className="ek-workbench__binding-candidates">
+            <Button
+              className="ek-ui-button--quiet"
+              disabled={!service || !query || candidates.status === "loading"}
+              onClick={() => { void loadCandidates(); }}
+            >{candidates.status === "loading"
+                ? t("dataBinding.form.device.loading")
+                : t("dataBinding.form.device.load")}</Button>
+            {candidatesStale ? (
+              <small role="status">{t("dataBinding.form.device.stale")}</small>
+            ) : candidates.status === "error" ? (
+              <small role="alert">
+                {candidates.problems.length > 0
+                  ? candidates.problems.map((problem) => formatDataQueryProblem(context.i18n, problem)).join(" ")
+                  : candidates.message ?? t("dataBinding.problem.candidatesFailed")}
+              </small>
+            ) : candidates.status === "ready" ? (
+              currentCandidates.length === 0 ? (
+                <small role="status">{t("dataBinding.form.device.none")}</small>
+              ) : (
+                <label className="ek-workbench__field">
+                  <span>{t("dataBinding.form.device.candidates")}</span>
+                  <WorkbenchSelect
+                    aria-label={t("dataBinding.form.device.candidates")}
+                    value={currentCandidates.some((entity) => entity.entityId === draft.deviceId) ? draft.deviceId : ""}
+                    options={[
+                      { value: "", label: t("dataBinding.form.device.placeholder") },
+                      ...currentCandidates.map((entity) => ({
+                        value: entity.entityId,
+                        label: entity.displayName ? `${entity.displayName} (${entity.entityId})` : entity.entityId
+                      }))
+                    ]}
+                    onChange={(entityId) => updateDraft({ deviceId: entityId })}
+                  />
+                </label>
+              )
+            ) : null}
+          </div>
+        </section>
+
+        <section className="ek-workbench__form-section" aria-label={t("dataBinding.form.parameters")}>
+          <h4>{t("dataBinding.form.section.parameters")}</h4>
           {query && query.parameters.length > 0 ? (
             <p className="ek-workbench__binding-hint">{t("dataBinding.form.parameters.note")}</p>
           ) : null}
           {!query || query.parameters.length === 0 ? (
             <small>{t("dataBinding.form.parameters.empty")}</small>
-          ) : query.parameters.map((parameter) => {
-            const entry = draft.overrides[parameter.name] ?? { enabled: false, text: "" };
-            return (
-              <div
-                key={parameter.name}
-                className="ek-workbench__binding-parameter"
-                role="group"
-                aria-label={parameter.name}
-              >
-                <div className="ek-workbench__binding-parameter-main">
-                  <strong>{parameter.name}</strong>
-                  <small>{t(PARAMETER_TYPE_MESSAGE_KEYS[parameter.type])}</small>
-                  <small>
-                    {t("dataBinding.form.parameters.default")}: {
-                      Object.prototype.hasOwnProperty.call(parameter, "defaultValue")
-                        ? formatParameterValue(parameter.defaultValue as DataParameterValue)
-                        : t("dataBinding.form.parameters.noValue")
-                    }
-                  </small>
-                </div>
-                <label className="ek-workbench__request-check">
-                  <input
-                    type="checkbox"
-                    aria-label={t("dataBinding.form.parameters.overrideAria", { name: parameter.name })}
-                    checked={entry.enabled}
-                    onChange={(event) => updateOverride(parameter.name, {
-                      enabled: event.target.checked,
-                      ...(event.target.checked && parameter.type === "boolean" && entry.text === ""
-                        ? { text: "false" }
-                        : {})
-                    })}
-                  />
-                  <span>{t("dataBinding.form.parameters.override")}</span>
-                </label>
-                {entry.enabled ? (
-                  <DataParameterValueInput
-                    id={`${id}-${parameter.name}-override`}
-                    type={parameter.type}
-                    value={entry.text}
-                    disabled={false}
-                    label={t("dataBinding.form.parameters.overrideValueAria", { name: parameter.name })}
-                    trueLabel={t("dataSources.request.boolean.true")}
-                    falseLabel={t("dataSources.request.boolean.false")}
-                    onChange={(value) => updateOverride(parameter.name, { text: value })}
-                  />
-                ) : null}
-              </div>
-            );
-          })}
-        </fieldset>
+          ) : (
+            <div className="ek-workbench__binding-parameters" role="group" aria-label={t("dataBinding.form.parameters")}>
+              {query.parameters.map((parameter) => {
+                const entry = draft.overrides[parameter.name] ?? { enabled: false, text: "" };
+                return (
+                  <div
+                    key={parameter.name}
+                    className="ek-workbench__binding-parameter"
+                    role="group"
+                    aria-label={parameter.name}
+                  >
+                    <div className="ek-workbench__binding-parameter-main">
+                      <strong>{parameter.name}</strong>
+                      <small>{t(PARAMETER_TYPE_MESSAGE_KEYS[parameter.type])}</small>
+                      <small>
+                        {t("dataBinding.form.parameters.default")}: {
+                          Object.prototype.hasOwnProperty.call(parameter, "defaultValue")
+                            ? formatParameterValue(parameter.defaultValue as DataParameterValue)
+                            : t("dataBinding.form.parameters.noValue")
+                        }
+                      </small>
+                    </div>
+                    <label className="ek-workbench__request-check">
+                      <input
+                        type="checkbox"
+                        aria-label={t("dataBinding.form.parameters.overrideAria", { name: parameter.name })}
+                        checked={entry.enabled}
+                        onChange={(event) => updateOverride(parameter.name, {
+                          enabled: event.target.checked,
+                          ...(event.target.checked && parameter.type === "boolean" && entry.text === ""
+                            ? { text: "false" }
+                            : {})
+                        })}
+                      />
+                      <span>{t("dataBinding.form.parameters.override")}</span>
+                    </label>
+                    {entry.enabled ? (
+                      <DataParameterValueInput
+                        id={`${id}-${parameter.name}-override`}
+                        type={parameter.type}
+                        value={entry.text}
+                        disabled={false}
+                        label={t("dataBinding.form.parameters.overrideValueAria", { name: parameter.name })}
+                        trueLabel={t("dataSources.request.boolean.true")}
+                        falseLabel={t("dataSources.request.boolean.false")}
+                        onChange={(value) => updateOverride(parameter.name, { text: value })}
+                      />
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
 
-        <fieldset className="ek-workbench__binding-details">
-          <legend>{t("dataBinding.form.details")}</legend>
+        <section className="ek-workbench__form-section" aria-label={t("dataBinding.form.section.details")}>
+          <h4>{t("dataBinding.form.section.details")}</h4>
           <p className="ek-workbench__binding-hint">{t("dataBinding.form.details.hint")}</p>
-          {draft.details.length === 0 ? (
-            <small>{t("dataBinding.form.details.required")}</small>
-          ) : draft.details.map((detail, index) => {
-            const property = query?.mapping.properties.find((candidate) => candidate.key === detail.key) ?? null;
-            const name = property?.label ?? detail.key;
-            return (
-              <div key={detail.key} className="ek-workbench__binding-detail-row">
-                <div className="ek-workbench__binding-detail-name">
-                  <strong>{name}</strong>
-                  <small>{property?.unit ?? ""}</small>
-                </div>
-                <button
-                  type="button"
-                  aria-label={t("dataBinding.form.details.moveUpAria", { name })}
-                  disabled={index === 0}
-                  onClick={() => moveDetail(detail.key, -1)}
-                >{t("dataBinding.form.details.moveUp")}</button>
-                <button
-                  type="button"
-                  aria-label={t("dataBinding.form.details.moveDownAria", { name })}
-                  disabled={index === draft.details.length - 1}
-                  onClick={() => moveDetail(detail.key, 1)}
-                >{t("dataBinding.form.details.moveDown")}</button>
-                <label className="ek-workbench__field">
-                  <span>{t("dataBinding.form.details.label")}</span>
-                  <input
-                    type="text"
-                    aria-label={t("dataBinding.form.details.labelAria", { name })}
-                    placeholder={t("dataBinding.form.details.labelPlaceholder")}
-                    value={detail.label}
-                    onChange={(event) => updateDetail(detail.key, { label: event.target.value })}
-                  />
-                </label>
-                {property?.type === "number" ? (
-                  <label className="ek-workbench__field">
-                    <span>{t("dataBinding.form.details.precision")}</span>
-                    <input
-                      type="number"
-                      min="0"
-                      max={DATA_DETAIL_MAX_PRECISION}
-                      step="1"
-                      aria-label={t("dataBinding.form.details.precisionAria", { name })}
-                      value={detail.precision}
-                      onChange={(event) => updateDetail(detail.key, { precision: event.target.value })}
-                    />
-                  </label>
-                ) : null}
-                <button
-                  type="button"
-                  aria-label={t("dataBinding.form.details.removeAria", { name })}
-                  onClick={() => removeDetail(detail.key)}
-                >{t("dataBinding.form.details.remove")}</button>
-              </div>
-            );
-          })}
+          {draft.details.length > 0 ? (
+            <div className="ek-workbench__binding-details">
+              {draft.details.map((detail, index) => {
+                const property = query?.mapping.properties.find((item) => item.key === detail.key);
+                const name = property?.label ?? detail.key;
+                return (
+                  <div
+                    key={detail.key}
+                    className="ek-workbench__binding-detail-row"
+                    role="group"
+                    aria-label={name}
+                  >
+                    <div className="ek-workbench__binding-detail-name">
+                      <strong>{name}</strong>
+                      <small>{property?.unit || detail.key}</small>
+                      {index > 0 ? (
+                        <Button
+                          className="ek-ui-button--quiet"
+                          aria-label={t("dataBinding.form.details.moveUpAria", { name })}
+                          onClick={() => moveDetail(detail.key, -1)}
+                        >{t("dataBinding.form.details.moveUp")}</Button>
+                      ) : null}
+                      {index < draft.details.length - 1 ? (
+                        <Button
+                          className="ek-ui-button--quiet"
+                          aria-label={t("dataBinding.form.details.moveDownAria", { name })}
+                          onClick={() => moveDetail(detail.key, 1)}
+                        >{t("dataBinding.form.details.moveDown")}</Button>
+                      ) : null}
+                      {draft.details.length > 1 ? (
+                        <Button
+                          className="ek-ui-button--quiet"
+                          aria-label={t("dataBinding.form.details.removeAria", { name })}
+                          onClick={() => removeDetail(detail.key)}
+                        >{t("dataBinding.form.details.remove")}</Button>
+                      ) : null}
+                    </div>
+                    <label className="ek-workbench__field">
+                      <span>{t("dataBinding.form.details.label")}</span>
+                      <Input
+                        type="text"
+                        aria-label={t("dataBinding.form.details.labelAria", { name })}
+                        value={detail.label}
+                        placeholder={t("dataBinding.form.details.labelPlaceholder")}
+                        onChange={(event) => updateDetail(detail.key, { label: event.target.value })}
+                      />
+                    </label>
+                    {property?.type === "number" ? (
+                      <label className="ek-workbench__field">
+                        <span>{t("dataBinding.form.details.precision")}</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          max={DATA_DETAIL_MAX_PRECISION}
+                          step="1"
+                          aria-label={t("dataBinding.form.details.precisionAria", { name })}
+                          value={detail.precision}
+                          onChange={(event) => updateDetail(detail.key, { precision: event.target.value })}
+                        />
+                      </label>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <small className="ek-workbench__binding-hint">{t("dataBinding.form.details.empty")}</small>
+          )}
           {unavailableProperties.length > 0 ? (
             <div className="ek-workbench__binding-add-details">
               <span>{t("dataBinding.form.details.add")}</span>
               {unavailableProperties.map((property) => (
-                <button
+                <Button
                   key={property.key}
-                  type="button"
+                  className="ek-ui-button--quiet"
                   aria-label={t("dataBinding.form.details.addAria", { name: property.label })}
                   onClick={() => addDetail(property.key)}
-                >{property.label}</button>
+                >{property.label}</Button>
               ))}
             </div>
           ) : null}
-        </fieldset>
+        </section>
 
-        <fieldset className="ek-workbench__binding-colors">
-          <legend>{t("dataBinding.form.colors")}</legend>
+        <section
+          className="ek-workbench__form-section ek-workbench__binding-colors"
+          role="group"
+          aria-label={t("dataBinding.form.section.colors")}
+        >
+          <h4>{t("dataBinding.form.section.colors")}</h4>
+          <div className="ek-workbench__binding-colors-fields">
+            <label className="ek-workbench__request-check">
+              <input
+                type="checkbox"
+                aria-label={t("dataBinding.form.colors.enable")}
+                checked={draft.color !== null}
+                onChange={(event) => toggleColor(event.target.checked)}
+              />
+              <span>{t("dataBinding.form.colors.enable")}</span>
+            </label>
+            {draft.color ? (
+              <>
+                <p className="ek-workbench__binding-hint">{t("dataBinding.form.colors.hint")}</p>
+                <label className="ek-workbench__field">
+                  <span>{t("dataBinding.form.colors.property")}</span>
+                  <WorkbenchSelect
+                    aria-label={t("dataBinding.form.colors.property")}
+                    value={draft.color.propertyKey}
+                    options={[
+                      { value: "", label: t("dataBinding.form.colors.propertyPlaceholder") },
+                      ...colorProperties.map((property) => ({ value: property.key, label: property.label }))
+                    ]}
+                    onChange={changeColorProperty}
+                  />
+                </label>
+                <div
+                  className="ek-workbench__binding-color-rules"
+                  role="group"
+                  aria-label={t("dataBinding.form.colors.rules")}
+                >
+                  {draft.color.rules.length === 0 ? (
+                    <small>{t("dataBinding.problem.colorRulesRequired")}</small>
+                  ) : draft.color.rules.map((rule, index) => {
+                    const rulePropertyType = colorProperty?.type ?? "string";
+                    const operators = dataColorOperatorsForType(rulePropertyType);
+                    const label = t("dataBinding.form.colors.rule", { index: index + 1 });
+                    return (
+                      <div
+                        key={index}
+                        className="ek-workbench__binding-color-rule"
+                        role="group"
+                        aria-label={label}
+                      >
+                        <span className="ek-workbench__binding-color-order" aria-hidden="true">{index + 1}</span>
+                        <label className="ek-workbench__field">
+                          <span>{t("dataBinding.form.colors.operator")}</span>
+                          <select
+                            aria-label={`${label} · ${t("dataBinding.form.colors.operator")}`}
+                            value={rule.operator}
+                            onChange={(event) => updateColorRule(index, {
+                              operator: event.target.value as DataColorOperator
+                            })}
+                          >
+                            {operators.map((operator) => (
+                              <option key={operator} value={operator}>
+                                {t(`dataBinding.color.operator.${operator}`)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="ek-workbench__field">
+                          <span>{t("dataBinding.form.colors.value")}</span>
+                          {rulePropertyType === "boolean" ? (
+                            <select
+                              aria-label={`${label} · ${t("dataBinding.form.colors.value")}`}
+                              value={rule.value === "false" ? "false" : "true"}
+                              onChange={(event) => updateColorRule(index, { value: event.target.value })}
+                            >
+                              <option value="true">{t("dataSources.request.boolean.true")}</option>
+                              <option value="false">{t("dataSources.request.boolean.false")}</option>
+                            </select>
+                          ) : (
+                            <input
+                              type={rulePropertyType === "number" ? "number" : "text"}
+                              step={rulePropertyType === "number" ? "any" : undefined}
+                              aria-label={`${label} · ${t("dataBinding.form.colors.value")}`}
+                              value={rule.value}
+                              onChange={(event) => updateColorRule(index, { value: event.target.value })}
+                            />
+                          )}
+                        </label>
+                        {rule.operator === "between" ? (
+                          <label className="ek-workbench__field">
+                            <span>{t("dataBinding.form.colors.max")}</span>
+                            <input
+                              type="number"
+                              step="any"
+                              aria-label={`${label} · ${t("dataBinding.form.colors.max")}`}
+                              value={rule.max}
+                              onChange={(event) => updateColorRule(index, { max: event.target.value })}
+                            />
+                          </label>
+                        ) : null}
+                        <label className="ek-workbench__field ek-workbench__binding-color-swatch">
+                          <span>{t("dataBinding.form.colors.color")}</span>
+                          <input
+                            type="color"
+                            aria-label={`${label} · ${t("dataBinding.form.colors.color")}`}
+                            value={normalizeDataColorHex(rule.color) ?? "#22c55e"}
+                            onChange={(event) => updateColorRule(index, { color: event.target.value })}
+                          />
+                        </label>
+                        <div
+                          className="ek-workbench__binding-color-palette"
+                          role="group"
+                          aria-label={t("dataBinding.form.colors.palette")}
+                        >
+                          {COLOR_PALETTE.map((swatch) => (
+                            <button
+                              key={swatch}
+                              type="button"
+                              className="ek-workbench__binding-color-chip"
+                              style={{ backgroundColor: swatch }}
+                              aria-label={t("dataBinding.form.colors.swatch", { color: swatch })}
+                              aria-pressed={normalizeDataColorHex(rule.color) === swatch}
+                              onClick={() => updateColorRule(index, { color: swatch })}
+                            />
+                          ))}
+                        </div>
+                        <div className="ek-workbench__binding-color-actions">
+                          <button
+                            type="button"
+                            aria-label={t("dataBinding.form.colors.moveUpAria", { index: index + 1 })}
+                            disabled={index === 0}
+                            onClick={() => moveColorRule(index, -1)}
+                          >{t("dataBinding.form.colors.moveUp")}</button>
+                          <button
+                            type="button"
+                            aria-label={t("dataBinding.form.colors.moveDownAria", { index: index + 1 })}
+                            disabled={index === draft.color!.rules.length - 1}
+                            onClick={() => moveColorRule(index, 1)}
+                          >{t("dataBinding.form.colors.moveDown")}</button>
+                          <button
+                            type="button"
+                            aria-label={t("dataBinding.form.colors.removeAria", { index: index + 1 })}
+                            onClick={() => removeColorRule(index)}
+                          >{t("dataBinding.form.colors.remove")}</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button type="button" onClick={addColorRule}>{t("dataBinding.form.colors.addRule")}</button>
+                <small className="ek-workbench__binding-hint">{t("dataBinding.form.colors.default")}</small>
+                {colorCapability ? (
+                  <div
+                    className="ek-workbench__binding-color-capability"
+                    data-status={colorCapability.status}
+                    role="status"
+                  >
+                    <span>{colorCapabilityLabel(colorCapability, t)}</span>
+                    {colorCapability.problems.length > 0 ? (
+                      <ul>
+                        {colorCapability.problems.map((problem, index) => (
+                          <li key={`${problem.meshName}-${problem.slotIndex}-${index}`}>
+                            {t("dataBinding.colors.capability.problem", {
+                              materialType: problem.materialType,
+                              meshName: problem.meshName
+                            })}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
+                <div className="ek-workbench__binding-color-trial">
+                  {trialActive ? (
+                    <>
+                      <span role="status">{t("dataBinding.colors.trial.active")}</span>
+                      <button type="button" onClick={endDraftTrial}>{t("dataBinding.colors.trial.end")}</button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        disabled={!dataColorService || trialHint !== null}
+                        onClick={startDraftTrial}
+                      >{t("dataBinding.colors.trial.start")}</button>
+                      {trialHint ? <small>{t(trialHint)}</small> : null}
+                    </>
+                  )}
+                  {trialProblem ? <small role="alert">{t(trialProblem)}</small> : null}
+                </div>
+              </>
+            ) : null}
+          </div>
+        </section>
+
+        <section className="ek-workbench__form-section" aria-label={t("dataBinding.form.section.state")}>
+          <h4>{t("dataBinding.form.section.state")}</h4>
           <label className="ek-workbench__request-check">
             <input
               type="checkbox"
-              aria-label={t("dataBinding.form.colors.enable")}
-              checked={draft.color !== null}
-              onChange={(event) => toggleColor(event.target.checked)}
+              aria-label={t("dataBinding.form.enabled")}
+              checked={draft.enabled}
+              onChange={(event) => updateDraft({ enabled: event.target.checked })}
             />
-            <span>{t("dataBinding.form.colors.enable")}</span>
+            <span>{t("dataBinding.form.enabled")}</span>
           </label>
-          {draft.color ? (
-            <>
-              <p className="ek-workbench__binding-hint">{t("dataBinding.form.colors.hint")}</p>
-              <label className="ek-workbench__field">
-                <span>{t("dataBinding.form.colors.property")}</span>
-                <select
-                  aria-label={t("dataBinding.form.colors.property")}
-                  value={draft.color.propertyKey}
-                  onChange={(event) => changeColorProperty(event.target.value)}
-                >
-                  <option value="">{t("dataBinding.form.colors.propertyPlaceholder")}</option>
-                  {colorProperties.map((property) => (
-                    <option key={property.key} value={property.key}>{property.label}</option>
-                  ))}
-                </select>
-              </label>
-              <div
-                className="ek-workbench__binding-color-rules"
-                role="group"
-                aria-label={t("dataBinding.form.colors.rules")}
-              >
-                {draft.color.rules.length === 0 ? (
-                  <small>{t("dataBinding.problem.colorRulesRequired")}</small>
-                ) : draft.color.rules.map((rule, index) => {
-                  const rulePropertyType = colorProperty?.type ?? "string";
-                  const operators = dataColorOperatorsForType(rulePropertyType);
-                  const label = t("dataBinding.form.colors.rule", { index: index + 1 });
-                  return (
-                    <div
-                      key={index}
-                      className="ek-workbench__binding-color-rule"
-                      role="group"
-                      aria-label={label}
-                    >
-                      <span className="ek-workbench__binding-color-order" aria-hidden="true">{index + 1}</span>
-                      <label className="ek-workbench__field">
-                        <span>{t("dataBinding.form.colors.operator")}</span>
-                        <select
-                          aria-label={`${label} · ${t("dataBinding.form.colors.operator")}`}
-                          value={rule.operator}
-                          onChange={(event) => updateColorRule(index, {
-                            operator: event.target.value as DataColorOperator
-                          })}
-                        >
-                          {operators.map((operator) => (
-                            <option key={operator} value={operator}>
-                              {t(`dataBinding.color.operator.${operator}`)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="ek-workbench__field">
-                        <span>{t("dataBinding.form.colors.value")}</span>
-                        {rulePropertyType === "boolean" ? (
-                          <select
-                            aria-label={`${label} · ${t("dataBinding.form.colors.value")}`}
-                            value={rule.value === "false" ? "false" : "true"}
-                            onChange={(event) => updateColorRule(index, { value: event.target.value })}
-                          >
-                            <option value="true">{t("dataSources.request.boolean.true")}</option>
-                            <option value="false">{t("dataSources.request.boolean.false")}</option>
-                          </select>
-                        ) : (
-                          <input
-                            type={rulePropertyType === "number" ? "number" : "text"}
-                            step={rulePropertyType === "number" ? "any" : undefined}
-                            aria-label={`${label} · ${t("dataBinding.form.colors.value")}`}
-                            value={rule.value}
-                            onChange={(event) => updateColorRule(index, { value: event.target.value })}
-                          />
-                        )}
-                      </label>
-                      {rule.operator === "between" ? (
-                        <label className="ek-workbench__field">
-                          <span>{t("dataBinding.form.colors.max")}</span>
-                          <input
-                            type="number"
-                            step="any"
-                            aria-label={`${label} · ${t("dataBinding.form.colors.max")}`}
-                            value={rule.max}
-                            onChange={(event) => updateColorRule(index, { max: event.target.value })}
-                          />
-                        </label>
-                      ) : null}
-                      <label className="ek-workbench__field ek-workbench__binding-color-swatch">
-                        <span>{t("dataBinding.form.colors.color")}</span>
-                        <input
-                          type="color"
-                          aria-label={`${label} · ${t("dataBinding.form.colors.color")}`}
-                          value={normalizeDataColorHex(rule.color) ?? "#22c55e"}
-                          onChange={(event) => updateColorRule(index, { color: event.target.value })}
-                        />
-                      </label>
-                      <div
-                        className="ek-workbench__binding-color-palette"
-                        role="group"
-                        aria-label={t("dataBinding.form.colors.palette")}
-                      >
-                        {COLOR_PALETTE.map((swatch) => (
-                          <button
-                            key={swatch}
-                            type="button"
-                            className="ek-workbench__binding-color-chip"
-                            style={{ backgroundColor: swatch }}
-                            aria-label={t("dataBinding.form.colors.swatch", { color: swatch })}
-                            aria-pressed={normalizeDataColorHex(rule.color) === swatch}
-                            onClick={() => updateColorRule(index, { color: swatch })}
-                          />
-                        ))}
-                      </div>
-                      <div className="ek-workbench__binding-color-actions">
-                        <button
-                          type="button"
-                          aria-label={t("dataBinding.form.colors.moveUpAria", { index: index + 1 })}
-                          disabled={index === 0}
-                          onClick={() => moveColorRule(index, -1)}
-                        >{t("dataBinding.form.colors.moveUp")}</button>
-                        <button
-                          type="button"
-                          aria-label={t("dataBinding.form.colors.moveDownAria", { index: index + 1 })}
-                          disabled={index === draft.color!.rules.length - 1}
-                          onClick={() => moveColorRule(index, 1)}
-                        >{t("dataBinding.form.colors.moveDown")}</button>
-                        <button
-                          type="button"
-                          aria-label={t("dataBinding.form.colors.removeAria", { index: index + 1 })}
-                          onClick={() => removeColorRule(index)}
-                        >{t("dataBinding.form.colors.remove")}</button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <button type="button" onClick={addColorRule}>{t("dataBinding.form.colors.addRule")}</button>
-              <small className="ek-workbench__binding-hint">{t("dataBinding.form.colors.default")}</small>
-              {colorCapability ? (
-                <div
-                  className="ek-workbench__binding-color-capability"
-                  data-status={colorCapability.status}
-                  role="status"
-                >
-                  <span>{colorCapabilityLabel(colorCapability, t)}</span>
-                  {colorCapability.problems.length > 0 ? (
-                    <ul>
-                      {colorCapability.problems.map((problem, index) => (
-                        <li key={`${problem.meshName}-${problem.slotIndex}-${index}`}>
-                          {t("dataBinding.colors.capability.problem", {
-                            materialType: problem.materialType,
-                            meshName: problem.meshName
-                          })}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              ) : null}
-              <div className="ek-workbench__binding-color-trial">
-                {trialActive ? (
-                  <>
-                    <span role="status">{t("dataBinding.colors.trial.active")}</span>
-                    <button type="button" onClick={endDraftTrial}>{t("dataBinding.colors.trial.end")}</button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      disabled={!dataColorService || trialHint !== null}
-                      onClick={startDraftTrial}
-                    >{t("dataBinding.colors.trial.start")}</button>
-                    {trialHint ? <small>{t(trialHint)}</small> : null}
-                  </>
-                )}
-                {trialProblem ? <small role="alert">{t(trialProblem)}</small> : null}
-              </div>
-            </>
-          ) : null}
-        </fieldset>
-
-        <label className="ek-workbench__request-check">
-          <input
-            type="checkbox"
-            aria-label={t("dataBinding.form.enabled")}
-            checked={draft.enabled}
-            onChange={(event) => updateDraft({ enabled: event.target.checked })}
-          />
-          <span>{t("dataBinding.form.enabled")}</span>
-        </label>
-        <small className="ek-workbench__binding-hint">{t("dataBinding.form.enabledHint")}</small>
+          <small className="ek-workbench__binding-hint">{t("dataBinding.form.enabledHint")}</small>
+        </section>
 
         {problems.length > 0 ? (
           <div className="ek-workbench__binding-problems" role="alert" aria-label={t("dataBinding.form.problems")}>
@@ -1042,14 +1087,21 @@ export function DataBindingForm({
         {status ? <p className="ek-workbench__data-status" role="status">{t(status.key, status.values)}</p> : null}
 
         <div className="ek-workbench__binding-actions">
-          <button type="submit">{savedBinding
+          <Button type="submit">{savedBinding
             ? t("dataBinding.form.save")
-            : t("dataBinding.form.create")}</button>
-          <button type="button" disabled={!dirty && !savedBinding} onClick={resetDraft}>
+            : t("dataBinding.form.create")}</Button>
+          <Button
+            className="ek-ui-button--quiet"
+            disabled={!dirty && !savedBinding}
+            onClick={resetDraft}
+          >
             {t("dataBinding.form.cancel")}
-          </button>
+          </Button>
           {savedBinding ? (
-            <button type="button" onClick={removeBinding}>{t("dataBinding.form.unbind")}</button>
+            <Button
+              className="ek-ui-button--quiet"
+              onClick={removeBinding}
+            >{t("dataBinding.form.unbind")}</Button>
           ) : null}
         </div>
       </form>

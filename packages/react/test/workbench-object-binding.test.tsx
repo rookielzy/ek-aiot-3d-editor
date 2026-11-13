@@ -11,7 +11,7 @@ import {
   type RendererLike
 } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
-import { selectWorkbenchOption } from "./support/workbench-select";
+import { selectWorkbenchOption, workbenchOptionLabels } from "./support/workbench-select";
 
 describe("React object binding authoring", () => {
   beforeEach(() => {
@@ -29,7 +29,7 @@ describe("React object binding authoring", () => {
     fireEvent.click(screen.getByTitle("Pump object"));
 
     expect(screen.getByRole("heading", { name: "Device data" })).toBeTruthy();
-    expect(screen.getByLabelText("Query").textContent).toContain("Pump status");
+    expect(await screen.findByText("Pump status")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Device ID"), { target: { value: "pump-manual-99" } });
     fireEvent.click(screen.getByLabelText("Override areaId for this object"));
     fireEvent.change(screen.getByLabelText("Override value for areaId"), { target: { value: "B" } });
@@ -93,8 +93,8 @@ describe("React object binding authoring", () => {
 
     const candidates = await screen.findByLabelText("Devices in current result");
     expect(urls).toEqual(["https://api.example.test/v1/pumps?areaId=B"]);
-    expect(within(candidates).getByRole("option", { name: "Pump 2 (pump-2)" })).toBeTruthy();
-    fireEvent.change(candidates, { target: { value: "pump-2" } });
+    expect(workbenchOptionLabels(candidates)).toContain("Pump 2 (pump-2)");
+    await selectWorkbenchOption(candidates, "Pump 2 (pump-2)");
     expect((screen.getByLabelText("Device ID") as HTMLInputElement).value).toBe("pump-2");
 
     fireEvent.change(screen.getByLabelText("Override value for areaId"), { target: { value: "C" } });
@@ -260,7 +260,8 @@ describe("React object binding authoring", () => {
     expect((screen.getByLabelText("Device ID") as HTMLInputElement).value).toBe("pump-manual-1");
     const savedQuery = Object.values(editor.getSnapshot().dataSources.queries)[0];
     expect(savedQuery).toMatchObject({ name: "Pump query", path: "/pumps" });
-    expect((screen.getByLabelText("Query") as HTMLSelectElement).value).toBe(savedQuery.id);
+    expect(await screen.findByText("Pump query")).toBeTruthy();
+    expect(screen.queryByText("Pump status")).toBeNull();
     expect(screen.getByText("Temperature")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Create query" }));
@@ -341,7 +342,7 @@ describe("React object binding authoring", () => {
     expect(await screen.findByLabelText("Devices in current result")).toBeTruthy();
     expect(requests).toHaveLength(2);
     await act(async () => pending.resolve({ status: 200, body: JSON.stringify({ items: [] }) }));
-    expect(screen.getByRole("option", { name: "Pump 1 (pump-1)" })).toBeTruthy();
+    expect(workbenchOptionLabels(screen.getByLabelText("Devices in current result"))).toContain("Pump 1 (pump-1)");
 
     view.unmount();
     editor.dispose();
@@ -354,8 +355,10 @@ describe("React object binding authoring", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Manage bindings for Pump status" }));
     const dialog = await screen.findByRole("dialog", { name: "Bindings for Pump status" });
-    expect(within(dialog).getByText("Pump status")).toBeTruthy();
-    expect(within(dialog).queryByLabelText("Query")).toBeNull();
+    expect(within(dialog).getByRole("heading", { name: "Bindings for Pump status" })).toBeTruthy();
+    // The query is fixed by the dialog, so the object form offers no query picker.
+    expect(within(dialog).queryByRole("combobox", { name: "Query" })).toBeNull();
+    expect(within(dialog).getByRole("combobox", { name: "Object" }).textContent).toContain("Pump object");
 
     fireEvent.change(within(dialog).getByLabelText("Device ID"), { target: { value: "pump-77" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create binding" }));
@@ -369,6 +372,66 @@ describe("React object binding authoring", () => {
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Close bindings" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Bindings for Pump status" })).toBeNull());
+
+    view.unmount();
+    editor.dispose();
+  });
+
+  it("locates a bound object in the scene and announces the saved binding", async () => {
+    const editor = createSeedEditor();
+    const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    openDataPanel();
+
+    fireEvent.click(screen.getByRole("button", { name: "Manage bindings for Pump status" }));
+    const dialog = await screen.findByRole("dialog", { name: "Bindings for Pump status" });
+    fireEvent.change(within(dialog).getByLabelText("Device ID"), { target: { value: "pump-77" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create binding" }));
+    await within(dialog).findByText("Binding saved. Undo to discard.");
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Locate Pump object in the scene" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Bindings for Pump status" })).toBeNull());
+
+    expect(editor.getSnapshot().selection.nodeId).toBe("object-a");
+    // The Inspector shows the durable binding of the located object.
+    expect(screen.getByRole("heading", { name: "Device data" })).toBeTruthy();
+    expect((screen.getByLabelText("Device ID") as HTMLInputElement).value).toBe("pump-77");
+    expect(screen.getByText("Selected Pump object in the scene.")).toBeTruthy();
+
+    view.unmount();
+    editor.dispose();
+  });
+
+  it("resolves the discard prompt before the dialog listens to Escape", async () => {
+    const editor = createSeedEditor();
+    const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    openDataPanel();
+
+    fireEvent.click(screen.getByRole("button", { name: "Manage bindings for Pump status" }));
+    const dialog = await screen.findByRole("dialog", { name: "Bindings for Pump status" });
+    fireEvent.change(within(dialog).getByLabelText("Device ID"), { target: { value: "pump-draft" } });
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    const guard = await within(dialog).findByRole("alertdialog", { name: "Discard binding changes?" });
+    fireEvent.keyDown(guard, { key: "Escape" });
+    await waitFor(() => expect(within(dialog).queryByRole("alertdialog")).toBeNull());
+    // Cancelling the prompt keeps the draft and the dialog.
+    expect((within(dialog).getByLabelText("Device ID") as HTMLInputElement).value).toBe("pump-draft");
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await within(dialog).findByRole("alertdialog", { name: "Discard binding changes?" });
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => expect(within(dialog).queryByRole("alertdialog")).toBeNull());
+    expect((within(dialog).getByLabelText("Device ID") as HTMLInputElement).value).toBe("pump-draft");
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close bindings" }));
+    const closeGuard = await within(dialog).findByRole("alertdialog", { name: "Discard binding changes?" });
+    // The panel entry point owns the focus again once the dialog is gone.
+    fireEvent.click(within(closeGuard).getByRole("button", { name: "Discard changes" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Bindings for Pump status" })).toBeNull());
+    expect(editor.getSnapshot().dataSources.bindings).toEqual({});
+    await waitFor(() => expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Manage bindings for Pump status" })
+    ));
 
     view.unmount();
     editor.dispose();
@@ -411,16 +474,17 @@ describe("React object binding authoring", () => {
     }));
     const dialog = await screen.findByRole("dialog", { name: labels.dialog });
     fireEvent.change(within(dialog).getByLabelText(labels.device), { target: { value: "pump-draft" } });
-    fireEvent.change(within(dialog).getByLabelText(labels.object), { target: { value: "object-b" } });
+    await selectWorkbenchOption(within(dialog).getByLabelText(labels.object), "Valve object");
     const switchGuard = await within(dialog).findByRole("alertdialog", { name: labels.guard });
-    expect((within(dialog).getByLabelText(labels.object) as HTMLSelectElement).value).toBe("object-a");
-    expect(document.activeElement).toBe(within(switchGuard).getByRole("button", { name: labels.keep }));
+    expect(within(dialog).getByLabelText(labels.object).textContent).toContain("Pump object");
+
     fireEvent.click(within(switchGuard).getByRole("button", { name: labels.keep }));
+    expect(within(dialog).getByLabelText(labels.object).textContent).toContain("Pump object");
     expect((within(dialog).getByLabelText(labels.device) as HTMLInputElement).value).toBe("pump-draft");
 
-    fireEvent.change(within(dialog).getByLabelText(labels.object), { target: { value: "object-b" } });
+    await selectWorkbenchOption(within(dialog).getByLabelText(labels.object), "Valve object");
     fireEvent.click(within(dialog).getByRole("button", { name: labels.discard }));
-    expect((within(dialog).getByLabelText(labels.object) as HTMLSelectElement).value).toBe("object-b");
+    expect(within(dialog).getByLabelText(labels.object).textContent).toContain("Valve object");
     expect((within(dialog).getByLabelText(labels.device) as HTMLInputElement).value).toBe("");
 
     fireEvent.change(within(dialog).getByLabelText(labels.device), { target: { value: "valve-draft" } });

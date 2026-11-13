@@ -11,6 +11,7 @@ import {
   type RendererLike
 } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
+import { selectWorkbenchOption } from "./support/workbench-select";
 
 describe("React data color authoring", () => {
   beforeEach(() => {
@@ -25,9 +26,9 @@ describe("React data color authoring", () => {
 
     const section = screen.getByRole("group", { name: "Status color" });
     fireEvent.click(within(section).getByLabelText("Use status color"));
-    const property = within(section).getByLabelText("Color property") as HTMLSelectElement;
-    expect(property.value).toBe("temperature");
-    fireEvent.change(property, { target: { value: "running" } });
+    const property = within(section).getByRole("combobox", { name: "Color property" });
+    expect(property.textContent).toContain("Temperature");
+    await selectWorkbenchOption(property, "Running");
     await within(section).findByLabelText("Color rule 1 · Color");
     fireEvent.click(within(section).getByRole("button", { name: "Use color #3b82f6" }));
     expect((within(section).getByLabelText("Color rule 1 · Color") as HTMLInputElement).value).toBe("#3b82f6");
@@ -64,10 +65,10 @@ describe("React data color authoring", () => {
 
     const section = screen.getByRole("group", { name: "Status color" });
     fireEvent.click(within(section).getByLabelText("Use status color"));
-    fireEvent.change(within(section).getByLabelText("Color property"), { target: { value: "running" } });
+    await selectWorkbenchOption(within(section).getByLabelText("Color property"), "Running");
     fireEvent.click(screen.getByRole("button", { name: "Load devices" }));
-    const candidates = await screen.findByLabelText("Devices in current result");
-    fireEvent.change(candidates, { target: { value: "pump-1" } });
+    const candidates = await screen.findByRole("combobox", { name: "Devices in current result" });
+    await selectWorkbenchOption(candidates, "Pump 1 (pump-1)");
 
     fireEvent.click(within(section).getByRole("button", { name: "Try draft on object" }));
 

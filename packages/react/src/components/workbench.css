@@ -2185,6 +2185,7 @@ button.ek-workbench__status-chip { cursor: pointer; font: inherit; }
 }
 
 .ek-workbench__form-section legend,
+.ek-workbench__form-section > h4,
 .ek-workbench__request-section > h4 {
   margin: 0;
   padding: 0 var(--ek-workbench-space-1, 0.25rem);
@@ -2468,20 +2469,9 @@ button.ek-workbench__status-chip { cursor: pointer; font: inherit; }
 
 .ek-workbench__binding-parameters,
 .ek-workbench__binding-details,
-.ek-workbench__binding-colors {
+.ek-workbench__binding-colors-fields {
   display: grid;
   gap: var(--ek-workbench-space-2);
-  border: 1px solid var(--ek-workbench-border);
-  border-radius: var(--ek-workbench-radius-md, 8px);
-  padding: var(--ek-workbench-space-3);
-}
-
-.ek-workbench__binding-parameters > legend,
-.ek-workbench__binding-details > legend,
-.ek-workbench__binding-colors > legend {
-  padding: 0 0.25rem;
-  font-size: 0.74rem;
-  font-weight: 600;
 }
 
 .ek-workbench__binding-color-rules {
@@ -2622,8 +2612,9 @@ button.ek-workbench__status-chip { cursor: pointer; font: inherit; }
 
 .ek-workbench__binding-detail-name {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.35rem;
+  flex-wrap: wrap;
   font-size: 0.74rem;
 }
 
@@ -2654,10 +2645,31 @@ button.ek-workbench__status-chip { cursor: pointer; font: inherit; }
   padding-left: 1.1rem;
 }
 
+/* The form is long, so its actions stay reachable while the form scrolls. */
 .ek-workbench__binding-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   display: flex;
   gap: var(--ek-workbench-space-2);
   flex-wrap: wrap;
+  margin-top: var(--ek-workbench-space-2);
+  padding-top: var(--ek-workbench-space-3);
+  border-top: 1px solid var(--ek-workbench-border);
+}
+
+.ek-workbench__binding-actions .ek-ui-button[type="submit"] {
+  border-color: var(--ek-workbench-accent);
+  background: var(--ek-workbench-accent);
+  color: #fff;
+}
+
+.ek-workbench__binding-actions .ek-ui-button[type="submit"]:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.ek-workbench__data-status:has(+ .ek-workbench__binding-actions) {
+  margin: 0;
 }
 
 .ek-workbench__binding-unsupported {
@@ -2666,42 +2678,10 @@ button.ek-workbench__status-chip { cursor: pointer; font: inherit; }
   justify-items: start;
 }
 
-.ek-workbench__binding-dialog::backdrop {
-  background: #10182826;
-}
-
-.ek-workbench__binding-dialog {
-  position: fixed;
-  z-index: 45;
-  top: max(3.5rem, 8vh);
-  left: max(1.5rem, 8vw);
-  right: max(1.5rem, 8vw);
-  bottom: auto;
-  width: auto;
-  max-width: 48rem;
-  max-height: min(86vh, 48rem);
-  margin-inline: auto;
-  margin-block: 0;
-  color: var(--ek-workbench-text);
-  overflow: auto;
-  padding: var(--ek-workbench-space-4);
-  border: 1px solid var(--ek-workbench-border-strong, var(--ek-workbench-border));
-  border-radius: var(--ek-workbench-radius-md, 8px);
-  background: var(--ek-workbench-panel-bg);
-  box-shadow: 0 18px 48px #10182833;
-}
-
-.ek-workbench__binding-dialog-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--ek-workbench-space-3);
-  margin-bottom: var(--ek-workbench-space-3);
-}
-
-.ek-workbench__binding-dialog-header h2 {
-  margin: 0;
-  font-size: 0.95rem;
+/* Object bindings dialog: reuses the shared data-section dialog shell and keeps
+   the bound-object list compact above the scrollable form. */
+.ek-workbench__binding-dialog-dialog {
+  max-width: 60rem;
 }
 
 .ek-workbench__binding-dialog-list {
@@ -2711,22 +2691,88 @@ button.ek-workbench__status-chip { cursor: pointer; font: inherit; }
   font-size: 0.72rem;
 }
 
+.ek-workbench__binding-dialog-list > strong {
+  color: var(--ek-workbench-text-muted, var(--ek-workbench-text));
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .ek-workbench__binding-dialog-list ul {
+  display: grid;
+  gap: var(--ek-workbench-space-1);
   margin: 0;
   padding: 0;
   list-style: none;
-  display: grid;
-  gap: var(--ek-workbench-space-2);
 }
 
 .ek-workbench__binding-dialog-list li {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--ek-workbench-space-2);
+  padding: 0.3rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: var(--ek-workbench-radius-sm);
+}
+
+.ek-workbench__binding-dialog-list li[data-current="true"] {
+  border-color: var(--ek-workbench-border);
+  background: var(--ek-workbench-surface, var(--ek-workbench-panel-bg));
+}
+
+.ek-workbench__binding-dialog-row-name {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.ek-workbench__binding-dialog-row-name > span {
+  overflow-wrap: anywhere;
 }
 
 .ek-workbench__binding-dialog-list small {
   color: var(--ek-workbench-muted);
+  overflow-wrap: anywhere;
+}
+
+.ek-workbench__binding-dialog-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  justify-content: flex-end;
+}
+
+.ek-workbench__binding-dialog-row-actions button[aria-pressed="true"] {
+  border-color: var(--ek-workbench-accent);
+  color: var(--ek-workbench-accent);
+}
+
+.ek-workbench__binding-dialog-target {
+  margin-block: var(--ek-workbench-space-3);
+}
+
+.ek-workbench__binding-dialog-target-name {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ek-workbench-space-2);
+  flex-wrap: wrap;
+  font-size: 0.72rem;
+  color: var(--ek-workbench-muted);
+}
+
+.ek-workbench__binding-dialog-target-name small[data-tone="target"] {
+  color: var(--ek-workbench-text);
+}
+
+.ek-workbench__binding-dialog-target-name small[data-tone="stored"] {
+  color: var(--ek-workbench-muted);
+}
+
+.ek-workbench__binding-dialog-target-name small[data-tone="draft"] {
+  color: var(--ek-workbench-warning, #b54708);
+  font-weight: 600;
 }
 
 .ek-workbench__data-preview {

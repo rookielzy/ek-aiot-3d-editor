@@ -1,17 +1,52 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { buildDeleteDataObjectBindingCommand, type DataBindingProblem } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
 import { DataBindingForm } from "./DataBindingForm";
+import { Button } from "./ui/Button";
+import { Dialog } from "./ui/Dialog";
+import { WorkbenchSelect } from "./ui/WorkbenchSelect";
+
+/** The action the user asked for before the draft guard interrupted it. */
+type PendingAction = { run(): void } | { objectNodeId: string };
+
+/** Everything needed to run a leaving action and to return focus to its trigger. */
+interface GuardRequest {
+  action: () => void;
+  trigger: HTMLElement | null;
+}
 
 export interface DataQueryBindingsDialogProps {
   context: ResolvedWorkbenchContext;
   queryId: string;
+  /** Leaves the dialog and returns focus to the row that opened it. */
   onClose(): void;
+  /** Reports the object the scene selected after a locate left the dialog. */
+  onLocated?(node: { nodeId: string; name: string }): void;
 }
 
-export function DataQueryBindingsDialog({ context, queryId, onClose }: DataQueryBindingsDialogProps) {
+/**
+ * Binds GLB objects to one saved query. The bound-object list, the object picker
+ * and the binding form share one draft boundary: leaving the dialog, switching
+ * objects, locating another object in the scene and unbinding all resolve the
+ * unsaved binding changes of the open form first.
+ */
+export function DataQueryBindingsDialog({
+  context,
+  queryId,
+  onClose,
+  onLocated
+}: DataQueryBindingsDialogProps) {
   const query = context.snapshot.dataSources.queries[queryId] ?? null;
-  const objectNodes = Object.values(context.snapshot.nodes).filter((node) => node.kind === "object");
+  // Only GLB object nodes can carry a binding; the asset name is what the user
+  // recognises in the scene, the node name is the fallback.
+  const objectNodes = Object.values(context.snapshot.nodes)
+    .filter((node) => node.kind === "object")
+    .map((node) => ({
+      id: node.id,
+      name: node.name,
+      label: context.snapshot.objects[node.objectId]?.asset.label ?? node.name
+    }));
+  const objectLabels = new Map(objectNodes.map((node) => [node.id, node.label]));
   const bindings = Object.values(context.snapshot.dataSources.bindings)
     .filter((binding) => binding.queryId === queryId);
   const [selectedObjectId, setSelectedObjectId] = useState(() =>
@@ -19,30 +54,22 @@ export function DataQueryBindingsDialog({ context, queryId, onClose }: DataQuery
       ?? objectNodes[0]?.id
       ?? ""
   );
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
-  const keepEditingRef = useRef<HTMLButtonElement>(null);
-  const discardRef = useRef<HTMLButtonElement>(null);
-  const pendingActionRef = useRef<(() => void) | null>(null);
   const [dirty, setDirty] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [problems, setProblems] = useState<DataBindingProblem[]>([]);
-  const titleId = useId();
+  // A pending action is either a plain callback (close, locate, unbind) or the
+  // object id of a switch that waits for the discard decision.
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const guardTriggerRef = useRef<HTMLElement | null>(null);
+  const objectRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const t = context.i18n.t;
 
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog || dialog.open) {
-      return;
-    }
-    if (typeof dialog.showModal === "function") {
-      dialog.showModal();
-    } else {
-      dialog.setAttribute("open", "");
-    }
-    closeRef.current?.focus();
-  }, []);
+  const selectedBinding = selectedObjectId
+    ? context.snapshot.dataSources.bindings[selectedObjectId] ?? null
+    : null;
+  const objectOptions = objectNodes.map((node) => ({ value: node.id, label: node.label }));
 
   useEffect(() => {
     if (selectedObjectId && !objectNodes.some((node) => node.id === selectedObjectId)) {
@@ -51,74 +78,99 @@ export function DataQueryBindingsDialog({ context, queryId, onClose }: DataQuery
     }
   }, [objectNodes, selectedObjectId]);
 
-  useEffect(() => {
+  // The discard layer is the topmost layer; it resolves one action at a time.
+  function requestAction(action: GuardRequest): void {
     if (discardOpen) {
-      keepEditingRef.current?.focus();
       return;
     }
-    closeRef.current?.focus();
-  }, [discardOpen]);
-
-  function requestAction(action: () => void): void {
     if (dirty) {
-      pendingActionRef.current = action;
+      setPendingAction({ run: action.action });
+      guardTriggerRef.current = action.trigger;
       setDiscardOpen(true);
       return;
     }
-    action();
+    action.action();
+  }
+
+  /** Leaves the dialog; the panel focuses the row that opened it. */
+  function close(): void {
+    requestAction({ action: () => onClose(), trigger: closeRef.current });
   }
 
   function keepEditing(): void {
-    pendingActionRef.current = null;
+    setPendingAction(null);
     setDiscardOpen(false);
+    // Keep editing: the draft stays untouched; the dialog shell restores focus.
   }
 
   function discardChanges(): void {
-    const action = pendingActionRef.current;
-    pendingActionRef.current = null;
-    setDiscardOpen(false);
+    const action = pendingAction;
+    setPendingAction(null);
     setDirty(false);
-    action?.();
+    setDiscardOpen(false);
+    if (!action) return;
+    if ("objectNodeId" in action) {
+      setSelectedObjectId(action.objectNodeId);
+      return;
+    }
+    action.run();
   }
 
-  function selectObject(objectNodeId: string): void {
-    if (objectNodeId === selectedObjectId) return;
-    requestAction(() => setSelectedObjectId(objectNodeId));
-  }
-
-  function selectInScene(objectNodeId: string): void {
-    requestAction(() => {
-      context.dispatch({
-        type: "select-nodes",
-        mode: "replace",
-        nodeIds: [objectNodeId],
-        primaryNodeId: objectNodeId
-      });
-      onClose();
+  /**
+   * Switches the bound object, guarded by the draft. The guard runs after the
+   * triggering control (a list row button or the picker) lost focus, so the
+   * triggering control is passed in explicitly.
+   */
+  function selectObject(objectNodeId: string, trigger?: HTMLElement | null): void {
+    if (objectNodeId === selectedObjectId) {
+      return;
+    }
+    requestAction({
+      action: () => setSelectedObjectId(objectNodeId),
+      trigger: trigger ?? objectRef.current
     });
   }
 
-  function unbind(objectNodeId: string, name: string): void {
-    requestAction(() => {
-      const result = buildDeleteDataObjectBindingCommand(context.snapshot, objectNodeId);
-      if (!result.ok) {
-        setProblems(result.problems);
-        return;
+  function selectInScene(objectNodeId: string, trigger: HTMLElement | null): void {
+    requestAction({
+      action: () => {
+        context.dispatch({
+          type: "select-nodes",
+          mode: "replace",
+          nodeIds: [objectNodeId],
+          primaryNodeId: objectNodeId
+        });
+        onLocated?.({ nodeId: objectNodeId, name: objectLabels.get(objectNodeId) ?? objectNodeId });
+        onClose();
+      },
+      trigger
+    });
+  }
+
+  function unbind(objectNodeId: string, name: string, trigger: HTMLElement | null): void {
+    requestAction({
+      trigger,
+      action: () => {
+        const result = buildDeleteDataObjectBindingCommand(context.snapshot, objectNodeId);
+        if (!result.ok) {
+          setProblems(result.problems);
+          return;
+        }
+        const dispatched = context.dispatch(result.command);
+        if (!dispatched.ok) {
+          setProblems([{
+            field: "binding",
+            code: "command-failed",
+            message: dispatched.error ?? ""
+          }]);
+          return;
+        }
+        setProblems([]);
+        setStatus(t("dataBinding.queryDialog.unbound", { name }));
+        if (objectNodeId === selectedObjectId) {
+          setDirty(false);
+        }
       }
-      const dispatched = context.dispatch(result.command);
-      if (!dispatched.ok) {
-        setProblems([{
-          field: "binding",
-          code: "command-failed",
-          message: dispatched.error ?? ""
-        }]);
-        return;
-      }
-      setProblems([]);
-      if (objectNodeId === selectedObjectId) {
-        setDirty(false);
-      }
-      setStatus(t("dataBinding.queryDialog.unbound", { name }));
     });
   }
 
@@ -127,133 +179,131 @@ export function DataQueryBindingsDialog({ context, queryId, onClose }: DataQuery
   }
 
   return (
-    <dialog
-      ref={dialogRef}
-      className="ek-workbench__binding-dialog"
-      aria-labelledby={titleId}
-      onCancel={(event) => {
-        event.preventDefault();
-        if (discardOpen) {
-          keepEditing();
-          return;
-        }
-        requestAction(onClose);
-      }}
-      onClose={onClose}
-      onKeyDownCapture={(event) => {
-        event.stopPropagation();
-        if (!discardOpen || event.key !== "Tab") return;
-        if (event.shiftKey && event.target === keepEditingRef.current) {
-          event.preventDefault();
-          discardRef.current?.focus();
-        }
-        if (!event.shiftKey && event.target === discardRef.current) {
-          event.preventDefault();
-          keepEditingRef.current?.focus();
-        }
-      }}
+    <Dialog
+      className="ek-workbench__binding-dialog-dialog"
+      label={t("dataBinding.queryDialog.title", { name: query.name })}
+      title={t("dataBinding.queryDialog.title", { name: query.name })}
+      headerActions={(
+        <Button ref={closeRef} data-dialog-dismiss onClick={close}>
+          {t("dataBinding.queryDialog.close")}
+        </Button>
+      )}
+      initialFocus={objectRef}
+      fallbackFocus={guardTriggerRef}
+      onDismiss={close}
+      discard={discardOpen ? {
+        title: t("dataBinding.queryDialog.discard.title"),
+        description: t("dataBinding.queryDialog.discard.description"),
+        keepLabel: t("dataSources.queryEditor.discard.keep"),
+        discardLabel: t("dataSources.queryEditor.discard.confirm"),
+        onKeepEditing: keepEditing,
+        onDiscard: discardChanges
+      } : undefined}
     >
-      <div inert={discardOpen ? true : undefined}>
-        <header className="ek-workbench__binding-dialog-header">
-          <h2 id={titleId}>{t("dataBinding.queryDialog.title", { name: query.name })}</h2>
-          <button ref={closeRef} type="button" onClick={() => requestAction(onClose)}>{t("dataBinding.queryDialog.close")}</button>
-        </header>
-
-        {objectNodes.length === 0 ? (
-          <p className="ek-workbench__empty">{t("dataBinding.queryDialog.noObjects")}</p>
-        ) : (
-          <>
+      {objectNodes.length === 0 ? (
+        <p className="ek-workbench__empty">{t("dataBinding.queryDialog.noObjects")}</p>
+      ) : (
+        <>
+          <div className="ek-workbench__binding-dialog-list" role="group" aria-label={t("dataBinding.queryDialog.list")}>
+            <strong>{t("dataBinding.queryDialog.list")}</strong>
             {bindings.length === 0 ? (
               <p className="ek-workbench__binding-hint">{t("dataBinding.queryDialog.empty")}</p>
             ) : (
-              <div className="ek-workbench__binding-dialog-list">
-                <strong>{t("dataBinding.queryDialog.list")}</strong>
-                <ul>
-                  {bindings.map((binding) => {
-                    const node = objectNodes.find((candidate) => candidate.id === binding.objectNodeId);
-                    const name = node?.name ?? binding.objectNodeId;
-                    return (
-                      <li key={binding.objectNodeId}>
+              <ul>
+                {bindings.map((binding) => {
+                  const name = objectLabels.get(binding.objectNodeId) ?? binding.objectNodeId;
+                  const current = binding.objectNodeId === selectedObjectId;
+                  return (
+                    <li key={binding.objectNodeId} data-current={current ? "true" : undefined}>
+                      <div className="ek-workbench__binding-dialog-row-name">
                         <span>{name}</span>
                         <small>{binding.deviceId}</small>
-                        <button
-                          type="button"
+                      </div>
+                      <div className="ek-workbench__binding-dialog-row-actions">
+                        <Button
+                          className="ek-ui-button--quiet"
+                          data-dialog-dismiss
+                          aria-pressed={current}
                           aria-label={t("dataBinding.queryDialog.edit", { name })}
-                          onClick={() => selectObject(binding.objectNodeId)}
-                        >{t("dataBinding.queryDialog.open")}</button>
-                        <button
-                          type="button"
-                          aria-label={t("dataBinding.queryDialog.selectAria", { name })}
-                          onClick={() => selectInScene(binding.objectNodeId)}
-                        >{t("dataBinding.queryDialog.select")}</button>
-                        <button
-                          type="button"
+                          onClick={(event) => selectObject(binding.objectNodeId, event.currentTarget)}
+                        >{t("dataBinding.queryDialog.editAction")}</Button>
+                        <Button
+                          className="ek-ui-button--quiet"
+                          data-dialog-dismiss
+                          aria-label={t("dataBinding.queryDialog.locateAria", { name })}
+                          onClick={(event) => selectInScene(binding.objectNodeId, event.currentTarget)}
+                        >{t("dataBinding.queryDialog.locate")}</Button>
+                        <Button
+                          className="ek-ui-button--quiet"
+                          data-dialog-dismiss
                           aria-label={t("dataBinding.queryDialog.unbindAria", { name })}
-                          onClick={() => unbind(binding.objectNodeId, name)}
-                        >{t("dataBinding.queryDialog.unbind")}</button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
+                          onClick={(event) => unbind(binding.objectNodeId, name, event.currentTarget)}
+                        >{t("dataBinding.queryDialog.unbind")}</Button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
+          </div>
 
-            {status ? <p className="ek-workbench__data-status" role="status">{status}</p> : null}
-            {problems.length > 0 ? (
-              <div className="ek-workbench__binding-problems" role="alert">
-                <ul>
-                  {problems.map((problem, index) => (
-                    <li key={`${problem.code}-${index}`}>{problem.message}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
+          {status ? <p className="ek-workbench__data-status" role="status">{status}</p> : null}
+          {problems.length > 0 ? (
+            <div className="ek-workbench__binding-problems" role="alert">
+              <ul>
+                {problems.map((problem, index) => (
+                  <li key={`${problem.code}-${index}`}>{problem.message}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
+          <section
+            className="ek-workbench__form-section ek-workbench__binding-dialog-target"
+            aria-label={t("dataBinding.queryDialog.target")}
+          >
             <label className="ek-workbench__field">
               <span>{t("dataBinding.queryDialog.object")}</span>
-              <select
+              <WorkbenchSelect
+                ref={objectRef}
                 aria-label={t("dataBinding.queryDialog.object")}
                 value={selectedObjectId}
-                onChange={(event) => selectObject(event.target.value)}
-              >
-                <option value="">{t("dataBinding.queryDialog.selectObject")}</option>
-                {objectNodes.map((node) => (
-                  <option key={node.id} value={node.id}>{node.name}</option>
-                ))}
-              </select>
-            </label>
-
-            {selectedObjectId ? (
-              <DataBindingForm
-                key={`${queryId}:${selectedObjectId}`}
-                context={context}
-                objectNodeId={selectedObjectId}
-                fixedQueryId={queryId}
-                onDirtyChange={setDirty}
+                options={objectOptions}
+                onChange={(next) => selectObject(next)}
               />
-            ) : null}
-          </>
-        )}
-      </div>
-      {discardOpen ? (
-        <div
-          className="ek-workbench__connection-discard"
-          role="alertdialog"
-          aria-label={t("dataBinding.queryDialog.discard.title")}
-          aria-describedby={`${titleId}-discard-description`}
-        >
-          <strong>{t("dataBinding.queryDialog.discard.title")}</strong>
-          <p id={`${titleId}-discard-description`}>{t("dataBinding.queryDialog.discard.description")}</p>
-          <div className="ek-workbench__connection-discard-actions">
-            <button ref={keepEditingRef} type="button" onClick={keepEditing}>
-              {t("dataSources.queryEditor.discard.keep")}
-            </button>
-            <button ref={discardRef} type="button" onClick={discardChanges}>
-              {t("dataSources.queryEditor.discard.confirm")}
-            </button>
-          </div>
-        </div>
-      ) : null}
-    </dialog>
+            </label>
+            <div className="ek-workbench__binding-dialog-target-name">
+              <small data-tone="target">
+                {selectedBinding
+                  ? t("dataBinding.queryDialog.deviceNamed", { deviceId: selectedBinding.deviceId })
+                  : t("dataBinding.queryDialog.selectObject")}
+              </small>
+              {selectedBinding ? (
+                <small data-tone="stored">
+                  {t("dataBinding.queryDialog.stored")}
+                  {" · "}
+                  {selectedBinding.enabled
+                    ? t("dataBinding.queryDialog.enabled")
+                    : t("dataBinding.queryDialog.disabled")}
+                </small>
+              ) : null}
+              {dirty ? <small data-tone="draft">{t("dataBinding.queryDialog.draft")}</small> : null}
+            </div>
+          </section>
+
+          {selectedObjectId ? (
+            <DataBindingForm
+              key={`${queryId}:${selectedObjectId}`}
+              context={context}
+              objectNodeId={selectedObjectId}
+              fixedQueryId={queryId}
+              onDirtyChange={setDirty}
+              discardOpen={discardOpen && pendingAction !== null && !("run" in pendingAction)}
+              discardStatusKey="dataBinding.queryDialog.draftDiscarded"
+            />
+          ) : null}
+        </>
+      )}
+    </Dialog>
   );
 }

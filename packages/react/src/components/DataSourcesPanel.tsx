@@ -60,7 +60,7 @@ type FocusTarget =
   | { kind: "new" }
   | { kind: "connection"; connectionId: string }
   | { kind: "request"; connectionId: string }
-  | { kind: "query"; queryId: string }
+  | { kind: "query"; queryId: string; bindings?: boolean }
   | { kind: "newQuery"; connectionId: string };
 
 const PROBLEM_MESSAGE_KEYS = {
@@ -145,7 +145,12 @@ function DataSourcesSession({
     } else if (focusTarget.kind === "request") {
       requestButtonRefs.current.get(focusTarget.connectionId)?.focus();
     } else if (focusTarget.kind === "query") {
-      queryButtonRefs.current.get(focusTarget.queryId)?.focus();
+      // The ref belongs to the row's bindings button; the row's first button edits.
+      const bindingsButton = queryButtonRefs.current.get(focusTarget.queryId);
+      const target = focusTarget.bindings
+        ? bindingsButton
+        : bindingsButton?.parentElement?.querySelector<HTMLButtonElement>("button");
+      (target ?? bindingsButton)?.focus();
     } else if (focusTarget.kind === "newQuery") {
       newQueryButtonRefs.current.get(focusTarget.connectionId)?.focus();
     } else {
@@ -206,7 +211,9 @@ function DataSourcesSession({
       return;
     }
     if (!context.snapshot.dataSources.queries[bindingsQueryId]) {
+      // The query vanished under the dialog, so its row is gone with it.
       setBindingsQueryId(null);
+      setFocusTarget({ kind: "new" });
     }
   }, [bindingsQueryId, context.snapshot]);
 
@@ -433,11 +440,16 @@ function DataSourcesSession({
     setBindingsQueryId(queryId);
   }
 
+  function handleBindingLocated(node: { nodeId: string; name: string }) {
+    // Locate moves the user into the scene; the viewport focuses the selected object.
+    setStatus({ key: "dataBinding.queryDialog.locateDone", values: { name: node.name } });
+  }
+
   function closeBindings() {
     const queryId = bindingsQueryId;
     setBindingsQueryId(null);
     if (queryId) {
-      setFocusTarget({ kind: "query", queryId });
+      setFocusTarget({ kind: "query", queryId, bindings: true });
     }
   }
 
@@ -627,6 +639,7 @@ function DataSourcesSession({
           context={context}
           queryId={bindingsQueryId}
           onClose={closeBindings}
+          onLocated={handleBindingLocated}
         />
       ) : null}
     </div>
@@ -746,12 +759,12 @@ function ConnectionRow({
                 </div>
                 <div className="ek-workbench__query-actions">
                   <button
-                    ref={(element) => queryButtonRef(query.id, element)}
                     type="button"
                     aria-label={t("dataSources.queries.editAria", { name: query.name })}
                     onClick={() => onEditQuery(query)}
                   >{t("dataSources.queries.edit")}</button>
                   <button
+                    ref={(element) => queryButtonRef(query.id, element)}
                     type="button"
                     aria-label={t("dataBinding.queryDialog.openAria", { name: query.name })}
                     onClick={() => onManageBindings(query)}

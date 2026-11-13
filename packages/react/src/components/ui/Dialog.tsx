@@ -12,6 +12,8 @@ interface DialogProps {
   headerActions?: ReactNode;
   className?: string;
   initialFocus: RefObject<HTMLElement | null>;
+  /** Entry the dialog returns to after an unsaved draft was discarded by leaving. */
+  fallbackFocus?: RefObject<HTMLElement | null>;
   discard?: {
     title: string;
     description: string;
@@ -25,7 +27,17 @@ interface DialogProps {
 
 const FOCUSABLE_SELECTOR = "a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]";
 
-export function Dialog({ onDismiss, label, title, headerActions, className, initialFocus, discard, children }: DialogProps) {
+export function Dialog({
+  onDismiss,
+  label,
+  title,
+  headerActions,
+  className,
+  initialFocus,
+  fallbackFocus,
+  discard,
+  children
+}: DialogProps) {
   const [dialog, setDialog] = useState<HTMLDialogElement | null>(null);
   const lastFocused = useRef<HTMLElement>(null);
   const keepEditingRef = useRef<HTMLButtonElement>(null);
@@ -48,8 +60,8 @@ export function Dialog({ onDismiss, label, title, headerActions, className, init
       return;
     }
     const previous = lastFocused.current;
-    (previous?.isConnected ? previous : initialFocus.current)?.focus();
-  }, [dialog, confirming, initialFocus]);
+    (previous?.isConnected ? previous : fallbackFocus?.current ?? initialFocus.current)?.focus();
+  }, [dialog, confirming, initialFocus, fallbackFocus]);
 
   function handleKeyDown(event: KeyboardEvent<HTMLDialogElement>): void {
     event.stopPropagation();
