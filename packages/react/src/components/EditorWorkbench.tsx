@@ -361,6 +361,12 @@ export function EditorWorkbench({
             activeView={activeView}
             dataLocate={dataLocate}
             onDataLocateHandled={() => setDataLocate(null)}
+            onLocateObject={(nodeId) => {
+              setDataDetailFocus(null);
+              setActiveView("scene");
+              setLeftCollapsed(false);
+              setPanelFocus({ kind: "node", nodeId });
+            }}
             focus={panelFocus}
             onFocusHandled={() => setPanelFocus(null)}
           />

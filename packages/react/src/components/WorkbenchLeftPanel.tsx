@@ -10,6 +10,7 @@ export interface WorkbenchLeftPanelProps {
   activeView: WorkbenchPanelView;
   dataLocate?: { connectionId: string; queryId: string } | null;
   onDataLocateHandled?(): void;
+  onLocateObject?(nodeId: string): void;
   /** A problem's target that one of these regions can reveal and focus. */
   focus?: PanelLocateRequest | null;
   onFocusHandled?(): void;
@@ -22,6 +23,7 @@ export function WorkbenchLeftPanel({
   activeView,
   dataLocate,
   onDataLocateHandled,
+  onLocateObject,
   focus,
   onFocusHandled
 }: WorkbenchLeftPanelProps) {
@@ -67,7 +69,7 @@ export function WorkbenchLeftPanel({
         aria-label={t("dataSources.panel.label")}
         hidden={activeView !== "data"}
       >
-        <DataSourcesPanel context={context} locate={dataLocate} onLocateHandled={onDataLocateHandled} />
+        <DataSourcesPanel context={context} locate={dataLocate} onLocateHandled={onDataLocateHandled} onLocateObject={onLocateObject} />
       </section>
 
       <section

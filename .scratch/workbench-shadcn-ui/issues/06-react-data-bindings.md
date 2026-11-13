@@ -55,3 +55,24 @@ Blocked by: 05
 ### 未完成项
 
 - 无。Vue 数据面板（任务 11）不在本任务范围。
+
+
+### 2026-11-12 Code review 与修复
+
+评审范围：`git diff 9212bdc...4a6adcb`；分别检查仓库规范与本任务/正式规格。
+
+- Standards：2 项。浏览器对象选择依赖 Radix 内部属性，已改按 option 的可见名称操作；`PendingAction` 中不可达的分支使新增 `discardOpen` 重置链路永远不执行，已移除这套死逻辑。
+- Spec：3 项。明确放弃后解绑其他对象仍保留当前草稿且清除父级脏标记（底层问题已存在，任务新增重置逻辑未修复）；取消确认焦点未回触发入口；定位后焦点仍回数据面板。均已修复。
+- 放弃时递增表单 key，确保即使仍停留在当前对象也丢弃草稿与临时试色状态；继续编辑不重建表单。定位复用场景树的目标展开与焦点请求机制，不改变持久化契约。
+- 扩展真实工作台浏览器测试，覆盖 Escape 取消回输入框、按钮取消回入口、定位进入场景目标、解绑另一对象后草稿确实清除、再次编辑后关闭仍受保护。
+- `.opencode/skills` 及对应测试技能在仓库中不存在；依照现有 Vitest 配置和正式规格执行。仓库无 `bun run check`，使用现有 pnpm 脚本；测试从 `packages/react` 调用。
+
+
+验证（本次评审修复）：
+
+- `packages/react`：`pnpm typecheck` 通过。
+- `packages/react`：`pnpm exec vitest run --root ../.. packages/react/test/workbench-object-binding.test.tsx packages/react/test/workbench-data-colors.test.tsx packages/react/test/workbench-data-sources.test.tsx packages/react/test/workbench-i18n-parity.test.ts`：4 文件、35 项通过。
+- `packages/react`：`pnpm exec vitest run --root ../.. --config vitest.browser.config.ts packages/react/test/data-bindings-dialog.browser.test.tsx packages/react/test/data-dialog.browser.test.tsx`：六种视口、12 文件、36 项通过。
+- 根目录：`pnpm --filter @ek-aiot/react-proof-loop build` 通过（Vite 提示 bundle 超过 500 kB）。
+- `git diff --check` 通过；保留原有未跟踪文件，未提交测试运行生成的截图。
+- `packages/react`：`pnpm exec vitest run --root ../..`：全仓 161 文件、1427 项全部通过；运行期间 jsdom 输出 navigation/Canvas 未实现提示，不影响结果。

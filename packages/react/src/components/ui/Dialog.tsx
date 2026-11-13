@@ -12,8 +12,8 @@ interface DialogProps {
   headerActions?: ReactNode;
   className?: string;
   initialFocus: RefObject<HTMLElement | null>;
-  /** Entry the dialog returns to after an unsaved draft was discarded by leaving. */
-  fallbackFocus?: RefObject<HTMLElement | null>;
+  /** Explicit return target after resolving the draft confirmation. */
+  returnFocus?: RefObject<HTMLElement | null>;
   discard?: {
     title: string;
     description: string;
@@ -34,7 +34,7 @@ export function Dialog({
   headerActions,
   className,
   initialFocus,
-  fallbackFocus,
+  returnFocus,
   discard,
   children
 }: DialogProps) {
@@ -60,8 +60,11 @@ export function Dialog({
       return;
     }
     const previous = lastFocused.current;
-    (previous?.isConnected ? previous : fallbackFocus?.current ?? initialFocus.current)?.focus();
-  }, [dialog, confirming, initialFocus, fallbackFocus]);
+    const target = returnFocus?.current?.isConnected
+      ? returnFocus.current
+      : previous?.isConnected ? previous : initialFocus.current;
+    target?.focus();
+  }, [dialog, confirming, initialFocus, returnFocus]);
 
   function handleKeyDown(event: KeyboardEvent<HTMLDialogElement>): void {
     event.stopPropagation();

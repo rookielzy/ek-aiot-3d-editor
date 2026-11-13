@@ -7,7 +7,7 @@ import { Dialog } from "./ui/Dialog";
 import { WorkbenchSelect } from "./ui/WorkbenchSelect";
 
 /** The action the user asked for before the draft guard interrupted it. */
-type PendingAction = { run(): void } | { objectNodeId: string };
+type PendingAction = { run(): void };
 
 /** Everything needed to run a leaving action and to return focus to its trigger. */
 interface GuardRequest {
@@ -20,7 +20,7 @@ export interface DataQueryBindingsDialogProps {
   queryId: string;
   /** Leaves the dialog and returns focus to the row that opened it. */
   onClose(): void;
-  /** Reports the object the scene selected after a locate left the dialog. */
+  /** Closes the dialog and reveals the selected object in the host scene region. */
   onLocated?(node: { nodeId: string; name: string }): void;
 }
 
@@ -55,11 +55,11 @@ export function DataQueryBindingsDialog({
       ?? ""
   );
   const [dirty, setDirty] = useState(false);
+  const [draftRevision, setDraftRevision] = useState(0);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [problems, setProblems] = useState<DataBindingProblem[]>([]);
-  // A pending action is either a plain callback (close, locate, unbind) or the
-  // object id of a switch that waits for the discard decision.
+  // Preserve the requested action until the user resolves the draft guard.
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const guardTriggerRef = useRef<HTMLElement | null>(null);
   const objectRef = useRef<HTMLButtonElement>(null);
@@ -94,7 +94,10 @@ export function DataQueryBindingsDialog({
 
   /** Leaves the dialog; the panel focuses the row that opened it. */
   function close(): void {
-    requestAction({ action: () => onClose(), trigger: closeRef.current });
+    requestAction({
+      action: onClose,
+      trigger: document.activeElement instanceof HTMLElement ? document.activeElement : closeRef.current
+    });
   }
 
   function keepEditing(): void {
@@ -109,10 +112,9 @@ export function DataQueryBindingsDialog({
     setDirty(false);
     setDiscardOpen(false);
     if (!action) return;
-    if ("objectNodeId" in action) {
-      setSelectedObjectId(action.objectNodeId);
-      return;
-    }
+    guardTriggerRef.current = objectRef.current;
+    // Unbinding another row leaves this object selected, so reset its form too.
+    setDraftRevision((revision) => revision + 1);
     action.run();
   }
 
@@ -140,7 +142,10 @@ export function DataQueryBindingsDialog({
           nodeIds: [objectNodeId],
           primaryNodeId: objectNodeId
         });
-        onLocated?.({ nodeId: objectNodeId, name: objectLabels.get(objectNodeId) ?? objectNodeId });
+        if (onLocated) {
+          onLocated({ nodeId: objectNodeId, name: objectLabels.get(objectNodeId) ?? objectNodeId });
+          return;
+        }
         onClose();
       },
       trigger
@@ -189,7 +194,7 @@ export function DataQueryBindingsDialog({
         </Button>
       )}
       initialFocus={objectRef}
-      fallbackFocus={guardTriggerRef}
+      returnFocus={guardTriggerRef}
       onDismiss={close}
       discard={discardOpen ? {
         title: t("dataBinding.queryDialog.discard.title"),
@@ -293,13 +298,11 @@ export function DataQueryBindingsDialog({
 
           {selectedObjectId ? (
             <DataBindingForm
-              key={`${queryId}:${selectedObjectId}`}
+              key={`${queryId}:${selectedObjectId}:${draftRevision}`}
               context={context}
               objectNodeId={selectedObjectId}
               fixedQueryId={queryId}
               onDirtyChange={setDirty}
-              discardOpen={discardOpen && pendingAction !== null && !("run" in pendingAction)}
-              discardStatusKey="dataBinding.queryDialog.draftDiscarded"
             />
           ) : null}
         </>

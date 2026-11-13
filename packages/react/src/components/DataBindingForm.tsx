@@ -46,10 +46,6 @@ export interface DataBindingFormProps {
   objectNodeId: string;
   fixedQueryId?: string | null;
   onDirtyChange?(dirty: boolean): void;
-  /** Set while the owner confirmed that the open draft is discarded. */
-  discardOpen?: boolean;
-  /** Status shown when the owner discarded the open draft. */
-  discardStatusKey?: WorkbenchMessageKey;
 }
 
 interface DetailDraft {
@@ -130,9 +126,7 @@ export function DataBindingForm({
   context,
   objectNodeId,
   fixedQueryId = null,
-  onDirtyChange,
-  discardOpen = false,
-  discardStatusKey
+  onDirtyChange
 }: DataBindingFormProps) {
   const snapshot = context.snapshot;
   const savedBinding = snapshot.dataSources.bindings[objectNodeId] ?? null;
@@ -158,20 +152,6 @@ export function DataBindingForm({
   const lastSavedSignatureRef = useRef(savedSignature);
   const id = useId();
   const t = context.i18n.t;
-
-  // The owner's discard decision for this object runs this after the guard closes,
-  // so the draft returns to the saved binding and the outcome is announced.
-  const discardStatusRef = useRef(discardStatusKey);
-  discardStatusRef.current = discardStatusKey;
-  const previousDiscardOpenRef = useRef(discardOpen);
-  useEffect(() => {
-    if (previousDiscardOpenRef.current && !discardOpen) {
-      resetDraft();
-      const key = discardStatusRef.current;
-      if (key) setStatus({ key });
-    }
-    previousDiscardOpenRef.current = discardOpen;
-  }, [discardOpen]);
 
   const query = draft.queryId ? snapshot.dataSources.queries[draft.queryId] ?? null : null;
   const connection = query ? snapshot.dataSources.connections[query.connectionId] ?? null : null;

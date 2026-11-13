@@ -83,11 +83,13 @@ const PROBLEM_MESSAGE_KEYS = {
 export function DataSourcesPanel({
   context,
   locate,
-  onLocateHandled
+  onLocateHandled,
+  onLocateObject
 }: {
   context: ResolvedWorkbenchContext;
   locate?: { connectionId: string; queryId: string } | null;
   onLocateHandled?(): void;
+  onLocateObject?(nodeId: string): void;
 }) {
   // Drafts and response samples belong to the editor that opened the panel.
   const [session, setSession] = useState({ editor: context.editor, key: 0 });
@@ -95,17 +97,19 @@ export function DataSourcesPanel({
     setSession({ editor: context.editor, key: session.key + 1 });
     return null;
   }
-  return <DataSourcesSession key={session.key} context={context} locate={locate} onLocateHandled={onLocateHandled} />;
+  return <DataSourcesSession key={session.key} context={context} locate={locate} onLocateHandled={onLocateHandled} onLocateObject={onLocateObject} />;
 }
 
 function DataSourcesSession({
   context,
   locate,
-  onLocateHandled
+  onLocateHandled,
+  onLocateObject
 }: {
   context: ResolvedWorkbenchContext;
   locate?: { connectionId: string; queryId: string } | null;
   onLocateHandled?(): void;
+  onLocateObject?(nodeId: string): void;
 }) {
   const [query, setQuery] = useState("");
   const [form, setForm] = useState<DataFormState | null>(null);
@@ -441,7 +445,8 @@ function DataSourcesSession({
   }
 
   function handleBindingLocated(node: { nodeId: string; name: string }) {
-    // Locate moves the user into the scene; the viewport focuses the selected object.
+    setBindingsQueryId(null);
+    onLocateObject?.(node.nodeId);
     setStatus({ key: "dataBinding.queryDialog.locateDone", values: { name: node.name } });
   }
 

@@ -96,6 +96,7 @@ describe("real workbench object bindings dialog", () => {
     await userEvent.click(keep);
     await expect.poll(() => dialog.querySelector('[role="alertdialog"]')).toBeNull();
     expect(device.value).toBe("pump-42");
+    await expect.poll(() => document.activeElement).toBe(device);
     expect(editor.getSnapshot()).toEqual(snapshotBefore);
     expect(editor.getHistoryState()).toEqual(historyBefore);
 
@@ -111,7 +112,11 @@ describe("real workbench object bindings dialog", () => {
     // Cancelling the confirm and closing for real discards only after consent,
     // and returns focus to the panel row that opened the dialog.
     const trigger = button(host, COPY.manageBindings);
-    await userEvent.click(button(dialog, COPY.close));
+    const closeButton = button(dialog, COPY.close);
+    await userEvent.click(closeButton);
+    await userEvent.click(button(await waitForElement<HTMLElement>(dialog, '[role="alertdialog"]'), COPY.keepEditing));
+    await expect.poll(() => document.activeElement).toBe(closeButton);
+    await userEvent.click(closeButton);
     const closePrompt = await waitForElement<HTMLElement>(dialog, '[role="alertdialog"]');
     await userEvent.click(button(closePrompt, COPY.discardChanges));
     await expect.poll(() => host.querySelector(`dialog[aria-label="${COPY.dialogTitle}"]`)).toBeNull();
@@ -130,6 +135,8 @@ describe("real workbench object bindings dialog", () => {
     await userEvent.click(button(reopened, COPY.locatePump));
     await expect.poll(() => host.querySelector(`dialog[aria-label="${COPY.dialogTitle}"]`)).toBeNull();
     expect(editor.getSnapshot().selection.nodeId).toBe("pump");
+    await expect.poll(() => document.activeElement?.textContent).toContain("Pump object");
+    await userEvent.click(page.getByRole("button", { name: /^Data / }));
 
     // A different object of the scene stays selectable from the reopened dialog
     // without rewriting the saved binding.
@@ -138,17 +145,25 @@ describe("real workbench object bindings dialog", () => {
     const bindingsBefore = editor.getSnapshot().dataSources.bindings;
     const picker = requireElement<HTMLButtonElement>(again, `[aria-label="${COPY.object}"]`);
     await userEvent.click(picker);
-    const valve = await waitForElement<HTMLElement>(
-      document.body,
-      '[role="option"][data-radix-collection-item]:not([data-state="checked"])'
-    );
-    expect(text(valve)).toContain("Valve object");
-    await userEvent.click(valve);
+    await userEvent.click(page.getByRole("option", { name: "Valve object", exact: true }));
     // The draft form follows the picker; nothing is saved until the user saves.
     await expect.poll(() => deviceValue(again)).toBe("");
     expect(again.querySelector(`[aria-label="${COPY.device}"]`)).toBeTruthy();
     expect(editor.getSnapshot().selection.nodeId).toBe("pump");
     expect(editor.getSnapshot().dataSources.bindings).toEqual(bindingsBefore);
+    await userEvent.fill(requireElement<HTMLInputElement>(again, `[aria-label="${COPY.device}"]`), "valve-draft");
+    const unbind = button(again, "Unbind Pump object");
+    await userEvent.click(unbind);
+    await userEvent.click(button(await waitForElement<HTMLElement>(again, '[role="alertdialog"]'), COPY.keepEditing));
+    await expect.poll(() => document.activeElement).toBe(unbind);
+    expect(deviceValue(again)).toBe("valve-draft");
+    await userEvent.click(unbind);
+    await userEvent.click(button(await waitForElement<HTMLElement>(again, '[role="alertdialog"]'), COPY.discardChanges));
+    await expect.poll(() => deviceValue(again)).toBe("");
+    expect(editor.getSnapshot().dataSources.bindings.pump).toBeUndefined();
+    await userEvent.fill(requireElement<HTMLInputElement>(again, `[aria-label="${COPY.device}"]`), "new-valve-draft");
+    await userEvent.click(button(again, COPY.close));
+    await waitForElement<HTMLElement>(again, '[role="alertdialog"]');
   }, 45_000);
 });
 
