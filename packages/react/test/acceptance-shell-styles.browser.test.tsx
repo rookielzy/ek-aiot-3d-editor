@@ -5,6 +5,7 @@ import { createEditor, type RendererLike } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench, type WorkbenchLocale } from "../src";
 import WorkbenchStyles from "../src/components/workbench.css?raw";
 import InspectorStyles from "../src/components/inspector.css?raw";
+import UiStyles from "../src/components/ui/ui.css?inline";
 
 // Issue 07 (React overall consistency and acceptance): drive the published workbench shell at the
 // three desktop sizes from the spec and assert what a user can observe — reachable navigation,
@@ -12,8 +13,8 @@ import InspectorStyles from "../src/components/inspector.css?raw";
 // focus across i18n switches, and the host-facing style contract. Landmarks, roles, accessible
 // names and visible text drive every assertion, so a restyled or restructured shell keeps passing
 // as long as the user experience holds. The workbench renders the host's own styles, so each test
-// installs the package CSS the way a published `styles.css` consumer does and keeps the dev-plugin
-// styles disabled so palette assertions stay meaningful.
+// installs the complete compiled source styles and disables duplicate dev-plugin styles.
+// The built styles.css artifact is verified separately during release acceptance.
 
 const SIZES = [[1440, 900], [1920, 1080], [1100, 800]] as const;
 const LONG_NAME = "Factory Floor Conveyor Line B — Section With An Extremely Long Device Name That Must Stay Reachable";
@@ -38,7 +39,7 @@ function disableViteStyles() {
 function installStyles() {
   const element = document.createElement("style");
   element.id = STYLE_ID;
-  element.textContent = [WorkbenchStyles, InspectorStyles].join("\n");
+  element.textContent = [UiStyles, WorkbenchStyles, InspectorStyles].join("\n");
   document.head.append(element);
 }
 
@@ -106,19 +107,12 @@ function control(label: string) {
   );
 }
 
-function roleList(selector: string, role: string) {
-  return [...document.querySelectorAll<HTMLElement>(`${selector}, [role~="${role}"]`)].filter((element) => {
-    // Landmarks contributed by layers outside the shell are not part of this frame.
-    return element.closest("main") !== null;
-  });
-}
-
 /** The inspector: the panel that holds the selection tabs. */
 function inspector(host: HTMLElement) {
   return host.querySelector<HTMLElement>('[role="tablist"]')!.closest("aside") as HTMLElement;
 }
 
-function horizontalOverflow(element: HTMLElement) {
+function horizontalOverflow(element: Element) {
   return element.scrollWidth - element.clientWidth;
 }
 
@@ -219,9 +213,9 @@ describe("React workbench shell acceptance", () => {
         expect(buttons.map((element) => element.textContent?.replace(/\d+/g, "").trim())).toEqual([
           "Scene", "Assets", "Data", "Project"
         ]);
-        expect(buttons.map((element) => element.getAttribute("aria-label")?.split(" ").at(-1))).toEqual(
-          buttons.map((element) => element.querySelector("small")!.textContent)
-        );
+        expect(buttons.map((element) => element.getAttribute("aria-label"))).toEqual([
+          "Scene 2", "Assets 2", "Data 0", "Project 2"
+        ]);
         for (const element of buttons) {
           expect(clippedBy(element)).toBeNull();
           const rect = element.getBoundingClientRect();
@@ -237,9 +231,12 @@ describe("React workbench shell acceptance", () => {
         const titles: Array<[string, string]> = [["Assets", "Assets"], ["Data", "Data sources"], ["Project", "Project"], ["Scene", "Hierarchy"]];
         for (const [label, title] of titles) {
           await userEvent.click(navButton(host, label));
-          await waitFor(() => [...panel.querySelectorAll<HTMLElement>("section:not([hidden])")].find((element) => element.querySelector("h2")?.textContent === title) !== undefined);
-          const visibleSection = panel.querySelector<HTMLElement>("section:not([hidden])")!;
-          const heading = [...visibleSection.querySelectorAll("h2")][0]!;
+          const region = page.getByRole("region", { name: title, exact: true });
+          await expect.element(region).toBeVisible();
+          const heading = region.getByRole("heading", { name: title, exact: true }).element();
+          for (const otherTitle of titles.map((entry) => entry[1]).filter((entry) => entry !== title)) {
+            await expect.element(page.getByRole("region", { name: otherTitle, exact: true, includeHidden: true })).not.toBeVisible();
+          }
           expect(heading.textContent).toBe(title);
           expect(navButton(host, label).getAttribute("aria-pressed")).toBe("true");
           expect(navButton(host, label).getAttribute("aria-expanded")).toBe("true");
@@ -331,7 +328,7 @@ describe("React workbench shell acceptance", () => {
           await userEvent.click(navButton(host, "Data"));
         }
         await waitFor(() => (panel.textContent ?? "").includes("No connections yet"));
-        const dataSection = panel.querySelector<HTMLElement>("section:not([hidden])")!;
+        const dataSection = page.getByRole("region", { name: "Data sources", exact: true }).element();
         expect(dataSection.textContent ?? "").toContain("No connections yet");
         expect(clippedBy(dataSection)).toBeNull();
         expect(horizontalOverflow(panel)).toBeLessThanOrEqual(0);
@@ -340,7 +337,7 @@ describe("React workbench shell acceptance", () => {
         await userEvent.click(navButton(host, "Assets"));
         await waitFor(() => (navButton(host, "Assets").getAttribute("aria-expanded")) === "true");
         // Only the visible workspace holds the filter the user types into.
-        const visibleWorkspace = () => panel.querySelector<HTMLElement>("section:not([hidden])")!;
+        const visibleWorkspace = () => page.getByRole("region", { name: "Assets", exact: true }).element();
         await waitFor(() => Boolean(visibleWorkspace().querySelector<HTMLInputElement>('input[type="search"]')));
         await waitForFrame();
         const assetSearch = () => visibleWorkspace().querySelector<HTMLInputElement>('input[type="search"]')!;
@@ -362,8 +359,8 @@ describe("React workbench shell acceptance", () => {
         // Project problems stay readable: an empty list says so, and listed problems stay in frame.
         if (navButton(host, "Project").getAttribute("aria-expanded") === "false") await userEvent.click(navButton(host, "Project"));
         await waitFor(() => (navButton(host, "Project").getAttribute("aria-expanded")) === "true");
-        await waitFor(() => [...panel.querySelectorAll<HTMLElement>("section:not([hidden])")].length === 1);
-        const project = panel.querySelector<HTMLElement>("section:not([hidden])")!;
+        await expect.element(page.getByRole("region", { name: "Project", exact: true })).toBeVisible();
+        const project = page.getByRole("region", { name: "Project", exact: true }).element();
         expect(project.querySelector("h2")?.textContent).toBe("Project");
         for (const item of project.querySelectorAll<HTMLElement>("li")) {
           expect(clippedBy(item)).toBeNull();
@@ -395,7 +392,8 @@ describe("React workbench shell acceptance", () => {
         await waitFor(() => Boolean(document.querySelector('[role="menu"]')));
         const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
         expect(insideFrame(menu, width, height)).toBe(true);
-        for (const item of menu.querySelectorAll<HTMLElement>('[role="menu"]')) {
+        expect(menu.querySelectorAll('[role^="menuitem"]').length).toBeGreaterThan(0);
+        for (const item of menu.querySelectorAll<HTMLElement>('[role^="menuitem"]')) {
           expect(clippedBy(item)).toBeNull();
         }
         await userEvent.keyboard("{Escape}");
@@ -421,6 +419,8 @@ describe("React workbench shell acceptance", () => {
         await userEvent.keyboard("{Escape}");
         await waitFor(() => !document.querySelector('[role="menu"]'));
 
+        expect(document.activeElement).toBe(row);
+
         // Deleting through the menu updates the tree and the status the user reads.
         await userEvent.click(rowMenu);
         await waitFor(() => Boolean(document.querySelector('[role^="menuitem"]')));
@@ -430,18 +430,16 @@ describe("React workbench shell acceptance", () => {
 
         // The data-source connection dialog stays inside the frame at every size.
         await userEvent.click(navButton(host, "Data"));
-        const addConnection = [...document.querySelectorAll<HTMLButtonElement>("button")].find((element) =>
-          /connection/i.test(element.textContent ?? "") && element.getBoundingClientRect().width > 0
-        );
-        if (addConnection) {
-          await userEvent.click(addConnection);
-          await waitFor(() => Boolean(document.querySelector("dialog[open]")));
-          const dialog = document.querySelector<HTMLElement>("dialog[open]")!;
-          expect(insideFrame(dialog, width, height)).toBe(true);
-          expect(dialog.scrollWidth).toBeLessThanOrEqual(width);
-          await userEvent.keyboard("{Escape}");
-          await waitFor(() => !document.querySelector("dialog[open]"));
-        }
+        const addConnection = page.getByRole("button", { name: "New connection", exact: true });
+        await expect.element(addConnection).toBeVisible();
+        await addConnection.click();
+        await waitFor(() => Boolean(document.querySelector("dialog[open]")));
+        const dialog = document.querySelector<HTMLElement>("dialog[open]")!;
+        expect(insideFrame(dialog, width, height)).toBe(true);
+        expect(dialog.scrollWidth).toBeLessThanOrEqual(width);
+        await userEvent.keyboard("{Escape}");
+        await waitFor(() => !document.querySelector("dialog[open]"));
+        await expect.element(addConnection).toHaveFocus();
       }
     } finally {
       await page.viewport(originalSize.width, originalSize.height);
@@ -487,14 +485,15 @@ describe("React workbench shell acceptance", () => {
 
       // A drag on the handle keeps the panel inside the frame while the pointer moves.
       const separatorRect = separator.getBoundingClientRect();
-      const x = separatorRect.left + separatorRect.width / 2;
-      const y = separatorRect.top + 120;
-      separator.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, clientX: x, clientY: y, pointerId: 1, isPrimary: true }));
-      window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: x + 40, clientY: y, pointerId: 1, isPrimary: true }));
-      await waitForFrame();
-      expect(width()).toBeGreaterThanOrEqual(before - 16);
-      expect(insideFrame(panel, host.getBoundingClientRect().width, host.getBoundingClientRect().height)).toBe(true);
-      window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, clientX: x + 40, clientY: y, pointerId: 1, isPrimary: true }));
+      const beforeDrag = width();
+      const hostRect = host.getBoundingClientRect();
+      await userEvent.dragAndDrop(separator, host, {
+        sourcePosition: { x: 1, y: 120 },
+        targetPosition: { x: separatorRect.left + separator.clientLeft - hostRect.left - host.clientLeft + 41, y: separatorRect.top - hostRect.top + 120 }
+      });
+      await expect.poll(width).toBe(beforeDrag + 40);
+      expect(width()).toBe(beforeDrag + 40);
+      expect(insideFrame(panel, hostRect.width, hostRect.height)).toBe(true);
       expect(horizontalOverflow(panel)).toBeLessThanOrEqual(0);
       expect(insideFrame(separator, host.getBoundingClientRect().width, host.getBoundingClientRect().height)).toBe(true);
     } finally {
@@ -506,7 +505,9 @@ describe("React workbench shell acceptance", () => {
   it("switches language without rebuilding the editor, and restores focus to the switcher", async () => {
     const { host, editor } = mount({ width: 1440, height: 900 });
     await waitFor(() => Boolean(navigation(host)));
+    await waitFor(() => editor.getRuntime() !== null && Boolean(host.querySelector("canvas")));
     const idleRuntime = editor.getRuntime();
+    expect(idleRuntime).toBeTruthy();
     const canvas = host.querySelector("canvas");
 
     // The switcher's label follows the language it is about to show.
@@ -531,16 +532,29 @@ describe("React workbench shell acceptance", () => {
     expect(editor.getRuntime()).toBe(idleRuntime);
   }, 30000);
 
-  it("isolates published styles from host styles and leaves host regions unstyled", async () => {
+  it("isolates compiled styles from host styles and leaves host regions unstyled", async () => {
     const hostStyle = document.createElement("style");
     hostStyle.textContent = `
       .starter-host { color: rgb(0, 128, 96); font: 12px/1.2 serif; }
       .starter-host button { border: 3px dashed rgb(0, 128, 96); }
     `;
     document.head.append(hostStyle);
+    const outsideButton = document.createElement("button");
+    outsideButton.textContent = "Host outside editor";
+    outsideButton.style.position = "absolute";
+    document.body.append(outsideButton);
+    const packageStyle = document.getElementById(STYLE_ID) as HTMLStyleElement;
+    packageStyle.disabled = true;
+    const outsideAppearance = () => {
+      const style = getComputedStyle(outsideButton);
+      return [style.color, style.backgroundColor, style.fontFamily, style.padding, style.border, style.boxSizing];
+    };
+    const baseline = outsideAppearance();
+    packageStyle.disabled = false;
     try {
       const { host } = mount({ width: 1440, height: 900, toolbar: true, hostRegions: true });
       await waitFor(() => Boolean(navigation(host)));
+      expect(outsideAppearance()).toEqual(baseline);
       expect(getComputedStyle(navigation(host)).backgroundColor).toBe("rgb(255, 255, 255)");
       const headerFont = getComputedStyle(host.querySelector("h2")!).fontFamily;
       expect(headerFont).toContain("system-ui");
@@ -558,6 +572,13 @@ describe("React workbench shell acceptance", () => {
         expect(getComputedStyle(element).fontFamily).toContain("serif");
         expect(clippedBy(element)).toBeNull();
       }
+      workbench(host).style.setProperty("--ek-workbench-text", "rgb(73, 61, 52)");
+      await userEvent.click(control("Actions for Floor plate")!);
+      await waitFor(() => Boolean(document.querySelector('[role="menu"]')));
+      const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
+      expect(getComputedStyle(menu).color).toBe("rgb(73, 61, 52)");
+      expect(outsideAppearance()).toEqual(baseline);
+      await userEvent.keyboard("{Escape}");
     } finally {
       hostStyle.remove();
     }

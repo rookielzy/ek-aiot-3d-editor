@@ -7,7 +7,7 @@ Blocked by: 02, 04, 06
 
 开始前阅读 [正式规格](../spec.md)，其 Implementation Decisions、Testing Decisions 与 Out of Scope 均适用本任务。参照 [任务索引](../README.md) 确认前置任务；按既定优先级执行。
 覆盖 User Stories：1–29。
-本任务尚未实现；ready-for-agent 表示规格可执行，不代表依赖已满足。
+技术实现已完成，用户体验验收仍待明确反馈；ready-for-agent 不代表已通过验收。
 
 ## What to build
 
@@ -87,3 +87,36 @@ Blocked by: 02, 04, 06
 ### 待用户体验验收
 
 请在 `pnpm --filter @ek-aiot/react-proof-loop dev` 中按 `.scratch/workbench-shadcn-ui/spec.md` 的验收边界体验 React 外壳（导航、页签、收放、面板调宽、长名称、空/错误状态、问题抽屉与定位、Inspector、中英文切换、快捷键与输入法），并回复是否通过；只有你的明确验收结果会被记录并勾选最后一项，任务 08 随后才能开始。
+
+
+### 二次 Code review 与修复（2026-11-13，基线 ecfde03）
+
+本轮仅审查 `77bd478`、`55972e2`。以下记录补正前文的验收结论，不删除历史执行记录。
+
+**Standards（2 项）**
+
+- [P2，已修] 验收仍依赖 `<small>` 和 `section:not([hidden])` 内部结构，违反 Testing Decisions 的用户可观察边界。改为可访问名称、region/heading 角色和实际可见性，并验证其他工作区不可见。
+- [P2，已纠正执行方式] 历史常规测试从根目录执行，不符合包目录调用约定。本轮所有 Vitest 命令均从 `packages/react` 执行，通过 `--root ../..` 使用仓库配置。
+
+**Spec（3 项，均已修）**
+
+- [P1] 原用例禁用 Vite 样式后只恢复 workbench/inspector CSS，漏掉共享 UI 控件样式。补充 `ui.css?inline`，由 Vite 编译 Tailwind 导入；新增包外宿主按钮在样式启用前后的外观对比、portal 菜单主题文字颜色继承断言。源码样式测试不再命名为发布产物测试，发布 CSS 另行实际复测。
+- [P2] 原指针移动事件派发到 window，未经过手柄的 React pointermove 处理器，且 `>=` 允许宽度不变。改用真实浏览器拖拽并严格验证增加 40px。
+- [P2] 原对话框断言在找不到入口时直接跳过。改为必须存在的 `New connection` 按钮并无条件打开/关闭，验证 Escape 回还焦点；修复菜单裁剪检查错误查询嵌套 menu 而非 menuitem、循环可能零次执行的问题。层级菜单继续遵循既有返回所属树行的焦点语义。
+
+另外，语言切换前明确等候非空 runtime/canvas，避免两次空值相等导致漏检；移除未使用的 roleList。没有改动产品组件、持久快照或 Vue 验收门槛。
+
+**本轮验证**
+
+- 未找到 `.opencode/skills` 或匹配测试技能；按本仓库 Vitest 配置执行。
+- Windows 原命令 `pnpm build` 未匹配目录过滤，`pnpm typecheck` 因 cmd 不支持 `rm` 失败。这不是成功验证；改设当前进程 `npm_config_script_shell=C:/Program Files/Git/bin/bash.exe`，执行 `pnpm --filter @ek-aiot/3d-editor-core --filter @ek-aiot/3d-editor-react --filter @ek-aiot/3d-editor-vue build` 及同一过滤器的 `typecheck`：均通过。
+- `pnpm --filter @ek-aiot/react-proof-loop build`：通过，仍有既有 chunk 体积提示。
+- 用安装的 TypeScript compiler API 单独检查本测试和 `src/vite-env.d.ts`：0 diagnostics。未直接调用 tsc；包类型脚本仍不覆盖 test 目录。
+
+- 包目录执行 `pnpm exec vitest run --root ../.. --config vitest.browser.config.ts test/acceptance-shell-styles.browser.test.tsx test/acceptance-published-review.browser.test.tsx`：12 个文件实例、84/84 通过（六个 Chromium 配置，每个配置分别测试源码完整样式和发布 CSS）。发布复测临时用例由本测试原样复制，仅将三项 CSS 导入替换为 `../dist/index.css?raw` 并注入该完整产物，验证后删除临时用例；全新 checkout 的常规浏览器测试仍不依赖 dist。复测包括三个验收尺寸、宿主样式隔离和 portal 主题继承。
+- 上述 `--project chromium` 只选择默认实例，不能代表六个实例均通过；前文把这一命令描述为全部六实例通过不准确。本轮六实例结果来自不带 `--project` 的命令。
+
+- 包目录执行 `pnpm exec vitest run --root ../.. --pool forks --maxWorkers 2`：161 个文件、1427/1427 通过，耗时 532.77 秒。先前默认 threads 池的 `--maxWorkers 2` 运行因长时间没有结果被主动中止，不计为通过；独立进程池完整运行结束。该结果证明本轮常规回归通过，但不将此前超时的成因武断归为负载。
+- `git diff --check`：通过。本轮未重跑全部浏览器文件；已有其他文件的失败记录仍按历史记录保留，不据此宣称已经修复。
+
+审查汇总：Standards 2 项（最高 P2）、Spec 3 项（最高 P1），本轮均已处理。用户明确的 React 体验验收仍未发生，最后一项继续不勾选，任务 08 继续阻塞。
