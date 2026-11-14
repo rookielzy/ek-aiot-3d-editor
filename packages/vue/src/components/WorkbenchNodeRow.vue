@@ -13,7 +13,6 @@
       ><span aria-hidden="true">{{ expanded ? "▾" : "▸" }}</span></button>
       <span v-else class="ek-workbench__tree-toggle-space" />
       <button
-        :id="`${treeId}-${row.id}`"
         ref="selectButton"
         type="button"
         data-ek-discard-draft
@@ -26,6 +25,7 @@
         aria-haspopup="menu"
         aria-keyshortcuts="ContextMenu Shift+F10"
         :tabindex="tabStop === row.id ? 0 : -1"
+        :data-tree-row-id="row.id"
         :data-selected="row.selected ? 'true' : undefined"
         :data-severity="row.highestProblemSeverity ?? undefined"
         :title="row.label"
@@ -38,7 +38,7 @@
         <small>{{ row.kind }}{{ row.problemCount ? ` · ${row.problemCount}` : "" }}</small>
       </button>
       <CommandMenu ref="menu" :label="moreLabel" :trigger-label="moreLabel" icon="more" compact
-        :commands="commands" :return-focus="() => selectButton" />
+        :commands="() => commands" :return-focus="() => selectButton" :trigger-tab-index="tabStop === row.id ? 0 : -1" />
     </div>
     <p v-for="problem in selectedProblems" :key="problem.id" class="ek-workbench__tree-problem" :data-severity="problem.severity">
       {{ problem.detailDescriptor ? context.i18n.t(problem.detailDescriptor) : problem.detail ?? (problem.titleDescriptor ? context.i18n.t(problem.titleDescriptor) : problem.title) }}
@@ -53,7 +53,6 @@
         :matches="matches"
         :collapsed="collapsed"
         :toggle="toggle"
-        :tree-id="treeId"
         :tab-stop="tabStop"
         :set-focus="setFocus"
         :navigate="navigate"
@@ -80,9 +79,8 @@ const props = defineProps<{
   matches: ReadonlySet<string>;
   collapsed: ReadonlySet<string>;
   toggle(nodeId: string): void;
-  treeId: string;
   tabStop?: string;
-  setFocus(nodeId: string | null): void;
+  setFocus(nodeId: string): void;
   navigate(nodeId: string, where: -1 | 1 | "first" | "last" | "parent"): void;
 }>();
 
@@ -126,7 +124,7 @@ function onKeyDown(event: KeyboardEvent): void {
     menu.value?.openMenu();
     return;
   }
-  if (!["ArrowDown", "ArrowUp", "Home", "End", "ArrowRight", "ArrowLeft", "Enter", " ", "Escape"].includes(event.key)) return;
+  if (!["ArrowDown", "ArrowUp", "Home", "End", "ArrowRight", "ArrowLeft", "Enter", " "].includes(event.key)) return;
   event.preventDefault();
   event.stopPropagation();
   switch (event.key) {
@@ -142,9 +140,6 @@ function onKeyDown(event: KeyboardEvent): void {
       return props.navigate(props.row.id, "parent");
     case "Enter":
     case " ": return selectNode(event);
-    case "Escape":
-      props.setFocus(null);
-      if (event.currentTarget instanceof HTMLElement) event.currentTarget.blur();
   }
 }
 

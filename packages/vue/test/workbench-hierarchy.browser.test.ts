@@ -14,6 +14,16 @@ const camera = hierarchy.getByRole("treeitem", { name: "Front view" });
 let editor: ReturnType<typeof createEditor>;
 let app: App;
 
+function mountWorkbench(container: HTMLElement, editor: ReturnType<typeof createEditor>) {
+  const app = createApp({
+    render: () => h(EditorWorkbench, {
+      editor: markRaw(editor), locale: "en", rendererFactory: testRenderer, style: { "--ek-workbench-accent": "rgb(123, 45, 67)" }
+    })
+  });
+  app.mount(container);
+  return app;
+}
+
 beforeEach(() => {
   editor = createEditor();
   editor.dispatch({ type: "create-group", nodeId: "assembly", name: "Assembly" });
@@ -21,12 +31,7 @@ beforeEach(() => {
   editor.dispatch({ type: "add-light", light: { id: "light", name: "Key light", kind: "point" } });
   editor.dispatch({ type: "create-camera-view", view: { id: "front", name: "Front view" } });
   document.body.append(host);
-  app = createApp({
-    render: () => h(EditorWorkbench, {
-      editor: markRaw(editor), locale: "en", rendererFactory: testRenderer, style: { "--ek-workbench-accent": "rgb(123, 45, 67)" }
-    })
-  });
-  app.mount(host);
+  app = mountWorkbench(host, editor);
 });
 
 afterEach(() => {
@@ -54,9 +59,10 @@ it("browses and searches the scene tree without changing the Inspector target un
   await userEvent.keyboard("{Enter}");
   await expect.element(light).toHaveAttribute("aria-selected", "true");
   await expect.element(robot).toHaveAttribute("aria-selected", "false");
+  assembly.element().focus();
   await userEvent.keyboard("{Escape}");
   await expect.element(light).toHaveAttribute("aria-selected", "true");
-  await expect.element(light).not.toHaveFocus();
+  await expect.element(assembly).not.toHaveFocus();
 
   const search = hierarchy.getByRole("searchbox", { name: "Search hierarchy" });
   await page.getByRole("button", { name: "Rotate", exact: true }).click();
@@ -86,7 +92,9 @@ it("opens row actions from the pointer and keyboard, with capability and focus o
 
   const lightActions = page.getByRole("menu", { name: "Actions for Key light" });
   light.element().focus();
-  await userEvent.keyboard("{ContextMenu}");
+  await userEvent.keyboard("{Tab}");
+  await expect.element(hierarchy.getByRole("button", { name: "Actions for Key light" })).toHaveFocus();
+  await userEvent.keyboard("{Enter}");
   await expect.element(lightActions.getByRole("menuitem", { name: "Copy" })).toHaveFocus();
   await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
   await expect.element(lightActions).not.toBeInTheDocument();
@@ -108,6 +116,23 @@ it("opens row actions from the pointer and keyboard, with capability and focus o
   expect(Object.keys(editor.getSnapshot().objects)).toEqual(["robot"]);
 });
 
+it("dismisses the row menu before the Problems drawer from the hierarchy", async () => {
+  const problems = page.getByRole("button", { name: "Problem details", exact: true });
+  await problems.click();
+  const drawer = page.getByRole("region", { name: "Problem details" });
+  await expect.element(drawer).toBeVisible();
+  await light.click();
+  await userEvent.keyboard("{ContextMenu}");
+  await expect.element(page.getByRole("menu", { name: "Actions for Key light" })).toBeVisible();
+  await userEvent.keyboard("{Escape}");
+  await expect.element(light).toHaveFocus();
+  await expect.element(drawer).toBeVisible();
+  await userEvent.keyboard("{Escape}");
+  await expect.element(problems).toHaveAttribute("aria-expanded", "false");
+  await expect.element(problems).toHaveFocus();
+  await expect.element(light).toHaveAttribute("aria-selected", "true");
+});
+
 it("removes the row targeted by the menu and keeps keyboard navigation in the tree", async () => {
   await light.click();
   await hierarchy.getByRole("button", { name: "Actions for Robot" }).click();
@@ -121,6 +146,25 @@ it("removes the row targeted by the menu and keeps keyboard navigation in the tr
   await expect.element(light).toHaveFocus();
   await userEvent.keyboard("{ArrowUp}");
   await expect.element(assembly).toHaveFocus();
+});
+
+it("keeps focus in its own workbench when two hosts show the same scene", async () => {
+  const otherHost = document.createElement("div");
+  const otherEditor = createEditor({ snapshot: editor.serialize() });
+  document.body.append(otherHost);
+  const otherApp = mountWorkbench(otherHost, otherEditor);
+  try {
+    const trees = page.getByRole("tree", { name: "Hierarchy" });
+    const secondTree = trees.nth(1);
+    await secondTree.getByRole("treeitem", { name: "Assembly" }).click();
+    await userEvent.keyboard("{ArrowDown}");
+    await expect.element(secondTree.getByRole("treeitem", { name: "Robot" })).toHaveFocus();
+    await expect.element(trees.first().getByRole("treeitem", { name: "Assembly" })).toHaveAttribute("aria-selected", "false");
+  } finally {
+    otherApp.unmount();
+    otherEditor.dispose();
+    otherHost.remove();
+  }
 });
 
 function testRenderer(): RendererLike {

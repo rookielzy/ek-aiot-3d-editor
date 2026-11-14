@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuPortal, DropdownMenuRoot, DropdownMenuTrigger } from "reka-ui";
-import { ref, type CSSProperties } from "vue";
+import { computed, ref, type CSSProperties } from "vue";
 import WorkbenchIcon, { type WorkbenchIconName } from "../WorkbenchIcon.vue";
 import { getPortalTheme } from "./utils";
 
@@ -20,24 +20,26 @@ const props = defineProps<{
   label: string;
   triggerLabel: string;
   icon: WorkbenchIconName;
-  commands: MenuCommand[];
+  commands: MenuCommand[] | (() => MenuCommand[]);
   compact?: boolean;
   returnFocus?: () => HTMLElement | null;
+  triggerTabIndex?: number;
 }>();
 
 const open = ref(false);
 const trigger = ref<HTMLButtonElement | null>(null);
 const theme = ref<CSSProperties>({});
 const boundary = ref<Element | null>(null);
+const interactedOutside = ref(false);
+const commands = computed(() => typeof props.commands === "function" ? props.commands() : props.commands);
 let leavingByTab = false;
-let interactedOutside = false;
 
 defineExpose({ openMenu: () => changeOpen(true) });
 
 function changeOpen(value: boolean): void {
   if (value) {
     leavingByTab = false;
-    interactedOutside = false;
+    interactedOutside.value = false;
     boundary.value = trigger.value?.closest(".ek-workbench__viewport-shell") ?? null;
     theme.value = getPortalTheme(trigger.value);
     if (boundary.value && trigger.value) {
@@ -75,11 +77,7 @@ function restoreFocus(event: Event): void {
   if (leavingByTab) event.preventDefault();
   if (!props.returnFocus) return;
   event.preventDefault();
-  if (!leavingByTab && !interactedOutside) props.returnFocus()?.focus({ preventScroll: true });
-}
-
-function onInteractOutside(): void {
-  interactedOutside = true;
+  if (!leavingByTab && !interactedOutside.value) props.returnFocus()?.focus({ preventScroll: true });
 }
 
 function onMenuKeyDown(event: KeyboardEvent): void {
@@ -99,7 +97,8 @@ function onMenuKeyDown(event: KeyboardEvent): void {
     event.stopPropagation();
     leavingByTab = true;
     changeOpen(false);
-    (props.returnFocus?.() ?? trigger.value)?.focus({ preventScroll: true });
+    const previous = event.shiftKey ? props.returnFocus?.() : undefined;
+    (previous ?? trigger.value)?.focus({ preventScroll: true });
   }
 }
 </script>
@@ -109,7 +108,7 @@ function onMenuKeyDown(event: KeyboardEvent): void {
     <DropdownMenuTrigger as-child>
       <button ref="trigger" type="button" class="ek-workbench__command-button"
         :class="{ 'ek-workbench__command-button--icon': compact, 'ek-workbench__tree-more': returnFocus }"
-        :tabindex="returnFocus ? -1 : undefined" :aria-label="triggerLabel" :title="label"
+        :tabindex="triggerTabIndex" :aria-label="triggerLabel" :title="label"
         @keydown.capture="onMenuKeyDown">
         <WorkbenchIcon :name="icon" />
         <span>{{ triggerLabel }}</span>
@@ -121,7 +120,7 @@ function onMenuKeyDown(event: KeyboardEvent): void {
         :align="boundary ? 'end' : 'start'" :side-flip="!boundary"
         sticky="always" :loop="true" :style="theme" :class="{ 'ek-vue-workbench-menu--row': returnFocus }"
         @keydown.capture="onMenuKeyDown" @open-auto-focus="focusFirstCommand" @close-auto-focus="restoreFocus"
-        @interact-outside="onInteractOutside">
+        @interact-outside="interactedOutside = true">
         <DropdownMenuLabel class="ek-vue-workbench-menu__label">{{ label }}</DropdownMenuLabel>
         <component :is="command.pressed === undefined ? DropdownMenuItem : DropdownMenuCheckboxItem"
           v-for="command in commands" :key="command.key" :disabled="command.disabled"

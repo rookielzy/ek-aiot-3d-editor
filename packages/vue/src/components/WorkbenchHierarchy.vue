@@ -5,7 +5,7 @@
   </label>
   <p v-if="hierarchy.empty" class="ek-workbench__empty">{{ context.i18n.t("reactWorkbench.leftPanel.hierarchy.empty") }}</p>
   <p v-else-if="search && matches.size === 0" class="ek-workbench__empty" role="status">{{ context.i18n.t("reactWorkbench.leftPanel.hierarchy.noResults") }}</p>
-  <ul v-else class="ek-workbench__tree" role="tree" aria-multiselectable="true"
+  <ul v-else ref="tree" class="ek-workbench__tree" role="tree" aria-multiselectable="true"
     :aria-label="context.i18n.t('reactWorkbench.leftPanel.hierarchy.label')" :style="treeStyle">
     <WorkbenchNodeRow
       v-for="row in hierarchy.roots"
@@ -16,7 +16,6 @@
       :matches="matches"
       :collapsed="collapsed"
       :toggle="toggle"
-      :tree-id="treeId"
       :tab-stop="tabStop"
       :set-focus="setFocus"
       :navigate="navigate"
@@ -25,7 +24,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, useId, watch, type CSSProperties } from "vue";
+import { computed, nextTick, ref, watch, type CSSProperties } from "vue";
 import type { WorkbenchHierarchyRow } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext } from "../composables/use-workbench";
 import WorkbenchNodeRow from "./WorkbenchNodeRow.vue";
@@ -33,7 +32,7 @@ import WorkbenchNodeRow from "./WorkbenchNodeRow.vue";
 const props = defineProps<{ context: ResolvedWorkbenchContext }>();
 const query = ref("");
 const collapsed = ref(new Set<string>());
-const treeId = useId();
+const tree = ref<HTMLUListElement | null>(null);
 const focusId = ref<string | null>(null);
 const hierarchy = computed(() => props.context.model.hierarchy);
 const search = computed(() => query.value.trim().toLocaleLowerCase());
@@ -79,7 +78,7 @@ watch(() => JSON.stringify([props.context.selectedNodeId, props.context.selected
 watch(visibleIds, (ids) => {
   const previous = focusId.value;
   if (!previous || ids.includes(previous)) return;
-  const hadFocus = document.activeElement === document.getElementById(`${treeId}-${previous}`);
+  const hadFocus = tree.value?.querySelector<HTMLElement>("[data-tree-row-id]:focus")?.dataset.treeRowId === previous;
   const fallback = tabStop.value;
   if (hadFocus && fallback) return focusRow(fallback);
   setFocus(fallback ?? null);
@@ -105,7 +104,7 @@ function navigate(id: string, where: -1 | 1 | "first" | "last" | "parent"): void
 async function focusRow(id: string): Promise<void> {
   setFocus(id);
   await nextTick();
-  const row = document.getElementById(`${treeId}-${id}`);
+  const row = tree.value?.querySelector<HTMLElement>(`[data-tree-row-id="${CSS.escape(id)}"]`);
   row?.focus({ preventScroll: true });
   row?.scrollIntoView?.({ block: "nearest" });
 }

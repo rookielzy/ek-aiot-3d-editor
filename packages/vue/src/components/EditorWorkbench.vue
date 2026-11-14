@@ -307,7 +307,7 @@ function kebabCase(value: string): string {
 function onKeyDown(event: KeyboardEvent): void {
   if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
   // The teleported menu handles its own keys. Pointer entry can also leave focus on its trigger.
-  if (event.target instanceof Element && event.target.closest('[aria-haspopup="menu"][aria-expanded="true"]')) return;
+  if (event.target instanceof Element && event.target.closest('[aria-haspopup="menu"][data-state="open"]')) return;
   const resolution = resolveEditorShortcut({
     key: event.key,
     code: event.code,
@@ -319,6 +319,14 @@ function onKeyDown(event: KeyboardEvent): void {
   });
   if (resolution.action === "clear-selection" && statusBar.value?.dismissProblems()) {
     event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
+  if (resolution.action === "clear-selection" && event.target instanceof HTMLElement
+    && event.target.matches("[data-tree-row-id], .ek-workbench__tree-more")) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.target.blur();
     return;
   }
   if (!resolution.handled || !resolution.action) {
