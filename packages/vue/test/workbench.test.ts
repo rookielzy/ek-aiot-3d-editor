@@ -1,3 +1,4 @@
+import { menuItem, menuTrigger, runMenuCommand } from "./support/workbench-menu";
 import { setInspectorColor } from "./support/inspector-controls";
 import { mount } from "@vue/test-utils";
 import { defineComponent, h, markRaw, nextTick } from "vue";
@@ -74,8 +75,7 @@ describe("Vue EditorWorkbench", () => {
       slots: { rightPanel: () => null }
     });
 
-    await wrapper.get('button[aria-controls^="project-menu"]').trigger("click");
-    await wrapper.get('[title="导出完整项目"]').trigger("click");
+    await runMenuCommand(wrapper, "项目菜单", "导出");
     await waitForAssertion(() => expect(wrapper.text()).toContain("无法完整导出：资源载荷缺失"));
     expect(urls.createObjectURL).not.toHaveBeenCalled();
 
@@ -83,8 +83,7 @@ describe("Vue EditorWorkbench", () => {
     const drawer = wrapper.get('[aria-label="问题详情"]');
     expect(drawer.text()).toContain("资源 asset-a 没有可导出的载荷");
 
-    await wrapper.get('button[aria-controls^="project-menu"]').trigger("click");
-    await wrapper.get('[title="导出部分项目"]').trigger("click");
+    await runMenuCommand(wrapper, "项目菜单", "导出部分");
     await waitForAssertion(() => expect(wrapper.text()).toContain("已导出部分项目"));
     expect(urls.createObjectURL).toHaveBeenCalled();
 
@@ -96,8 +95,7 @@ describe("Vue EditorWorkbench", () => {
     await drawer.get("input").trigger("change");
     await waitForAssertion(() => expect(drawer.text()).not.toContain("无法完整导出"));
 
-    await wrapper.get('button[aria-controls^="project-menu"]').trigger("click");
-    await wrapper.get('[title="导出完整项目"]').trigger("click");
+    await runMenuCommand(wrapper, "项目菜单", "导出");
     await waitForAssertion(() => expect(wrapper.text()).toContain("已导出项目"));
 
     urls.restore();
@@ -114,7 +112,7 @@ describe("Vue EditorWorkbench", () => {
     });
     const before = editor.serialize();
 
-    await wrapper.get('button[aria-controls^="project-menu"]').trigger("click");
+    await runMenuCommand(wrapper, "Project menu", "Open");
     const input = wrapper.get('[aria-label="Open project package"]');
     const file = new File(["invalid"], "broken.ek3d");
     Object.defineProperty(file, "arrayBuffer", {
@@ -133,31 +131,20 @@ describe("Vue EditorWorkbench", () => {
     wrapper.unmount();
   });
 
-  it("keeps project commands in a dismissible global menu with the locale switch", async () => {
+  it("keeps language accessible next to the project menu", async () => {
     const editor = markRaw(createEditor());
     const wrapper = mount(EditorWorkbench, {
       attachTo: document.body,
       props: { editor, rendererFactory: fakeRenderer },
       slots: { rightPanel: () => null }
     });
-    const trigger = wrapper.get('button[aria-controls^="project-menu"]');
-    expect(wrapper.find('[title="Export complete project"]:not([disabled])').isVisible()).toBe(false);
-
-    await trigger.trigger("click");
-    const menu = wrapper.get('[role="region"][aria-label="Project actions"]');
-    expect(menu.text()).toContain("Open");
-    expect(menu.text()).toContain("Export partial");
-    await menu.get('[aria-label="Language"]').setValue("zh-CN");
-    expect(editor.getRuntime()).toBeTruthy();
-
-    await menu.get('[aria-label="语言"]').trigger("keydown", { key: "Escape" });
-    expect(trigger.attributes("aria-expanded")).toBe("false");
-    expect(document.activeElement).toBe(trigger.element);
-
-    await trigger.trigger("click");
-    document.querySelector<HTMLElement>('[aria-label="3D 视口"]')?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-    await nextTick();
-    expect(trigger.attributes("aria-expanded")).toBe("false");
+    expect(menuTrigger(wrapper, "Project menu").attributes("aria-expanded")).toBe("false");
+    const runtime = editor.getRuntime();
+    expect(runtime).toBeTruthy();
+    await wrapper.get('[aria-label="Language"]').setValue("zh-CN");
+    expect(menuTrigger(wrapper, "项目菜单").attributes("aria-expanded")).toBe("false");
+    expect(wrapper.emitted("update:locale")).toEqual([["zh-CN"]]);
+    expect(editor.getRuntime()).toBe(runtime);
     wrapper.unmount();
   });
 
@@ -175,8 +162,7 @@ describe("Vue EditorWorkbench", () => {
       slots: { rightPanel: () => null }
     });
 
-    await wrapper.get('button[aria-controls^="project-menu"]').trigger("click");
-    await wrapper.get('[title="Export complete project"]').trigger("click");
+    await runMenuCommand(wrapper, "Project menu", "Export");
     rejected.reject(new Error("archive stream failed"));
     await waitForAssertion(() => expect(wrapper.text()).toContain("Project export failed"));
     expect(urls.createObjectURL).not.toHaveBeenCalled();
@@ -196,8 +182,7 @@ describe("Vue EditorWorkbench", () => {
     });
 
     try {
-      await wrapper.get('button[aria-controls^="project-menu"]').trigger("click");
-      await wrapper.get('[title="Export complete project"]').trigger("click");
+      await runMenuCommand(wrapper, "Project menu", "Export");
       await waitForAssertion(() => expect(wrapper.text()).toContain("Project export failed"));
       expect(wrapper.text()).toContain("Project download is unavailable");
       expect(wrapper.text()).not.toContain("Exported project");
@@ -248,11 +233,15 @@ describe("Vue EditorWorkbench", () => {
         h("button", { "data-host-paste": "", onClick: () => operations.paste() }, "Host paste")
       ] }
     });
-    const paste = () => wrapper.findAll("button").find((button) => button.text() === "Paste")!;
-    expect(paste().attributes("disabled")).toBeDefined();
-    expect(paste().attributes("title")).toBe("Copy a node before pasting.");
+    const trigger = menuTrigger(wrapper, "Node operations");
+    await trigger.trigger("click");
+    expect(menuItem("Paste").attributes("aria-disabled")).toBe("true");
+    expect(menuItem("Paste").attributes("aria-description")).toBe("Copy a node before pasting.");
+    await trigger.trigger("click");
     await wrapper.get('[data-host-copy]').trigger("click");
-    expect(paste().attributes("disabled")).toBeUndefined();
+    await trigger.trigger("click");
+    expect(menuItem("Paste").attributes("aria-disabled")).toBeUndefined();
+    await trigger.trigger("click");
     await wrapper.get('[data-host-paste]').trigger("click");
     expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(2);
     wrapper.unmount();
@@ -267,18 +256,14 @@ describe("Vue EditorWorkbench", () => {
       props: { editor, rendererFactory: fakeRenderer },
       slots: { toolbar: () => [h("input", { type: "number" }), h("textarea"), h("select", [h("option", "One")]), h("div", { contenteditable: "true", role: "textbox" }, "Notes")] }
     });
-    const trigger = wrapper.get('[aria-label="Node operations"]');
+    const trigger = menuTrigger(wrapper, "Node operations");
     const command = async (name: string) => {
       await trigger.trigger("click");
-      const panel = wrapper.get(`#${trigger.attributes("aria-controls")}`);
-      await panel.findAll("button").find((button) => button.text() === name)!.trigger("click");
+      await menuItem(name).trigger("click");
       expect(trigger.attributes("aria-expanded")).toBe("false");
-      expect(document.activeElement).toBe(trigger.element);
+      await waitForAssertion(() => expect(document.activeElement).toBe(trigger.element));
     };
     await command("Copy");
-    await waitForAssertion(() => {
-      expect(wrapper.findAll("button").find((button) => button.text() === "Paste")!.attributes("disabled")).toBeUndefined();
-    });
     await command("Paste");
     expect(Object.keys(editor.getSnapshot().objects)).toHaveLength(2);
     await command("Duplicate");
@@ -311,8 +296,8 @@ describe("Vue EditorWorkbench", () => {
     await wrapper.get('[title="Toggle move snap"]').trigger("click");
     expect(editor.snap.get()).toEqual({ translate: null, rotate: Math.PI / 12, scale: 0.1 });
     await trigger.trigger("click");
-    await wrapper.get("textarea").trigger("pointerdown");
-    expect(trigger.attributes("aria-expanded")).toBe("false");
+    wrapper.get("textarea").element.focus();
+    await waitForAssertion(() => expect(trigger.attributes("aria-expanded")).toBe("false"));
     wrapper.unmount();
   });
 
@@ -320,15 +305,15 @@ describe("Vue EditorWorkbench", () => {
     const editor = markRaw(createEditor());
     const wrapper = mount(EditorWorkbench, { props: { editor, defaultLocale: locale, rendererFactory: fakeRenderer } });
     const label = (en: string, zh: string) => locale === "en" ? en : zh;
-    await wrapper.get(`[aria-label="${label("Node operations", "节点操作")}"]`).trigger("click");
-    const copy = wrapper.findAll("button").find((button) => button.text() === label("Copy", "复制"))!;
-    expect(copy.attributes("disabled")).toBeDefined();
-    expect(copy.attributes("title")).toBe(label("Select a node first.", "请先选择节点。"));
+    await menuTrigger(wrapper, label("Node operations", "节点操作")).trigger("click");
+    const copy = menuItem(label("Copy", "复制"));
+    expect(copy.attributes("aria-disabled")).toBe("true");
+    expect(copy.attributes("aria-description")).toBe(label("Select a node first.", "请先选择节点。"));
     editor.dispatch({ type: "create-camera-view", view: { id: "view-a" } });
     const camera = Object.values(editor.getSnapshot().nodes).find((node) => node.kind === "camera")!;
     editor.dispatch({ type: "select-node", nodeId: camera.id });
     await nextTick();
-    expect(copy.attributes("title")).toBe(label("Camera nodes cannot be copied or grouped.", "相机节点不能复制或组合。"));
+    expect(copy.attributes("aria-description")).toBe(label("Camera nodes cannot be copied or grouped.", "相机节点不能复制或组合。"));
     wrapper.unmount();
   });
 
@@ -337,11 +322,11 @@ describe("Vue EditorWorkbench", () => {
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
     editor.dispatch({ type: "select-object", objectId: "object-a" });
     const wrapper = mount(EditorWorkbench, { attachTo: document.body, props: { editor, rendererFactory: fakeRenderer } });
-    const trigger = wrapper.get('[aria-label="Node operations"]');
+    const trigger = menuTrigger(wrapper, "Node operations");
     await trigger.trigger("click");
     await trigger.trigger("keydown", { key: "Escape" });
     expect(editor.getSnapshot().selection.objectId).toBe("object-a");
-    expect(document.activeElement).toBe(trigger.element);
+    await waitForAssertion(() => expect(document.activeElement).toBe(trigger.element));
     await wrapper.get('[title="Move mode"]').trigger("keydown", { key: "Escape" });
     expect(editor.getSnapshot().selection.nodeIds).toEqual([]);
     wrapper.unmount();
@@ -415,7 +400,7 @@ describe("Vue EditorWorkbench", () => {
     expect(importedButton().attributes("aria-pressed")).toBe("true");
     expect(wrapper.text()).toContain(`Selection ${imported.name}`);
     expect(wrapper.get('[aria-label="Position X"]').exists()).toBe(true);
-    await wrapper.get('[title="Clear selection"]').trigger("click");
+    await runMenuCommand(wrapper, "Node operations", "Clear");
     expect(editor.getSnapshot().selection.nodeIds).toEqual([]);
     expect(importedButton().attributes("aria-pressed")).toBe("false");
     wrapper.unmount();
@@ -443,22 +428,6 @@ describe("Vue EditorWorkbench", () => {
     await hierarchy.get('[aria-label="Expand Assembly"]').trigger("click");
     expect(hierarchy.text()).toContain("Robot arm");
     expect(editor.getSnapshot()).toEqual(before);
-    wrapper.unmount();
-  });
-
-  it("opens secondary tools with the keyboard and restores focus when dismissed", async () => {
-    const wrapper = mount(EditorWorkbench, {
-      attachTo: document.body,
-      props: { editor: markRaw(createEditor()), rendererFactory: fakeRenderer }
-    });
-    const trigger = wrapper.get('button[aria-label="Viewport helpers"]');
-    await trigger.trigger("click");
-    const panel = wrapper.get(`#${trigger.attributes("aria-controls")}`);
-    expect(panel.attributes("hidden")).toBeUndefined();
-    expect(panel.element.contains(document.activeElement)).toBe(true);
-    await panel.trigger("keydown", { key: "Escape" });
-    expect(panel.attributes("hidden")).toBeDefined();
-    expect(document.activeElement).toBe(trigger.element);
     wrapper.unmount();
   });
 
@@ -620,30 +589,24 @@ describe("Vue EditorWorkbench", () => {
     expect(wrapper.find('[title="Toggle rotate snap"]').attributes("aria-pressed")).toBe("true");
     expect(wrapper.find('[title="Toggle scale snap"]').attributes("aria-pressed")).toBe("true");
 
-    await waitForAssertion(() => {
-      expect(wrapper.find('[title="Toggle viewport grid"]').attributes("aria-pressed")).toBe("true");
-    });
-    await wrapper.find('[title="Toggle viewport grid"]').trigger("click");
+    await menuTrigger(wrapper, "Viewport helpers").trigger("click");
+    expect(menuItem("Grid", "menuitemcheckbox").attributes("aria-checked")).toBe("true");
+    await menuItem("Grid", "menuitemcheckbox").trigger("click");
     await nextTick();
     expect(editor.viewportHelpers.get().visibility.grid).toBe(false);
-    expect(wrapper.find('[title="Toggle viewport grid"]').attributes("aria-pressed")).toBe("false");
+    expect(menuItem("Grid", "menuitemcheckbox").attributes("aria-checked")).toBe("false");
 
-    await wrapper.find('[title="Toggle viewport floor"]').trigger("click");
+    await menuItem("Floor", "menuitemcheckbox").trigger("click");
     await nextTick();
     expect(editor.viewportHelpers.get().visibility.floor).toBe(true);
-    expect(wrapper.find('[title="Toggle viewport floor"]').attributes("aria-pressed")).toBe("true");
+    expect(menuItem("Floor", "menuitemcheckbox").attributes("aria-checked")).toBe("true");
 
-    for (const title of [
-      "Toggle viewport axes",
-      "Toggle hover feedback",
-      "Toggle selection bounds",
-      "Toggle snap feedback",
-      "Toggle viewport floor"
-    ]) {
-      await wrapper.find(`[title="${title}"]`).trigger("click");
-      await nextTick();
-      expect(wrapper.find(`[title="${title}"]`).attributes("aria-pressed")).toBe("false");
+    for (const label of ["Axes", "Hover", "Bounds", "Guide", "Floor"]) {
+      const toggle = menuItem(label, "menuitemcheckbox");
+      await toggle.trigger("click");
+      expect(toggle.attributes("aria-checked")).toBe("false");
     }
+    await menuTrigger(wrapper, "Viewport helpers").trigger("click");
     expect(Object.values(editor.viewportHelpers.get().visibility)).toEqual([false, false, false, false, false, false, true, true, false]);
 
     await wrapper.find('[title="Move mode"]').trigger("click");
@@ -652,9 +615,9 @@ describe("Vue EditorWorkbench", () => {
     expect(Object.values(editor.viewportHelpers.get().visibility)).toEqual([false, false, false, false, false, false, true, true, false]);
     expect(JSON.stringify(editor.serialize())).not.toContain("viewportHelpers");
 
-    await wrapper.find('[title="Reset camera"]').trigger("click");
-    await wrapper.find('[title="Frame selected"]').trigger("click");
-    await wrapper.find('[title="Frame all"]').trigger("click");
+    await runMenuCommand(wrapper, "Camera", "Reset");
+    await runMenuCommand(wrapper, "Camera", "Frame sel");
+    await runMenuCommand(wrapper, "Camera", "Frame all");
     expect(resetCamera).toHaveBeenCalledTimes(1);
     expect(frameSelected).toHaveBeenCalledTimes(1);
     expect(frameAll).toHaveBeenCalledTimes(1);
@@ -671,26 +634,26 @@ describe("Vue EditorWorkbench", () => {
         far: 1000
       }
     });
-    await wrapper.find('[title="Capture camera view"]').trigger("click");
+    await runMenuCommand(wrapper, "Camera", "Capture view");
     await nextTick();
     expect(editor.getSnapshot().cameras["view-a"]).toBeDefined();
-    await wrapper.find('[title="Apply camera view"]').trigger("click");
+    await runMenuCommand(wrapper, "Camera", "Apply view");
     expect(applyCameraView).toHaveBeenCalledWith(editor.getSnapshot().cameras["view-a"]);
 
-    await wrapper.find('[title="Duplicate selection"]').trigger("click");
-    await wrapper.find('[title="Copy selection"]').trigger("click");
-    await wrapper.find('[title="Paste objects"]').trigger("click");
-    await wrapper.find('[title="Delete selection"]').trigger("click");
-    await wrapper.find('[title="Select all"]').trigger("click");
-    await wrapper.find('[title="Clear selection"]').trigger("click");
+    await runMenuCommand(wrapper, "Node operations", "Duplicate");
+    await runMenuCommand(wrapper, "Node operations", "Copy");
+    await runMenuCommand(wrapper, "Node operations", "Paste");
+    await runMenuCommand(wrapper, "Node operations", "Delete");
+    await runMenuCommand(wrapper, "Node operations", "Select all");
+    await runMenuCommand(wrapper, "Node operations", "Clear");
     editor.dispatch({ type: "import-glb", objectId: "object-b", asset: { id: "asset-b" } });
     editor.dispatch({ type: "select-nodes", mode: "replace", nodeIds: ["object-a", "object-b"], primaryNodeId: "object-a" });
     await nextTick();
-    await wrapper.find('[title="Group selection"]').trigger("click");
+    await runMenuCommand(wrapper, "Node operations", "Group");
     editor.dispatch({ type: "create-group", nodeId: "group-a", name: "Group A" });
     editor.dispatch({ type: "select-node", nodeId: "group-a" });
     await nextTick();
-    await wrapper.find('[title="Ungroup selection"]').trigger("click");
+    await runMenuCommand(wrapper, "Node operations", "Ungroup");
     expect(duplicate).toHaveBeenCalledTimes(1);
     expect(copy).toHaveBeenCalledTimes(1);
     expect(paste).toHaveBeenCalledTimes(1);
@@ -1125,7 +1088,7 @@ describe("Vue EditorWorkbench", () => {
 
     await wrapper.find(".ek-workbench__locale-switcher select").setValue("en");
     await nextTick();
-    await wrapper.find('[title="Export complete project"]').trigger("click");
+    await runMenuCommand(wrapper, "Project menu", "Export");
     await nextTick();
 
     expect(exportProject).toHaveBeenLastCalledWith({ partial: false });
@@ -1202,7 +1165,7 @@ describe("Vue EditorWorkbench", () => {
     await nextTick();
     expect(wrapper.find('[aria-label="Project"]').attributes("hidden")).toBeUndefined();
 
-    await wrapper.find('[title="Select all"]').trigger("click");
+    await runMenuCommand(wrapper, "Node operations", "Select all");
     await nextTick();
 
     expect(wrapper.text()).toContain("Selection 2 nodes");
@@ -1277,16 +1240,15 @@ describe("Vue EditorWorkbench", () => {
       props: { editor, rendererFactory: fakeRenderer, defaultLocale: "en" }
     });
 
-    await waitForAssertion(() => {
-      expect(wrapper.find('[title="Toggle viewport grid"]').attributes("aria-pressed")).toBe("true");
-    });
+    await menuTrigger(wrapper, "Viewport helpers").trigger("click");
+    expect(menuItem("Grid", "menuitemcheckbox").attributes("aria-checked")).toBe("true");
     const mountCallsBeforeSwitch = mountRuntime.mock.calls.length;
-    await wrapper.find('[title="Toggle viewport grid"]').trigger("click");
+    await menuItem("Grid", "menuitemcheckbox").trigger("click");
     const helperState = editor.viewportHelpers.get();
     const snapshotBefore = editor.serialize();
     const runtime = editor.getRuntime();
     const historyBefore = editor.getHistoryState();
-    expect(wrapper.get(".ek-workbench__project-menu").attributes("hidden")).toBeDefined();
+    expect(menuTrigger(wrapper, "Project menu").attributes("aria-expanded")).toBe("false");
 
     await wrapper.get('button[lang="zh-CN"]').trigger("click");
     await nextTick();
@@ -1377,7 +1339,9 @@ describe("Vue EditorWorkbench", () => {
     expect(wrapper.find("button[lang]").exists()).toBe(false);
     await wrapper.setProps({ locale: "zh-CN" });
     await nextTick();
-    expect(wrapper.text()).toContain("Host open");
+    await menuTrigger(wrapper, "项目菜单").trigger("click");
+    expect(menuItem("Host open").exists()).toBe(true);
+    await menuTrigger(wrapper, "项目菜单").trigger("click");
 
     await wrapper.setProps({ locale: "en", showLocaleSwitcher: true });
     await nextTick();
@@ -1387,13 +1351,16 @@ describe("Vue EditorWorkbench", () => {
 
     expect(onLocaleChange).toHaveBeenCalledWith("zh-CN");
     expect(wrapper.emitted("update:locale")?.[0]).toEqual(["zh-CN"]);
-    expect(wrapper.text()).toContain("Open");
-    expect(wrapper.text()).not.toContain("Host open");
+    await menuTrigger(wrapper, "Project menu").trigger("click");
+    expect(menuItem("Open").exists()).toBe(true);
+    await menuTrigger(wrapper, "Project menu").trigger("click");
     expect(window.localStorage.getItem("ek-aiot.workbench.locale")).toBe("en");
 
     await wrapper.setProps({ locale: "zh-CN" });
     await nextTick();
-    expect(wrapper.text()).toContain("Host open");
+    await menuTrigger(wrapper, "项目菜单").trigger("click");
+    expect(menuItem("Host open").exists()).toBe(true);
+    await menuTrigger(wrapper, "项目菜单").trigger("click");
 
     onLocaleChange.mockClear();
     expect(window.localStorage.getItem("ek-aiot.workbench.locale")).toBe("zh-CN");

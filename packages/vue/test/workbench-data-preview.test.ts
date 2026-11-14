@@ -1,3 +1,4 @@
+import { runMenuCommand } from "./support/workbench-menu";
 import { mount, type VueWrapper } from "@vue/test-utils";
 import { markRaw, nextTick } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -290,8 +291,7 @@ describe("Vue object data preview", () => {
     const wrapper = mountWorkbench(editor);
 
     await selectNode(wrapper, "Pump object");
-    await clickButton(wrapper, "Node operations");
-    await clickButton(wrapper, "Duplicate");
+    await runMenuCommand(wrapper, "Node operations", "Duplicate");
 
     const bindings = editor.getSnapshot().dataSources.bindings;
     expect(Object.keys(bindings)).toHaveLength(2);

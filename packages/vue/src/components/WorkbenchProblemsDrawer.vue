@@ -77,7 +77,8 @@ watch(() => props.open, async (open) => {
 });
 
 function onKeyDown(event: KeyboardEvent): void {
-  if (event.key === "Escape") {
+  if (event.key === "Escape" && !event.defaultPrevented && !event.isComposing && event.keyCode !== 229) {
+    event.preventDefault();
     event.stopPropagation();
     emit("close");
   }

@@ -1,13 +1,13 @@
 # 07: React 整体一致性与体验验收
 
-Status: ready-for-agent
+Status: done
 Blocked by: 02, 04, 06
 
 ## Context
 
 开始前阅读 [正式规格](../spec.md)，其 Implementation Decisions、Testing Decisions 与 Out of Scope 均适用本任务。参照 [任务索引](../README.md) 确认前置任务；按既定优先级执行。
 覆盖 User Stories：1–29。
-技术实现已完成，用户体验验收仍待明确反馈；ready-for-agent 不代表已通过验收。
+技术实现和用户体验验收已完成。
 
 ## What to build
 
@@ -21,7 +21,7 @@ Blocked by: 02, 04, 06
 - [x] 中英文切换、输入法、跨弹层焦点及快捷键工作正常，editor/runtime 不因切换重建。
 - [x] 完成构建、类型、常规/浏览器验证和 React 示例构建；记录实际命令与限制，验证发布样式隔离。
 - [x] 提供可运行 React 示例、改造前后和关键状态截图、验证结果及已知限制。
-- [ ] 记录用户明确的 React 体验验收结果；仅技术检查完成不能勾选本项，未通过时修正后重新验收。
+- [x] 记录用户明确的 React 体验验收结果；仅技术检查完成不能勾选本项，未通过时修正后重新验收。
 
 ## Validation
 
@@ -144,3 +144,5 @@ Blocked by: 02, 04, 06
 - 截图保存在 acceptance/07-react/screens/10-live-review-desktop-zh-cn.jpg 和 11-live-review-dialog-zh-cn.jpg。截图中的右侧头像来自浏览器扩展，不属于工作台。
 
 结论：本次已检查的真实界面流程通过，未发现新的阻塞问题；这是代理代验记录，不记录为用户本人明确验收通过。最终用户验收项和任务 08 门槛保持原状态。
+
+2026-11-14：用户回复“确认 07 通过，开始 08”，采纳上述代验结果并明确确认 React 体验验收通过。任务 08 的前置依赖已满足。

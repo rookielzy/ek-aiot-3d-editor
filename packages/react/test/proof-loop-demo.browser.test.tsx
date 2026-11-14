@@ -1415,7 +1415,7 @@ async function clickNodeCommand(host: HTMLElement, command: string): Promise<voi
   await waitForAnimationFrame();
 }
 
-/** Finds the tool-strip button that opens the menu which holds `name`; Vue labels its strip differently. */
+/** Finds the tool-strip button that opens the menu which holds `name`. */
 function menuTrigger(host: HTMLElement, name: string): HTMLButtonElement | null {
   return [...host.querySelectorAll<HTMLButtonElement>(".ek-workbench__viewport-tool-strip button")]
     .find((candidate) => candidate.getAttribute("aria-label") === name || candidate.textContent?.trim() === name) ?? null;
@@ -1437,42 +1437,25 @@ async function openMenu(host: HTMLElement, trigger: HTMLButtonElement): Promise<
 async function waitForMenuCommand(host: HTMLElement, command: string): Promise<HTMLElement> {
   let found: HTMLElement | null = null;
   await waitFor(() => {
-    found = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')]
-      .find((candidate) => text(candidate) === command || candidate.getAttribute("title") === command) ??
-      [...document.querySelectorAll<HTMLElement>(".ek-workbench__tool-popover:not([hidden]) button")]
-        .find((candidate) => text(candidate) === command || candidate.getAttribute("title") === command) ?? null;
+    found = findMenuItem(host, command);
     expect(found, `Expected menu command ${command}`).toBeTruthy();
   });
   return found!;
 }
 
-/** Runs a project-menu command; the React menu renders its rows only while open. */
+/** Runs a project-menu command from the open menu. */
 async function clickProjectCommand(host: HTMLElement, command: string): Promise<void> {
   const trigger = [...host.querySelectorAll<HTMLButtonElement>(".ek-workbench__default-toolbar button")]
     .find((candidate) => candidate.getAttribute("aria-haspopup") === "menu");
-  if (!trigger) {
-    // Vue keeps its project actions in an inline region that its trigger reveals.
-    await clickByText(host, host.textContent?.includes("项目操作") ? "项目菜单" : "Project menu");
-    await clickByText(host, command);
-    return;
-  }
-  if (trigger!.getAttribute("aria-expanded") !== "true") {
-    await userEvent.click(trigger!);
-    await waitForAnimationFrame();
-    if (trigger!.getAttribute("aria-expanded") !== "true") {
-      const inline = host.querySelector<HTMLElement>(".ek-workbench__project-menu");
-      expect(inline, "Expected a project menu to open").toBeTruthy();
-      await clickByText(host, command);
-      return;
-    }
-  }
+  expect(trigger, "Expected the Project menu trigger").toBeTruthy();
+  await openMenu(host, trigger!);
   await userEvent.click(await waitForMenuCommand(host, command));
   await waitForAnimationFrame();
 }
 
 function findMenuItem(host: HTMLElement, label: string): HTMLElement | null {
   return [...host.ownerDocument.querySelectorAll<HTMLElement>('[role^="menuitem"]')]
-    .find((row) => text(row) === label || row.getAttribute("title") === label) ?? null;
+    .find((row) => row.getAttribute("aria-label") === label || text(row) === label || row.getAttribute("title") === label) ?? null;
 }
 
 async function verifyViewportToolsReachable(host: HTMLElement): Promise<void> {
@@ -1491,9 +1474,7 @@ async function verifyViewportToolsReachable(host: HTMLElement): Promise<void> {
     if (trigger.getAttribute("aria-expanded") === "true") await userEvent.keyboard("{Escape}");
     await userEvent.click(trigger);
     const rowFor = () =>
-      [...document.querySelectorAll<HTMLElement>('[role="menu"][aria-label="' + label + '"] [role^="menuitem"]')].at(-1) ??
-      // The Vue package still renders its menus as inline tool popovers.
-      [...document.querySelectorAll<HTMLElement>(".ek-workbench__tool-popover:not([hidden]) button")].at(-1) ?? null;
+      [...document.querySelectorAll<HTMLElement>(`[role="menu"][aria-label="${label}"] [role^="menuitem"]`)].at(-1) ?? null;
     await waitFor(() => expect(rowFor()).toBeTruthy());
     const lastButton = rowFor()!;
     lastButton.focus();
@@ -1503,7 +1484,7 @@ async function verifyViewportToolsReachable(host: HTMLElement): Promise<void> {
     expect(lastButton.contains(document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2))).toBe(true);
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("false"));
-    expect(document.activeElement).toBe(trigger);
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
   }
 }
 

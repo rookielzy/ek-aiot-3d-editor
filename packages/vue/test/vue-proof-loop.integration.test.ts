@@ -1,3 +1,4 @@
+import { menuItem, menuTrigger, runMenuCommand } from "./support/workbench-menu";
 import { setInspectorColor } from "./support/inspector-controls";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -125,9 +126,13 @@ describe("Vue proof-loop parity", () => {
       await waitForVue(() => expect(wrapper.text()).toContain("Studio view"));
 
       const toolbar = wrapper.get('[aria-label="Editor controls"]');
-      expect(buttonByText(toolbar, "Export").exists()).toBe(true);
+      await menuTrigger(wrapper, "Project menu").trigger("click");
+      expect(menuItem("Export").exists()).toBe(true);
+      await menuTrigger(wrapper, "Project menu").trigger("click");
       expect(buttonByText(wrapper, "Move").attributes("aria-pressed")).toBe("true");
-      expect((buttonByText(wrapper, "Duplicate").element as HTMLButtonElement).disabled).toBe(true);
+      await menuTrigger(wrapper, "Node operations").trigger("click");
+      expect(menuItem("Duplicate").attributes("aria-disabled")).toBe("true");
+      await menuTrigger(wrapper, "Node operations").trigger("click");
 
       const projectPanel = wrapper.get('[aria-label="Project panel"]');
       const hierarchy = projectPanel.get('[aria-label="Hierarchy"]');
@@ -151,7 +156,7 @@ describe("Vue proof-loop parity", () => {
       await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Scene")!.trigger("click");
       await waitForVue(() => expect(wrapper.text()).toContain("Studio view"));
       expect(wrapper.text()).toContain("Default");
-      await clickButton(wrapper, "Apply view");
+      await runMenuCommand(wrapper, "Camera", "Apply view");
 
       await clickButton(wrapper, "Snap move");
       expect(buttonByText(wrapper, "Snap move").attributes("aria-pressed")).toBe("true");
@@ -172,17 +177,18 @@ describe("Vue proof-loop parity", () => {
       await nextTick();
       await waitForVue(() => expect(wrapper.text()).toContain("Dirty"));
 
-      await clickButton(wrapper, "Duplicate");
+      await runMenuCommand(wrapper, "Node operations", "Duplicate");
       await clickPanelTab(wrapper, "Project");
       await waitForVue(() => expect(projectPanel.text()).toContain("Objects3"));
 
-      await clickButton(wrapper, "Export partial");
+      await runMenuCommand(wrapper, "Project menu", "Export partial");
       await waitForVue(() => expect(wrapper.text()).toMatch(/Exported (partial )?project/));
       await waitForVue(() => expect(window.__lastDownloadedProject).toBeInstanceOf(Uint8Array));
       expect(JSON.stringify(window.__lastDownloadedProject)).not.toContain("asset-unresolved");
 
       const bytes = window.__lastDownloadedProject;
       expect(bytes).toBeInstanceOf(Uint8Array);
+      await runMenuCommand(wrapper, "Project menu", "Open");
       const openInput = toolbar.find('input[type="file"]');
       await uploadFile(openInput.element as HTMLInputElement, new File([copyBytes(bytes!)], "starter.ek3d", { type: "application/octet-stream" }));
       await waitForVue(() => expect(wrapper.text()).toContain("Opened starter.ek3d"));

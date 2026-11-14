@@ -1,32 +1,21 @@
 <template>
-  <div ref="root" class="ek-workbench__default-toolbar" :aria-label="t('reactWorkbench.toolbar.controls.label')" @focusout="onFocusOut" @keydown.capture="onKeyDown">
-    <button ref="trigger" type="button" class="ek-workbench__command-button" :aria-expanded="menuOpen" :aria-controls="menuId" @click="menuOpen = !menuOpen">
-      {{ t("reactWorkbench.toolbar.project.menu") }}
-    </button>
-    <div ref="menu" :id="menuId" class="ek-workbench__project-menu" role="region" :hidden="!menuOpen" :aria-label="t('reactWorkbench.toolbar.project.label')">
-    <div class="ek-workbench__tool-group ek-workbench__tool-group--project">
-      <button class="ek-workbench__command-button ek-workbench__command-button--primary" type="button" :disabled="busy" :title="t('reactWorkbench.toolbar.project.open.title')" @click="fileInput?.click()">
-        <WorkbenchIcon name="open" />
-        <span>{{ t("reactWorkbench.toolbar.project.open.label") }}</span>
-      </button>
-      <input
-        ref="fileInput"
-        class="ek-workbench__file-input"
-        type="file"
-        :aria-label="t('reactWorkbench.toolbar.project.open.title')"
-        :disabled="busy"
-        :accept="ACCEPT_PROJECT_PACKAGE"
-        @change="openProject"
-      />
-      <button class="ek-workbench__command-button" type="button" :disabled="busy" :title="t('reactWorkbench.toolbar.project.export.title')" @click="exportProject(false)">
-        <WorkbenchIcon name="export" />
-        <span>{{ t("reactWorkbench.toolbar.project.export.label") }}</span>
-      </button>
-      <button class="ek-workbench__command-button" type="button" :disabled="busy" :title="t('reactWorkbench.toolbar.project.exportPartial.title')" @click="exportProject(true)">
-        <WorkbenchIcon name="export-partial" />
-        <span>{{ t("reactWorkbench.toolbar.project.exportPartial.label") }}</span>
-      </button>
-    </div>
+  <div class="ek-workbench__default-toolbar" :aria-label="t('reactWorkbench.toolbar.controls.label')">
+    <CommandMenu :trigger-label="t('reactWorkbench.toolbar.project.menu')" :label="t('reactWorkbench.toolbar.project.label')"
+      icon="open" :commands="projectCommands" />
+    <input
+      ref="fileInput"
+      class="ek-workbench__file-input"
+      type="file"
+      tabindex="-1"
+      :aria-label="t('reactWorkbench.toolbar.project.open.title')"
+      :disabled="busy"
+      :accept="ACCEPT_PROJECT_PACKAGE"
+      @change="openProject"
+    />
+    <span role="status" aria-live="polite" class="ek-workbench__toolbar-status" :data-tone="projectStatus.tone">
+      <span class="ek-workbench__toolbar-status-label">{{ t("reactWorkbench.toolbar.status.label") }}</span>
+      {{ projectStatusLabel }}
+    </span>
     <label v-if="showLocaleSwitcher" class="ek-workbench__locale-switcher">
       <span>{{ t("reactWorkbench.toolbar.locale.switch.label") }}</span>
       <select
@@ -41,12 +30,6 @@
         </option>
       </select>
     </label>
-    </div>
-
-    <span role="status" aria-live="polite" class="ek-workbench__toolbar-status" :data-tone="projectStatus.tone">
-      <span class="ek-workbench__toolbar-status-label">{{ t("reactWorkbench.toolbar.status.label") }}</span>
-      {{ projectStatusLabel }}
-    </span>
     <button
       v-if="showLocaleSwitcher"
       type="button"
@@ -62,11 +45,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from "vue";
-import type { MessageDescriptor, Problem, ProjectExportResult } from "@ek-aiot/3d-editor-core";
+import { computed, ref } from "vue";
+import type { MessageDescriptor, Problem } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext } from "../composables/use-workbench";
 import type { WorkbenchLocale, WorkbenchMessageKey, WorkbenchMessageValues } from "../i18n/workbench-i18n";
-import WorkbenchIcon from "./WorkbenchIcon.vue";
+import CommandMenu, { type MenuCommand } from "./ui/CommandMenu.vue";
 
 type ProjectActionStatus = {
   tone: "neutral" | "success" | "warning" | "error";
@@ -85,11 +68,6 @@ const emit = defineEmits<{
   projectProblems: [problems: Problem[]];
 }>();
 
-const root = ref<HTMLDivElement | null>(null);
-const trigger = ref<HTMLButtonElement | null>(null);
-const menu = ref<HTMLDivElement | null>(null);
-const menuId = `project-menu-${useId()}`;
-const menuOpen = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
 const busy = ref(false);
 const projectStatus = ref<ProjectActionStatus>({
@@ -106,39 +84,15 @@ const projectStatusLabel = computed(() => projectStatus.value.message
       fallback: props.context.model.project.statusLabel
     }));
 
-watch(menuOpen, async (open) => {
-  if (open) {
-    await nextTick();
-    menu.value?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
-  }
-});
-
-function dismiss(event: PointerEvent): void {
-  if (event.target instanceof Node && !root.value?.contains(event.target)) {
-    menuOpen.value = false;
-  }
-}
-
-onMounted(() => document.addEventListener("pointerdown", dismiss, true));
-onBeforeUnmount(() => document.removeEventListener("pointerdown", dismiss, true));
-
-function closeMenu(): void {
-  menuOpen.value = false;
-  trigger.value?.focus();
-}
-
-function onFocusOut(event: FocusEvent): void {
-  if (!(event.relatedTarget instanceof Node) || !root.value?.contains(event.relatedTarget)) {
-    menuOpen.value = false;
-  }
-}
-
-function onKeyDown(event: KeyboardEvent): void {
-  if (menuOpen.value && event.key === "Escape") {
-    event.stopPropagation();
-    closeMenu();
-  }
-}
+const projectCommands = computed(() => ([
+  { key: "open", label: t("reactWorkbench.toolbar.project.open.label"), title: t("reactWorkbench.toolbar.project.open.title"), icon: "open", onClick: () => fileInput.value?.click() },
+  { key: "export", label: t("reactWorkbench.toolbar.project.export.label"), title: t("reactWorkbench.toolbar.project.export.title"), icon: "export", onClick: () => void exportProject(false) },
+  { key: "export-partial", label: t("reactWorkbench.toolbar.project.exportPartial.label"), title: t("reactWorkbench.toolbar.project.exportPartial.title"), icon: "export-partial", onClick: () => void exportProject(true) }
+] satisfies MenuCommand[]).map((command) => ({
+  ...command,
+  disabled: busy.value,
+  reason: busy.value ? projectStatusLabel.value : undefined
+})));
 
 async function openProject(event: Event): Promise<void> {
   const input = event.currentTarget as HTMLInputElement;
@@ -153,7 +107,6 @@ async function openProject(event: Event): Promise<void> {
   }
   busy.value = true;
   projectStatus.value = { tone: "neutral", message: { key: "reactWorkbench.toolbar.status.opening", fallback: "Opening project..." } };
-  closeMenu();
   try {
     const packageBytes = new Uint8Array(await file.arrayBuffer());
     const result = props.context.importProject(packageBytes);
@@ -206,7 +159,6 @@ async function exportProject(partial: boolean): Promise<void> {
   }
   busy.value = true;
   projectStatus.value = { tone: "neutral", message: { key: "reactWorkbench.toolbar.status.exporting", fallback: "Exporting project..." } };
-  closeMenu();
   try {
     const result = props.context.exportProject({ partial });
     emit("projectProblems", result.problems);
@@ -215,7 +167,7 @@ async function exportProject(partial: boolean): Promise<void> {
         "reactWorkbench.toolbar.status.exportFailed.message", "Project export failed");
       return;
     }
-    const packageBytes = await resolvePackageBytes(result);
+    const packageBytes = await result.packageBytes;
     if (!downloadPackage(packageBytes, `${props.context.model.project.sceneName || "scene"}.ek3d`)) {
       throw new Error("Project download is unavailable");
     }
@@ -262,14 +214,6 @@ function changeLocale(event: Event): void {
     return;
   }
   props.context.i18n.setLocale((event.currentTarget as HTMLSelectElement).value as WorkbenchLocale);
-}
-
-async function resolvePackageBytes(result: ProjectExportResult): Promise<Uint8Array> {
-  const packageBytes = result.packageBytes;
-  if (!packageBytes) {
-    return new Uint8Array();
-  }
-  return packageBytes instanceof Uint8Array ? packageBytes : packageBytes;
 }
 
 function downloadPackage(packageBytes: Uint8Array, filename: string): boolean {

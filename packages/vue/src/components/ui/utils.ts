@@ -10,6 +10,6 @@ export function cn(...inputs: ClassValue[]) {
 export function getPortalTheme(trigger: HTMLElement | null): CSSProperties {
   if (!trigger) return {};
   const style = getComputedStyle(trigger);
-  const tokens = ["surface", "surface-raised", "border", "text", "muted", "accent", "accent-soft", "error", "radius-sm", "control-height"];
+  const tokens = ["surface", "surface-raised", "border", "text", "muted", "accent", "accent-soft", "error", "focus", "radius", "radius-sm", "control-height"];
   return Object.fromEntries(tokens.map((token) => [`--ek-workbench-${token}`, style.getPropertyValue(`--ek-workbench-${token}`)]).filter(([, value]) => value?.trim()));
 }

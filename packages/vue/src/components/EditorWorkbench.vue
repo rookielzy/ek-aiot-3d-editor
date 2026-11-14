@@ -97,7 +97,7 @@
 
     <footer class="ek-workbench__status" :aria-label="context.i18n.t('reactWorkbench.shell.status.label')">
       <slot v-if="$slots.status" name="status" v-bind="context" />
-      <WorkbenchStatusBar v-else :context="context" @locate-data-target="locateDataTarget" />
+      <WorkbenchStatusBar v-else ref="statusBar" :context="context" @locate-data-target="locateDataTarget" />
     </footer>
   </main>
 </template>
@@ -141,6 +141,7 @@ const props = withDefaults(defineProps<EditorWorkbenchProps>(), {
 const emit = defineEmits<EditorWorkbenchEmitDefinitions>();
 defineSlots<EditorWorkbenchSlots>();
 const instance = getCurrentInstance();
+const statusBar = ref<InstanceType<typeof WorkbenchStatusBar> | null>(null);
 
 const workbench = useWorkbench({
   editor: toRef(props, "editor"),
@@ -304,6 +305,9 @@ function kebabCase(value: string): string {
 }
 
 function onKeyDown(event: KeyboardEvent): void {
+  if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
+  // The teleported menu handles its own keys. Pointer entry can also leave focus on its trigger.
+  if (event.target instanceof Element && event.target.closest('[aria-haspopup="menu"][aria-expanded="true"]')) return;
   const resolution = resolveEditorShortcut({
     key: event.key,
     code: event.code,
@@ -313,6 +317,10 @@ function onKeyDown(event: KeyboardEvent): void {
     altKey: event.altKey,
     target: event.target
   });
+  if (resolution.action === "clear-selection" && statusBar.value?.dismissProblems()) {
+    event.preventDefault();
+    return;
+  }
   if (!resolution.handled || !resolution.action) {
     return;
   }

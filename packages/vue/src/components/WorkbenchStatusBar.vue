@@ -109,4 +109,12 @@ function closeDrawer(): void {
   open.value = false;
   trigger.value?.focus();
 }
+
+defineExpose({
+  dismissProblems() {
+    if (!open.value) return false;
+    closeDrawer();
+    return true;
+  }
+});
 </script>

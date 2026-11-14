@@ -1,3 +1,4 @@
+import { runMenuCommand } from "./support/workbench-menu";
 import { mount, type VueWrapper } from "@vue/test-utils";
 import { markRaw, nextTick } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -214,7 +215,7 @@ function okResponse() {
 }
 
 async function openPackage(wrapper: VueWrapper, bytes: Uint8Array): Promise<void> {
-  await clickButton(wrapper, "Project menu");
+  await runMenuCommand(wrapper, "Project menu", "Open");
   const input = wrapper.get(".ek-workbench__file-input");
   const file = new File([bytes], "handoff.ek3d", { type: "application/octet-stream" });
   Object.defineProperty(input.element, "files", { value: [file as unknown as File], configurable: true });
