@@ -17,6 +17,7 @@ import {
   type Editor,
   type EditorWithGlbImport,
   type EditorAction,
+  type EditorClipboardPayload,
   type EditorOptions,
   type EditorRuntime,
   type EditorRuntimeOptions,
@@ -177,6 +178,7 @@ export interface WorkbenchContext {
 
 export interface ResolvedWorkbenchContext extends WorkbenchContext {
   i18n: WorkbenchI18n;
+  setClipboard(payload: EditorClipboardPayload): void;
 }
 
 export interface UseWorkbenchResult {
@@ -626,6 +628,10 @@ export function useWorkbench(options: UseWorkbenchOptions = {}): UseWorkbenchRes
       selectAll: () => currentEditor.value.operations.selectAll(),
       clearSelection: () => currentEditor.value.operations.clearSelection(),
       canPaste: () => currentEditor.value.operations.canPaste()
+    },
+    setClipboard(payload) {
+      currentEditor.value.clipboard.set(payload);
+      clipboardVersion.value++;
     },
     historyState: currentEditor.value.getHistoryState(),
     selectionCount: model.value.selection.count,

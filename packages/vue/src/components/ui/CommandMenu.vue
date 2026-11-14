@@ -16,12 +16,13 @@ export interface MenuCommand {
   shortcut?: string;
 }
 
-defineProps<{
+const props = defineProps<{
   label: string;
   triggerLabel: string;
   icon: WorkbenchIconName;
   commands: MenuCommand[];
   compact?: boolean;
+  returnFocus?: () => HTMLElement | null;
 }>();
 
 const open = ref(false);
@@ -29,10 +30,14 @@ const trigger = ref<HTMLButtonElement | null>(null);
 const theme = ref<CSSProperties>({});
 const boundary = ref<Element | null>(null);
 let leavingByTab = false;
+let interactedOutside = false;
+
+defineExpose({ openMenu: () => changeOpen(true) });
 
 function changeOpen(value: boolean): void {
   if (value) {
     leavingByTab = false;
+    interactedOutside = false;
     boundary.value = trigger.value?.closest(".ek-workbench__viewport-shell") ?? null;
     theme.value = getPortalTheme(trigger.value);
     if (boundary.value && trigger.value) {
@@ -49,7 +54,32 @@ function changeOpen(value: boolean): void {
 
 function select(command: MenuCommand, event: Event): void {
   if (command.pressed !== undefined) event.preventDefault();
+  if (props.returnFocus) {
+    // Restore while the row still exists so the tree can hand focus on if the command removes it.
+    event.preventDefault();
+    changeOpen(false);
+    props.returnFocus()?.focus({ preventScroll: true });
+  }
   command.onClick();
+}
+
+function focusFirstCommand(event: Event): void {
+  if (!props.returnFocus || !(event.currentTarget instanceof HTMLElement)) return;
+  const item = event.currentTarget.querySelector<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])');
+  if (!item) return;
+  event.preventDefault();
+  item.focus();
+}
+
+function restoreFocus(event: Event): void {
+  if (leavingByTab) event.preventDefault();
+  if (!props.returnFocus) return;
+  event.preventDefault();
+  if (!leavingByTab && !interactedOutside) props.returnFocus()?.focus({ preventScroll: true });
+}
+
+function onInteractOutside(): void {
+  interactedOutside = true;
 }
 
 function onMenuKeyDown(event: KeyboardEvent): void {
@@ -69,7 +99,7 @@ function onMenuKeyDown(event: KeyboardEvent): void {
     event.stopPropagation();
     leavingByTab = true;
     changeOpen(false);
-    trigger.value?.focus();
+    (props.returnFocus?.() ?? trigger.value)?.focus({ preventScroll: true });
   }
 }
 </script>
@@ -78,7 +108,8 @@ function onMenuKeyDown(event: KeyboardEvent): void {
   <DropdownMenuRoot :open="open" :modal="false" @update:open="changeOpen">
     <DropdownMenuTrigger as-child>
       <button ref="trigger" type="button" class="ek-workbench__command-button"
-        :class="{ 'ek-workbench__command-button--icon': compact }" :aria-label="triggerLabel" :title="label"
+        :class="{ 'ek-workbench__command-button--icon': compact, 'ek-workbench__tree-more': returnFocus }"
+        :tabindex="returnFocus ? -1 : undefined" :aria-label="triggerLabel" :title="label"
         @keydown.capture="onMenuKeyDown">
         <WorkbenchIcon :name="icon" />
         <span>{{ triggerLabel }}</span>
@@ -88,8 +119,9 @@ function onMenuKeyDown(event: KeyboardEvent): void {
       <DropdownMenuContent class="ek-vue-workbench-menu" :aria-label="label" :aria-labelledby="undefined"
         :side-offset="4" :collision-padding="8" :collision-boundary="boundary"
         :align="boundary ? 'end' : 'start'" :side-flip="!boundary"
-        sticky="always" :loop="true" :style="theme"
-        @keydown.capture="onMenuKeyDown" @close-auto-focus="leavingByTab && $event.preventDefault()">
+        sticky="always" :loop="true" :style="theme" :class="{ 'ek-vue-workbench-menu--row': returnFocus }"
+        @keydown.capture="onMenuKeyDown" @open-auto-focus="focusFirstCommand" @close-auto-focus="restoreFocus"
+        @interact-outside="onInteractOutside">
         <DropdownMenuLabel class="ek-vue-workbench-menu__label">{{ label }}</DropdownMenuLabel>
         <component :is="command.pressed === undefined ? DropdownMenuItem : DropdownMenuCheckboxItem"
           v-for="command in commands" :key="command.key" :disabled="command.disabled"

@@ -28,6 +28,7 @@ import type { ResolvedWorkbenchContext } from "../composables/use-workbench";
 import type { WorkbenchMessageKey, WorkbenchMessageValues } from "../i18n/workbench-i18n";
 import WorkbenchIcon, { type WorkbenchIconName } from "./WorkbenchIcon.vue";
 import CommandMenu from "./ui/CommandMenu.vue";
+import { workbenchNodeCommands } from "./workbench-node-commands";
 
 interface CommandButton {
   key: string;
@@ -327,87 +328,7 @@ const commandGroups = computed<CommandGroup[]>(() => [
   {
     key: "node",
     label: "reactWorkbench.toolbar.node.label",
-    commands: [
-      {
-        key: "copy",
-        shortcut: `${primary}+C`,
-        icon: "copy",
-        label: "reactWorkbench.toolbar.node.copy.label",
-        title: "reactWorkbench.toolbar.node.copy.title",
-        disabled: !toolbar.value.canCopy,
-        reason: toolbar.value.disabledReasons?.canCopy,
-        onClick: () => props.context.runAction("copy")
-      },
-      {
-        key: "paste",
-        shortcut: `${primary}+V`,
-        icon: "paste",
-        label: "reactWorkbench.toolbar.node.paste.label",
-        title: "reactWorkbench.toolbar.node.paste.title",
-        disabled: !toolbar.value.canPaste,
-        reason: toolbar.value.disabledReasons?.canPaste,
-        onClick: () => props.context.runAction("paste")
-      },
-      {
-        key: "duplicate",
-        shortcut: `${primary}+D`,
-        icon: "duplicate",
-        label: "reactWorkbench.toolbar.node.duplicate.label",
-        title: "reactWorkbench.toolbar.node.duplicate.title",
-        disabled: !toolbar.value.canDuplicate,
-        reason: toolbar.value.disabledReasons?.canDuplicate,
-        onClick: () => props.context.runAction("duplicate")
-      },
-      {
-        key: "delete",
-        shortcut: "Delete Backspace",
-        icon: "delete",
-        label: "reactWorkbench.toolbar.node.delete.label",
-        title: "reactWorkbench.toolbar.node.delete.title",
-        disabled: !toolbar.value.canDelete,
-        reason: toolbar.value.disabledReasons?.canDelete,
-        onClick: () => props.context.runAction("delete")
-      },
-      {
-        key: "group",
-        shortcut: `${primary}+G`,
-        icon: "group",
-        label: "reactWorkbench.toolbar.node.group.label",
-        title: "reactWorkbench.toolbar.node.group.title",
-        disabled: !toolbar.value.canGroup,
-        reason: toolbar.value.disabledReasons?.canGroup,
-        onClick: () => props.context.runAction("group")
-      },
-      {
-        key: "ungroup",
-        shortcut: `${primary}+Shift+G`,
-        icon: "ungroup",
-        label: "reactWorkbench.toolbar.node.ungroup.label",
-        title: "reactWorkbench.toolbar.node.ungroup.title",
-        disabled: !toolbar.value.canUngroup,
-        reason: toolbar.value.disabledReasons?.canUngroup,
-        onClick: () => props.context.runAction("ungroup")
-      },
-      {
-        key: "select-all",
-        shortcut: `${primary}+A`,
-        icon: "select-all",
-        label: "reactWorkbench.toolbar.node.selectAll.label",
-        title: "reactWorkbench.toolbar.node.selectAll.title",
-        disabled: !toolbar.value.canSelectAll,
-        reason: toolbar.value.disabledReasons?.canSelectAll,
-        onClick: () => props.context.runAction("select-all")
-      },
-      {
-        key: "clear-selection",
-        icon: "clear-selection",
-        label: "reactWorkbench.toolbar.node.clear.label",
-        title: "reactWorkbench.toolbar.node.clear.title",
-        disabled: !toolbar.value.canClearSelection,
-        reason: toolbar.value.disabledReasons?.canClearSelection,
-        onClick: () => props.context.runAction("clear-selection")
-      }
-    ]
+    commands: workbenchNodeCommands(props.context, { primary })
   }
 ]);
 

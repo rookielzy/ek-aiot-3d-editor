@@ -384,7 +384,7 @@ describe("Vue EditorWorkbench", () => {
     expect(editor.getSnapshot().selection.nodeIds).toEqual(["object-a", imported.id]);
     expect(wrapper.text()).toContain("Selection 2 nodes");
     expect(wrapper.get('[data-host-selection]').attributes("data-host-selection")).toBe(`object-a,${imported.id}`);
-    expect(importedButton().attributes("aria-pressed")).toBe("true");
+    expect(importedButton().attributes("aria-selected")).toBe("true");
     await importedButton().trigger("click", { metaKey: true });
     expect(editor.getSnapshot().selection.nodeIds).toEqual(["object-a"]);
     await importedButton().trigger("click", { shiftKey: true });
@@ -397,12 +397,12 @@ describe("Vue EditorWorkbench", () => {
     await wrapper.get('[data-host-selection]').trigger("click");
     await openPanelView(wrapper, "Scene");
     expect((hierarchy.get('input[type="search"]').element as HTMLInputElement).value).toBe("");
-    expect(importedButton().attributes("aria-pressed")).toBe("true");
+    expect(importedButton().attributes("aria-selected")).toBe("true");
     expect(wrapper.text()).toContain(`Selection ${imported.name}`);
     expect(wrapper.get('[aria-label="Position X"]').exists()).toBe(true);
     await runMenuCommand(wrapper, "Node operations", "Clear");
     expect(editor.getSnapshot().selection.nodeIds).toEqual([]);
-    expect(importedButton().attributes("aria-pressed")).toBe("false");
+    expect(importedButton().attributes("aria-selected")).toBe("false");
     wrapper.unmount();
   });
 

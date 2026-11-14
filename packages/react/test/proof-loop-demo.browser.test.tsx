@@ -549,7 +549,7 @@ describe("proof-loop starter demo browser verification", () => {
         await userEvent.dblClick(row);
         await waitFor(() => {
           expect(editor.getSnapshot().nodes[editor.getSnapshot().selection.nodeId!]?.kind).toBe("imported");
-          expect(row.getAttribute(framework === "vue" ? "aria-pressed" : "aria-selected")).toBe("true");
+          expect(row.getAttribute("aria-selected")).toBe("true");
           expect(text(section(host, "Editor status"))).toContain(mesh.name);
         });
         expect(editor.getRuntime()!.captureCameraView()).not.toEqual(cameraBefore);
@@ -586,7 +586,7 @@ describe("proof-loop starter demo browser verification", () => {
         await waitFor(() => {
           const snapshot = editor.getSnapshot();
           expect(snapshot.selection.nodeIds.some((id) => snapshot.nodes[id].kind === "imported")).toBe(true);
-          expect(hierarchy.querySelector(framework === "vue" ? '[aria-pressed="true"]' : '[aria-selected="true"]')).toBeTruthy();
+          expect(hierarchy.querySelector('[role="treeitem"][aria-selected="true"]')).toBeTruthy();
         });
         await userEvent.keyboard("{Control>}");
         await userEvent.click(hierarchy.querySelector('button.ek-workbench__tree-row[title="Robot"]')!);
@@ -617,7 +617,7 @@ describe("proof-loop starter demo browser verification", () => {
         await clickByText(host, "清除");
         await userEvent.click(canvas, { position: { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 } });
         await waitFor(() => {
-          expect(chineseHierarchy.querySelector(framework === "vue" ? '[aria-pressed="true"]' : '[aria-selected="true"]')).toBeTruthy();
+          expect(chineseHierarchy.querySelector('[role="treeitem"][aria-selected="true"]')).toBeTruthy();
           expect(text(section(host, "编辑器状态"))).toContain("选择 Primitive 0");
         });
         expect((chineseHierarchy.querySelector('input[type="search"]') as HTMLInputElement).value).toBe("");
