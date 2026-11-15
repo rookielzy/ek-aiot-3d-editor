@@ -4,7 +4,7 @@
     :context="context"
     :open="open"
     @close="closeDrawer"
-    @locate-data-target="emit('locateDataTarget', $event)"
+    @locate="emit('locate', $event)"
   />
   <div class="ek-workbench__default-status">
     <span class="ek-workbench__status-chip" :data-tone="status.selectionCount > 0 ? 'active' : 'neutral'">
@@ -57,6 +57,9 @@
       <span :id="`${drawerId}-count`">{{ t("reactWorkbench.status.problems", { count: status.problemCount }) }}</span>
     </button>
     <span v-if="status.problemCount > 0" class="ek-workbench__status-chip" :data-tone="problemTone">
+      <span>{{ t("reactWorkbench.status.severitySummary", { errorCount: context.model.problems.bySeverity.error, warningCount: context.model.problems.bySeverity.warning, infoCount: context.model.problems.bySeverity.info }) }}</span>
+    </span>
+    <span v-if="status.problemCount > 0" class="ek-workbench__status-chip" :data-tone="problemTone">
       <span>
       {{ t("reactWorkbench.status.problemBreakdown", {
         authoredCount: status.authoredProblemCount,
@@ -75,14 +78,14 @@ import type { ResolvedWorkbenchContext } from "../composables/use-workbench";
 import type { WorkbenchMessageValues } from "../i18n/workbench-i18n";
 import { problemToneFromCounts } from "./workbench-model-helpers";
 import WorkbenchProblemsDrawer from "./WorkbenchProblemsDrawer.vue";
-import type { DataProblemTarget } from "./workbench-problem-target";
+import type { ProblemLocateRequest } from "./problem-locate";
 
 const props = defineProps<{
   context: ResolvedWorkbenchContext;
 }>();
 
 const emit = defineEmits<{
-  locateDataTarget: [target: DataProblemTarget];
+  locate: [request: ProblemLocateRequest];
 }>();
 
 const open = ref(false);

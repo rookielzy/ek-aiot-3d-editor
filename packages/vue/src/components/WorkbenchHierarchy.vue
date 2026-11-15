@@ -29,7 +29,8 @@ import type { WorkbenchHierarchyRow } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext } from "../composables/use-workbench";
 import WorkbenchNodeRow from "./WorkbenchNodeRow.vue";
 
-const props = defineProps<{ context: ResolvedWorkbenchContext }>();
+const props = defineProps<{ context: ResolvedWorkbenchContext; focus?: { nodeId: string } | null }>();
+const emit = defineEmits<{ focusHandled: [] }>();
 const query = ref("");
 const collapsed = ref(new Set<string>());
 const tree = ref<HTMLUListElement | null>(null);
@@ -82,6 +83,16 @@ watch(visibleIds, (ids) => {
   const fallback = tabStop.value;
   if (hadFocus && fallback) return focusRow(fallback);
   setFocus(fallback ?? null);
+});
+
+watch(() => props.focus?.nodeId, async (nodeId) => {
+  if (!nodeId || !visibleIds.value.includes(nodeId)) return;
+  focusId.value = nodeId;
+  await nextTick();
+  [...(tree.value?.querySelectorAll<HTMLElement>("[data-tree-row-id]") ?? [])]
+    .find((element) => element.dataset.treeRowId === nodeId)
+    ?.focus();
+  emit("focusHandled");
 });
 
 function toggle(id: string): void {

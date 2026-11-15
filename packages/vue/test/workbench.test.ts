@@ -855,6 +855,25 @@ describe("Vue EditorWorkbench", () => {
     wrapper.unmount();
   });
 
+  it("opens asset details and keeps maintenance reachable from the row menu", async () => {
+    const editor = markRaw(createEditor());
+    editor.dispatch({ type: "register-asset", asset: { id: "image-a", kind: "image", label: "Panel image", source: new Uint8Array([1, 2]) } });
+    const wrapper = mount(EditorWorkbench, { props: { editor, rendererFactory: fakeRenderer } });
+    await openPanelView(wrapper, "Assets");
+
+    const summary = wrapper.get('[aria-label="Show details for Panel image"]');
+    await summary.trigger("click");
+    expect(summary.attributes("aria-expanded")).toBe("true");
+    expect(wrapper.find(`#asset-image-a-details`).attributes("hidden")).toBeUndefined();
+    expect(wrapper.find(`#asset-image-a-details`).text()).toContain("Replace asset");
+
+    const more = wrapper.get('[aria-label="Asset actions for Panel image"]');
+    await more.trigger("click");
+    expect(document.querySelector('[role="menu"]')?.textContent).toContain("Replace file");
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    wrapper.unmount();
+  });
+
   it("shows every referencing object and imports dropped rasters with the chosen intent", async () => {
     const editor = markRaw(createEditor());
     for (const name of ["Arm", "Body", "Wheel", "Cabin"]) {
@@ -1287,7 +1306,7 @@ describe("Vue EditorWorkbench", () => {
 
     const status = wrapper.get('[aria-label="Editor status"]');
     const chips = status.findAll(".ek-workbench__status-chip");
-    expect(chips).toHaveLength(9);
+    expect(chips).toHaveLength(10);
     expect(chips.map((chip) => chip.find("strong").exists() ? chip.find("strong").text() : "")).toEqual([
       "Selection",
       "History",
@@ -1297,6 +1316,7 @@ describe("Vue EditorWorkbench", () => {
       "Assets",
       "Save",
       "Problems",
+      "",
       ""
     ]);
     expect(chips[0].attributes("data-tone")).toBe("active");
@@ -1308,7 +1328,8 @@ describe("Vue EditorWorkbench", () => {
     expect(chips[6].attributes("data-tone")).toBe("warning");
     expect(chips[7].attributes("data-tone")).toBe("warning");
     expect(chips[7].text()).toContain("Problems 1");
-    expect(chips[8].text()).toContain("Authored 0 · Runtime 1 · Data 0 · Project 0");
+    expect(chips[8].text()).toContain("0 errors · 1 warnings · 0 notes");
+    expect(chips[9].text()).toContain("Authored 0 · Runtime 1 · Data 0 · Project 0");
 
     await wrapper.find(".ek-workbench__locale-switcher select").setValue("zh-CN");
     await nextTick();

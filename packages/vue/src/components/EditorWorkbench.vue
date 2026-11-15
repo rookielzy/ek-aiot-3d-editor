@@ -70,7 +70,10 @@
         :context="context"
         :active-view="activeView"
         :data-locate="dataLocate"
+        :asset-locate="panelFocus?.kind === 'asset' ? panelFocus : null"
+        :node-locate="panelFocus?.kind === 'node' ? panelFocus : null"
         @data-locate-handled="handleDataLocateHandled"
+        @focus-handled="panelFocus = null"
       />
     </aside>
 
@@ -97,7 +100,7 @@
 
     <footer class="ek-workbench__status" :aria-label="context.i18n.t('reactWorkbench.shell.status.label')">
       <slot v-if="$slots.status" name="status" v-bind="context" />
-      <WorkbenchStatusBar v-else ref="statusBar" :context="context" @locate-data-target="locateDataTarget" />
+      <WorkbenchStatusBar v-else ref="statusBar" :context="context" @locate="locateProblem" />
     </footer>
   </main>
 </template>
@@ -107,6 +110,7 @@ import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, toRef, u
 import { buildWorkbenchModel, resolveEditorShortcut, type EditorAction, type EditorRuntimeOptions, type Problem } from "@ek-aiot/3d-editor-core";
 import { useWorkbench, type ResolvedWorkbenchContext } from "../composables/use-workbench";
 import type { DataProblemTarget } from "./workbench-problem-target";
+import type { PanelLocateRequest, ProblemLocateRequest } from "./problem-locate";
 import type { EditorWorkbenchEmitDefinitions, EditorWorkbenchProps, EditorWorkbenchSlots } from "./EditorWorkbench.types";
 import EditorViewport from "./EditorViewport.vue";
 import DataDetailCard from "./DataDetailCard.vue";
@@ -238,6 +242,7 @@ const panelId = useId();
 type PanelView = "scene" | "assets" | "data" | "project";
 const activeView = ref<PanelView>("scene");
 const dataLocate = ref<{ connectionId: string; queryId: string } | null>(null);
+const panelFocus = ref<PanelLocateRequest | null>(null);
 const dataFieldFocus = ref<{ nodeId: string; propertyKey: string } | null>(null);
 const objectOperationNotice = ref<string | null>(null);
 const leftCollapsed = ref(false);
@@ -285,6 +290,31 @@ function locateDataTarget(target: DataProblemTarget): void {
   dataFieldFocus.value = target.kind === "data-field"
     ? { nodeId: target.nodeId, propertyKey: target.propertyKey }
     : null;
+}
+
+function locateProblem(request: ProblemLocateRequest): void {
+  if (request.kind === "asset") {
+    activeView.value = "assets";
+    leftCollapsed.value = false;
+    panelFocus.value = request;
+    return;
+  }
+  if (request.kind === "node") {
+    workbench.dispatch({ type: "select-nodes", mode: "replace", nodeIds: [request.nodeId], primaryNodeId: request.nodeId });
+    activeView.value = "scene";
+    leftCollapsed.value = false;
+    panelFocus.value = request;
+    dataFieldFocus.value = null;
+    return;
+  }
+  if (request.kind === "data-query") {
+    activeView.value = "data";
+    leftCollapsed.value = false;
+    dataLocate.value = { connectionId: request.connectionId, queryId: request.queryId };
+    return;
+  }
+  workbench.dispatch({ type: "select-nodes", mode: "replace", nodeIds: [request.nodeId], primaryNodeId: request.nodeId });
+  dataFieldFocus.value = request.kind === "data-field" ? { nodeId: request.nodeId, propertyKey: request.propertyKey } : null;
 }
 
 function replaceAsset(assetId: string, file: File): void {

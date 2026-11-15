@@ -8,6 +8,7 @@
   >
     <header>
       <h2>{{ t("reactWorkbench.problems.details") }}</h2>
+      <small v-if="context.model.problems.totalCount > 0" class="ek-workbench__problems-summary">{{ t("reactWorkbench.status.severitySummary", { errorCount: context.model.problems.bySeverity.error, warningCount: context.model.problems.bySeverity.warning, infoCount: context.model.problems.bySeverity.info }) }}</small>
       <button ref="closeButton" type="button" @click="emit('close')">
         {{ t("reactWorkbench.problems.close") }}
       </button>
@@ -15,42 +16,45 @@
     <p v-if="context.model.problems.totalCount === 0">{{ t("reactWorkbench.problems.empty") }}</p>
     <ul class="ek-workbench__problem-list">
       <li
-        v-for="problem in context.model.problems.items"
+      v-for="problem in problems"
         :key="`${problem.id}:${problem.assetId ?? ''}:${problem.objectId ?? ''}`"
         :data-severity="problem.severity"
       >
-        <strong>{{ problem.titleDescriptor ? t(problem.titleDescriptor) : problem.title }}</strong>
-        <small>{{ renderSeverity(context.i18n, problem.severity) }} · {{ renderProblemSource(context.i18n, problem.source) }}</small>
-        <span>{{ renderTarget(problem.target) }}</span>
-        <span v-if="problem.detail || problem.detailDescriptor">
-          {{ problem.detailDescriptor ? t(problem.detailDescriptor) : problem.detail }}
-        </span>
-        <button
-          v-if="isDataTarget(problem.target)"
-          type="button"
-          @click="locateDataTarget(problem.target)"
-        >{{ t("reactWorkbench.problems.locate") }}</button>
+        <div class="ek-workbench__problem-head">
+          <strong>{{ problem.titleDescriptor ? t(problem.titleDescriptor) : problem.title }}</strong>
+          <small>{{ t("reactWorkbench.problems.severity") }} {{ renderSeverity(context.i18n, problem.severity) }} · {{ t("reactWorkbench.problems.source") }} {{ renderProblemSource(context.i18n, problem.source) }}</small>
+        </div>
+        <dl class="ek-workbench__problem-facts">
+          <div><dt>{{ t("reactWorkbench.problems.target") }}</dt><dd>{{ renderTarget(problem.target) }}</dd></div>
+          <div v-if="problem.detail || problem.detailDescriptor"><dt>{{ t("reactWorkbench.problems.detail") }}</dt><dd>{{ problem.detailDescriptor ? t(problem.detailDescriptor) : problem.detail }}</dd></div>
+        </dl>
+        <div class="ek-workbench__problem-actions">
+          <button v-if="locateProblemRequest(problem, context.model)" type="button" @click="locate(problem)">{{ t("reactWorkbench.problems.locate") }}</button>
         <label v-if="problem.assetId && problem.recoverability === 'user-action'" class="ek-workbench__file-action">
           <span>{{ problem.actionLabelDescriptor ? t(problem.actionLabelDescriptor) : problem.actionLabel ?? t("reactWorkbench.inspector.problems.replaceAsset.label") }}</span>
           <input type="file" :disabled="busy.includes(problem.assetId)" @change="recover(problem.assetId, $event)" />
         </label>
+          <small v-if="problem.assetId && progress[problem.assetId]" role="status">{{ renderStatusMessage(context.i18n, progress[problem.assetId]) }}</small>
+        </div>
       </li>
     </ul>
-    <div role="status">
+    <div v-if="Object.keys(feedback).length > 0" class="ek-workbench__problem-results" role="status" :aria-label="t('reactWorkbench.problems.results.label')">
       <p v-for="(message, assetId) in feedback" :key="assetId">
-        {{ assetId }} · <span>{{ t(message) }}</span>
+        {{ assetId }} · <span>{{ renderStatusMessage(context.i18n, message) }}</span>
       </p>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, watch } from "vue";
-import type { MessageDescriptor, ProblemTarget } from "@ek-aiot/3d-editor-core";
+import { computed, nextTick, ref, watch } from "vue";
+import type { ProblemSeverity, ProblemTarget, WorkbenchProblemItem } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext } from "../composables/use-workbench";
 import type { WorkbenchMessageInput } from "../i18n/workbench-i18n";
 import { renderProblemSource, renderSeverity } from "./inspector-i18n";
-import { isDataProblemTarget, type DataProblemTarget } from "./workbench-problem-target";
+import { locateProblemRequest, type ProblemLocateRequest } from "./problem-locate";
+import { replaceAssetFile, serializeAssetMaintenance } from "./asset-maintenance";
+import { renderStatusMessage, localizedStatusMessage, type LocalizedStatusMessage } from "./asset-workspace-status";
 
 const props = defineProps<{
   context: ResolvedWorkbenchContext;
@@ -60,14 +64,16 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: [];
-  locateDataTarget: [target: DataProblemTarget];
+  locate: [request: ProblemLocateRequest];
 }>();
 
 const closeButton = ref<HTMLButtonElement | null>(null);
 const pending = new Set<string>();
 const busy = ref<string[]>([]);
-const feedback = ref<Record<string, MessageDescriptor>>({});
-const t = (message: WorkbenchMessageInput) => props.context.i18n.t(message);
+const feedback = ref<Record<string, LocalizedStatusMessage>>({});
+const progress = ref<Record<string, LocalizedStatusMessage>>({});
+const t = (message: WorkbenchMessageInput, values?: Record<string, string | number>) => props.context.i18n.t(message, values);
+const problems = computed(() => [...props.context.model.problems.items].sort((left, right) => severityOrder[right.severity] - severityOrder[left.severity]));
 
 watch(() => props.open, async (open) => {
   if (open) {
@@ -84,15 +90,10 @@ function onKeyDown(event: KeyboardEvent): void {
   }
 }
 
-function isDataTarget(target: ProblemTarget): target is DataProblemTarget {
-  return isDataProblemTarget(target);
-}
-
-function locateDataTarget(target: ProblemTarget): void {
-  if (!isDataTarget(target)) {
-    return;
-  }
-  emit("locateDataTarget", target);
+function locate(problem: WorkbenchProblemItem): void {
+  const request = locateProblemRequest(problem, props.context.model);
+  if (!request) return;
+  emit("locate", request);
   emit("close");
 }
 
@@ -118,43 +119,23 @@ async function recover(assetId: string, event: Event): Promise<void> {
 
   pending.add(assetId);
   busy.value = [...pending];
-  feedback.value = {
-    ...feedback.value,
-    [assetId]: { key: "reactWorkbench.leftPanel.assets.replace.progress", fallback: "Replacing..." }
-  };
+  progress.value = { ...progress.value, [assetId]: localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.progress", "Replacing...") };
   try {
-    const result = await props.context.replaceAsset({ assetId, source: file, label: file.name, mimeType: file.type });
-    if (result.ok) {
-      await props.context.runtime?.project();
-    }
-    props.context.refreshProblems();
-    const problem = result.problems[0];
-    feedback.value = {
-      ...feedback.value,
-      [assetId]: result.ok
-        ? {
-            key: "reactWorkbench.leftPanel.assets.replace.success",
-            fallback: "Replaced with {fileName}",
-            values: { fileName: file.name }
-          }
-        : problem?.display?.titleDescriptor ?? {
-            key: "reactWorkbench.problems.recoveryFailed",
-            fallback: "Recovery failed: {detail}",
-            values: { detail: problem?.display?.title ?? problem?.message ?? "" }
-          }
-    };
+    const result = await serializeAssetMaintenance(props.context.editor, assetId, () => replaceAssetFile(props.context, assetId, file));
+    feedback.value = { ...feedback.value, [assetId]: result.message };
   } catch (error) {
     feedback.value = {
       ...feedback.value,
-      [assetId]: {
-        key: "reactWorkbench.problems.recoveryFailed",
-        fallback: "Recovery failed: {detail}",
-        values: { detail: error instanceof Error ? error.message : String(error) }
-      }
+      [assetId]: localizedStatusMessage("reactWorkbench.problems.recoveryFailed", "Recovery failed: {detail}", { detail: error instanceof Error ? error.message : String(error) })
     };
   } finally {
     pending.delete(assetId);
     busy.value = [...pending];
+    const next = { ...progress.value };
+    delete next[assetId];
+    progress.value = next;
   }
 }
+
+const severityOrder: Record<ProblemSeverity, number> = { error: 3, warning: 2, info: 1 };
 </script>

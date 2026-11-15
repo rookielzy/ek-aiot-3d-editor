@@ -5,7 +5,7 @@
         <h2>{{ t("reactWorkbench.leftPanel.hierarchy.label") }}</h2>
         <span>{{ t("reactWorkbench.leftPanel.hierarchy.count", { selectedCount: model.hierarchy.selectedCount, totalCount: model.hierarchy.totalCount }) }}</span>
       </div>
-      <WorkbenchHierarchy :context="context" />
+      <WorkbenchHierarchy :context="context" :focus="nodeLocate" @focus-handled="emit('focusHandled')" />
     </section>
 
     <section class="ek-workbench__panel-section" :aria-label="t('reactWorkbench.leftPanel.assets.label')" :hidden="activeView !== 'assets'">
@@ -78,66 +78,39 @@
             </select>
           </label>
         </div>
-        <ul v-if="queue.length > 0" class="ek-workbench__asset-queue" tabindex="0" aria-live="polite" :aria-label="t('reactWorkbench.leftPanel.assets.queue.label')">
-          <li v-for="item in queue" :key="item.id" :data-status="item.status">
-            <span>{{ item.label }}</span>
-            <small>
-              {{ queueStatusLabel(item.status) }}{{ item.kind ? ` · ${formatAssetKind(item.kind)}` : "" }}{{ item.detail ? ` · ${renderStatusMessage(item.detail)}` : "" }}
-            </small>
-            <em v-if="item.diagnostics.length > 0">{{ item.diagnostics.map(formatImportDiagnostic).join("; ") }}</em>
-          </li>
-        </ul>
+        <div v-if="queue.length > 0" class="ek-workbench__asset-queue-group">
+          <div class="ek-workbench__asset-queue-header">
+            <span>{{ queue.some((item) => item.status === 'queued' || item.status === 'importing') ? t('reactWorkbench.leftPanel.assets.queue.importing.label') : t('reactWorkbench.leftPanel.assets.queue.summary', { succeededCount: queue.filter((item) => item.status === 'succeeded').length, failedCount: queue.filter((item) => item.status === 'failed').length }) }}</span>
+            <button type="button" class="ek-workbench__asset-queue-clear" @click="queue = []">{{ t('reactWorkbench.leftPanel.assets.queue.clear') }}</button>
+          </div>
+          <ul class="ek-workbench__asset-queue" tabindex="0" aria-live="polite" :aria-label="t('reactWorkbench.leftPanel.assets.queue.label')">
+            <li v-for="item in queue" :key="item.id" :data-status="item.status">
+              <span>{{ item.label }}</span>
+              <small>
+                {{ queueStatusLabel(item.status) }}{{ item.kind ? ` · ${formatAssetKind(item.kind)}` : "" }}{{ item.detail ? ` · ${renderStatusMessage(item.detail)}` : "" }}
+              </small>
+              <em v-if="item.diagnostics.length > 0">{{ item.diagnostics.map(formatImportDiagnostic).join("; ") }}</em>
+            </li>
+          </ul>
+        </div>
         <p v-if="!workspace || workspace.totalCount === 0" class="ek-workbench__empty">{{ t("reactWorkbench.leftPanel.assets.empty") }}</p>
         <p v-else-if="visibleAssets.length === 0" class="ek-workbench__empty" role="status">{{ t("reactWorkbench.leftPanel.assets.noMatches") }}</p>
         <ul v-else class="ek-workbench__asset-list" :aria-label="t('reactWorkbench.leftPanel.assets.rows.label')">
-          <li
+          <WorkbenchAssetRow
             v-for="asset in visibleAssets"
             :key="asset.id"
-            class="ek-workbench__asset-row"
-            :data-missing="asset.missing ? 'true' : undefined"
-            :data-severity="asset.highestProblemSeverity ?? undefined"
-            :data-status="asset.status"
-          >
-            <div class="ek-workbench__asset-row-main">
-              <span>{{ asset.label }}</span>
-              <small>{{ asset.id }}</small>
-            </div>
-            <div class="ek-workbench__asset-badges" :aria-label="t('reactWorkbench.leftPanel.assets.state.label', { assetLabel: asset.label })">
-              <span>{{ formatAssetKind(asset.kind) }}</span>
-              <span>{{ formatWorkspaceStatus(asset.status) }}</span>
-              <span>{{ formatPayloadStatus(asset.payloadStatus) }}</span>
-              <span>{{ formatPackageStatus(asset.packageStatus) }}</span>
-              <span v-if="asset.importStatus">{{ formatImportStatus(asset.importStatus) }}</span>
-            </div>
-            <p class="ek-workbench__asset-meta">
-              {{ asset.referenced ? t("reactWorkbench.leftPanel.assets.refs", { count: asset.referenceCount }) : t("reactWorkbench.leftPanel.assets.unreferenced") }}{{ asset.references.length > 0 ? ` · ${asset.references.map((reference) => reference.labelDescriptor ? t(reference.labelDescriptor) : reference.label).join(", ")}` : "" }}{{ asset.problemCount ? ` · ${t("reactWorkbench.leftPanel.assets.problemCount", { count: asset.problemCount })}` : "" }}
-            </p>
-            <ul v-if="asset.problems.length > 0" class="ek-workbench__asset-diagnostics" :aria-label="t('reactWorkbench.leftPanel.assets.diagnostics.label', { assetLabel: asset.label })">
-              <li v-for="problem in asset.problems" :key="problem.id" :data-severity="problem.severity">
-                <strong>{{ problem.titleDescriptor ? t(problem.titleDescriptor) : problem.title }}</strong>
-                <small v-if="problem.detail">{{ problem.detailDescriptor ? t(problem.detailDescriptor) : problem.detail }}</small>
-              </li>
-            </ul>
-            <label v-if="asset.kind === 'glb' && asset.registered" class="ek-workbench__asset-replace">
-              <span>{{ t("reactWorkbench.leftPanel.assets.reimport.label") }}</span>
-              <small role="status">{{ recoveryStatusLabel(asset.id, "reactWorkbench.leftPanel.assets.reimport.hint") }}</small>
-              <input
-                type="file"
-                accept=".glb,.gltf,model/gltf-binary,model/gltf+json"
-                :aria-label="t('reactWorkbench.leftPanel.assets.reimport.aria', { assetLabel: asset.label })"
-                @change="maintainAsset(asset.id, $event, 'reimport')"
-              />
-            </label>
-            <label v-else-if="asset.registered" class="ek-workbench__asset-replace">
-              <span>{{ asset.actionLabelDescriptor ? t(asset.actionLabelDescriptor) : asset.actionLabel ?? t("reactWorkbench.leftPanel.assets.replace.label") }}</span>
-              <small role="status">{{ recoveryStatusLabel(asset.id, "reactWorkbench.leftPanel.assets.replace.hint") }}</small>
-              <input type="file" :aria-label="t('reactWorkbench.leftPanel.assets.replace.aria', { assetLabel: asset.label })" @change="maintainAsset(asset.id, $event, 'replace')" />
-            </label>
-          </li>
+            :context="context"
+            :asset="asset"
+            :recovery="recoveryByAsset.get(asset.id) ?? []"
+            :recovery-state="recoveryState"
+            :locate="assetLocate?.assetId === asset.id"
+            @picked="(file, mode) => maintainAsset(asset.id, file, mode)"
+            @locate-handled="emit('focusHandled')"
+          />
         </ul>
         <div v-if="model.assets.missing.length > 0" class="ek-workbench__recovery-list" :aria-label="t('reactWorkbench.leftPanel.assets.recovery.label')">
           <label
-            v-for="item in model.assets.missing"
+            v-for="item in hiddenRecovery"
             :key="item.problemId"
             class="ek-workbench__file-action"
             :data-severity="item.severity"
@@ -145,7 +118,7 @@
             <span>{{ item.actionLabelDescriptor ? t(item.actionLabelDescriptor) : item.actionLabel ?? t("reactWorkbench.leftPanel.assets.replace.label") }}</span>
             <strong>{{ item.label }}</strong>
             <small role="status">{{ recoveryState[item.assetId] ? renderStatusMessage(recoveryState[item.assetId]!) : (item.titleDescriptor ? t(item.titleDescriptor) : item.title) }}</small>
-            <input type="file" @change="maintainAsset(item.assetId, $event, 'replace')" />
+            <input type="file" @change="onMissingAssetChange(item.assetId, $event)" />
           </label>
         </div>
         <div v-if="Object.keys(recoverySuccessState).length > 0" class="ek-workbench__recovery-list" :aria-label="t('reactWorkbench.leftPanel.assets.recovery.status.label')">
@@ -228,12 +201,15 @@ import {
   type MessageDescriptor,
   type ProjectProblem,
   type WorkbenchAssetImportDiagnostic,
+  type WorkbenchMissingAssetItem,
   type WorkbenchRasterImportKind
 } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext } from "../composables/use-workbench";
 import type { WorkbenchMessageKey, WorkbenchMessageValues } from "../i18n/workbench-i18n";
 import WorkbenchHierarchy from "./WorkbenchHierarchy.vue";
+import WorkbenchAssetRow from "./WorkbenchAssetRow.vue";
 import DataSourcesPanel from "./DataSourcesPanel.vue";
+import { serializeAssetMaintenance } from "./asset-maintenance";
 
 type LocalizedStatusMessage =
   | {
@@ -269,16 +245,18 @@ const props = defineProps<{
   context: ResolvedWorkbenchContext;
   activeView: "scene" | "assets" | "data" | "project";
   dataLocate?: { connectionId: string; queryId: string } | null;
+  assetLocate?: { assetId: string } | null;
+  nodeLocate?: { nodeId: string } | null;
 }>();
 
 const emit = defineEmits<{
   dataLocateHandled: [];
+  focusHandled: [];
 }>();
 
 const recoveryState = reactive<AssetRecoveryState>({});
 const recoverySuccessState = reactive<AssetRecoveryState>({});
 const maintenanceTokens = new Map<string, symbol>();
-const pendingMaintenance = new Map<string, Promise<void>>();
 const assetQuery = ref("");
 const assetKind = ref<AssetKindFilter>("all");
 const assetStatus = ref<AssetStatusFilter>("all");
@@ -304,6 +282,12 @@ const visibleAssets = computed(() => {
   });
   return sortAssetWorkspaceItems(filtered, { key: assetSort.value });
 });
+watch(() => props.assetLocate, (locate) => {
+  if (!locate) return;
+  assetQuery.value = "";
+  assetKind.value = "all";
+  assetStatus.value = "all";
+});
 
 watch(
   () => ({
@@ -317,7 +301,6 @@ watch(
         delete recoverySuccessState[assetId];
       }
       maintenanceTokens.clear();
-      pendingMaintenance.clear();
       for (const assetId of Object.keys(recoveryState)) {
         delete recoveryState[assetId];
       }
@@ -337,7 +320,6 @@ watch(
     for (const assetId of maintenanceTokens.keys()) {
       if (!assetIds.has(assetId)) {
         maintenanceTokens.delete(assetId);
-        pendingMaintenance.delete(assetId);
       }
     }
   },
@@ -385,6 +367,9 @@ async function importAssetFiles(files: readonly File[]): Promise<void> {
   const resultsByQueueId = new Map(queueItems.map((item, index) => [item.id, results[index]]));
   queue.value = queue.value.map((item) => {
     const result = resultsByQueueId.get(item.id);
+    if (!result && queueItems.some((queued) => queued.id === item.id)) {
+      return { ...item, status: "failed", detail: localizedStatusMessage("reactWorkbench.leftPanel.assets.queue.failedDetail", "Import failed") };
+    }
     if (!result) {
       return item;
     }
@@ -402,6 +387,14 @@ async function importAssetFiles(files: readonly File[]): Promise<void> {
   });
 }
 
+const recoveryByAsset = computed(() => {
+  const grouped = new Map<string, WorkbenchMissingAssetItem[]>();
+  for (const item of model.value.assets.missing) grouped.set(item.assetId, [...(grouped.get(item.assetId) ?? []), item]);
+  return grouped;
+});
+const visibleAssetIds = computed(() => new Set(visibleAssets.value.map((asset) => asset.id)));
+const hiddenRecovery = computed(() => model.value.assets.missing.filter((item) => !visibleAssetIds.value.has(item.assetId)));
+
 function onImportChange(event: Event): void {
   const input = event.currentTarget as HTMLInputElement;
   const files = Array.from(input.files ?? []);
@@ -415,14 +408,7 @@ function onDrop(event: DragEvent): void {
   void importAssetFiles(Array.from(event.dataTransfer?.files ?? []));
 }
 
-async function maintainAsset(assetId: string, event: Event, mode: "replace" | "reimport"): Promise<void> {
-  const input = event.currentTarget as HTMLInputElement;
-  const file = input.files?.[0];
-  input.value = "";
-  if (!file) {
-    return;
-  }
-
+async function maintainAsset(assetId: string, file: File, mode: "replace" | "reimport"): Promise<void> {
   const recoveringMissing = model.value.assets.missing.some((item) => item.assetId === assetId);
   const token = Symbol(assetId);
   maintenanceTokens.set(assetId, token);
@@ -431,67 +417,47 @@ async function maintainAsset(assetId: string, event: Event, mode: "replace" | "r
     ? localizedStatusMessage("reactWorkbench.leftPanel.assets.reimport.progress", "Analyzing GLB...")
     : localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.progress", "Replacing...");
 
-  const previous = pendingMaintenance.get(assetId);
-  let finish!: () => void;
-  const pending = new Promise<void>((resolve) => {
-    finish = resolve;
-  });
-  pendingMaintenance.set(assetId, pending);
   try {
-    if (previous) {
-      await previous;
-    }
-    if (maintenanceTokens.get(assetId) !== token) {
-      return;
-    }
-
-    let message: LocalizedStatusMessage;
-    let replaced = false;
-    try {
-      if (mode === "reimport") {
-        const result = await props.context.assets.reimportGlbAsset({ assetId, source: file });
-        message = result.ok
-          ? reimportSummaryStatusMessage(file.name, result.remap?.summary)
-          : glbDiagnosticStatusMessage(result.diagnostics[0]) ??
-            (result.commandResult?.error ? rawStatusMessage(result.commandResult.error) : localizedStatusMessage("reactWorkbench.leftPanel.assets.reimport.failed", "Reimport failed"));
-      } else {
-        const result = await props.context.assets.replaceAsset({
-          assetId,
-          source: file,
-          label: file.name,
-          mimeType: file.type
-        });
-        if (result.ok) {
-          await props.context.runtime?.project();
-          replaced = true;
+    await serializeAssetMaintenance(props.context.editor, assetId, async () => {
+      if (maintenanceTokens.get(assetId) !== token) return;
+      let message: LocalizedStatusMessage;
+      let replaced = false;
+      try {
+        if (mode === "reimport") {
+          const result = await props.context.assets.reimportGlbAsset({ assetId, source: file });
+          message = result.ok
+            ? reimportSummaryStatusMessage(file.name, result.remap?.summary)
+            : glbDiagnosticStatusMessage(result.diagnostics[0]) ??
+              (result.commandResult?.error ? rawStatusMessage(result.commandResult.error) : localizedStatusMessage("reactWorkbench.leftPanel.assets.reimport.failed", "Reimport failed"));
+        } else {
+          const result = await props.context.assets.replaceAsset({ assetId, source: file, label: file.name, mimeType: file.type });
+          if (result.ok) {
+            await props.context.runtime?.project();
+            replaced = true;
+          }
+          message = result.ok
+            ? localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.success", "Replaced with {fileName}", { fileName: file.name })
+            : projectProblemStatusMessage(result.problems[0]) ?? localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.failed", "Replacement failed");
         }
-        message = result.ok
-          ? localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.success", "Replaced with {fileName}", { fileName: file.name })
-          : projectProblemStatusMessage(result.problems[0]) ?? localizedStatusMessage("reactWorkbench.leftPanel.assets.replace.failed", "Replacement failed");
+        props.context.refreshProblems();
+      } catch (error) {
+        message = rawStatusMessage(error instanceof Error ? error.message : String(error));
       }
-      props.context.refreshProblems();
-    } catch (error) {
-      message = rawStatusMessage(error instanceof Error ? error.message : String(error));
-    }
-    if (maintenanceTokens.get(assetId) !== token) {
-      return;
-    }
-    maintenanceTokens.delete(assetId);
-    recoveryState[assetId] = message;
-    if (replaced && recoveringMissing) {
-      recoverySuccessState[assetId] = message;
-    }
+      if (maintenanceTokens.get(assetId) !== token) return;
+      maintenanceTokens.delete(assetId);
+      recoveryState[assetId] = message;
+      if (replaced && recoveringMissing) recoverySuccessState[assetId] = message;
+    });
   } finally {
-    finish();
-    if (pendingMaintenance.get(assetId) === pending) {
-      pendingMaintenance.delete(assetId);
-    }
+    if (maintenanceTokens.get(assetId) === token) maintenanceTokens.delete(assetId);
   }
 }
 
-function recoveryStatusLabel(assetId: string, fallbackKey: WorkbenchMessageKey): string {
-  const message = recoveryState[assetId];
-  return message ? renderStatusMessage(message) : t(fallbackKey);
+function onMissingAssetChange(assetId: string, event: Event): void {
+  const input = event.currentTarget as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (file) void maintainAsset(assetId, file, "replace");
 }
 
 function localizedStatusMessage(
