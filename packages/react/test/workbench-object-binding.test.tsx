@@ -318,7 +318,10 @@ describe("React object binding authoring", () => {
   });
 
   it("allows devices to be loaded again after query creation cancels a pending candidate request", async () => {
-    const pending = Promise.withResolvers<{ status: number; body: string }>();
+    let resolvePending!: (response: { status: number; body: string }) => void;
+    const pending = new Promise<{ status: number; body: string }>((resolve) => {
+      resolvePending = resolve;
+    });
     const requests: Parameters<DataRequestExecutor>[0][] = [];
     const editor = createSeedEditor((request) => {
       requests.push(request);
@@ -341,7 +344,7 @@ describe("React object binding authoring", () => {
     fireEvent.click(load);
     expect(await screen.findByLabelText("Devices in current result")).toBeTruthy();
     expect(requests).toHaveLength(2);
-    await act(async () => pending.resolve({ status: 200, body: JSON.stringify({ items: [] }) }));
+    await act(async () => resolvePending({ status: 200, body: JSON.stringify({ items: [] }) }));
     expect(workbenchOptionLabels(screen.getByLabelText("Devices in current result"))).toContain("Pump 1 (pump-1)");
 
     view.unmount();
