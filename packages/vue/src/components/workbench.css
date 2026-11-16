@@ -2511,6 +2511,14 @@ button.ek-workbench__status-chip { cursor: pointer; font: inherit; }
   cursor: pointer;
 }
 
+.ek-workbench__asset-summary-row > .ek-workbench__tree-more {
+  position: static;
+  inset-inline-end: auto;
+  width: var(--ek-workbench-control-height);
+  min-width: var(--ek-workbench-control-height);
+  min-height: var(--ek-workbench-control-height);
+}
+
 .ek-workbench__asset-summary:hover,
 .ek-workbench__asset-more:hover,
 .ek-workbench__asset-more[data-state="open"] {

@@ -1582,6 +1582,11 @@ async function assertAssetWorkspaceLayout(host: HTMLElement): Promise<void> {
     expect(rect.left).toBeGreaterThanOrEqual(panelRect.left - 1);
     expect(rect.right).toBeLessThanOrEqual(panelRect.right + 1);
   }
+  for (const trigger of assets.querySelectorAll(".ek-workbench__asset-summary-row > .ek-workbench__asset-more, .ek-workbench__asset-summary-row > .ek-workbench__tree-more")) {
+    const rect = trigger.getBoundingClientRect();
+    expect(rect.left, "Asset row menu stays inside the workspace").toBeGreaterThanOrEqual(panelRect.left - 1);
+    expect(rect.right, "Asset row menu stays inside the workspace").toBeLessThanOrEqual(panelRect.right + 1);
+  }
   assertViewportWidthWasExercised();
 }
 
