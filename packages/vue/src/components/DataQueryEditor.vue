@@ -8,6 +8,7 @@
     @keydown.capture="onKeyDown"
     @cancel.prevent="cancelDialog"
   >
+    <div :inert="discardOpen ? true : undefined">
     <div class="ek-workbench__query-editor-header">
       <h3>{{ title }}</h3>
       <button ref="closeButton" type="button" @click="requestClose()">{{ t("dataSources.queryEditor.close") }}</button>
@@ -18,16 +19,22 @@
     </p>
 
     <div v-else class="ek-workbench__query-editor-form">
-      <label class="ek-workbench__field">
-        <span>{{ t("dataSources.queryEditor.name") }}</span>
-        <input
-          ref="nameInput"
-          type="text"
-          :aria-label="t('dataSources.queryEditor.name')"
-          :value="form.name"
-          @input="updateForm({ name: ($event.target as HTMLInputElement).value })"
-        />
-      </label>
+      <section class="ek-workbench__query-section" :aria-label="t('dataSources.queryEditor.connectionSection')">
+        <h4>{{ t("dataSources.queryEditor.connectionSection") }}</h4>
+        <label class="ek-workbench__field">
+          <span>{{ t("dataSources.queryEditor.name") }}</span>
+          <input
+            ref="nameInput"
+            type="text"
+            :aria-label="t('dataSources.queryEditor.name')"
+            :aria-invalid="nameProblems.length > 0"
+            :aria-describedby="nameProblems.length > 0 ? `${problemId}-name` : undefined"
+            :value="form.name"
+            @input="updateForm({ name: ($event.target as HTMLInputElement).value })"
+          />
+        </label>
+        <p v-if="nameProblems.length > 0" :id="`${problemId}-name`" class="ek-workbench__field-error" role="alert">{{ nameProblems.join(" ") }}</p>
+      </section>
 
       <section v-if="referenceModel && referenceCount > 0" class="ek-workbench__query-references" :aria-label="referenceCountLabel">
         <h4>{{ referenceCountLabel }}</h4>
@@ -92,11 +99,14 @@
           <input
             type="text"
             :aria-label="t('dataSources.request.path')"
+            :aria-invalid="pathProblems.length > 0"
+            :aria-describedby="pathProblems.length > 0 ? `${problemId}-path` : undefined"
             :placeholder="t('dataSources.request.pathPlaceholder')"
             :value="form.path"
             @input="updateRequestForm({ path: ($event.target as HTMLInputElement).value })"
           />
         </label>
+        <p v-if="pathProblems.length > 0" :id="`${problemId}-path`" class="ek-workbench__field-error" role="alert">{{ pathProblems.join(" ") }}</p>
 
         <div class="ek-workbench__request-preview">
           <span>{{ t("dataSources.request.preview") }}</span>
@@ -178,6 +188,7 @@
             @change-type="changeParameterType(parameter.id, $event)"
             @remove="removeParameter(parameter.id)"
           />
+          <p v-if="parameterProblems.length > 0" :id="`${problemId}-parameters`" class="ek-workbench__field-error" role="alert">{{ parameterProblems.join(" ") }}</p>
           <button type="button" @click="addParameter">{{ t("dataSources.request.parameters.add") }}</button>
         </fieldset>
 
@@ -439,6 +450,7 @@
         <button ref="cancelButton" type="button" @click="requestClose()">{{ t("dataSources.queryEditor.cancel") }}</button>
       </div>
     </div>
+    </div>
 
     <div
       v-if="discardOpen"
@@ -614,7 +626,9 @@ watchEffect(() => {
 });
 const rootSuggestions = computed(() => collectPathSuggestions(sample.value?.body));
 const suggestions = computed(() => mappingSuggestions(sample.value?.body, form.value.rootPath, form.value.mode));
-const dirty = computed(() => serializeQueryForm(form.value) !== form.value.baseline);
+const dirty = computed(() => serializeQueryForm(form.value) !== form.value.baseline
+  || form.value.parameters.some((parameter) => parameter.override || parameter.overrideText !== "")
+  || sampleText.value !== (sample.value?.source === "request" ? JSON.stringify(sample.value.body, null, 2) : ""));
 const referenceModel = computed(() =>
   props.queryId ? buildDataQueryReferenceModel(props.context.snapshot, props.queryId) : null
 );
@@ -662,6 +676,15 @@ const validationProblems = computed<DataQueryDefinitionProblem[]>(() => {
   items.push(...problems.value);
   return items;
 });
+const nameProblems = computed(() => validationProblems.value
+  .filter((problem) => problem.field === "name")
+  .map(formatDefinitionProblem));
+const pathProblems = computed(() => validationProblems.value
+  .filter((problem) => problem.field === "path")
+  .map(formatDefinitionProblem));
+const parameterProblems = computed(() => validationProblems.value
+  .filter((problem) => problem.field === "parameters")
+  .map(formatDefinitionProblem));
 const sampleStatus = computed(() => {
   if (!sample.value) {
     return t("dataSources.queryEditor.notTested");
@@ -677,6 +700,7 @@ const title = computed(() => props.queryId
   ? t("dataSources.queryEditor.editTitle", { name: storedQuery?.name ?? "" })
   : t("dataSources.queryEditor.newTitle", { connection: connection.value?.name ?? "" })
 );
+const problemId = useId();
 
 onMounted(async () => {
   const dialog = dialogRef.value;
@@ -932,6 +956,7 @@ function cancelDialog(): void {
   if (discardOpen.value) {
     pendingAction = null;
     discardOpen.value = false;
+    void nextTick(() => nameInput.value?.focus());
     return;
   }
   requestClose();
@@ -995,4 +1020,14 @@ function onKeyDown(event: KeyboardEvent): void {
     first?.focus();
   }
 }
+
+function formatDefinitionProblem(problem: DataQueryDefinitionProblem): string {
+  return t(DATA_QUERY_DEFINITION_PROBLEM_MESSAGE_KEYS[problem.code], {
+    detail: problem.message,
+    parameterName: problem.parameterName ?? "",
+    propertyKey: problem.propertyKey ?? ""
+  });
+}
+
+defineExpose({ isDirty: () => dirty.value, focusPrimary: () => nameInput.value?.focus() });
 </script>

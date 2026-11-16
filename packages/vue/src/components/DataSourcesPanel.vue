@@ -1,12 +1,12 @@
 <template>
-  <section class="ek-workbench__data-sources" :aria-label="t('dataSources.panel.label')">
+  <section ref="panelRef" class="ek-workbench__data-sources" :aria-label="t('dataSources.panel.label')">
     <div class="ek-workbench__section-header">
       <h2>{{ t("dataSources.panel.label") }}</h2>
       <span>{{ t("dataSources.panel.count", { visibleCount: visibleConnections.length, totalCount: workspace.totalCount }) }}</span>
     </div>
 
     <div class="ek-workbench__data-controls">
-      <button type="button" @click="startNewConnection">{{ t("dataSources.new") }}</button>
+      <button type="button" @click="startNewConnection($event)">{{ t("dataSources.new") }}</button>
       <label class="ek-workbench__field ek-workbench__field--search">
         <span>{{ t("dataSources.search.label") }}</span>
         <input
@@ -57,16 +57,16 @@
           </p>
 
           <div class="ek-workbench__data-row-actions">
-            <button type="button" :aria-label="t('dataSources.actions.editAria', { name: connection.name })" @click="startEditConnection(connection.id)">
+            <button type="button" :aria-label="t('dataSources.actions.editAria', { name: connection.name })" @click="startEditConnection(connection.id, $event)">
               {{ t("dataSources.actions.edit") }}
             </button>
-            <button type="button" :aria-label="t('dataSources.actions.testAria', { name: connection.name })" @click="startTester(connection.id)">
+            <button type="button" :aria-label="t('dataSources.actions.testAria', { name: connection.name })" @click="startTester(connection.id, $event)">
               {{ t("dataSources.actions.test") }}
             </button>
-            <button type="button" :aria-label="t('dataSources.actions.duplicateAria', { name: connection.name })" @click="duplicateConnection(connection.id)">
+            <button type="button" :aria-label="t('dataSources.actions.duplicateAria', { name: connection.name })" @click="duplicateConnection(connection.id, $event)">
               {{ t("dataSources.actions.duplicate") }}
             </button>
-            <button type="button" :aria-label="t('dataSources.actions.deleteAria', { name: connection.name })" @click="deleteConnection(connection)" :disabled="connection.referenced">
+            <button type="button" :aria-label="t('dataSources.actions.deleteAria', { name: connection.name })" @click="deleteConnection(connection, $event)" :disabled="connection.referenced">
               {{ t("dataSources.actions.delete") }}
             </button>
           </div>
@@ -84,23 +84,23 @@
                   <small v-if="query.bindingCount > 0">{{ boundObjectsLabel(query.bindingCount) }}</small>
                 </div>
                 <div class="ek-workbench__data-row-actions">
-                  <button type="button" :aria-label="t('dataSources.queries.editAria', { name: query.name })" @click="startQueryEditor(connection.id, query.id)">
+                  <button type="button" :aria-label="t('dataSources.queries.editAria', { name: query.name })" @click="startQueryEditor(connection.id, query.id, $event)">
                     {{ t("dataSources.queries.edit") }}
                   </button>
-                  <button type="button" :aria-label="t('dataBinding.queryDialog.openAria', { name: query.name })" @click="openBindings(query.id)">
+                  <button type="button" :aria-label="t('dataBinding.queryDialog.openAria', { name: query.name })" @click="openBindings(query.id, $event)">
                     {{ t("dataBinding.queryDialog.open") }}
                   </button>
-                  <button type="button" :aria-label="t('dataSources.queries.duplicateAria', { name: query.name })" @click="duplicateQuery(query.id)">
+                  <button type="button" :aria-label="t('dataSources.queries.duplicateAria', { name: query.name })" @click="duplicateQuery(query.id, $event)">
                     {{ t("dataSources.queries.duplicate") }}
                   </button>
-                  <button type="button" :aria-label="t('dataSources.queries.deleteAria', { name: query.name })" @click="deleteQuery(query)" :disabled="query.referenced">
+                  <button type="button" :aria-label="t('dataSources.queries.deleteAria', { name: query.name })" @click="deleteQuery(query, $event)" :disabled="query.referenced">
                     {{ t("dataSources.queries.delete") }}
                   </button>
                 </div>
                 <p v-if="query.referenced" class="ek-workbench__request-hint">{{ t("dataSources.queries.deleteReferenced") }}</p>
               </li>
             </ul>
-            <button type="button" :aria-label="t('dataSources.queries.newAria', { name: connection.name })" @click="startQueryEditor(connection.id, null)">
+            <button type="button" :aria-label="t('dataSources.queries.newAria', { name: connection.name })" @click="startQueryEditor(connection.id, null, $event)">
               {{ t("dataSources.queries.new") }}
             </button>
           </section>
@@ -128,6 +128,7 @@
 
     <DataQueryEditor
       v-if="queryEditor"
+      ref="queryEditorRef"
       :context="context"
       :connection-id="queryEditor.connectionId"
       :query-id="queryEditor.queryId"
@@ -137,9 +138,10 @@
 
     <DataQueryTester
       v-if="tester"
+      ref="testerRef"
       :context="context"
       :connection-id="tester.connectionId"
-      @close="tester = null"
+      @close="closeTester"
     />
 
     <DataQueryBindingsDialog
@@ -147,7 +149,7 @@
       :key="bindingsQueryId"
       :context="context"
       :query-id="bindingsQueryId"
-      @close="bindingsQueryId = null"
+      @close="closeBindings"
     />
   </section>
 </template>
@@ -188,15 +190,20 @@ const t = (message: Parameters<ResolvedWorkbenchContext["i18n"]["t"]>[0], values
   props.context.i18n.t(message, values);
 
 const search = ref("");
+const panelRef = ref<HTMLElement | null>(null);
 const status = ref("");
 const connectionForm = ref<{ connectionId: string | null } | null>(null);
 const connectionFormRef = ref<InstanceType<typeof DataConnectionForm> | null>(null);
 const queryEditor = ref<{ connectionId: string; queryId: string | null } | null>(null);
+const queryEditorRef = ref<InstanceType<typeof DataQueryEditor> | null>(null);
 const bindingsQueryId = ref<string | null>(null);
 const tester = ref<{ connectionId: string } | null>(null);
+const testerRef = ref<InstanceType<typeof DataQueryTester> | null>(null);
 const pendingAction = ref<(() => void) | null>(null);
 const keepEditingRef = ref<HTMLButtonElement | null>(null);
 const dirty = ref(false);
+const focusTarget = ref<string | null>(null);
+const returnFocus = ref<HTMLElement | null>(null);
 const sessionEditor = ref<EditorWithGlbImport>(props.context.editor);
 
 const workspace = computed(() => buildDataSourcesWorkspaceModel(props.context.snapshot, {
@@ -220,6 +227,7 @@ watch(() => props.context.editor, (editor) => {
   connectionForm.value = null;
   queryEditor.value = null;
   tester.value = null;
+  bindingsQueryId.value = null;
   pendingAction.value = null;
   dirty.value = false;
   status.value = "";
@@ -232,35 +240,79 @@ watch(
       return;
     }
     const query = props.context.snapshot.dataSources.queries[locate.queryId];
-    if (query && query.connectionId === locate.connectionId) {
+    if (!query || query.connectionId !== locate.connectionId) {
+      return;
+    }
+    const open = () => {
+      closeSessions();
       queryEditor.value = { connectionId: locate.connectionId, queryId: locate.queryId };
       emit("locateHandled");
+    };
+    if (hasDirtyDraft()) {
+      guardDirty(open);
+      return;
     }
+    open();
   },
   { immediate: true }
 );
+
+watch(focusTarget, async (label) => {
+  if (!label) {
+    return;
+  }
+  await nextTick();
+  const target = [...(panelRef.value?.querySelectorAll("button") ?? [])]
+    .find((button) => button.getAttribute("aria-label") === label || button.textContent?.trim() === label);
+  target?.focus();
+  focusTarget.value = null;
+});
 
 async function nextTickFocus(): Promise<void> {
   await nextTick();
   keepEditingRef.value?.focus();
 }
 
+function rememberTrigger(event?: Event): void {
+  const target = event?.currentTarget;
+  if (target instanceof HTMLElement) {
+    returnFocus.value = target;
+  }
+}
+
+function restoreFocus(): void {
+  void nextTick(() => returnFocus.value?.focus());
+}
+
 function closeConnectionForm(): void {
   // The form asks the panel first so a dirty draft is never dropped silently.
   guardDirty(() => {
     connectionForm.value = null;
+    restoreFocus();
   });
 }
 
 function guardDirty(action: () => void): void {
-  const formDirty = connectionFormRef.value?.isDirty() ?? false;
-  if (formDirty) {
+  if (hasDirtyDraft()) {
     dirty.value = true;
     pendingAction.value = action;
     void nextTickFocus();
     return;
   }
   action();
+}
+
+function hasDirtyDraft(): boolean {
+  return connectionFormRef.value?.isDirty() === true
+    || queryEditorRef.value?.isDirty() === true
+    || testerRef.value?.isDirty() === true;
+}
+
+function closeSessions(): void {
+  connectionForm.value = null;
+  queryEditor.value = null;
+  tester.value = null;
+  bindingsQueryId.value = null;
 }
 
 function requestAction(action: () => void): void {
@@ -270,25 +322,39 @@ function requestAction(action: () => void): void {
 function keepEditing(): void {
   pendingAction.value = null;
   dirty.value = false;
+  void nextTick(() => {
+    if (connectionForm.value) {
+      connectionFormRef.value?.focusPrimary();
+      return;
+    }
+    if (queryEditor.value) {
+      queryEditorRef.value?.focusPrimary();
+      return;
+    }
+    testerRef.value?.focusPrimary();
+  });
 }
 
 function confirmDiscard(): void {
   const action = pendingAction.value;
   pendingAction.value = null;
   dirty.value = false;
-  connectionForm.value = null;
   action?.();
 }
 
-function startNewConnection(): void {
+function startNewConnection(event?: Event): void {
+  rememberTrigger(event);
   requestAction(() => {
+    closeSessions();
     status.value = "";
     connectionForm.value = { connectionId: null };
   });
 }
 
-function startEditConnection(connectionId: string): void {
+function startEditConnection(connectionId: string, event?: Event): void {
+  rememberTrigger(event);
   requestAction(() => {
+    closeSessions();
     status.value = "";
     connectionForm.value = { connectionId };
   });
@@ -297,38 +363,66 @@ function startEditConnection(connectionId: string): void {
 function onConnectionSaved(_connectionId: string, created: boolean): void {
   connectionForm.value = null;
   status.value = created ? t("dataSources.status.saved") : t("dataSources.status.updated");
+  restoreFocus();
 }
 
-function startTester(connectionId: string): void {
+function startTester(connectionId: string, event?: Event): void {
+  rememberTrigger(event);
   requestAction(() => {
+    closeSessions();
     tester.value = { connectionId };
+    focusTarget.value = null;
   });
 }
 
-function startQueryEditor(connectionId: string, queryId: string | null): void {
+function startQueryEditor(connectionId: string, queryId: string | null, event?: Event): void {
+  rememberTrigger(event);
   requestAction(() => {
+    closeSessions();
     status.value = "";
     queryEditor.value = { connectionId, queryId };
   });
 }
 
-function openBindings(queryId: string): void {
+function openBindings(queryId: string, event?: Event): void {
+  rememberTrigger(event);
   requestAction(() => {
+    closeSessions();
     status.value = "";
     bindingsQueryId.value = queryId;
   });
 }
 
 function closeQueryEditor(): void {
+  const closing = queryEditor.value;
   queryEditor.value = null;
+  restoreFocus();
 }
 
 function onQuerySaved(_queryId: string, created: boolean): void {
   queryEditor.value = null;
   status.value = created ? t("dataSources.status.querySaved") : t("dataSources.status.queryUpdated");
+  restoreFocus();
 }
 
-function duplicateConnection(connectionId: string): void {
+function closeTester(): void {
+  requestAction(() => {
+    const connectionId = tester.value?.connectionId;
+    tester.value = null;
+    const connection = connectionId ? props.context.snapshot.dataSources.connections[connectionId] : null;
+    if (connection) restoreFocus();
+  });
+}
+
+function closeBindings(): void {
+  const queryId = bindingsQueryId.value;
+  bindingsQueryId.value = null;
+  const query = queryId ? props.context.snapshot.dataSources.queries[queryId] : null;
+  if (query) restoreFocus();
+}
+
+function duplicateConnection(connectionId: string, event?: Event): void {
+  rememberTrigger(event);
   requestAction(() => {
     const result = buildDuplicateDataConnectionCommand(props.context.snapshot, connectionId);
     if (!result.ok) {
@@ -342,13 +436,18 @@ function duplicateConnection(connectionId: string): void {
       return;
     }
     const copyId = Object.keys(dispatched.snapshot.dataSources.connections).find((id) => !previousIds.has(id));
+    closeSessions();
     status.value = t("dataSources.status.duplicated", {
       name: copyId ? dispatched.snapshot.dataSources.connections[copyId].name : ""
     });
+    if (copyId) {
+      focusTarget.value = t("dataSources.actions.editAria", { name: dispatched.snapshot.dataSources.connections[copyId].name });
+    }
   });
 }
 
-function deleteConnection(connection: DataConnectionListItem): void {
+function deleteConnection(connection: DataConnectionListItem, event?: Event): void {
+  rememberTrigger(event);
   requestAction(() => {
     const result = buildDeleteDataConnectionCommand(props.context.snapshot, connection.id);
     if (!result.ok) {
@@ -363,11 +462,19 @@ function deleteConnection(connection: DataConnectionListItem): void {
     if (connectionForm.value?.connectionId === connection.id) {
       connectionForm.value = null;
     }
+    queryEditor.value = null;
+    tester.value = null;
+    bindingsQueryId.value = null;
     status.value = t("dataSources.status.deleted", { name: connection.name });
+    const nextConnection = Object.values(dispatched.snapshot.dataSources.connections)[0];
+    focusTarget.value = nextConnection
+      ? t("dataSources.actions.editAria", { name: nextConnection.name })
+      : t("dataSources.new");
   });
 }
 
-function duplicateQuery(queryId: string): void {
+function duplicateQuery(queryId: string, event?: Event): void {
+  rememberTrigger(event);
   requestAction(() => {
     const result = buildDuplicateDataQueryCommand(props.context.snapshot, queryId);
     if (!result.ok) {
@@ -381,13 +488,18 @@ function duplicateQuery(queryId: string): void {
       return;
     }
     const copyId = Object.keys(dispatched.snapshot.dataSources.queries).find((id) => !previousIds.has(id));
+    closeSessions();
     status.value = t("dataSources.status.queryDuplicated", {
       name: copyId ? dispatched.snapshot.dataSources.queries[copyId].name : ""
     });
+    if (copyId) {
+      focusTarget.value = t("dataSources.queries.editAria", { name: dispatched.snapshot.dataSources.queries[copyId].name });
+    }
   });
 }
 
-function deleteQuery(query: DataQueryListItem): void {
+function deleteQuery(query: DataQueryListItem, event?: Event): void {
+  rememberTrigger(event);
   requestAction(() => {
     const result = buildDeleteDataQueryCommand(props.context.snapshot, query.id);
     if (!result.ok) {
@@ -402,7 +514,11 @@ function deleteQuery(query: DataQueryListItem): void {
     if (queryEditor.value?.queryId === query.id) {
       queryEditor.value = null;
     }
+    connectionForm.value = null;
+    tester.value = null;
+    bindingsQueryId.value = null;
     status.value = t("dataSources.status.queryDeleted", { name: query.name });
+    focusTarget.value = t("dataSources.queries.newAria", { name: props.context.snapshot.dataSources.connections[query.connectionId]?.name ?? "" });
   });
 }
 

@@ -1,128 +1,156 @@
 <template>
-  <form class="ek-workbench__connection-form" :aria-label="title" novalidate @submit.prevent="save">
-    <header class="ek-workbench__connection-form-header">
-      <h4>{{ title }}</h4>
-      <button type="button" :aria-label="t('dataSources.form.cancel')" @click="emit('close')">×</button>
-    </header>
+  <dialog
+    ref="dialogRef"
+    class="ek-workbench__connection-dialog"
+    role="dialog"
+    aria-modal="true"
+    :aria-label="title"
+    @cancel.prevent="cancelDialog"
+    @keydown.capture="onKeyDown"
+  >
+    <div :inert="discardOpen ? true : undefined">
+      <form class="ek-workbench__connection-form" :aria-label="title" novalidate @submit.prevent="save">
+      <header class="ek-workbench__connection-form-header">
+        <h4>{{ title }}</h4>
+        <button type="button" :aria-label="t('dataSources.form.cancel')" @click="requestClose()">×</button>
+      </header>
 
-    <label class="ek-workbench__field">
-      <span>{{ t("dataSources.form.name") }}</span>
-      <input ref="nameInput" type="text" :aria-label="t('dataSources.form.name')" :value="form.name" @input="setName" />
-    </label>
-
-    <label class="ek-workbench__field">
-      <span>{{ t("dataSources.form.baseUrl") }}</span>
-      <input
-        type="text"
-        :aria-label="t('dataSources.form.baseUrl')"
-        :placeholder="t('dataSources.form.baseUrlHint')"
-        :value="form.baseUrl"
-        @input="setField('baseUrl', $event)"
-      />
-    </label>
-
-    <label class="ek-workbench__field">
-      <span>{{ t("dataSources.form.timeout") }}</span>
-      <input
-        type="number"
-        min="1"
-        step="1"
-        inputmode="numeric"
-        :aria-label="t('dataSources.form.timeout')"
-        :value="form.timeoutSeconds"
-        @input="setField('timeoutSeconds', $event)"
-      />
-    </label>
-
-    <label class="ek-workbench__field">
-      <span>{{ t("dataSources.form.auth") }}</span>
-      <select :aria-label="t('dataSources.form.auth')" :value="form.authKind" @change="changeAuth">
-        <option value="none">{{ t("dataSources.form.auth.none") }}</option>
-        <option value="bearer">{{ t("dataSources.form.auth.bearer") }}</option>
-        <option value="api-key">{{ t("dataSources.form.auth.apiKey") }}</option>
-      </select>
-    </label>
-
-    <template v-if="form.authKind !== 'none'">
       <label class="ek-workbench__field">
-        <span>{{ t("dataSources.form.credential") }}</span>
-        <select
-          :aria-label="t('dataSources.form.credential')"
-          :value="form.credentialRef"
-          @change="setField('credentialRef', $event)"
-        >
-          <option value="">{{ t("dataSources.form.credential.placeholder") }}</option>
-          <option v-for="credential in credentials" :key="credential.ref" :value="credential.ref">
-            {{ credential.available
-              ? credential.label
-              : t("dataSources.form.credential.unavailable", { label: credential.label }) }}
-          </option>
-          <option v-if="missingCredentialRef" :value="missingCredentialRef">
-            {{ t("dataSources.form.credential.missing", { ref: missingCredentialRef }) }}
-          </option>
+        <span>{{ t("dataSources.form.name") }}</span>
+        <input ref="nameInput" type="text" :aria-label="t('dataSources.form.name')" :aria-invalid="fieldProblems('name').length > 0" :aria-describedby="describedBy('name')" :value="form.name" @input="setName" />
+      </label>
+      <p v-if="fieldMessage('name')" :id="errorId('name')" class="ek-workbench__field-error" role="alert">{{ fieldMessage("name") }}</p>
+
+      <label class="ek-workbench__field">
+        <span>{{ t("dataSources.form.baseUrl") }}</span>
+        <input
+          type="text"
+          :aria-label="t('dataSources.form.baseUrl')"
+          :placeholder="t('dataSources.form.baseUrlHint')"
+          :aria-invalid="fieldProblems('baseUrl').length > 0"
+          :aria-describedby="describedBy('baseUrl')"
+          :value="form.baseUrl"
+          @input="setField('baseUrl', $event)"
+        />
+      </label>
+      <p v-if="fieldMessage('baseUrl')" :id="errorId('baseUrl')" class="ek-workbench__field-error" role="alert">{{ fieldMessage("baseUrl") }}</p>
+
+      <label class="ek-workbench__field">
+        <span>{{ t("dataSources.form.timeout") }}</span>
+        <input
+          type="number"
+          min="1"
+          step="1"
+          inputmode="numeric"
+          :aria-label="t('dataSources.form.timeout')"
+          :aria-invalid="fieldProblems('timeoutMs').length > 0"
+          :aria-describedby="describedBy('timeoutMs')"
+          :value="form.timeoutSeconds"
+          @input="setField('timeoutSeconds', $event)"
+        />
+      </label>
+      <p v-if="fieldMessage('timeoutMs')" :id="errorId('timeoutMs')" class="ek-workbench__field-error" role="alert">{{ fieldMessage("timeoutMs") }}</p>
+
+      <label class="ek-workbench__field">
+        <span>{{ t("dataSources.form.auth") }}</span>
+      <select :aria-label="t('dataSources.form.auth')" :aria-invalid="fieldProblems('auth').length > 0" :aria-describedby="describedBy('auth')" :value="form.authKind" @change="changeAuth">
+          <option value="none">{{ t("dataSources.form.auth.none") }}</option>
+          <option value="bearer">{{ t("dataSources.form.auth.bearer") }}</option>
+          <option value="api-key">{{ t("dataSources.form.auth.apiKey") }}</option>
         </select>
       </label>
-      <p v-if="credentials.length === 0" class="ek-workbench__request-hint">
-        {{ t("dataSources.form.credential.empty") }}
-      </p>
-      <label v-if="form.authKind === 'api-key'" class="ek-workbench__field">
-        <span>{{ t("dataSources.form.apiKeyHeader") }}</span>
-        <input
-          type="text"
-          :aria-label="t('dataSources.form.apiKeyHeader')"
-          :placeholder="t('dataSources.form.apiKeyHeaderHint')"
-          :value="form.apiKeyHeader"
-          @input="setField('apiKeyHeader', $event)"
-        />
-      </label>
-    </template>
 
-    <fieldset class="ek-workbench__connection-headers">
-      <legend>{{ t("dataSources.form.headers") }}</legend>
-      <p class="ek-workbench__request-hint">{{ t("dataSources.form.headers.hint") }}</p>
-      <p v-if="form.headers.length === 0" class="ek-workbench__request-hint">{{ t("dataSources.form.headers.empty") }}</p>
-      <div v-for="(header, index) in form.headers" :key="header.id" class="ek-workbench__connection-header-row">
-        <input
-          type="text"
-          :aria-label="t('dataSources.form.headers.name') + ' ' + (index + 1)"
-          :placeholder="t('dataSources.form.headers.name')"
-          :value="header.name"
-          @input="updateHeader(header.id, 'name', $event)"
-        />
-        <input
-          type="text"
-          :aria-label="t('dataSources.form.headers.value') + ' ' + (index + 1)"
-          :placeholder="t('dataSources.form.headers.value')"
-          :value="header.value"
-          @input="updateHeader(header.id, 'value', $event)"
-        />
-        <button
-          type="button"
-          :aria-label="t('dataSources.form.headers.removeAria', { index: index + 1 })"
-          @click="removeHeader(header.id)"
-        >{{ t("dataSources.form.headers.remove") }}</button>
+      <template v-if="form.authKind !== 'none'">
+        <label class="ek-workbench__field">
+          <span>{{ t("dataSources.form.credential") }}</span>
+          <select
+            :aria-label="t('dataSources.form.credential')"
+            :value="form.credentialRef"
+            @change="setField('credentialRef', $event)"
+          >
+            <option value="">{{ t("dataSources.form.credential.placeholder") }}</option>
+            <option v-for="credential in credentials" :key="credential.ref" :value="credential.ref">
+              {{ credential.available
+                ? credential.label
+                : t("dataSources.form.credential.unavailable", { label: credential.label }) }}
+            </option>
+            <option v-if="missingCredentialRef" :value="missingCredentialRef">
+              {{ t("dataSources.form.credential.missing", { ref: missingCredentialRef }) }}
+            </option>
+          </select>
+        </label>
+        <p v-if="credentials.length === 0" class="ek-workbench__request-hint">
+          {{ t("dataSources.form.credential.empty") }}
+        </p>
+        <label v-if="form.authKind === 'api-key'" class="ek-workbench__field">
+          <span>{{ t("dataSources.form.apiKeyHeader") }}</span>
+          <input
+            type="text"
+            :aria-label="t('dataSources.form.apiKeyHeader')"
+            :placeholder="t('dataSources.form.apiKeyHeaderHint')"
+            :value="form.apiKeyHeader"
+            @input="setField('apiKeyHeader', $event)"
+          />
+        </label>
+      </template>
+      <p v-if="fieldMessage('auth')" :id="errorId('auth')" class="ek-workbench__field-error" role="alert">{{ fieldMessage("auth") }}</p>
+
+      <fieldset class="ek-workbench__connection-headers">
+        <legend>{{ t("dataSources.form.headers") }}</legend>
+        <p class="ek-workbench__request-hint">{{ t("dataSources.form.headers.hint") }}</p>
+        <p v-if="form.headers.length === 0" class="ek-workbench__request-hint">{{ t("dataSources.form.headers.empty") }}</p>
+        <div v-for="(header, index) in form.headers" :key="header.id" class="ek-workbench__connection-header-row">
+          <input
+            type="text"
+            :aria-label="t('dataSources.form.headers.name') + ' ' + (index + 1)"
+            :placeholder="t('dataSources.form.headers.name')"
+            :value="header.name"
+            @input="updateHeader(header.id, 'name', $event)"
+          />
+          <input
+            type="text"
+            :aria-label="t('dataSources.form.headers.value') + ' ' + (index + 1)"
+            :placeholder="t('dataSources.form.headers.value')"
+            :value="header.value"
+            @input="updateHeader(header.id, 'value', $event)"
+          />
+          <button
+            type="button"
+            :aria-label="t('dataSources.form.headers.removeAria', { index: index + 1 })"
+            @click="removeHeader(header.id)"
+          >{{ t("dataSources.form.headers.remove") }}</button>
+        </div>
+        <button type="button" @click="addHeader">{{ t("dataSources.form.headers.add") }}</button>
+      </fieldset>
+
+      <div v-if="problems.length > 0" class="ek-workbench__connection-problems" role="alert" :aria-label="t('dataSources.form.problems')">
+        <strong>{{ t("dataSources.form.problems") }}</strong>
+        <ul>
+          <li v-for="(problem, index) in problems" :key="`${problem.code}-${index}`">
+            {{ problemMessage(problem) }}
+          </li>
+        </ul>
       </div>
-      <button type="button" @click="addHeader">{{ t("dataSources.form.headers.add") }}</button>
-    </fieldset>
 
-    <div v-if="problems.length > 0" class="ek-workbench__connection-problems" role="alert" :aria-label="t('dataSources.form.problems')">
-      <strong>{{ t("dataSources.form.problems") }}</strong>
-      <ul>
-        <li v-for="(problem, index) in problems" :key="`${problem.code}-${index}`">
-          {{ problemMessage(problem) }}
-        </li>
-      </ul>
+      <div class="ek-workbench__connection-form-actions">
+        <button type="submit">{{ t("dataSources.form.save") }}</button>
+        <button type="button" @click="requestClose()">{{ t("dataSources.form.cancel") }}</button>
+      </div>
+      </form>
+  </div>
+  <div v-if="discardOpen" class="ek-workbench__connection-discard" role="alertdialog" :aria-label="t('dataSources.form.discard.title')">
+    <strong>{{ t("dataSources.form.discard.title") }}</strong>
+    <p>{{ t("dataSources.form.discard.description") }}</p>
+    <div class="ek-workbench__connection-discard-actions">
+      <button ref="keepEditingButton" type="button" @click="keepEditing">{{ t("dataSources.form.discard.keep") }}</button>
+      <button ref="discardButton" type="button" @click="discardChanges">{{ t("dataSources.form.discard.confirm") }}</button>
     </div>
-
-    <div class="ek-workbench__connection-form-actions">
-      <button type="submit">{{ t("dataSources.form.save") }}</button>
-      <button type="button" @click="emit('close')">{{ t("dataSources.form.cancel") }}</button>
-    </div>
-  </form>
+  </div>
+  </dialog>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref, useId } from "vue";
 import {
   DEFAULT_API_KEY_HEADER_NAME,
   DEFAULT_DATA_CONNECTION_TIMEOUT_MS,
@@ -181,6 +209,10 @@ const PROBLEM_MESSAGE_KEYS = {
 const t = (message: Parameters<ResolvedWorkbenchContext["i18n"]["t"]>[0], values?: WorkbenchMessageValues) =>
   props.context.i18n.t(message, values);
 const nameInput = ref<HTMLInputElement | null>(null);
+const dialogRef = ref<HTMLDialogElement | null>(null);
+const formId = useId();
+const keepEditingButton = ref<HTMLButtonElement | null>(null);
+const discardButton = ref<HTMLButtonElement | null>(null);
 const problems = ref<DataConnectionProblem[]>([]);
 const form = ref<ConnectionFormState>(createFormState(storedConnection()));
 let baseline = serializeForm(form.value);
@@ -196,8 +228,18 @@ const missingCredentialRef = computed(() => {
   }
   return ref;
 });
+const discardOpen = ref(false);
+let pendingClose: (() => void) | null = null;
 
 onMounted(() => {
+  const dialog = dialogRef.value;
+  if (dialog && !dialog.open) {
+    if (typeof dialog.showModal === "function") {
+      dialog.showModal();
+    } else {
+      dialog.setAttribute("open", "");
+    }
+  }
   void nextTick(() => nameInput.value?.focus());
 });
 
@@ -268,6 +310,22 @@ function problemMessage(problem: DataConnectionProblem): string {
   return t(PROBLEM_MESSAGE_KEYS[problem.code], { detail: problem.message });
 }
 
+function fieldProblems(field: DataConnectionProblem["field"]): DataConnectionProblem[] {
+  return problems.value.filter((problem) => problem.field === field);
+}
+
+function fieldMessage(field: DataConnectionProblem["field"]): string {
+  return fieldProblems(field).map(problemMessage).join(" ");
+}
+
+function errorId(field: DataConnectionProblem["field"]): string {
+  return `${formId}-${field}-error`;
+}
+
+function describedBy(field: DataConnectionProblem["field"]): string | undefined {
+  return fieldProblems(field).length > 0 ? errorId(field) : undefined;
+}
+
 function buildDraft(): DataConnectionDraft {
   const auth: DataConnectionAuth = form.value.authKind === "none"
     ? { kind: "none" }
@@ -312,6 +370,46 @@ function save(): void {
   emit("saved", props.connectionId ?? findCreatedConnectionId(dispatched.snapshot.dataSources.connections), props.connectionId === null);
 }
 
+function cancelDialog(): void {
+  if (discardOpen.value) {
+    keepEditing();
+    return;
+  }
+  requestClose();
+}
+
+function onKeyDown(event: KeyboardEvent): void {
+  event.stopPropagation();
+  if (event.key === "Escape") {
+    event.preventDefault();
+    cancelDialog();
+  }
+}
+
+function requestClose(action: () => void = () => emit("close")): void {
+  if (isDirty()) {
+    pendingClose = action;
+    discardOpen.value = true;
+    void nextTick(() => discardButton.value?.focus());
+    return;
+  }
+  action();
+}
+
+function keepEditing(): void {
+  pendingClose = null;
+  discardOpen.value = false;
+  void nextTick(() => nameInput.value?.focus());
+}
+
+function discardChanges(): void {
+  const action = pendingClose ?? (() => emit("close"));
+  pendingClose = null;
+  discardOpen.value = false;
+  baseline = serializeForm(form.value);
+  action();
+}
+
 function findCreatedConnectionId(connections: Record<string, { id: string }>): string {
   const known = new Set(Object.keys(props.context.snapshot.dataSources.connections));
   return Object.keys(connections).find((id) => !known.has(id)) ?? "";
@@ -322,5 +420,5 @@ function isDirty(): boolean {
   return serializeForm(form.value) !== baseline;
 }
 
-defineExpose({ isDirty });
+defineExpose({ isDirty, focusPrimary: () => nameInput.value?.focus() });
 </script>

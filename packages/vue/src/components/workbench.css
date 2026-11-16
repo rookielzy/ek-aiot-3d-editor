@@ -1505,6 +1505,36 @@ button.ek-workbench__status-chip { cursor: pointer; font: inherit; }
   min-width: 0;
 }
 
+.ek-workbench__connection-dialog {
+  position: fixed;
+  z-index: 40;
+  inset: 1rem;
+  width: min(38rem, calc(100vw - 2rem));
+  max-width: none;
+  max-height: calc(100vh - 2rem);
+  margin: 0 auto;
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--ek-workbench-border-strong);
+  border-radius: var(--ek-workbench-radius);
+  background: var(--ek-workbench-surface);
+  color: var(--ek-workbench-text);
+  box-shadow: 0 12px 40px #18223033;
+}
+
+.ek-workbench__connection-dialog::backdrop,
+.ek-workbench__query-editor::backdrop,
+.ek-workbench__request-tester::backdrop,
+.ek-workbench__binding-dialog::backdrop {
+  background: #18223066;
+}
+
+.ek-workbench__field-error {
+  margin: -0.2rem 0 0;
+  color: var(--ek-workbench-error);
+  font-size: 0.7rem;
+}
+
 .ek-workbench__connection-form-header,
 .ek-workbench__query-editor-header {
   display: flex;

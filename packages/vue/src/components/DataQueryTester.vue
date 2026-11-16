@@ -6,21 +6,27 @@
     aria-modal="true"
     :aria-label="t('dataSources.request.label')"
     @keydown.capture="onKeyDown"
-    @cancel.prevent="emit('close')"
+    @cancel.prevent="cancelDialog"
   >
+    <div :inert="discardOpen ? true : undefined">
     <div class="ek-workbench__query-editor-header">
       <h3>{{ t("dataSources.request.title", { name: connection?.name ?? "" }) }}</h3>
-      <button ref="closeButton" type="button" @click="emit('close')">{{ t("dataSources.request.close") }}</button>
+      <button ref="closeButton" type="button" @click="requestClose()">{{ t("dataSources.request.close") }}</button>
     </div>
 
-    <p class="ek-workbench__request-hint">{{ t("dataSources.request.draftHint") }}</p>
-    <p class="ek-workbench__request-hint">{{ t("dataSources.request.sessionOnly") }}</p>
-    <p v-if="!service" class="ek-workbench__request-warning" role="alert">{{ t("dataSources.request.unavailable") }}</p>
-    <p v-else-if="!context.dataServiceState.executorAvailable" class="ek-workbench__request-warning" role="status">
-      {{ t("dataSources.request.executorMissing") }}
-    </p>
+    <section class="ek-workbench__query-section" :aria-label="t('dataSources.request.connectionSection')">
+      <h4>{{ t("dataSources.request.connectionSection") }}</h4>
+      <code>{{ connection?.baseUrl ?? "" }}</code>
+      <p class="ek-workbench__request-hint">{{ t("dataSources.request.draftHint") }}</p>
+      <p class="ek-workbench__request-hint">{{ t("dataSources.request.sessionOnly") }}</p>
+      <p v-if="!service" class="ek-workbench__request-warning" role="alert">{{ t("dataSources.request.unavailable") }}</p>
+      <p v-else-if="!context.dataServiceState.executorAvailable" class="ek-workbench__request-warning" role="status">
+        {{ t("dataSources.request.executorMissing") }}
+      </p>
+    </section>
 
-    <form class="ek-workbench__request-form" novalidate @submit.prevent="runRequest">
+    <form class="ek-workbench__request-form ek-workbench__query-section" :aria-label="t('dataSources.queryEditor.requestSection')" novalidate @submit.prevent="runRequest">
+      <h4>{{ t("dataSources.queryEditor.requestSection") }}</h4>
       <label class="ek-workbench__field">
         <span>{{ t("dataSources.request.method") }}</span>
         <select :aria-label="t('dataSources.request.method')" :value="method" @change="changeMethod">
@@ -86,9 +92,9 @@
       </div>
     </form>
 
-    <section v-if="run" class="ek-workbench__request-result" :aria-label="t('dataSources.request.result')" :data-status="run.status">
+    <section v-if="run" class="ek-workbench__request-result" :aria-label="t('dataSources.request.resultSection')" :data-status="run.status">
       <header>
-        <h4>{{ t("dataSources.request.result") }}</h4>
+        <h4>{{ t("dataSources.request.resultSection") }}</h4>
         <span>{{ t(DATA_QUERY_RUN_STATUS_MESSAGE_KEYS[run.status]) }}</span>
       </header>
       <p>{{ t("dataSources.request.resultRevision", { revision: run.configRevision }) }}</p>
@@ -141,6 +147,20 @@
         </template>
       </template>
     </section>
+    </div>
+    <div
+      v-if="discardOpen"
+      class="ek-workbench__connection-discard"
+      role="alertdialog"
+      :aria-label="t('dataSources.form.discard.title')"
+    >
+      <strong>{{ t("dataSources.form.discard.title") }}</strong>
+      <p>{{ t("dataSources.form.discard.description") }}</p>
+      <div class="ek-workbench__connection-discard-actions">
+        <button ref="keepEditingButton" type="button" @click="keepEditing">{{ t("dataSources.form.discard.keep") }}</button>
+        <button ref="discardButton" type="button" @click="discardChanges">{{ t("dataSources.form.discard.confirm") }}</button>
+      </div>
+    </div>
   </dialog>
 </template>
 
@@ -181,6 +201,8 @@ const t = (message: Parameters<ResolvedWorkbenchContext["i18n"]["t"]>[0], values
 
 const dialogRef = ref<HTMLDialogElement | null>(null);
 const closeButton = ref<HTMLButtonElement | null>(null);
+const keepEditingButton = ref<HTMLButtonElement | null>(null);
+const discardButton = ref<HTMLButtonElement | null>(null);
 const pathInput = ref<HTMLInputElement | null>(null);
 const service = props.context.editor.getDataService?.() ?? null;
 const connection = computed(() => props.context.snapshot.dataSources.connections[props.connectionId] ?? null);
@@ -188,6 +210,15 @@ const method = ref<DataQueryMethod>("GET");
 const readOnly = ref(true);
 const path = ref("");
 const parameters = ref<QueryParameterForm[]>([]);
+let baseline = JSON.stringify({ method: method.value, readOnly: readOnly.value, path: path.value, parameters: parameters.value });
+const dirty = computed(() => JSON.stringify({
+  method: method.value,
+  readOnly: readOnly.value,
+  path: path.value,
+  parameters: parameters.value
+}) !== baseline);
+const discardOpen = ref(false);
+let pendingClose: (() => void) | null = null;
 
 const run = computed<DataQueryRunState | null>(() => {
   const state = props.context.dataServiceState.run;
@@ -316,7 +347,52 @@ function onKeyDown(event: KeyboardEvent): void {
   event.stopPropagation();
   if (event.key === "Escape") {
     event.preventDefault();
-    emit("close");
+    if (discardOpen.value) {
+      discardOpen.value = false;
+      pendingClose = null;
+      void nextTick(() => pathInput.value?.focus());
+      return;
+    }
+    requestClose();
   }
 }
+
+function requestClose(action: () => void = () => emit("close")): void {
+  if (dirty.value) {
+    pendingClose = action;
+    discardOpen.value = true;
+    void nextTick(() => discardButton.value?.focus());
+    return;
+  }
+  action();
+}
+
+function keepEditing(): void {
+  pendingClose = null;
+  discardOpen.value = false;
+  void nextTick(() => pathInput.value?.focus());
+}
+
+function discardChanges(): void {
+  const action = pendingClose ?? (() => emit("close"));
+  pendingClose = null;
+  discardOpen.value = false;
+  baseline = JSON.stringify({
+    method: method.value,
+    readOnly: readOnly.value,
+    path: path.value,
+    parameters: parameters.value
+  });
+  action();
+}
+
+function cancelDialog(): void {
+  if (discardOpen.value) {
+    keepEditing();
+    return;
+  }
+  requestClose();
+}
+
+defineExpose({ isDirty: () => dirty.value, focusPrimary: () => pathInput.value?.focus() });
 </script>
