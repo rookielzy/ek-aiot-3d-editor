@@ -3,6 +3,8 @@
     v-if="query"
     ref="dialogRef"
     class="ek-workbench__binding-dialog"
+    role="dialog"
+    aria-modal="true"
     :aria-labelledby="titleId"
     @cancel="handleCancel"
     @keydown.capture="handleKeydown"
@@ -15,22 +17,26 @@
 
       <p v-if="objectNodes.length === 0" class="ek-workbench__empty">{{ t("dataBinding.queryDialog.noObjects") }}</p>
       <template v-else>
-        <p v-if="bindings.length === 0" class="ek-workbench__binding-hint">{{ t("dataBinding.queryDialog.empty") }}</p>
-        <div v-else class="ek-workbench__binding-dialog-list">
+        <div class="ek-workbench__binding-dialog-list" role="group" :aria-label="t('dataBinding.queryDialog.list')">
           <strong>{{ t("dataBinding.queryDialog.list") }}</strong>
-          <ul>
-            <li v-for="binding in bindings" :key="binding.objectNodeId">
-              <span>{{ nodeName(binding.objectNodeId) }}</span>
-              <small>{{ binding.deviceId }}</small>
-              <button type="button" :aria-label="t('dataBinding.queryDialog.edit', { name: nodeName(binding.objectNodeId) })" @click="selectObject(binding.objectNodeId)">
-                {{ t("dataBinding.queryDialog.open") }}
-              </button>
-              <button type="button" :aria-label="t('dataBinding.queryDialog.selectAria', { name: nodeName(binding.objectNodeId) })" @click="selectInScene(binding.objectNodeId)">
-                {{ t("dataBinding.queryDialog.select") }}
-              </button>
-              <button type="button" :aria-label="t('dataBinding.queryDialog.unbindAria', { name: nodeName(binding.objectNodeId) })" @click="unbind(binding.objectNodeId)">
-                {{ t("dataBinding.queryDialog.unbind") }}
-              </button>
+          <p v-if="bindings.length === 0" class="ek-workbench__binding-hint">{{ t("dataBinding.queryDialog.empty") }}</p>
+          <ul v-else>
+            <li v-for="binding in bindings" :key="binding.objectNodeId" :data-current="binding.objectNodeId === selectedObjectId ? 'true' : undefined">
+              <div class="ek-workbench__binding-dialog-row-name">
+                <span>{{ objectLabel(binding.objectNodeId) }}</span>
+                <small>{{ binding.deviceId }}</small>
+              </div>
+              <div class="ek-workbench__binding-dialog-row-actions">
+                <button type="button" :aria-pressed="binding.objectNodeId === selectedObjectId" :aria-label="t('dataBinding.queryDialog.edit', { name: objectLabel(binding.objectNodeId) })" @click="selectObject(binding.objectNodeId, $event.currentTarget)">
+                  {{ t("dataBinding.queryDialog.editAction") }}
+                </button>
+                <button type="button" :aria-label="t('dataBinding.queryDialog.locateAria', { name: objectLabel(binding.objectNodeId) })" @click="selectInScene(binding.objectNodeId, $event.currentTarget)">
+                  {{ t("dataBinding.queryDialog.locate") }}
+                </button>
+                <button type="button" :aria-label="t('dataBinding.queryDialog.unbindAria', { name: objectLabel(binding.objectNodeId) })" @click="unbind(binding.objectNodeId, $event.currentTarget)">
+                  {{ t("dataBinding.queryDialog.unbind") }}
+                </button>
+              </div>
             </li>
           </ul>
         </div>
@@ -42,17 +48,32 @@
           </ul>
         </div>
 
-        <label class="ek-workbench__field">
-          <span>{{ t("dataBinding.queryDialog.object") }}</span>
-          <select :aria-label="t('dataBinding.queryDialog.object')" :value="selectedObjectId" @change="selectObject(($event.target as HTMLSelectElement).value)">
-            <option value="">{{ t("dataBinding.queryDialog.selectObject") }}</option>
-            <option v-for="node in objectNodes" :key="node.id" :value="node.id">{{ node.name }}</option>
-          </select>
-        </label>
+        <section class="ek-workbench__form-section ek-workbench__binding-dialog-target" :aria-label="t('dataBinding.queryDialog.target')">
+          <label class="ek-workbench__field">
+            <span>{{ t("dataBinding.queryDialog.object") }}</span>
+            <select ref="objectRef" :aria-label="t('dataBinding.queryDialog.object')" :value="selectedObjectId" @change="selectObject(($event.target as HTMLSelectElement).value, $event.target)">
+              <option value="">{{ t("dataBinding.queryDialog.selectObject") }}</option>
+              <option v-for="node in objectNodes" :key="node.id" :value="node.id">{{ node.label }}</option>
+            </select>
+          </label>
+          <div class="ek-workbench__binding-dialog-target-name">
+            <small data-tone="target">
+              {{ selectedBinding
+                ? t("dataBinding.queryDialog.deviceNamed", { deviceId: selectedBinding.deviceId })
+                : t("dataBinding.queryDialog.selectObject") }}
+            </small>
+            <small v-if="selectedBinding" data-tone="stored">
+              {{ t("dataBinding.queryDialog.stored") }} · {{ selectedBinding.enabled
+                ? t("dataBinding.queryDialog.enabled")
+                : t("dataBinding.queryDialog.disabled") }}
+            </small>
+            <small v-if="dirty" data-tone="draft">{{ t("dataBinding.queryDialog.draft") }}</small>
+          </div>
+        </section>
 
         <DataBindingForm
           v-if="selectedObjectId"
-          :key="`${queryId}:${selectedObjectId}`"
+          :key="`${queryId}:${selectedObjectId}:${draftRevision}`"
           :context="context"
           :object-node-id="selectedObjectId"
           :fixed-query-id="queryId"
@@ -65,6 +86,7 @@
       v-if="discardOpen"
       class="ek-workbench__connection-discard"
       role="alertdialog"
+      aria-modal="true"
       :aria-label="t('dataBinding.queryDialog.discard.title')"
       :aria-describedby="`${titleId}-discard-description`"
     >
@@ -79,7 +101,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, useId, watch } from "vue";
+import { computed, nextTick, onMounted, ref, useId, watch } from "vue";
 import { buildDeleteDataObjectBindingCommand, type DataBindingProblem } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext } from "../composables/use-workbench";
 import type { WorkbenchMessageKey } from "../i18n/workbench-i18n";
@@ -90,23 +112,34 @@ const props = defineProps<{
   queryId: string;
 }>();
 
-const emit = defineEmits<{ close: [] }>();
+const emit = defineEmits<{
+  close: [];
+  located: [node: { nodeId: string; name: string }];
+}>();
 
 const t = (message: WorkbenchMessageKey, values?: Parameters<ResolvedWorkbenchContext["i18n"]["t"]>[1]) =>
   props.context.i18n.t(message, values);
 const titleId = useId();
 const dialogRef = ref<HTMLDialogElement | null>(null);
+const objectRef = ref<HTMLSelectElement | null>(null);
 const closeRef = ref<HTMLButtonElement | null>(null);
 const keepEditingRef = ref<HTMLButtonElement | null>(null);
 const discardRef = ref<HTMLButtonElement | null>(null);
 const dirty = ref(false);
+const draftRevision = ref(0);
 const discardOpen = ref(false);
 const status = ref<string | null>(null);
 const problems = ref<readonly DataBindingProblem[]>([]);
 let pendingAction: (() => void) | null = null;
+let pendingTrigger: HTMLElement | null = null;
 
 const query = computed(() => props.context.snapshot.dataSources.queries[props.queryId] ?? null);
-const objectNodes = computed(() => Object.values(props.context.snapshot.nodes).filter((node) => node.kind === "object"));
+const objectNodes = computed(() => Object.values(props.context.snapshot.nodes)
+  .filter((node) => node.kind === "object")
+  .map((node) => ({
+    id: node.id,
+    label: props.context.snapshot.objects[node.objectId]?.asset.label ?? node.name
+  })));
 const bindings = computed(() => Object.values(props.context.snapshot.dataSources.bindings)
   .filter((binding) => binding.queryId === props.queryId)
 );
@@ -115,6 +148,9 @@ const selectedObjectId = ref(
   ?? objectNodes.value[0]?.id
   ?? ""
 );
+const selectedBinding = computed(() => selectedObjectId.value
+  ? props.context.snapshot.dataSources.bindings[selectedObjectId.value] ?? null
+  : null);
 
 onMounted(() => {
   const dialog = dialogRef.value;
@@ -126,7 +162,7 @@ onMounted(() => {
   } else {
     dialog.setAttribute("open", "");
   }
-  closeRef.value?.focus();
+  objectRef.value?.focus();
 });
 
 watch(objectNodes, (nodes) => {
@@ -142,16 +178,23 @@ watch(discardOpen, (open) => {
     keepEditingRef.value?.focus();
     return;
   }
-  closeRef.value?.focus();
+  void nextTick(() => {
+    const target = pendingTrigger?.isConnected ? pendingTrigger : objectRef.value;
+    target?.focus();
+    pendingTrigger = null;
+  });
 });
 
 function close(): void {
   emit("close");
 }
 
-function requestAction(action: () => void): void {
+function requestAction(action: () => void, trigger?: EventTarget | null): void {
   if (dirty.value) {
     pendingAction = action;
+    pendingTrigger = trigger instanceof HTMLElement
+      ? trigger
+      : document.activeElement instanceof HTMLElement ? document.activeElement : closeRef.value;
     discardOpen.value = true;
     return;
   }
@@ -168,17 +211,18 @@ function discardChanges(): void {
   pendingAction = null;
   discardOpen.value = false;
   dirty.value = false;
+  draftRevision.value += 1;
   action?.();
 }
 
-function selectObject(objectNodeId: string): void {
+function selectObject(objectNodeId: string, trigger?: EventTarget | null): void {
   if (objectNodeId === selectedObjectId.value) {
     return;
   }
-  requestAction(() => { selectedObjectId.value = objectNodeId; });
+  requestAction(() => { selectedObjectId.value = objectNodeId; }, trigger);
 }
 
-function selectInScene(objectNodeId: string): void {
+function selectInScene(objectNodeId: string, trigger?: EventTarget | null): void {
   requestAction(() => {
     props.context.dispatch({
       type: "select-nodes",
@@ -186,12 +230,12 @@ function selectInScene(objectNodeId: string): void {
       nodeIds: [objectNodeId],
       primaryNodeId: objectNodeId
     });
-    emit("close");
-  });
+    emit("located", { nodeId: objectNodeId, name: objectLabel(objectNodeId) });
+  }, trigger);
 }
 
-function unbind(objectNodeId: string): void {
-  const name = nodeName(objectNodeId);
+function unbind(objectNodeId: string, trigger?: EventTarget | null): void {
+  const name = objectLabel(objectNodeId);
   requestAction(() => {
     const result = buildDeleteDataObjectBindingCommand(props.context.snapshot, objectNodeId);
     if (!result.ok) {
@@ -206,13 +250,15 @@ function unbind(objectNodeId: string): void {
     problems.value = [];
     if (objectNodeId === selectedObjectId.value) {
       dirty.value = false;
+    } else {
+      pendingTrigger = objectRef.value;
     }
     status.value = t("dataBinding.queryDialog.unbound", { name });
-  });
+  }, trigger);
 }
 
-function nodeName(objectNodeId: string): string {
-  return objectNodes.value.find((node) => node.id === objectNodeId)?.name ?? objectNodeId;
+function objectLabel(objectNodeId: string): string {
+  return objectNodes.value.find((node) => node.id === objectNodeId)?.label ?? objectNodeId;
 }
 
 function handleCancel(event: Event): void {
@@ -225,17 +271,42 @@ function handleCancel(event: Event): void {
 }
 
 function handleKeydown(event: KeyboardEvent): void {
-  event.stopPropagation();
-  if (!discardOpen.value || event.key !== "Tab") {
+  if (event.target instanceof Element && event.target.closest("dialog") !== event.currentTarget) {
     return;
   }
-  if (event.shiftKey && event.target === keepEditingRef.value) {
-    event.preventDefault();
-    discardRef.value?.focus();
+  event.stopPropagation();
+  if (event.defaultPrevented || event.isComposing || event.keyCode === 229) {
+    return;
   }
-  if (!event.shiftKey && event.target === discardRef.value) {
+  if (event.key === "Escape") {
     event.preventDefault();
-    keepEditingRef.value?.focus();
+    if (discardOpen.value) {
+      keepEditing();
+      return;
+    }
+    requestAction(close);
+    return;
+  }
+  if (event.key !== "Tab") {
+    return;
+  }
+  const dialog = dialogRef.value;
+  if (!dialog) {
+    return;
+  }
+  const focusable = [...dialog.querySelectorAll<HTMLElement>(
+    "a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]"
+  )].filter((element) => element.tabIndex >= 0 && !element.closest("[inert], [hidden], [aria-hidden='true']"));
+  const first = discardOpen.value ? keepEditingRef.value : focusable[0];
+  const last = discardOpen.value ? discardRef.value : focusable.at(-1);
+  if (event.shiftKey && (event.target === first || event.target === event.currentTarget)) {
+    event.preventDefault();
+    last?.focus();
+    return;
+  }
+  if (!event.shiftKey && (event.target === last || event.target === event.currentTarget)) {
+    event.preventDefault();
+    first?.focus();
   }
 }
 </script>

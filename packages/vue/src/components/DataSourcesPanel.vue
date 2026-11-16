@@ -150,6 +150,7 @@
       :context="context"
       :query-id="bindingsQueryId"
       @close="closeBindings"
+      @located="handleBindingLocated"
     />
   </section>
 </template>
@@ -184,6 +185,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   locateHandled: [];
+  locateObject: [nodeId: string];
 }>();
 
 const t = (message: Parameters<ResolvedWorkbenchContext["i18n"]["t"]>[0], values?: WorkbenchMessageValues) =>
@@ -419,6 +421,12 @@ function closeBindings(): void {
   bindingsQueryId.value = null;
   const query = queryId ? props.context.snapshot.dataSources.queries[queryId] : null;
   if (query) restoreFocus();
+}
+
+function handleBindingLocated(node: { nodeId: string; name: string }): void {
+  bindingsQueryId.value = null;
+  emit("locateObject", node.nodeId);
+  status.value = t("dataBinding.queryDialog.locateDone", { name: node.name });
 }
 
 function duplicateConnection(connectionId: string, event?: Event): void {

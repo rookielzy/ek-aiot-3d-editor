@@ -72,6 +72,65 @@ describe("Vue data binding lifecycle and references", () => {
     editor.dispose();
   });
 
+  it("guards object switching and returns focus through the nested confirmation", async () => {
+    const editor = createSeedEditor();
+    saveBinding(editor, "object-a");
+    importObject(editor, "object-b", "Pump B");
+    const wrapper = mountWorkbench(editor);
+    await openDataPanel(wrapper);
+    await clickButton(wrapper, "Manage bindings for Pump status");
+
+    const bindingDialog = dialog(wrapper);
+    await setInputIn(bindingDialog, "Device ID", "pump-draft");
+    const objectPicker = bindingDialog.get('[aria-label="Object"]');
+    await objectPicker.setValue("object-b");
+    expect(bindingDialog.find('[role="alertdialog"]').exists()).toBe(true);
+    expect((objectPicker.element as HTMLSelectElement).value).toBe("object-a");
+
+    await clickIn(bindingDialog.find('[role="alertdialog"]') as unknown as VueWrapper, "Keep editing");
+    expect((objectPicker.element as HTMLSelectElement).value).toBe("object-a");
+    expect(document.activeElement).toBe(objectPicker.element);
+
+    await objectPicker.setValue("object-b");
+    await clickIn(bindingDialog.find('[role="alertdialog"]') as unknown as VueWrapper, "Discard changes");
+    await settle();
+    expect((dialog(wrapper).get('[aria-label="Object"]').element as HTMLSelectElement).value).toBe("object-b");
+    expect((dialog(wrapper).get('[aria-label="Device ID"]').element as HTMLInputElement).value).toBe("");
+
+    const device = dialog(wrapper).get('[aria-label="Device ID"]');
+    await device.trigger("focus");
+    await device.setValue("pump-second-draft");
+    await device.trigger("keydown", { key: "Escape" });
+    expect(dialog(wrapper).find('[role="alertdialog"]').exists()).toBe(true);
+    await device.trigger("keydown", { key: "Escape" });
+    expect(dialog(wrapper).find('[role="alertdialog"]').exists()).toBe(false);
+
+    await bindingDialog.trigger("keydown", { key: "Escape" });
+    await clickIn(dialog(wrapper).find('[role="alertdialog"]') as unknown as VueWrapper, "Discard changes");
+    expect(wrapper.findAll("dialog.ek-workbench__binding-dialog")).toHaveLength(0);
+    expect(editor.getSnapshot().dataSources.bindings["object-a"]!.deviceId).toBe("pump-01");
+
+    wrapper.unmount();
+    editor.dispose();
+  });
+
+  it("locates a bound object and returns the workbench to the scene view", async () => {
+    const editor = createSeedEditor();
+    saveBinding(editor, "object-a");
+    const wrapper = mountWorkbench(editor);
+    await openDataPanel(wrapper);
+    await clickButton(wrapper, "Manage bindings for Pump status");
+
+    await clickIn(dialog(wrapper), "Locate Pump object in the scene");
+    await settle();
+    expect(wrapper.findAll("dialog.ek-workbench__binding-dialog")).toHaveLength(0);
+    expect(editor.getSnapshot().selection.nodeId).toBe("object-a");
+    expect(wrapper.get('[aria-label="Workspace views"] button[aria-label^="Scene "]').attributes("aria-pressed")).toBe("true");
+
+    wrapper.unmount();
+    editor.dispose();
+  });
+
   it("drives preview from a scoped-slot panel without duplicating requests", async () => {
     const executor = vi.fn<DataRequestExecutor>(async () => jsonResponse());
     const editor = createSeedEditor(executor);

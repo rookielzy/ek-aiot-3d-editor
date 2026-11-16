@@ -74,6 +74,7 @@
         :node-locate="panelFocus?.kind === 'node' ? panelFocus : null"
         @data-locate-handled="handleDataLocateHandled"
         @focus-handled="panelFocus = null"
+        @locate-object="handleBindingLocated"
       />
     </aside>
 
@@ -268,6 +269,13 @@ function selectView(view: PanelView): void {
 
 function handleDataLocateHandled(): void {
   dataLocate.value = null;
+}
+
+function handleBindingLocated(nodeId: string): void {
+  activeView.value = "scene";
+  leftCollapsed.value = false;
+  panelFocus.value = { kind: "node", nodeId };
+  dataFieldFocus.value = null;
 }
 
 function locateDataTarget(target: DataProblemTarget): void {

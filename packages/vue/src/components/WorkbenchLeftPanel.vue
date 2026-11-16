@@ -137,7 +137,7 @@
     </section>
 
     <section class="ek-workbench__panel-section" :aria-label="t('dataSources.panel.label')" :hidden="activeView !== 'data'">
-      <DataSourcesPanel :context="context" :locate="dataLocate ?? null" @locate-handled="emit('dataLocateHandled')" />
+      <DataSourcesPanel :context="context" :locate="dataLocate ?? null" @locate-handled="emit('dataLocateHandled')" @locate-object="emit('locateObject', $event)" />
     </section>
 
     <section class="ek-workbench__panel-section" :aria-label="t('reactWorkbench.leftPanel.project.label')" :hidden="activeView !== 'project'">
@@ -252,6 +252,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   dataLocateHandled: [];
   focusHandled: [];
+  locateObject: [nodeId: string];
 }>();
 
 const recoveryState = reactive<AssetRecoveryState>({});
