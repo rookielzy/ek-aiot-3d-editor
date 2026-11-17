@@ -399,7 +399,13 @@ const query = core.buildSaveDataQueryCommand(source.getSnapshot(), {
     root: [{ kind: "key", key: "items" }],
     identity: { kind: "path", path: [{ kind: "key", key: "deviceCode" }], valueType: "string" },
     displayName: null,
-    properties: [],
+    properties: [{
+      key: "temperature",
+      label: "Temperature",
+      type: "number",
+      source: [{ kind: "key", key: "tempRaw" }],
+      transform: { kind: "raw" }
+    }],
     observedAt: null,
     sourceQuality: null
   },
@@ -412,7 +418,7 @@ const binding = core.buildSaveDataObjectBindingCommand(source.getSnapshot(), {
   queryId: "status",
   deviceId: "pump-1",
   enabled: true,
-  details: []
+  details: [{ key: "temperature" }]
 });
 if (!binding.ok) throw new Error(\`buildSaveDataObjectBindingCommand failed: \${JSON.stringify(binding.problems)}\`);
 if (!source.dispatch(binding.command).ok) throw new Error("save binding failed");
