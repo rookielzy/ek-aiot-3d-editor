@@ -262,9 +262,9 @@ describe("proof-loop starter demo browser verification", () => {
           expect(document.activeElement).toBe(restoredSeparator);
         }
         await waitFor(() => {
-          const viewport = host.querySelector(".starter-viewport")!.getBoundingClientRect();
-          expect(canvas.width).toBe(Math.floor(viewport.width));
-          expect(canvas.height).toBe(Math.floor(viewport.height));
+          const viewport = host.querySelector<HTMLElement>(".starter-viewport")!;
+          expect(canvas.width).toBe(viewport.clientWidth);
+          expect(canvas.height).toBe(viewport.clientHeight);
           expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
           expect(section(host, "Editor status").getBoundingClientRect().bottom).toBeLessThanOrEqual(height);
         });

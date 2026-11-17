@@ -177,7 +177,10 @@ describe("React asset workspace browser verification", () => {
         expect(getComputedStyle(menu).getPropertyValue("--ek-workbench-accent").trim()).toBe("rgb(123, 45, 67)");
         const triggerRect = menuButton.element().getBoundingClientRect();
         expect(Math.abs(menuRect.left - triggerRect.left)).toBeLessThan(300);
-        expect(Math.abs(menuRect.top - triggerRect.bottom)).toBeLessThan(80);
+        // The popover can flip above its trigger when space below is limited.
+        const verticalGap = Math.max(menuRect.top - triggerRect.bottom, triggerRect.top - menuRect.bottom);
+        expect(verticalGap).toBeGreaterThanOrEqual(0);
+        expect(verticalGap).toBeLessThan(80);
         if (CAPTURE) {
           await page.screenshot({ path: `__screenshots__/assets/${width}-en.png` });
         }
