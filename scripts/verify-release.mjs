@@ -224,7 +224,7 @@ export async function assertWorkflowConfig() {
   assert(release.includes("id-token: write"), "release workflow must allow OIDC trusted publishing");
   assert(release.includes("changesets/action@v1"), "release workflow must use the Changesets GitHub Action");
   assert(release.includes("publish: pnpm release:publish"), "release workflow must publish through the root release script");
-  assert(release.includes("NPM_TOKEN"), "release workflow must document the token fallback path");
+  assert(release.includes("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}"), "release workflow must pass the npm token to setup-node's npm configuration");
 }
 
 function parsePackJson(stdout) {
