@@ -1,6 +1,6 @@
 {
   "name": "@ek-aiot/3d-editor-vue",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Vue composables, viewport, inspector, and workbench shell for the EK AIoT 3D editor core.",
   "type": "module",
   "main": "./dist/index.js",
@@ -49,7 +49,7 @@
     "test": "vitest run --root ../.. packages/vue"
   },
   "dependencies": {
-    "@ek-aiot/3d-editor-core": "workspace:^0.2.0",
+    "@ek-aiot/3d-editor-core": "workspace:^0.3.0",
     "@phosphor-icons/vue": "^2.2.1",
     "clsx": "^2.1.1",
     "reka-ui": "^2.11.0",
