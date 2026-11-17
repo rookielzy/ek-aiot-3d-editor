@@ -213,7 +213,8 @@ describe("React workbench shell acceptance", () => {
         expect(buttons.map((element) => element.textContent?.replace(/\d+/g, "").trim())).toEqual([
           "Scene", "Assets", "Data", "Project"
         ]);
-        expect(buttons.map((element) => element.getAttribute("aria-label"))).toEqual([
+        // The project count updates when the runtime reports missing asset payloads.
+        await expect.poll(() => buttons.map((element) => element.getAttribute("aria-label")), { timeout: 8000 }).toEqual([
           "Scene 2", "Assets 2", "Data 0", "Project 2"
         ]);
         for (const element of buttons) {
