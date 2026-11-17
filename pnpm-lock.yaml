@@ -123,7 +123,7 @@ importers:
   packages/react:
     dependencies:
       '@ek-aiot/3d-editor-core':
-        specifier: workspace:^0.2.0
+        specifier: workspace:^0.3.0
         version: link:../core
       '@phosphor-icons/react':
         specifier: ^2.1.10
@@ -166,7 +166,7 @@ importers:
   packages/vue:
     dependencies:
       '@ek-aiot/3d-editor-core':
-        specifier: workspace:^0.2.0
+        specifier: workspace:^0.3.0
         version: link:../core
       '@phosphor-icons/vue':
         specifier: ^2.2.1
