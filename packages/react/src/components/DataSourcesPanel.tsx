@@ -62,8 +62,7 @@ type FocusTarget =
   | { kind: "new" }
   | { kind: "connection"; connectionId: string }
   | { kind: "request"; connectionId: string; endpointKind?: DataDeviceEndpointKind }
-  | { kind: "query"; queryId: string; bindings?: boolean }
-  | { kind: "newQuery"; connectionId: string };
+  | { kind: "query"; queryId: string; bindings?: boolean };
 
 const PROBLEM_MESSAGE_KEYS = {
   "auth-invalid": "dataSources.problem.authInvalid",
@@ -118,7 +117,7 @@ function DataSourcesSession({
   const [form, setForm] = useState<DataFormState | null>(null);
   const [requestEditor, setRequestEditor] = useState<{ connectionId: string; endpointKind?: DataDeviceEndpointKind } | null>(null);
   const requestConnectionId = requestEditor?.connectionId ?? null;
-  const [queryEditor, setQueryEditor] = useState<{ connectionId: string; queryId: string | null } | null>(null);
+  const [queryEditor, setQueryEditor] = useState<{ connectionId: string; queryId: string } | null>(null);
   const [bindingsQueryId, setBindingsQueryId] = useState<string | null>(null);
   const [problems, setProblems] = useState<DataConnectionProblem[]>([]);
   const [status, setStatus] = useState<StatusMessage | null>(null);
@@ -134,7 +133,6 @@ function DataSourcesSession({
   const newButtonRef = useRef<HTMLButtonElement>(null);
   const editButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const requestButtonRefs = useRef(new Map<string, HTMLButtonElement>());
-  const newQueryButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const queryButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const t = context.i18n.t;
   const model = context.model.dataSources;
@@ -159,8 +157,6 @@ function DataSourcesSession({
         ? bindingsButton
         : bindingsButton?.parentElement?.querySelector<HTMLButtonElement>("button");
       (target ?? bindingsButton)?.focus();
-    } else if (focusTarget.kind === "newQuery") {
-      newQueryButtonRefs.current.get(focusTarget.connectionId)?.focus();
     } else {
       newButtonRef.current?.focus();
     }
@@ -201,14 +197,12 @@ function DataSourcesSession({
       return;
     }
     const connection = context.snapshot.dataSources.connections[queryEditor.connectionId];
-    const query = queryEditor.queryId
-      ? context.snapshot.dataSources.queries[queryEditor.queryId]
-      : null;
-    if (!connection || (queryEditor.queryId !== null && !query)) {
+    const query = context.snapshot.dataSources.queries[queryEditor.queryId];
+    if (!connection || !query) {
       setQueryEditor(null);
       setFocusTarget(
         connection
-          ? { kind: "newQuery", connectionId: connection.id }
+          ? { kind: "request", connectionId: connection.id, endpointKind: "deviceRealtime" }
           : { kind: "new" }
       );
     }
@@ -430,7 +424,7 @@ function DataSourcesSession({
     }
   }
 
-  function openQuery(connectionId: string, queryId: string | null) {
+  function openQuery(connectionId: string, queryId: string) {
     setForm(null);
     setRequestEditor(null);
     setBindingsQueryId(null);
@@ -466,20 +460,14 @@ function DataSourcesSession({
     const closing = queryEditor;
     setQueryEditor(null);
     if (closing) {
-      setFocusTarget(
-        closing.queryId
-          ? { kind: "query", queryId: closing.queryId }
-          : { kind: "newQuery", connectionId: closing.connectionId }
-      );
+      setFocusTarget({ kind: "query", queryId: closing.queryId });
     }
   }
 
-  function handleQuerySaved(savedId: string, created: boolean) {
+  function handleQuerySaved(savedId: string) {
     setQueryEditor(null);
     setProblems([]);
-    setStatus({
-      key: created ? "dataSources.status.querySaved" : "dataSources.status.queryUpdated"
-    });
+    setStatus({ key: "dataSources.status.queryUpdated" });
     setFocusTarget({ kind: "query", queryId: savedId });
   }
 
@@ -503,7 +491,9 @@ function DataSourcesSession({
         name: result.command.type === "duplicate-data-query" ? result.command.name ?? "" : ""
       }
     });
-    setFocusTarget(createdId ? { kind: "query", queryId: createdId } : { kind: "newQuery", connectionId: query.connectionId });
+    setFocusTarget(createdId
+      ? { kind: "query", queryId: createdId }
+      : { kind: "request", connectionId: query.connectionId, endpointKind: "deviceRealtime" });
   }
 
   function deleteQuery(query: DataQueryListItem) {
@@ -519,7 +509,7 @@ function DataSourcesSession({
       return;
     }
     setStatus({ key: "dataSources.status.queryDeleted" });
-    setFocusTarget({ kind: "newQuery", connectionId: query.connectionId });
+    setFocusTarget({ kind: "request", connectionId: query.connectionId, endpointKind: "deviceRealtime" });
   }
 
   const dialogOpen = Boolean(form || requestConnectionId || queryEditor || bindingsQueryId);
@@ -607,13 +597,6 @@ function DataSourcesSession({
                   requestButtonRefs.current.delete(key);
                 }
               }}
-              newQueryButtonRef={(element) => {
-                if (element) {
-                  newQueryButtonRefs.current.set(connection.id, element);
-                } else {
-                  newQueryButtonRefs.current.delete(connection.id);
-                }
-              }}
               queryButtonRef={(queryId, element) => {
                 if (element) {
                   queryButtonRefs.current.set(queryId, element);
@@ -625,7 +608,6 @@ function DataSourcesSession({
               onTest={(kind) => requestClose(() => openRequest(connection, kind))}
               onDuplicate={() => requestClose(() => duplicateConnection(connection))}
               onDelete={() => requestClose(() => deleteConnection(connection))}
-              onNewQuery={() => openQuery(connection.id, null)}
               onEditQuery={(query) => openQuery(connection.id, query.id)}
               onManageBindings={(query) => openBindings(query.id)}
               onDuplicateQuery={duplicateQuery}
@@ -636,7 +618,7 @@ function DataSourcesSession({
       )}
       {queryEditor ? (
         <DataQueryEditor
-          key={`${queryEditor.connectionId}:${queryEditor.queryId ?? "new"}`}
+          key={queryEditor.queryId}
           context={context}
           connectionId={queryEditor.connectionId}
           queryId={queryEditor.queryId}
@@ -663,13 +645,11 @@ function ConnectionRow({
   i18n,
   editButtonRef,
   requestButtonRef,
-  newQueryButtonRef,
   queryButtonRef,
   onEdit,
   onTest,
   onDuplicate,
   onDelete,
-  onNewQuery,
   onEditQuery,
   onManageBindings,
   onDuplicateQuery,
@@ -680,13 +660,11 @@ function ConnectionRow({
   i18n: WorkbenchI18n;
   editButtonRef(element: HTMLButtonElement | null): void;
   requestButtonRef(element: HTMLButtonElement | null, kind?: DataDeviceEndpointKind): void;
-  newQueryButtonRef(element: HTMLButtonElement | null): void;
   queryButtonRef(queryId: string, element: HTMLButtonElement | null): void;
   onEdit(): void;
   onTest(kind?: DataDeviceEndpointKind): void;
   onDuplicate(): void;
   onDelete(): void;
-  onNewQuery(): void;
   onEditQuery(query: DataQueryListItem): void;
   onManageBindings(query: DataQueryListItem): void;
   onDuplicateQuery(query: DataQueryListItem): void;
@@ -751,19 +729,11 @@ function ConnectionRow({
         ))}
       </div>
 
-      <div className="ek-workbench__query-list">
-        <div className="ek-workbench__query-list-header">
-          <span>{t("dataSources.queries.label")}</span>
-          <button
-            ref={newQueryButtonRef}
-            type="button"
-            aria-label={t("dataSources.queries.newAria", { name: connection.name })}
-            onClick={onNewQuery}
-          >{t("dataSources.queries.new")}</button>
-        </div>
-        {connection.queries.length === 0 ? (
-          <small>{t("dataSources.queries.empty")}</small>
-        ) : (
+      {connection.queries.length > 0 ? (
+        <div className="ek-workbench__query-list">
+          <div className="ek-workbench__query-list-header">
+            <span>{t("dataSources.queries.label")}</span>
+          </div>
           <ul aria-label={t("dataSources.queries.listAria", { name: connection.name })}>
             {connection.queries.map((query) => (
               <li key={query.id} className="ek-workbench__query-row" aria-label={t("dataSources.queries.rowLabel", { name: query.name })}>
@@ -808,8 +778,8 @@ function ConnectionRow({
               </li>
             ))}
           </ul>
-        )}
-      </div>
+        </div>
+      ) : null}
     </li>
   );
 }

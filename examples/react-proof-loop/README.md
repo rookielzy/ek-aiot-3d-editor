@@ -53,10 +53,8 @@ The fixture is dev-only, same-origin, and never contacts an external service.
 
 Start `pnpm dev:data-source` from the workspace root to run the manually
 testable backend on `127.0.0.1:4310`. The Vite dev server proxies `/local-api`
-to it, so use `/local-api/api/devices` as a connection URL. Add
-`?scenario=empty`, `?scenario=missing-field`, `?scenario=slow`, or
-`?scenario=http-500` to exercise predictable response states.
+to it. Use the demo origin plus `/local-api` as the service URL, then configure
+`GET /api/devices` for the device list and `GET /api/devices/realtime` for realtime data.
 
-Step-by-step click-through instructions (connection → test request → query
-mapping → object binding → data preview, plus the failure-state experiments)
-are in [`docs/local-data-source-demo-walkthrough.md`](../../docs/local-data-source-demo-walkthrough.md).
+Follow the [local data source walkthrough](../../docs/local-data-source-demo-walkthrough.md)
+to save the endpoints and test normal and error responses.

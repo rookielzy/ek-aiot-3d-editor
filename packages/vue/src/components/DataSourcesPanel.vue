@@ -82,9 +82,8 @@
             >{{ t(`dataSources.endpoints.${kind}`) }}</button>
           </div>
 
-          <section class="ek-workbench__data-queries" :aria-label="t('dataSources.queries.listAria', { name: connection.name })">
+          <section v-if="connection.queries.length > 0" class="ek-workbench__data-queries" :aria-label="t('dataSources.queries.listAria', { name: connection.name })">
             <h5>{{ t("dataSources.queries.label") }}</h5>
-            <p v-if="connection.queries.length === 0" class="ek-workbench__request-hint">{{ t("dataSources.queries.empty") }}</p>
             <ul>
               <li v-for="query in connection.queries" :key="query.id">
                 <div>
@@ -110,9 +109,6 @@
                 <p v-if="query.referenced" class="ek-workbench__request-hint">{{ t("dataSources.queries.deleteReferenced") }}</p>
               </li>
             </ul>
-            <button type="button" :aria-label="t('dataSources.queries.newAria', { name: connection.name })" @click="startQueryEditor(connection.id, null, $event)">
-              {{ t("dataSources.queries.new") }}
-            </button>
           </section>
         </article>
       </li>
@@ -210,7 +206,7 @@ const panelRef = ref<HTMLElement | null>(null);
 const status = ref("");
 const connectionForm = ref<{ connectionId: string | null } | null>(null);
 const connectionFormRef = ref<InstanceType<typeof DataConnectionForm> | null>(null);
-const queryEditor = ref<{ connectionId: string; queryId: string | null } | null>(null);
+const queryEditor = ref<{ connectionId: string; queryId: string } | null>(null);
 const queryEditorRef = ref<InstanceType<typeof DataQueryEditor> | null>(null);
 const bindingsQueryId = ref<string | null>(null);
 const tester = ref<{ connectionId: string; endpointKind?: DataDeviceEndpointKind } | null>(null);
@@ -391,7 +387,7 @@ function startTester(connectionId: string, event?: Event, endpointKind?: DataDev
   });
 }
 
-function startQueryEditor(connectionId: string, queryId: string | null, event?: Event): void {
+function startQueryEditor(connectionId: string, queryId: string, event?: Event): void {
   rememberTrigger(event);
   requestAction(() => {
     closeSessions();
@@ -410,14 +406,13 @@ function openBindings(queryId: string, event?: Event): void {
 }
 
 function closeQueryEditor(): void {
-  const closing = queryEditor.value;
   queryEditor.value = null;
   restoreFocus();
 }
 
-function onQuerySaved(_queryId: string, created: boolean): void {
+function onQuerySaved(): void {
   queryEditor.value = null;
-  status.value = created ? t("dataSources.status.querySaved") : t("dataSources.status.queryUpdated");
+  status.value = t("dataSources.status.queryUpdated");
   restoreFocus();
 }
 
@@ -540,7 +535,7 @@ function deleteQuery(query: DataQueryListItem, event?: Event): void {
     tester.value = null;
     bindingsQueryId.value = null;
     status.value = t("dataSources.status.queryDeleted", { name: query.name });
-    focusTarget.value = t("dataSources.queries.newAria", { name: props.context.snapshot.dataSources.connections[query.connectionId]?.name ?? "" });
+    focusTarget.value = t("dataSources.endpoints.deviceRealtimeAria", { name: props.context.snapshot.dataSources.connections[query.connectionId]?.name ?? "" });
   });
 }
 

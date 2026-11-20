@@ -34,6 +34,7 @@ it("distinguishes a valid empty endpoint response, malformed data, and HTTP fail
       }
     }).ok).toBe(true);
     await page.getByRole("button", { name: /^Data / }).click();
+    await expect.element(page.getByRole("button", { name: "New query for Standard API" })).not.toBeInTheDocument();
     await page.getByRole("button", { name: "Configure device realtime data for Standard API" }).click();
     const dialog = page.getByRole("dialog", { name: "Device realtime data" });
     const path = dialog.getByRole("textbox", { name: "Request path" });

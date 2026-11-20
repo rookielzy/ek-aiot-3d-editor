@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createEditor,
@@ -8,6 +8,7 @@ import {
   type RendererLike
 } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
+import { seedSavedQuery } from "./support/saved-data-query";
 import { selectWorkbenchOption } from "./support/workbench-select";
 
 describe("React HTTP read contract configuration", () => {
@@ -44,7 +45,8 @@ describe("React HTTP read contract configuration", () => {
     expect(screen.getAllByText("API key header").length).toBeGreaterThan(0);
     expect(screen.getByText("Auth header: X-Zone-Key")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "New query for Zone API" }));
+    act(() => { seedSavedQuery(editor); });
+    fireEvent.click(screen.getByRole("button", { name: "Edit query Saved query" }));
     fireEvent.change(screen.getByLabelText("Query name"), { target: { value: "Zone search" } });
     selectWorkbenchOption(screen.getByLabelText("Method"), "POST");
     expect(screen.getAllByText(/Read-only POST queries run only/).length).toBeGreaterThan(0);
@@ -104,7 +106,8 @@ describe("React HTTP read contract configuration", () => {
     const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} rightPanel={() => null} />);
     openDataPanel();
     await createConnection("Blank API", "https://blank.example.test");
-    fireEvent.click(screen.getByRole("button", { name: "New query for Blank API" }));
+    act(() => { seedSavedQuery(editor); });
+    fireEvent.click(screen.getByRole("button", { name: "Edit query Saved query" }));
 
     fireEvent.change(screen.getByLabelText("Query name"), { target: { value: "Blank success" } });
     fireEvent.change(screen.getByLabelText("Request path"), { target: { value: "/devices" } });
@@ -119,8 +122,8 @@ describe("React HTTP read contract configuration", () => {
     expect(
       screen.getByText("The business success condition needs a valid field path and JSON scalar value.")
     ).toBeTruthy();
-    expect(editor.getHistoryState()).toEqual({ undoCount: 1, redoCount: 0 });
-    expect(editor.getSnapshot().dataSources.queries).toEqual({});
+    expect(editor.getHistoryState()).toEqual({ undoCount: 2, redoCount: 0 });
+    expect(Object.values(editor.getSnapshot().dataSources.queries)[0].name).toBe("Saved query");
     view.unmount();
     editor.dispose();
   });

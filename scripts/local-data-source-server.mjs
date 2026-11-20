@@ -8,6 +8,12 @@ const devices = [
   { deviceCode: "pump-2", name: "Pump 2", temperature: 24.8, running: false }
 ];
 
+const runningStatusEnum = [
+  { value: 17, desc: "离线" },
+  { value: 42, desc: "运行中" }
+];
+const offlineObservedAt = new Date(Date.now() - 15 * 60_000).toISOString();
+
 const server = createServer(async (request, response) => {
   const url = new URL(request.url ?? "/", `http://${host}:${port}`);
   response.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -27,10 +33,40 @@ const server = createServer(async (request, response) => {
     return send(response, 401, { error: "api-key-required" });
   }
   if (url.pathname === "/health") return send(response, 200, { status: "ok", service: "local-data-source" });
-  if (url.pathname === "/api/devices" && request.method === "GET") {
-    if (scenario === "empty") return send(response, 200, { items: [] });
-    if (scenario === "missing-field") return send(response, 200, { items: [{ deviceCode: "pump-1" }] });
-    return send(response, 200, { items: devices.map((device) => ({ ...device, observedAt: new Date().toISOString() })) });
+  const deviceList = url.pathname === "/api/devices";
+  if (request.method === "GET" && (deviceList || url.pathname === "/api/devices/realtime")) {
+    if (scenario === "empty") return send(response, 200, []);
+    if (scenario === "missing-field") {
+      return send(response, 200, [deviceList
+        ? { deviceId: devices[0].deviceCode }
+        : { deviceId: devices[0].deviceCode, runningStatus: 42, runningStatusEnum }]);
+    }
+    if (deviceList) {
+      return send(response, 200, devices.map((device) => ({
+        deviceId: device.deviceCode,
+        deviceName: device.name
+      })));
+    }
+    const observedAt = new Date().toISOString();
+    return send(response, 200, devices.map((device) => ({
+      deviceId: device.deviceCode,
+      runningStatus: device.running ? 42 : 17,
+      runningStatusEnum,
+      observedAt: device.running ? observedAt : offlineObservedAt,
+      data: [
+        { key: "temperature", valueType: "number", value: device.temperature, desc: "温度", unit: "°C" },
+        {
+          key: "power",
+          valueType: "boolean",
+          value: device.running ? true : null,
+          desc: "开关状态",
+          valueEnum: [
+            { value: true, desc: "开启" },
+            { value: false, desc: "关闭" }
+          ]
+        }
+      ]
+    })));
   }
   const deviceMatch = url.pathname.match(/^\/api\/devices\/([^/]+)$/);
   if (deviceMatch && request.method === "GET") {
@@ -48,6 +84,7 @@ const server = createServer(async (request, response) => {
 
 server.listen(port, host, () => {
   console.log(`Local data source listening at http://${host}:${port}`);
+  console.log("Standard endpoints: GET /api/devices and GET /api/devices/realtime");
   console.log("Scenarios: ?scenario=empty|missing-field|slow|http-500|auth-required|business-error");
 });
 

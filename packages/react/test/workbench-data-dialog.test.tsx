@@ -172,21 +172,21 @@ describe("React data configuration dialogs", () => {
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Test request for Offline API" }));
   });
 
-  it("organizes the query editor into connection, request, mapping, preview, and test result sections", async () => {
+  it("offers standard endpoint configuration without creating a mapped query", async () => {
     const editor = createEditor({ executor: async () => ({ status: 200, contentType: "application/json", body: "{\"value\":1}" }) });
     render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} rightPanel={() => null} />);
     openDataPanel();
     await createConnection("Plant API", "https://api.example.test/v1");
 
-    fireEvent.click(screen.getByRole("button", { name: "New query for Plant API" }));
-    const dialog = screen.getByRole("dialog", { name: "Query configuration" });
+    expect(screen.queryByRole("button", { name: "New query for Plant API" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Configure device list for Plant API" }));
+    const dialog = screen.getByRole("dialog", { name: "Device list" });
     expect(within(dialog).getByRole("group", { name: "Connection" })).toBeTruthy();
     expect(within(dialog).getByRole("group", { name: "Request" })).toBeTruthy();
-    expect(within(dialog).getByRole("group", { name: "Mapping" })).toBeTruthy();
-    expect(within(dialog).getByRole("group", { name: "Mapping preview" })).toBeTruthy();
+    expect(within(dialog).queryByRole("group", { name: "Mapping" })).toBeNull();
+    expect(within(dialog).queryByRole("group", { name: "Mapping preview" })).toBeNull();
     expect(within(dialog).getByRole("group", { name: "Test result" })).toBeTruthy();
-    expect(within(dialog).getByRole("group", { name: "Connection" })).toBeTruthy();
-    expect(within(dialog).getByText("Not tested. Save is allowed without a response.")).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Save endpoint" })).toBeTruthy();
   });
 
   it("renders the connection dialog in Chinese and keeps its draft across a locale switch", async () => {

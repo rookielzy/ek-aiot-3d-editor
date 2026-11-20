@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createEditor,
@@ -7,6 +7,7 @@ import {
   type RendererLike
 } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
+import { seedSavedQuery } from "./support/saved-data-query";
 import { selectWorkbenchOption } from "./support/workbench-select";
 
 describe("React query authoring and mapping preview", () => {
@@ -41,7 +42,8 @@ describe("React query authoring and mapping preview", () => {
     const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} rightPanel={() => null} />);
     openDataPanel();
     await createConnection("Plant API", "https://api.example.test/v1");
-    fireEvent.click(screen.getByRole("button", { name: "New query for Plant API" }));
+    act(() => { seedSavedQuery(editor); });
+    fireEvent.click(screen.getByRole("button", { name: "Edit query Saved query" }));
 
     expect(screen.getByRole("dialog", { name: "Query configuration" })).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Query name"), { target: { value: "Pump status" } });
@@ -97,12 +99,12 @@ describe("React query authoring and mapping preview", () => {
     selectWorkbenchOption(screen.getByLabelText("Property 1 transform"), "Multiply and offset");
     expect(screen.getByLabelText("Device 001").textContent).toContain("85.2");
 
-    expect(editor.getHistoryState()).toEqual({ undoCount: 1, redoCount: 0 });
+    expect(editor.getHistoryState()).toEqual({ undoCount: 2, redoCount: 0 });
     fireEvent.click(screen.getByRole("button", { name: "Save query" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Query configuration" })).toBeNull());
-    expect(screen.getByText("Query saved. Undo to discard.")).toBeTruthy();
-    expect(editor.getHistoryState()).toEqual({ undoCount: 2, redoCount: 0 });
+    expect(screen.getByText("Query updated. Undo to revert.")).toBeTruthy();
+    expect(editor.getHistoryState()).toEqual({ undoCount: 3, redoCount: 0 });
     const query = Object.values(editor.getSnapshot().dataSources.queries)[0];
     expect(query).toMatchObject({
       name: "Pump status",
@@ -139,16 +141,18 @@ describe("React query authoring and mapping preview", () => {
     const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} rightPanel={() => null} />);
     openDataPanel();
     await createConnection("Strict API", "https://strict.example.test");
-    fireEvent.click(screen.getByRole("button", { name: "New query for Strict API" }));
+    act(() => { seedSavedQuery(editor); });
+    fireEvent.click(screen.getByRole("button", { name: "Edit query Saved query" }));
 
     fireEvent.change(screen.getByLabelText("Query name"), { target: { value: "Incomplete" } });
+    fireEvent.change(screen.getByLabelText("Device ID path"), { target: { value: "" } });
     fireEvent.change(screen.getByLabelText("Request path"), { target: { value: "/devices" } });
     fireEvent.click(screen.getByRole("button", { name: "Save query" }));
 
     expect(screen.getByRole("dialog", { name: "Query configuration" })).toBeTruthy();
     expect(screen.getAllByText("The mapping is incomplete or invalid.").length).toBeGreaterThan(0);
-    expect(editor.getHistoryState()).toEqual({ undoCount: 1, redoCount: 0 });
-    expect(editor.getSnapshot().dataSources.queries).toEqual({});
+    expect(editor.getHistoryState()).toEqual({ undoCount: 2, redoCount: 0 });
+    expect(Object.values(editor.getSnapshot().dataSources.queries)[0].name).toBe("Saved query");
     view.unmount();
     editor.dispose();
   });
@@ -158,7 +162,8 @@ describe("React query authoring and mapping preview", () => {
     const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} rightPanel={() => null} />);
     openDataPanel();
     await createConnection("Offline API", "https://offline.example.test");
-    fireEvent.click(screen.getByRole("button", { name: "New query for Offline API" }));
+    act(() => { seedSavedQuery(editor); });
+    fireEvent.click(screen.getByRole("button", { name: "Edit query Saved query" }));
 
     fireEvent.change(screen.getByLabelText("Query name"), { target: { value: "Single pump" } });
     fireEvent.change(screen.getByLabelText("Request path"), { target: { value: "/pump" } });
@@ -201,7 +206,7 @@ describe("React query authoring and mapping preview", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Save query" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Query configuration" })).toBeNull());
-    expect(editor.getHistoryState()).toEqual({ undoCount: 2, redoCount: 0 });
+    expect(editor.getHistoryState()).toEqual({ undoCount: 3, redoCount: 0 });
 
     const query = Object.values(editor.getSnapshot().dataSources.queries)[0];
     expect(query).toMatchObject({
@@ -230,7 +235,8 @@ describe("React query authoring and mapping preview", () => {
     const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} rightPanel={() => null} />);
     openDataPanel();
     await createConnection("Empty API", "https://empty.example.test");
-    fireEvent.click(screen.getByRole("button", { name: "New query for Empty API" }));
+    act(() => { seedSavedQuery(editor); });
+    fireEvent.click(screen.getByRole("button", { name: "Edit query Saved query" }));
 
     fireEvent.change(screen.getByLabelText("Query name"), { target: { value: "Empty query" } });
     fireEvent.change(screen.getByLabelText("Request path"), { target: { value: "/pumps" } });
@@ -245,7 +251,7 @@ describe("React query authoring and mapping preview", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Save query" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Query configuration" })).toBeNull());
-    expect(editor.getHistoryState()).toEqual({ undoCount: 2, redoCount: 0 });
+    expect(editor.getHistoryState()).toEqual({ undoCount: 3, redoCount: 0 });
     const query = Object.values(editor.getSnapshot().dataSources.queries)[0];
     expect(query.mapping.properties).toMatchObject([{ key: "temperature", source: [{ kind: "key", key: "tempRaw" }] }]);
     view.unmount();
@@ -257,7 +263,8 @@ describe("React query authoring and mapping preview", () => {
     const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} rightPanel={() => null} />);
     openDataPanel();
     await createConnection("Untested API", "https://untested.example.test");
-    fireEvent.click(screen.getByRole("button", { name: "New query for Untested API" }));
+    act(() => { seedSavedQuery(editor); });
+    fireEvent.click(screen.getByRole("button", { name: "Edit query Saved query" }));
 
     fireEvent.change(screen.getByLabelText("Query name"), { target: { value: "Untested query" } });
     fireEvent.change(screen.getByLabelText("Request path"), { target: { value: "/pumps" } });
@@ -269,7 +276,7 @@ describe("React query authoring and mapping preview", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Save query" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Query configuration" })).toBeNull());
-    expect(editor.getHistoryState()).toEqual({ undoCount: 2, redoCount: 0 });
+    expect(editor.getHistoryState()).toEqual({ undoCount: 3, redoCount: 0 });
     expect(Object.values(editor.getSnapshot().dataSources.queries)[0]).toMatchObject({
       name: "Untested query",
       mapping: { properties: [{ key: "temperature" }] }
@@ -284,7 +291,8 @@ describe("React query authoring and mapping preview", () => {
     const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} rightPanel={() => null} />);
     openDataPanel();
     await createConnection("State API", "https://state.example.test");
-    fireEvent.click(screen.getByRole("button", { name: "New query for State API" }));
+    act(() => { seedSavedQuery(editor); });
+    fireEvent.click(screen.getByRole("button", { name: "Edit query Saved query" }));
 
     fireEvent.change(screen.getByLabelText("Query name"), { target: { value: "State query" } });
     fireEvent.change(screen.getByLabelText("Request path"), { target: { value: "/state" } });
@@ -324,7 +332,7 @@ describe("React query authoring and mapping preview", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Save query" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Query configuration" })).toBeNull());
-    expect(editor.getHistoryState()).toEqual({ undoCount: 3, redoCount: 0 });
+    expect(editor.getHistoryState()).toEqual({ undoCount: 4, redoCount: 0 });
     const updated = Object.values(editor.getSnapshot().dataSources.queries)[0];
     expect(updated.mapping.properties[0]).toMatchObject({
       range: { min: 0, max: 50 },

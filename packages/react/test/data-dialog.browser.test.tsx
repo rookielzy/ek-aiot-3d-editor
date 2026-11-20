@@ -165,20 +165,19 @@ it("keeps the request tester modal, draft-safe, and returns focus to its row tri
   });
 }, 30_000);
 
-it("keeps every query configuration section rendered and the dialog inside the viewport", async () => {
+it("keeps standard endpoint configuration inside the viewport without mapping fields", async () => {
   await withWorkbench("en", async ({ editor, host }) => {
     await openDataPanel(host, EN);
     await createConnection(host, EN, "Plant API", "https://api.example.test/v1");
     const before = editor.getSnapshot();
-    await userEvent.click(button(host, EN.newQueryAria("Plant API")));
+    expect(findButton(host, "New query for Plant API")).toBeFalsy();
+    await userEvent.click(button(host, EN.realtimeAria("Plant API")));
 
-    const dialog = await waitForDialog(host, EN.queryLabel);
+    const dialog = await waitForDialog(host, EN.realtimeLabel);
     expect(dialog.open).toBe(true);
     const sections = [...dialog.querySelectorAll<HTMLElement>("[role='group']")];
     const labels = sections.map((section) => section.getAttribute("aria-label"));
-    expect(labels).toEqual(
-      expect.arrayContaining(["Connection", "Request", "Mapping", "Mapping preview", "Test result"])
-    );
+    expect(labels).toEqual(["Connection", "Request", "Test result"]);
     for (const section of sections) {
       const rect = section.getBoundingClientRect();
       expect(rect.width).toBeGreaterThan(0);
@@ -189,12 +188,9 @@ it("keeps every query configuration section rendered and the dialog inside the v
       expect(box.bottom).toBeLessThanOrEqual(window.innerHeight + 1);
       expect(box.right).toBeLessThanOrEqual(window.innerWidth + 1);
     }
-    await page.screenshot({
-      path: `__screenshots__/data-dialog.browser.test.tsx/query-editor-${window.innerWidth}x${window.innerHeight}.png`
-    });
-
-    await userEvent.click(button(dialog, EN.queryClose));
-    await expect.poll(() => host.querySelector(`dialog[aria-label="${EN.queryLabel}"]`)).toBeNull();
+    await userEvent.click(button(dialog, EN.closeRequest));
+    await expect.poll(() => host.querySelector(`dialog[aria-label="${EN.realtimeLabel}"]`)).toBeNull();
+    await expect.poll(() => document.activeElement).toBe(button(host, EN.realtimeAria("Plant API")));
     expect(editor.getSnapshot().dataSources.queries).toEqual(before.dataSources.queries);
   });
 }, 30_000);
@@ -238,7 +234,7 @@ it("keeps connection editing and the request tester usable with a long unbroken 
   });
 }, 30_000);
 
-it("localizes the connection, request tester, and query configuration dialogs in zh-CN", async () => {
+it("localizes the connection, request tester, and standard endpoint dialogs in zh-CN", async () => {
   const connectionName = "车间接口";
 
   await withWorkbench("zh-CN", async ({ host }) => {
@@ -268,15 +264,12 @@ it("localizes the connection, request tester, and query configuration dialogs in
     await userEvent.click(button(testerDialog, ZH.closeRequest));
     await expect.poll(() => host.querySelector(`dialog[aria-label="${ZH.requestLabel}"]`)).toBeNull();
 
-    await userEvent.click(button(host, ZH.newQueryAria(connectionName)));
-    const queryDialog = await waitForDialog(host, ZH.queryLabel);
-    expectLocalized(queryDialog);
-    expect(queryDialog.querySelector("h3")?.textContent).toContain(connectionName);
-    await page.screenshot({
-      path: `__screenshots__/data-dialog.browser.test.tsx/query-editor-zh-${window.innerWidth}x${window.innerHeight}.png`
-    });
-    await userEvent.click(button(queryDialog, ZH.queryClose));
-    await expect.poll(() => host.querySelector(`dialog[aria-label="${ZH.queryLabel}"]`)).toBeNull();
+    await userEvent.click(button(host, ZH.realtimeAria(connectionName)));
+    const endpointDialog = await waitForDialog(host, ZH.realtimeLabel);
+    expectLocalized(endpointDialog);
+    expect(endpointDialog.querySelector("h3")?.textContent).toContain(connectionName);
+    await userEvent.click(button(endpointDialog, ZH.closeRequest));
+    await expect.poll(() => host.querySelector(`dialog[aria-label="${ZH.realtimeLabel}"]`)).toBeNull();
   });
 }, 30_000);
 
@@ -323,9 +316,8 @@ type Copy = {
   keepEditing: string;
   discardChanges: string;
   discardTitle: string;
-  newQueryAria: (name: string) => string;
-  queryLabel: string;
-  queryClose: string;
+  realtimeAria: (name: string) => string;
+  realtimeLabel: string;
 };
 
 const EN: Copy = {
@@ -347,9 +339,8 @@ const EN: Copy = {
   keepEditing: "Keep editing",
   discardChanges: "Discard changes",
   discardTitle: "Discard unsaved changes?",
-  newQueryAria: (name) => `New query for ${name}`,
-  queryLabel: "Query configuration",
-  queryClose: "Close query configuration"
+  realtimeAria: (name) => `Configure device realtime data for ${name}`,
+  realtimeLabel: "Device realtime data"
 };
 
 const ZH: Copy = {
@@ -371,9 +362,8 @@ const ZH: Copy = {
   keepEditing: "继续编辑",
   discardChanges: "放弃修改",
   discardTitle: "放弃未保存的更改？",
-  newQueryAria: (name) => `为 ${name} 新建查询`,
-  queryLabel: "查询配置",
-  queryClose: "关闭查询配置"
+  realtimeAria: (name) => `配置 ${name} 的设备实时数据接口`,
+  realtimeLabel: "设备实时数据"
 };
 
 // Every dialog heading must be translated: Chinese text, no leftover English.
