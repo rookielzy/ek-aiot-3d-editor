@@ -10,13 +10,16 @@ import {
 } from "react";
 import {
   buildDataQueryRequest,
+  buildSaveDataDeviceEndpointCommand,
   collectQueryOverrides,
   createQueryParameterForm,
   formatDataPath,
+  queryParameterFormsFromDrafts,
   toQueryParameterDrafts,
   type DataParameterLocationInput,
   type DataParameterType,
   type DataParameterValue,
+  type DataDeviceEndpointKind,
   type DataQueryMethod,
   type DataQueryRunState,
   type DataServiceState,
@@ -39,6 +42,7 @@ import { WorkbenchSelect } from "./ui/WorkbenchSelect";
 export interface DataQueryTesterProps {
   context: ResolvedWorkbenchContext;
   connectionId: string;
+  endpointKind?: DataDeviceEndpointKind;
   /** Asked to close: the panel decides whether an unsaved draft needs a prompt. */
   onRequestClose(): void;
   /** Close for real and drop the draft. */
@@ -62,12 +66,12 @@ interface TesterDraft {
 }
 
 /**
- * Manual request tester. Its draft is window state: it never enters the scene
- * snapshot and is dropped when the dialog closes.
+ * Manual request tester with an optional saved device endpoint.
  */
 export function DataQueryTester({
   context,
   connectionId,
+  endpointKind,
   onRequestClose,
   onClose,
   discardRequested,
@@ -78,11 +82,21 @@ export function DataQueryTester({
   const subscribe = useCallback((listener: () => void) => service?.subscribe(listener) ?? (() => {}), [service]);
   const getState = useCallback(() => service?.getState() ?? EMPTY_SERVICE_STATE, [service]);
   const dataState = useSyncExternalStore(subscribe, getState, getState);
-  const [draft, setDraft] = useState<TesterDraft>({ method: "GET", readOnly: true, path: "", parameters: [] });
+  const connection = context.snapshot.dataSources.connections[connectionId];
+  const [draft, setDraft] = useState<TesterDraft>(() => {
+    const endpoint = endpointKind ? connection?.deviceEndpoints?.[endpointKind] : undefined;
+    return {
+      method: endpoint?.method ?? "GET",
+      readOnly: endpoint?.readOnly ?? true,
+      path: endpoint?.path ?? "",
+      parameters: queryParameterFormsFromDrafts(endpoint?.parameters ?? [])
+    };
+  });
+  const baseline = useRef(JSON.stringify(draft));
+  const [saveResult, setSaveResult] = useState<{ ok: boolean; message: string } | null>(null);
   const pathRef = useRef<HTMLInputElement>(null);
   const problemId = useId();
   const t = context.i18n.t;
-  const connection = context.snapshot.dataSources.connections[connectionId];
 
   useEffect(() => {
     service?.invalidateQueryRuns();
@@ -95,15 +109,15 @@ export function DataQueryTester({
     return null;
   }
 
-  const parameterDrafts = toQueryParameterDrafts(draft.parameters);
   const overrides = collectQueryOverrides(draft.parameters);
-  const preview = buildDataQueryRequest(context.snapshot, {
+  const request = {
     connectionId,
     method: draft.method,
     readOnly: draft.readOnly,
     path: draft.path,
-    parameters: parameterDrafts
-  }, { overrides });
+    parameters: toQueryParameterDrafts(draft.parameters)
+  };
+  const preview = buildDataQueryRequest(context.snapshot, request, { overrides });
   const run = dataState.run?.connectionId === connectionId ? dataState.run : null;
   const running = run?.status === "running";
   const pathErrors = run?.problems.filter((problem) => problem.field === "path")
@@ -115,7 +129,8 @@ export function DataQueryTester({
     service?.invalidateQueryRuns();
     const next = { ...draft, ...patch };
     setDraft(next);
-    onDraftChange(isDirtyDraft(next));
+    setSaveResult(null);
+    onDraftChange(JSON.stringify(next) !== baseline.current);
   }
 
   function addParameter(): void {
@@ -162,13 +177,24 @@ export function DataQueryTester({
     }
     if (!preview.ok && preview.problems[0]?.field === "path") pathRef.current?.focus();
     service.invalidateQueryRuns();
-    void service.executeQueryDraft({
-      connectionId,
-      method: draft.method,
-      readOnly: draft.readOnly,
-      path: draft.path,
-      parameters: parameterDrafts
-    }, { overrides }).result;
+    void service.executeQueryDraft(request, { overrides, deviceEndpoint: endpointKind }).result;
+  }
+
+  function saveEndpoint(): void {
+    if (!endpointKind) return;
+    const built = buildSaveDataDeviceEndpointCommand(context.snapshot, connectionId, endpointKind, request);
+    if (!built.ok) {
+      setSaveResult({ ok: false, message: t("dataSources.problem.endpointInvalid", { detail: built.problems[0]?.message ?? "" }) });
+      return;
+    }
+    const dispatched = context.dispatch(built.command);
+    if (!dispatched.ok) {
+      setSaveResult({ ok: false, message: t("dataSources.problem.commandFailed", { detail: dispatched.error ?? "" }) });
+      return;
+    }
+    baseline.current = JSON.stringify(draft);
+    onDraftChange(false);
+    setSaveResult({ ok: true, message: t("dataSources.endpoints.saved") });
   }
 
   function cancelRequest(): void {
@@ -180,8 +206,8 @@ export function DataQueryTester({
   return (
     <Dialog
       onDismiss={onRequestClose}
-      label={t("dataSources.request.label")}
-      title={t("dataSources.request.title", { name: connection.name })}
+      label={endpointKind ? t(`dataSources.endpoints.${endpointKind}`) : t("dataSources.request.label")}
+      title={t(endpointKind ? `dataSources.endpoints.${endpointKind}Aria` : "dataSources.request.title", { name: connection.name })}
       className="ek-workbench__request-dialog"
       headerActions={<Button data-dialog-dismiss onClick={onRequestClose}>{t("dataSources.request.close")}</Button>}
       initialFocus={pathRef}
@@ -196,7 +222,7 @@ export function DataQueryTester({
     >
       <div className="ek-workbench__dialog-content">
         <TesterSection label={t("dataSources.request.connectionSection")}>
-          <p className="ek-workbench__request-hint">{t("dataSources.request.draftHint")}</p>
+          {!endpointKind ? <p className="ek-workbench__request-hint">{t("dataSources.request.draftHint")}</p> : null}
           <p className="ek-workbench__request-connection">{connection.baseUrl}</p>
         </TesterSection>
 
@@ -382,11 +408,17 @@ export function DataQueryTester({
             </fieldset>
 
             <div className="ek-workbench__request-actions">
+              {endpointKind ? <Button onClick={saveEndpoint}>{t("dataSources.endpoints.save")}</Button> : null}
               <Button type="submit" disabled={!service || running}>{t("dataSources.request.run")}</Button>
               {running ? (
                 <Button onClick={cancelRequest}>{t("dataSources.request.cancel")}</Button>
               ) : null}
             </div>
+            {saveResult ? (
+              <p className={saveResult.ok ? "ek-workbench__request-hint" : "ek-workbench__request-warning"} role={saveResult.ok ? "status" : "alert"}>
+                {saveResult.message}
+              </p>
+            ) : null}
           </form>
         </TesterSection>
 
@@ -398,13 +430,6 @@ export function DataQueryTester({
       </div>
     </Dialog>
   );
-}
-
-function isDirtyDraft(draft: TesterDraft): boolean {
-  return draft.method !== "GET"
-    || !draft.readOnly
-    || draft.path.length > 0
-    || draft.parameters.length > 0;
 }
 
 function TesterSection({ label, children }: { label: string; children: ReactNode }) {
@@ -437,6 +462,7 @@ function RequestRunResult({ run, i18n }: { run: DataQueryRunState; i18n: Workben
           {t("dataSources.request.resultRevision", { revision: run.configRevision })}
         </small>
         <small>{t("dataSources.request.sessionOnly")}</small>
+        {run.recordCount !== undefined ? <small>{t("dataSources.endpoints.recordCount", { count: run.recordCount })}</small> : null}
       </div>
       {problems.length > 0 ? (
         <ul className="ek-workbench__request-problems" aria-label={t("dataSources.request.problems")}>

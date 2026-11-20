@@ -258,3 +258,21 @@ function isRetryableStatus(status: number): boolean {
 function utf8ByteLength(value: string): number {
   return new TextEncoder().encode(value).length;
 }
+
+const ISO_BASIC_WITH_ZONE = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(?:(\d{2})([.,]\d{1,9})?)?(Z|[+-]\d{2}(?:\d{2})?)$/;
+const ISO_WITH_ZONE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:?\d{2})$/;
+
+export function parseDataIsoDateTime(raw: unknown): number | null {
+  if (typeof raw !== "string") return null;
+  const basic = ISO_BASIC_WITH_ZONE.exec(raw);
+  const dateTime = (basic
+    ? `${basic[1]}-${basic[2]}-${basic[3]}T${basic[4]}:${basic[5]}${basic[6] ? `:${basic[6]}${basic[7] ?? ""}` : ""}${basic[8]}`
+    : raw).replace(",", ".").replace(/([+-]\d{2})$/, "$1:00");
+  if (!ISO_WITH_ZONE.test(dateTime)) return null;
+  // Date.parse normalizes impossible calendar days before applying the timezone.
+  if (new Date(`${dateTime.slice(0, 10)}T00:00:00Z`).getUTCDate() !== Number(dateTime.slice(8, 10))) {
+    return null;
+  }
+  const parsed = Date.parse(dateTime);
+  return Number.isFinite(parsed) ? parsed : null;
+}

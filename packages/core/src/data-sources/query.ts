@@ -89,6 +89,7 @@ export type DataQueryProblemCode =
   | "request-timeout"
   | "response-auth"
   | "response-business"
+  | "response-device-contract"
   | "response-http"
   | "response-invalid"
   | "response-json-invalid"
@@ -105,6 +106,7 @@ export interface DataQueryProblem {
   parameterName?: string;
   status?: number;
   credentialRef?: string;
+  responsePath?: string;
 }
 
 export type BuildDataQueryRequestResult =

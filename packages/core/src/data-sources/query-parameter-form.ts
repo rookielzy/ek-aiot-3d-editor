@@ -52,6 +52,21 @@ export function createQueryHeaderForm(name = "", value = ""): QueryHeaderForm {
   return { id: `data-query-header-${nextHeaderId}`, name, value };
 }
 
+export function queryParameterFormsFromDrafts(parameters: readonly DataQueryParameterDraft[]): QueryParameterForm[] {
+  return parameters.map((parameter) => ({
+    ...createQueryParameterForm(),
+    name: parameter.name,
+    type: parameter.type,
+    location: parameter.location ?? "auto",
+    useDefault: Object.prototype.hasOwnProperty.call(parameter, "defaultValue"),
+    defaultText: Object.prototype.hasOwnProperty.call(parameter, "defaultValue")
+      ? String(parameter.defaultValue)
+      : "",
+    override: false,
+    overrideText: ""
+  }));
+}
+
 export function toQueryParameterDrafts(
   parameters: readonly QueryParameterForm[]
 ): DataQueryParameterDraft[] {

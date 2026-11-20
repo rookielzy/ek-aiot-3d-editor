@@ -72,6 +72,16 @@
           </div>
           <p v-if="connection.referenced" class="ek-workbench__request-hint">{{ t("dataSources.delete.referencedReason") }}</p>
 
+          <div class="ek-workbench__data-row-actions">
+            <button
+              v-for="kind in DATA_DEVICE_ENDPOINT_KINDS"
+              :key="kind"
+              type="button"
+              :aria-label="t(`dataSources.endpoints.${kind}Aria`, { name: connection.name })"
+              @click="startTester(connection.id, $event, kind)"
+            >{{ t(`dataSources.endpoints.${kind}`) }}</button>
+          </div>
+
           <section class="ek-workbench__data-queries" :aria-label="t('dataSources.queries.listAria', { name: connection.name })">
             <h5>{{ t("dataSources.queries.label") }}</h5>
             <p v-if="connection.queries.length === 0" class="ek-workbench__request-hint">{{ t("dataSources.queries.empty") }}</p>
@@ -138,9 +148,11 @@
 
     <DataQueryTester
       v-if="tester"
+      :key="`${tester.connectionId}:${tester.endpointKind ?? ''}`"
       ref="testerRef"
       :context="context"
       :connection-id="tester.connectionId"
+      :endpoint-kind="tester.endpointKind"
       @close="closeTester"
     />
 
@@ -166,7 +178,9 @@ import {
   buildDuplicateDataQueryCommand,
   filterDataConnectionItems,
   type DataConnectionListItem,
+  DATA_DEVICE_ENDPOINT_KINDS,
   type DataConnectionProblemCode,
+  type DataDeviceEndpointKind,
   type DataQueryDefinitionProblem,
   type DataQueryListItem,
   type EditorWithGlbImport
@@ -199,7 +213,7 @@ const connectionFormRef = ref<InstanceType<typeof DataConnectionForm> | null>(nu
 const queryEditor = ref<{ connectionId: string; queryId: string | null } | null>(null);
 const queryEditorRef = ref<InstanceType<typeof DataQueryEditor> | null>(null);
 const bindingsQueryId = ref<string | null>(null);
-const tester = ref<{ connectionId: string } | null>(null);
+const tester = ref<{ connectionId: string; endpointKind?: DataDeviceEndpointKind } | null>(null);
 const testerRef = ref<InstanceType<typeof DataQueryTester> | null>(null);
 const pendingAction = ref<(() => void) | null>(null);
 const keepEditingRef = ref<HTMLButtonElement | null>(null);
@@ -368,11 +382,11 @@ function onConnectionSaved(_connectionId: string, created: boolean): void {
   restoreFocus();
 }
 
-function startTester(connectionId: string, event?: Event): void {
+function startTester(connectionId: string, event?: Event, endpointKind?: DataDeviceEndpointKind): void {
   rememberTrigger(event);
   requestAction(() => {
     closeSessions();
-    tester.value = { connectionId };
+    tester.value = { connectionId, endpointKind };
     focusTarget.value = null;
   });
 }
@@ -592,6 +606,7 @@ const CONNECTION_PROBLEM_MESSAGE_KEYS = {
   "connection-in-use": "dataSources.problem.connectionInUse",
   "connection-not-found": "dataSources.problem.connectionNotFound",
   "credential-required": "dataSources.problem.credentialRequired",
+  "endpoint-invalid": "dataSources.problem.endpointInvalid",
   "header-reserved": "dataSources.problem.headerReserved",
   "headers-invalid": "dataSources.problem.headersInvalid",
   "name-duplicate": "dataSources.problem.nameDuplicate",

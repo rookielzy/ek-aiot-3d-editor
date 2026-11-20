@@ -76,13 +76,95 @@ export function validateDataQueryDefinition(
     });
   }
 
+  const request = normalizeQueryRequest(input, connectionId, options.connection, problems);
+  const mapping = validateDataQueryMapping(input.mapping, { parameters: request.normalizedParameters ?? request.parameters ?? [] });
+  for (const problem of mapping.problems) {
+    problems.push(problem);
+  }
+
+  const updatePolicy = validateUpdatePolicy(input.updatePolicy, request.method, problems);
+
+  if (
+    problems.length === 0 &&
+    request.normalizedParameters &&
+    mapping.value &&
+    updatePolicy &&
+    options.existingQuery &&
+    options.referencingBindings &&
+    options.referencingBindings.length > 0
+  ) {
+    validateBindingReferences(options.existingQuery, request.normalizedParameters, mapping.value, options.referencingBindings, problems);
+  }
+
+  if (
+    problems.length > 0 ||
+    !mapping.value ||
+    !request.normalizedParameters ||
+    !request.headers ||
+    !request.method ||
+    !request.readOnly ||
+    !updatePolicy
+  ) {
+    return { ok: false, problems };
+  }
+
+  return {
+    ok: true,
+    problems: [],
+    value: {
+      connectionId,
+      name,
+      method: request.method,
+      readOnly: request.readOnly,
+      path: request.path,
+      headers: request.headers,
+      parameters: request.normalizedParameters,
+      successCondition: request.successCondition,
+      mapping: mapping.value,
+      updatePolicy
+    }
+  };
+}
+
+export function validateDataDeviceEndpointRequest(input: unknown, connection: DataConnection) {
+  if (!isPlainRecord(input)) {
+    return { ok: false as const, message: "Endpoint request must be an object." };
+  }
+
+  const problems: DataQueryDefinitionProblem[] = [];
+  const request = normalizeQueryRequest({
+    method: input.method,
+    readOnly: input.readOnly,
+    path: input.path,
+    parameters: input.parameters
+  }, connection.id, connection, problems);
+  if (problems.length > 0 || !request.method || !request.readOnly || !request.parameters) {
+    return { ok: false as const, message: problems.map((problem) => problem.message).join(" ") };
+  }
+  return {
+    ok: true as const,
+    value: {
+      method: request.method,
+      readOnly: request.readOnly,
+      path: request.path,
+      parameters: request.parameters
+    }
+  };
+}
+
+function normalizeQueryRequest(
+  input: Record<string, unknown>,
+  connectionId: string,
+  existingConnection: DataConnection | null | undefined,
+  problems: DataQueryDefinitionProblem[]
+) {
   const method = validateMethod(input.method, problems);
   const readOnly = validateReadOnly(input.readOnly, method, problems);
-  const headers = validateHeaders(input.headers, options.connection ?? null, problems);
+  const headers = validateHeaders(input.headers, existingConnection ?? null, problems);
   const parameters = validateParameters(input.parameters, connectionId, problems);
   const path = typeof input.path === "string" ? input.path.trim() : "";
 
-  const connection = options.connection ?? (connectionId ? {
+  const connection = existingConnection ?? (connectionId ? {
     id: connectionId,
     name: "",
     baseUrl: "https://data.invalid/",
@@ -160,53 +242,7 @@ export function validateDataQueryDefinition(
     }
   }
 
-  const mapping = validateDataQueryMapping(input.mapping, { parameters: normalizedParameters ?? parameters ?? [] });
-  for (const problem of mapping.problems) {
-    problems.push(problem);
-  }
-
-  const updatePolicy = validateUpdatePolicy(input.updatePolicy, method, problems);
-
-  if (
-    problems.length === 0 &&
-    normalizedParameters &&
-    mapping.value &&
-    updatePolicy &&
-    options.existingQuery &&
-    options.referencingBindings &&
-    options.referencingBindings.length > 0
-  ) {
-    validateBindingReferences(options.existingQuery, normalizedParameters, mapping.value, options.referencingBindings, problems);
-  }
-
-  if (
-    problems.length > 0 ||
-    !mapping.value ||
-    !normalizedParameters ||
-    !headers ||
-    !method ||
-    !readOnly ||
-    !updatePolicy
-  ) {
-    return { ok: false, problems };
-  }
-
-  return {
-    ok: true,
-    problems: [],
-    value: {
-      connectionId,
-      name,
-      method,
-      readOnly,
-      path,
-      headers,
-      parameters: normalizedParameters,
-      successCondition,
-      mapping: mapping.value,
-      updatePolicy
-    }
-  };
+  return { method, readOnly, path, headers, parameters, normalizedParameters, successCondition };
 }
 
 function validateMethod(value: unknown, problems: DataQueryDefinitionProblem[]): DataQueryMethod | null {

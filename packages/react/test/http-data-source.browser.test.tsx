@@ -26,6 +26,74 @@ describe("same-origin HTTP data source smoke", () => {
     host = null;
   });
 
+  it("saves and reopens both standard device endpoints and tests them independently", async () => {
+    const requests: string[] = [];
+    editor = createEditor({
+      executor: async (request) => {
+        const url = new URL(request.url);
+        requests.push(url.pathname + url.search);
+        const response = await fetch(request.url, { method: request.method, headers: request.headers, signal: request.signal });
+        return {
+          status: response.status,
+          contentType: response.headers.get("content-type"),
+          body: await response.text()
+        };
+      }
+    });
+    expect(editor.dispatch({
+      type: "create-data-connection",
+      connection: {
+        name: "Standard API",
+        baseUrl: `${window.location.origin}/__fixtures__/http-data-source`,
+        auth: { kind: "none" },
+        headers: {},
+        timeoutMs: 5000
+      }
+    }).ok).toBe(true);
+    host = document.createElement("div");
+    document.body.appendChild(host);
+    root = createRoot(host);
+    root.render(<EditorWorkbench editor={editor} locale="en" rendererFactory={fakeRenderer} rightPanel={() => null} />);
+    await waitFor(() => expect(button(host!, "Data", true)).toBeTruthy());
+    await userEvent.click(button(host, "Data", true)!);
+
+    const endpoints = [
+      { action: "Configure device list for Standard API", path: "/standard-device-list", tag: "plant north" },
+      { action: "Configure device realtime data for Standard API", path: "/standard-device-realtime" }
+    ];
+    for (const endpoint of endpoints) {
+      await userEvent.click(await waitForButton(host, endpoint.action));
+      await userEvent.fill(field(host, "Request path"), endpoint.path);
+      if (endpoint.tag) {
+        await userEvent.click(await waitForButton(host, "Add parameter"));
+        await userEvent.fill(field(host, "Parameter 1 name"), "tag");
+        await userEvent.fill(field(host, "Parameter 1 default"), endpoint.tag);
+      }
+      await userEvent.click(await waitForButton(host, "Save endpoint"));
+      await userEvent.click(await waitForButton(host, "Close request"));
+    }
+    expect(requests).toEqual([]);
+
+    for (const endpoint of endpoints) {
+      await userEvent.click(await waitForButton(host, endpoint.action));
+      expect(field(host, "Request path").value).toBe(endpoint.path);
+      if (endpoint.tag) {
+        expect(field(host, "Parameter 1 default").value).toBe(endpoint.tag);
+        expect(button(host, "Parameter 1 location")?.textContent).toContain("Automatic");
+      }
+      await userEvent.click(await waitForButton(host, "Run request"));
+      const result = await waitForElement(host, '[aria-label="Request result"]');
+      await waitFor(() => expect(result.getAttribute("data-status")).toBe("success"));
+      expect(result.textContent).toContain("2 records");
+      await userEvent.click(await waitForButton(host, "Close request"));
+    }
+    expect(requests).toEqual([
+      "/__fixtures__/http-data-source/standard-device-list?tag=plant+north",
+      "/__fixtures__/http-data-source/standard-device-realtime"
+    ]);
+    expect(JSON.stringify(editor.serialize())).not.toContain("runningStatusEnum");
+  });
+
   it("sends a real encoded GET to the local fixture from the Workbench request form", async () => {
     const executor: DataRequestExecutor = async (request) => {
       const response = await fetch(request.url, {

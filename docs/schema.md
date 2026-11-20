@@ -476,6 +476,8 @@ Snapshot 中的 `problems` 是 authored problem state。resolver、loader、PMRE
 
 v9 新增顶层 `dataSources`，用于保存 HTTP JSON 数据源配置。当前切片落地连接配置、已保存查询、设备属性映射与对象绑定配置；绑定保存查询/设备/参数覆盖/详情字段引用，实时数据本身仍是 runtime-only。后续任务在同一 v9 schema 内扩展，不提升版本。
 
+`DataConnection.deviceEndpoints` 保存设备列表与设备实时数据的标准 HTTP 端点。每个端点保存方法、相对路径和参数，复用连接的地址、请求头、认证引用和超时。保存的查询是只读请求，两种端点可分别保存和测试。测试响应和诊断只存在于运行态。标准响应的字段与示例见[物联网设备数据源接口规范](../.scratch/iot-device-api/spec.md)。
+
 ```ts
 type DataConnectionAuth =
   | { kind: "none" }
@@ -489,6 +491,7 @@ interface DataConnection {
   auth: DataConnectionAuth;
   headers: Record<string, string>;
   timeoutMs: number;
+  deviceEndpoints?: Partial<Record<"deviceList" | "deviceRealtime", DataDeviceEndpointRequest>>;
 }
 
 type DataParameterType = "string" | "number" | "boolean";
@@ -500,6 +503,13 @@ interface DataQueryParameter {
   type: DataParameterType;
   defaultValue?: DataParameterValue;
   location: DataParameterLocation;
+}
+
+interface DataDeviceEndpointRequest {
+  method: "GET" | "POST";
+  readOnly: boolean;
+  path: string;
+  parameters: readonly (Omit<DataQueryParameter, "location"> & { location?: DataParameterLocation | "auto" })[];
 }
 
 type DataPathSegment =

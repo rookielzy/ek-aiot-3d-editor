@@ -1,6 +1,7 @@
 import type { JsonValue } from "../snapshot/json";
 import type { SceneSnapshot } from "../snapshot/types";
 import { DEFAULT_DATA_MAX_RESPONSE_BYTES, MAX_DATA_QUERY_RETRY_BACKOFF_MS } from "./defaults";
+import { validateDeviceEndpointResponse } from "./device-response";
 import { mapDataQueryBody, type DataMappedEntity, type DataMappingProblem } from "./mapping";
 import {
   buildDataQueryRequest,
@@ -29,6 +30,7 @@ import {
 import type {
   DataConnection,
   DataCredentialDescriptor,
+  DataDeviceEndpointKind,
   DataObjectBinding,
   DataParameterValue,
   DataQuery,
@@ -71,6 +73,7 @@ interface DataQueryRunBase {
   request: DataRequestSummary | null;
   response: DataQueryResponse | null;
   problems: readonly DataQueryProblem[];
+  recordCount?: number;
 }
 
 export interface DataQueryRunState extends DataQueryRunBase {
@@ -94,6 +97,7 @@ export interface DataQueryRunHandle {
 
 export interface DataQueryDraftExecutionOptions {
   overrides?: DataQueryParameterOverrides;
+  deviceEndpoint?: DataDeviceEndpointKind;
 }
 
 export interface DataServiceState {
@@ -155,6 +159,7 @@ interface RunOutcome {
   request?: DataRequestSummary | null;
   response?: DataQueryResponse | null;
   problems?: DataQueryProblem[];
+  recordCount?: number;
 }
 
 interface PreviewBindingRef {
@@ -356,7 +361,7 @@ export class CoreDataService implements EditorDataService {
     this.#current = active;
     this.#runConfigKey = dataSourcesRunKey(this.#getSnapshot(), draft.connectionId);
     this.#publish({ ...this.#state, run: active.state });
-    void this.#execute(active, draft, options.overrides ?? {});
+    void this.#execute(active, draft, options);
 
     return {
       id: runId,
@@ -1152,13 +1157,13 @@ export class CoreDataService implements EditorDataService {
   async #execute(
     active: ActiveRun,
     draft: DataQueryDraft,
-    overrides: DataQueryParameterOverrides
+    options: DataQueryDraftExecutionOptions
   ): Promise<void> {
     // A running-state subscriber can synchronously cancel, invalidate, or dispose this run.
     if (active.settled) {
       return;
     }
-    const built = buildDataQueryRequest(this.#getSnapshot(), draft, { overrides });
+    const built = buildDataQueryRequest(this.#getSnapshot(), draft, { overrides: options.overrides });
     if (!built.ok) {
       this.#finish(active, { status: "error", problems: built.problems });
       return;
@@ -1264,11 +1269,30 @@ export class CoreDataService implements EditorDataService {
       });
       return;
     }
+    const validation = options.deviceEndpoint
+      ? validateDeviceEndpointResponse(options.deviceEndpoint, evaluation.kind === "success" ? evaluation.json : undefined)
+      : null;
+    if (validation && !validation.ok) {
+      this.#finish(active, {
+        status: "error",
+        request: requestSummary,
+        response: evaluation.response,
+        problems: [{
+          code: "response-device-contract",
+          field: "response",
+          connectionId: active.connectionId,
+          responsePath: validation.path,
+          message: `The response does not match the device interface at ${validation.path}.`
+        }]
+      });
+      return;
+    }
     this.#finish(active, {
       status: "success",
       request: requestSummary,
       response: evaluation.response,
-      problems: []
+      problems: [],
+      ...(validation ? { recordCount: validation.count } : {})
     });
   }
 
@@ -1307,6 +1331,7 @@ export class CoreDataService implements EditorDataService {
       elapsedMs,
       request: outcome.request === undefined ? active.state.request : outcome.request,
       response: outcome.response === undefined ? active.state.response : outcome.response,
+      ...(outcome.recordCount === undefined ? {} : { recordCount: outcome.recordCount }),
       problems: Object.freeze([...(outcome.problems ?? [])])
     };
     active.state = state;

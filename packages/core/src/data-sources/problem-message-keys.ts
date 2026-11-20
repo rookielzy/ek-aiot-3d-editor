@@ -79,6 +79,7 @@ export const DATA_QUERY_PROBLEM_MESSAGE_KEYS = {
   "request-timeout": "dataSources.request.problem.requestTimeout",
   "response-auth": "dataSources.request.problem.responseAuth",
   "response-business": "dataSources.request.problem.responseBusiness",
+  "response-device-contract": "dataSources.request.problem.deviceContract",
   "response-http": "dataSources.request.problem.responseHttp",
   "response-invalid": "dataSources.request.problem.responseInvalid",
   "response-json-invalid": "dataSources.request.problem.responseJsonInvalid",
@@ -109,6 +110,7 @@ export function dataQueryProblemMessageValues(problem: DataQueryProblem): Record
     parameterName: problem.parameterName ?? "",
     status: problem.status === undefined ? "" : String(problem.status),
     credentialRef: problem.credentialRef ?? "",
+    ...(problem.responsePath ? { path: problem.responsePath } : {}),
     detail: problem.message
   };
 }

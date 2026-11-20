@@ -28,6 +28,7 @@ export interface DataConnection {
   auth: DataConnectionAuth;
   headers: Record<string, string>;
   timeoutMs: number;
+  deviceEndpoints?: Partial<Record<DataDeviceEndpointKind, DataDeviceEndpointRequest>>;
 }
 
 export type DataConnectionDraft = Omit<DataConnection, "id">;
@@ -46,6 +47,16 @@ export type DataParameterValue = string | number | boolean;
 export type DataQueryParameterOverrides = Readonly<Record<string, DataParameterValue | null | undefined>>;
 
 export type DataQueryMethod = "GET" | "POST";
+export const DATA_DEVICE_ENDPOINT_KINDS = ["deviceList", "deviceRealtime"] as const;
+export type DataDeviceEndpointKind = typeof DATA_DEVICE_ENDPOINT_KINDS[number];
+
+export interface DataDeviceEndpointRequest {
+  method: DataQueryMethod;
+  readOnly: boolean;
+  path: string;
+  parameters: readonly DataQueryParameterDraft[];
+}
+
 export type DataParameterLocation = "path" | "query" | "body";
 export type DataParameterLocationInput = DataParameterLocation | "auto";
 
@@ -381,6 +392,7 @@ export type DataConnectionProblemCode =
   | "connection-in-use"
   | "connection-not-found"
   | "credential-required"
+  | "endpoint-invalid"
   | "header-reserved"
   | "headers-invalid"
   | "name-duplicate"

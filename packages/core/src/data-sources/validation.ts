@@ -1,8 +1,8 @@
 import type { SceneSnapshot, SceneNode } from "../snapshot/types";
 import { isPlainRecord } from "../snapshot/json";
 import { validateDataObjectBindingInput } from "./bindings";
-import { validateDataQueryDefinition } from "./query-validation";
-import type { DataConnection, DataQuery } from "./types";
+import { validateDataDeviceEndpointRequest, validateDataQueryDefinition } from "./query-validation";
+import { DATA_DEVICE_ENDPOINT_KINDS, type DataConnection, type DataQuery } from "./types";
 import {
   DEFAULT_DATA_CONNECTION_TIMEOUT_MS,
   isDataConnectionNameTaken
@@ -87,6 +87,9 @@ export function validateDataSources(
         errors.push(`Data connection ${connectionId} ${problem.code}: ${problem.message}`);
       }
       if (result.value) {
+        if (result.value.deviceEndpoints && !matchesNormalizedValue(connection.deviceEndpoints, result.value.deviceEndpoints, true)) {
+          errors.push(`Data connection ${connectionId} must contain normalized device endpoint settings.`);
+        }
         validConnections.set(connectionId, { id: connectionId, ...result.value });
       }
       if (typeof connection.name === "string") {
@@ -218,7 +221,8 @@ export function validateDataConnectionDraft(
   const connectionId = options.connectionId ?? null;
   const result = validateConnectionFields(draft, {
     existing,
-    connectionId
+    connectionId,
+    deviceEndpoints: connectionId ? snapshot.dataSources.connections[connectionId]?.deviceEndpoints : undefined
   });
   if (!result.value || !connectionId) {
     return result;
@@ -242,7 +246,11 @@ export function validateDataConnectionDraft(
 
 function validateConnectionFields(
   input: unknown,
-  context: { existing: ReadonlyArray<DataConnectionNameEntry>; connectionId?: string | null }
+  context: {
+    existing: ReadonlyArray<DataConnectionNameEntry>;
+    connectionId?: string | null;
+    deviceEndpoints?: DataConnection["deviceEndpoints"];
+  }
 ): DataConnectionValidationResult {
   const problems: DataConnectionProblem[] = [];
   if (!isPlainRecord(input)) {
@@ -272,20 +280,37 @@ function validateConnectionFields(
   const headers = validateHeaders(input.headers, auth, problems);
   const timeoutMs = validateTimeout(input.timeoutMs, problems);
 
-  if (problems.length > 0) {
+  if (problems.length > 0 || baseUrl === null || auth === null || headers === null || timeoutMs === null) {
     return { ok: false, problems };
   }
 
+  const connection = { id: context.connectionId ?? "", name, baseUrl, auth, headers, timeoutMs };
+  const inputEndpoints = input.deviceEndpoints === undefined ? context.deviceEndpoints : input.deviceEndpoints;
+  const deviceEndpoints: NonNullable<DataConnection["deviceEndpoints"]> = {};
+  if (inputEndpoints !== undefined) {
+    if (!isPlainRecord(inputEndpoints) || Object.keys(inputEndpoints).some((key) =>
+      !DATA_DEVICE_ENDPOINT_KINDS.some((kind) => kind === key)
+    )) {
+      return {
+        ok: false,
+        problems: [{ field: "connection", code: "endpoint-invalid", message: "Invalid device endpoint configuration." }]
+      };
+    }
+    for (const kind of DATA_DEVICE_ENDPOINT_KINDS) {
+      if (!Object.hasOwn(inputEndpoints, kind)) continue;
+      const result = validateDataDeviceEndpointRequest(inputEndpoints[kind], connection);
+      if (!result.ok) {
+        problems.push({ field: "connection", code: "endpoint-invalid", message: `${kind}: ${result.message}` });
+        continue;
+      }
+      deviceEndpoints[kind] = result.value;
+    }
+  }
+  if (problems.length > 0) return { ok: false, problems };
   return {
     ok: true,
     problems: [],
-    value: {
-      name,
-      baseUrl: baseUrl!,
-      auth: auth!,
-      headers: headers!,
-      timeoutMs: timeoutMs!
-    }
+    value: { name, baseUrl, auth, headers, timeoutMs, ...(inputEndpoints === undefined ? {} : { deviceEndpoints }) }
   };
 }
 

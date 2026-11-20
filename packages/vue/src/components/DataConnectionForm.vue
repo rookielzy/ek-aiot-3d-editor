@@ -199,6 +199,7 @@ const PROBLEM_MESSAGE_KEYS = {
   "connection-in-use": "dataSources.problem.connectionInUse",
   "connection-not-found": "dataSources.problem.connectionNotFound",
   "credential-required": "dataSources.problem.credentialRequired",
+  "endpoint-invalid": "dataSources.problem.endpointInvalid",
   "header-reserved": "dataSources.problem.headerReserved",
   "headers-invalid": "dataSources.problem.headersInvalid",
   "name-duplicate": "dataSources.problem.nameDuplicate",

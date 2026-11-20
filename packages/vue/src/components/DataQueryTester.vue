@@ -4,20 +4,20 @@
     class="ek-workbench__request-tester"
     role="dialog"
     aria-modal="true"
-    :aria-label="t('dataSources.request.label')"
+    :aria-label="endpointKind ? t(`dataSources.endpoints.${endpointKind}`) : t('dataSources.request.label')"
     @keydown.capture="onKeyDown"
     @cancel.prevent="cancelDialog"
   >
     <div :inert="discardOpen ? true : undefined">
     <div class="ek-workbench__query-editor-header">
-      <h3>{{ t("dataSources.request.title", { name: connection?.name ?? "" }) }}</h3>
+      <h3>{{ t(endpointKind ? `dataSources.endpoints.${endpointKind}Aria` : "dataSources.request.title", { name: connection?.name ?? "" }) }}</h3>
       <button ref="closeButton" type="button" @click="requestClose()">{{ t("dataSources.request.close") }}</button>
     </div>
 
     <section class="ek-workbench__query-section" :aria-label="t('dataSources.request.connectionSection')">
       <h4>{{ t("dataSources.request.connectionSection") }}</h4>
       <code>{{ connection?.baseUrl ?? "" }}</code>
-      <p class="ek-workbench__request-hint">{{ t("dataSources.request.draftHint") }}</p>
+      <p v-if="!endpointKind" class="ek-workbench__request-hint">{{ t("dataSources.request.draftHint") }}</p>
       <p class="ek-workbench__request-hint">{{ t("dataSources.request.sessionOnly") }}</p>
       <p v-if="!service" class="ek-workbench__request-warning" role="alert">{{ t("dataSources.request.unavailable") }}</p>
       <p v-else-if="!context.dataServiceState.executorAvailable" class="ek-workbench__request-warning" role="status">
@@ -63,9 +63,9 @@
         <span>{{ t("dataSources.request.preview") }}</span>
         <small v-if="!preview.ok">{{ t("dataSources.request.previewPending") }}</small>
         <template v-else>
-          <span :data-method="preview.method">{{ preview.method }}</span>
-          <code>{{ preview.url }}</code>
-          <pre v-if="preview.body !== null" class="ek-workbench__request-payload" :aria-label="t('dataSources.request.bodyPreview')">{{ JSON.stringify(preview.body, null, 2) }}</pre>
+          <span :data-method="preview.summary.method">{{ preview.summary.method }}</span>
+          <code>{{ preview.summary.url }}</code>
+          <pre v-if="preview.summary.body !== null" class="ek-workbench__request-payload" :aria-label="t('dataSources.request.bodyPreview')">{{ JSON.stringify(preview.summary.body, null, 2) }}</pre>
         </template>
       </div>
 
@@ -87,9 +87,13 @@
       </fieldset>
 
       <div class="ek-workbench__request-actions">
+        <button v-if="endpointKind" type="button" @click="saveEndpoint">{{ t("dataSources.endpoints.save") }}</button>
         <button type="submit" :disabled="!service || running">{{ t("dataSources.request.run") }}</button>
         <button v-if="running" type="button" @click="cancelRun">{{ t("dataSources.request.cancel") }}</button>
       </div>
+      <p v-if="saveResult" :class="saveResult.ok ? 'ek-workbench__request-hint' : 'ek-workbench__request-warning'" :role="saveResult.ok ? 'status' : 'alert'">
+        {{ saveResult.message }}
+      </p>
     </form>
 
     <section v-if="run" class="ek-workbench__request-result" :aria-label="t('dataSources.request.resultSection')" :data-status="run.status">
@@ -98,6 +102,7 @@
         <span>{{ t(DATA_QUERY_RUN_STATUS_MESSAGE_KEYS[run.status]) }}</span>
       </header>
       <p>{{ t("dataSources.request.resultRevision", { revision: run.configRevision }) }}</p>
+      <p v-if="run.recordCount !== undefined">{{ t("dataSources.endpoints.recordCount", { count: run.recordCount }) }}</p>
       <dl>
         <dt>{{ t("dataSources.request.summary.method") }}</dt>
         <dd>{{ run.request?.method ?? "" }}</dd>
@@ -168,13 +173,14 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import {
   DATA_QUERY_RUN_STATUS_MESSAGE_KEYS,
-  buildSuccessConditionFromForm,
+  buildDataQueryRequest,
+  buildSaveDataDeviceEndpointCommand,
   collectQueryOverrides,
-  createQueryFormState,
   createQueryParameterForm,
   formatDataPath,
-  queryHeadersToRecord,
+  queryParameterFormsFromDrafts,
   toQueryParameterDrafts,
+  type DataDeviceEndpointKind,
   type DataParameterType,
   type DataParameterValue,
   type DataQueryMethod,
@@ -185,11 +191,12 @@ import {
 import type { ResolvedWorkbenchContext } from "../composables/use-workbench";
 import type { WorkbenchMessageValues } from "../i18n/workbench-i18n";
 import DataQueryParameterRow from "./DataQueryParameterRow.vue";
-import { buildRequestPreview, formatDataQueryProblem } from "./data-query-ui";
+import { formatDataQueryProblem } from "./data-query-ui";
 
 const props = defineProps<{
   context: ResolvedWorkbenchContext;
   connectionId: string;
+  endpointKind?: DataDeviceEndpointKind;
 }>();
 
 const emit = defineEmits<{
@@ -206,17 +213,20 @@ const discardButton = ref<HTMLButtonElement | null>(null);
 const pathInput = ref<HTMLInputElement | null>(null);
 const service = props.context.editor.getDataService?.() ?? null;
 const connection = computed(() => props.context.snapshot.dataSources.connections[props.connectionId] ?? null);
-const method = ref<DataQueryMethod>("GET");
-const readOnly = ref(true);
-const path = ref("");
-const parameters = ref<QueryParameterForm[]>([]);
-let baseline = JSON.stringify({ method: method.value, readOnly: readOnly.value, path: path.value, parameters: parameters.value });
-const dirty = computed(() => JSON.stringify({
+const endpoint = props.endpointKind ? connection.value?.deviceEndpoints?.[props.endpointKind] : undefined;
+const method = ref<DataQueryMethod>(endpoint?.method ?? "GET");
+const readOnly = ref(endpoint?.readOnly ?? true);
+const path = ref(endpoint?.path ?? "");
+const parameters = ref<QueryParameterForm[]>(queryParameterFormsFromDrafts(endpoint?.parameters ?? []));
+const draft = computed(() => JSON.stringify({
   method: method.value,
   readOnly: readOnly.value,
   path: path.value,
   parameters: parameters.value
-}) !== baseline);
+}));
+const baseline = ref(draft.value);
+const dirty = computed(() => draft.value !== baseline.value);
+const saveResult = ref<{ ok: boolean; message: string } | null>(null);
 const discardOpen = ref(false);
 let pendingClose: (() => void) | null = null;
 
@@ -225,12 +235,15 @@ const run = computed<DataQueryRunState | null>(() => {
   return state?.connectionId === props.connectionId ? state : null;
 });
 const running = computed(() => run.value?.status === "running");
-const preview = computed(() => buildRequestPreview(props.context.snapshot, props.connectionId, {
-  ...createQueryFormState(),
+const request = computed(() => ({
+  connectionId: props.connectionId,
   method: method.value,
   readOnly: readOnly.value,
   path: path.value,
-  parameters: parameters.value
+  parameters: toQueryParameterDrafts(parameters.value)
+}));
+const preview = computed(() => buildDataQueryRequest(props.context.snapshot, request.value, {
+  overrides: collectQueryOverrides(parameters.value)
 }));
 
 onMounted(async () => {
@@ -257,6 +270,7 @@ onBeforeUnmount(() => {
 
 function invalidateRuns(): void {
   service?.invalidateQueryRuns();
+  saveResult.value = null;
 }
 
 function changeMethod(event: Event): void {
@@ -310,20 +324,26 @@ async function runRequest(): Promise<void> {
     return;
   }
   service.invalidateQueryRuns();
-  await service.executeQueryDraft({
-    connectionId: props.connectionId,
-    method: method.value,
-    readOnly: readOnly.value,
-    path: path.value,
-    headers: queryHeadersToRecord([]),
-    parameters: toQueryParameterDrafts(parameters.value),
-    successCondition: buildSuccessConditionFromForm({
-      ...createQueryFormState(),
-      successPath: "",
-      successType: "number",
-      successValue: ""
-    })
-  }, { overrides: collectQueryOverrides(parameters.value) }).result;
+  await service.executeQueryDraft(request.value, {
+    overrides: collectQueryOverrides(parameters.value),
+    deviceEndpoint: props.endpointKind
+  }).result;
+}
+
+function saveEndpoint(): void {
+  if (!props.endpointKind) return;
+  const built = buildSaveDataDeviceEndpointCommand(props.context.snapshot, props.connectionId, props.endpointKind, request.value);
+  if (!built.ok) {
+    saveResult.value = { ok: false, message: t("dataSources.problem.endpointInvalid", { detail: built.problems[0]?.message ?? "" }) };
+    return;
+  }
+  const dispatched = props.context.dispatch(built.command);
+  if (!dispatched.ok) {
+    saveResult.value = { ok: false, message: t("dataSources.problem.commandFailed", { detail: dispatched.error ?? "" }) };
+    return;
+  }
+  baseline.value = draft.value;
+  saveResult.value = { ok: true, message: t("dataSources.endpoints.saved") };
 }
 
 function cancelRun(): void {
@@ -377,12 +397,7 @@ function discardChanges(): void {
   const action = pendingClose ?? (() => emit("close"));
   pendingClose = null;
   discardOpen.value = false;
-  baseline = JSON.stringify({
-    method: method.value,
-    readOnly: readOnly.value,
-    path: path.value,
-    parameters: parameters.value
-  });
+  baseline.value = draft.value;
   action();
 }
 

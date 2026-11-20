@@ -67,7 +67,8 @@ export function applyDuplicateDataConnection(snapshot: SceneSnapshot, command: D
     baseUrl: source.baseUrl,
     auth: copyAuth(source.auth),
     headers: { ...source.headers },
-    timeoutMs: source.timeoutMs
+    timeoutMs: source.timeoutMs,
+    ...(source.deviceEndpoints ? { deviceEndpoints: source.deviceEndpoints } : {})
   };
   const validation = validateDataConnectionDraft(snapshot, draft);
   if (!validation.ok || !validation.value) {

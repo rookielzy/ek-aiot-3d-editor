@@ -268,6 +268,8 @@ export type {
   DataConnectionProblemCode,
   DataConnectionReferenceCounts,
   DataConnectionValidationResult,
+  DataDeviceEndpointKind,
+  DataDeviceEndpointRequest,
   DataCredentialDescriptor,
   DataIdentityMapping,
   DataMappedValueType,
@@ -587,7 +589,8 @@ export {
 export {
   buildDeleteDataConnectionCommand,
   buildDuplicateDataConnectionCommand,
-  buildSaveDataConnectionCommand
+  buildSaveDataConnectionCommand,
+  buildSaveDataDeviceEndpointCommand
 } from "./data-sources/commands";
 export {
   buildDeleteDataQueryCommand,
@@ -629,6 +632,7 @@ export {
   createUniqueDataQueryName
 } from "./data-sources/defaults";
 export { validateDataConnectionDraft } from "./data-sources/validation";
+export { DATA_DEVICE_ENDPOINT_KINDS } from "./data-sources/types";
 export type {
   QueryFormProblem,
   QueryFormState,
@@ -662,6 +666,7 @@ export {
   createQueryParameterForm,
   hasQueryOverrides,
   parseParameterText,
+  queryParameterFormsFromDrafts,
   toQueryParameterDrafts
 } from "./data-sources/query-parameter-form";
 export {

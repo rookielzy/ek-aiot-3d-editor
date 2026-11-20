@@ -4,7 +4,9 @@ import { createUniqueDataConnectionName, isDataConnectionNameTaken } from "./def
 import type {
   DataConnectionDraft,
   DataConnectionInput,
-  DataConnectionProblem
+  DataConnectionProblem,
+  DataDeviceEndpointKind,
+  DataDeviceEndpointRequest
 } from "./types";
 import { validateDataConnectionDraft } from "./validation";
 import { countDataConnectionReferences } from "./workspace";
@@ -123,6 +125,20 @@ export function buildDuplicateDataConnectionCommand(
       name
     }
   };
+}
+
+export function buildSaveDataDeviceEndpointCommand(
+  snapshot: Pick<SceneSnapshot, "dataSources">,
+  connectionId: string,
+  kind: DataDeviceEndpointKind,
+  request: DataDeviceEndpointRequest
+): DataConnectionCommandBuildResult {
+  const connection = snapshot.dataSources.connections[connectionId];
+  if (!connection) return { ok: false, problems: [connectionNotFoundProblem(connectionId)] };
+  return buildSaveDataConnectionCommand(snapshot, {
+    ...connection,
+    deviceEndpoints: { ...connection.deviceEndpoints, [kind]: request }
+  }, { connectionId });
 }
 
 export function buildDeleteDataConnectionCommand(

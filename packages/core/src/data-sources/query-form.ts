@@ -6,7 +6,7 @@ import { formatDataPath, parseDataPath } from "./path";
 import { resolveDataQueryParameters } from "./query";
 import {
   createQueryHeaderForm,
-  createQueryParameterForm,
+  queryParameterFormsFromDrafts,
   toQueryParameterDrafts,
   type QueryHeaderForm,
   type QueryParameterForm
@@ -208,18 +208,7 @@ export function queryFormFromQuery(query: DataQuery): QueryFormState {
     headers: Object.entries(query.headers).map(([name, value]) => createQueryHeaderForm(name, value)),
     refreshIntervalSeconds: formatSeconds(query.updatePolicy.refreshIntervalMs),
     maxAgeSeconds: formatSeconds(query.updatePolicy.maxAgeMs),
-    parameters: query.parameters.map((parameter) => ({
-      ...createQueryParameterForm(),
-      name: parameter.name,
-      type: parameter.type,
-      location: parameter.location ?? "auto",
-      useDefault: Object.prototype.hasOwnProperty.call(parameter, "defaultValue"),
-      defaultText: Object.prototype.hasOwnProperty.call(parameter, "defaultValue")
-        ? String(parameter.defaultValue)
-        : "",
-      override: false,
-      overrideText: ""
-    })),
+    parameters: queryParameterFormsFromDrafts(query.parameters),
     successPath: query.successCondition ? formatDataPath(query.successCondition.path) : "",
     successType,
     successValue: query.successCondition === null || query.successCondition.equals === null
