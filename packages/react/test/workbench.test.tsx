@@ -795,12 +795,15 @@ describe("React EditorWorkbench", () => {
     openLeftPanelView("项目 0");
     expect(screen.getByRole("heading", { name: "项目" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "变换" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "材质" }));
     expect(screen.getByRole("heading", { name: "材质" })).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "环境" }));
     expect(screen.getByRole("heading", { name: "环境" })).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "场景" }));
     expect(screen.getByRole("heading", { name: "灯光" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "相机视图" }));
     expect(screen.getByRole("heading", { name: "相机视图" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "问题" }));
     expect(screen.getByRole("heading", { name: "问题" })).toBeTruthy();
     expect(screen.getByText("选择可变换节点以编辑变换。")).toBeTruthy();
     expect(screen.getByText("选择 GLB 对象以编辑材质覆盖。")).toBeTruthy();
@@ -972,6 +975,8 @@ describe("React EditorWorkbench", () => {
       await editor.getRuntime()?.project();
     });
 
+    fireEvent.click(screen.getByRole("tab", { name: "Scene", exact: true }));
+    fireEvent.click(screen.getByRole("tab", { name: "Problems", exact: true }));
     const input = screen.getByLabelText(/Replace asset.*Broken texture/s) as HTMLInputElement;
     fireEvent.change(input, {
       target: {
@@ -1056,6 +1061,8 @@ describe("React EditorWorkbench", () => {
     expect(screen.getAllByText("替换资源").length).toBeGreaterThan(0);
     expect(screen.getAllByText("无法解析资源").length).toBeGreaterThan(0);
     const inspector = within(screen.getByLabelText("场景检查器"));
+    fireEvent.click(inspector.getByRole("tab", { name: "场景" }));
+    fireEvent.click(inspector.getByRole("tab", { name: "问题" }));
     expect(inspector.getByRole("heading", { name: "问题" })).toBeTruthy();
     expect(inspector.getByText("无法解析资源")).toBeTruthy();
     expect(inspector.getByText("资源 asset-a 缺失或不可用。")).toBeTruthy();
@@ -1271,6 +1278,7 @@ describe("React EditorWorkbench", () => {
     const slotId = getWorkbenchSlotIds(editor)[1]!;
 
     render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Material" }));
     fireEvent.click(screen.getByLabelText(/Screen/));
     setInspectorColor(screen.getByLabelText("Base color"), "#336699");
 

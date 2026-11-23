@@ -1,14 +1,15 @@
-import { useId, useState } from "react";
+import { useState } from "react";
 import type { Editor, InspectorModel, SceneSnapshot } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext, WorkbenchCameraContext } from "../hooks/use-workbench";
 import { CameraInspector } from "./CameraInspector";
 import { DataBindingInspector } from "./DataBindingInspector";
 import { EnvironmentInspector } from "./EnvironmentInspector";
+import { InspectorTabs } from "./InspectorTabs";
 import { LightInspector } from "./LightInspector";
 import { MaterialInspector } from "./MaterialInspector";
 import { ProblemsPanel } from "./ProblemsPanel";
 import { TransformInspector } from "./TransformInspector";
-import { DEFAULT_INSPECTOR_I18N, type InspectorI18n } from "./inspector-i18n";
+import { DEFAULT_INSPECTOR_I18N, renderSectionTitle, type InspectorI18n } from "./inspector-i18n";
 import { problemToneFromSeverities } from "./workbench-model-helpers";
 import "./inspector.css";
 
@@ -26,16 +27,15 @@ export interface InspectorViewProps {
 }
 
 export function InspectorView({ editor, snapshot, inspector, setActiveLightId, setActiveCameraViewId, camera, dataContext, i18n = DEFAULT_INSPECTOR_I18N, onReplaceAsset, className }: InspectorViewProps) {
-  const [activeGroup, setActiveGroup] = useState<"object" | "environment" | "scene">("object");
-  const id = useId();
-  const groups = ["object", "environment", "scene"] as const;
+  const [activeGroup, setActiveGroup] = useState("object");
   const selection = inspector.selection;
-  const showSelectedLight = activeGroup === "object" && selection.count === 1 && !!selection.light;
-  const showSelectedCamera = activeGroup === "object" && selection.count === 1 && !!selection.cameraView;
-  const lightInspector = <LightInspector key="light" editor={editor} snapshot={snapshot} section={inspector.lights} i18n={i18n} onActiveLightIdChange={setActiveLightId} />;
+  const selectedLight = selection.count === 1 && !!selection.light;
+  const selectedCamera = selection.count === 1 && !!selection.cameraView;
+  const lightsLabel = renderSectionTitle(i18n, inspector.lights);
+  const camerasLabel = renderSectionTitle(i18n, inspector.cameras);
+  const lightInspector = <LightInspector editor={editor} snapshot={snapshot} section={inspector.lights} i18n={i18n} onActiveLightIdChange={setActiveLightId} />;
   const cameraInspector = (
     <CameraInspector
-      key="camera"
       editor={editor}
       snapshot={snapshot}
       section={inspector.cameras}
@@ -44,75 +44,83 @@ export function InspectorView({ editor, snapshot, inspector, setActiveLightId, s
       onActiveCameraViewIdChange={setActiveCameraViewId ?? (() => {})}
     />
   );
+  const objectTabs = selectedLight ? [{ id: "lights", label: lightsLabel, content: activeGroup === "object" && lightInspector }]
+    : selectedCamera ? [{ id: "cameras", label: camerasLabel, content: activeGroup === "object" && cameraInspector }]
+    : selection.light || selection.cameraView ? []
+    : [
+      {
+        id: "transform",
+        label: renderSectionTitle(i18n, inspector.transform),
+        content: <TransformInspector key={selection.nodeId} editor={editor} snapshot={snapshot} section={inspector.transform} locked={dataContext?.dataState.preview.enabled} i18n={i18n} />
+      },
+      {
+        id: "material",
+        label: renderSectionTitle(i18n, inspector.material),
+        content: <MaterialInspector key={selection.nodeId} editor={editor} snapshot={snapshot} section={inspector.material} locked={dataContext?.dataState.preview.enabled} i18n={i18n} />
+      }
+    ];
+  if (dataContext) {
+    objectTabs.push({
+      id: "data",
+      label: i18n.t("dataBinding.section.label"),
+      content: <DataBindingInspector context={dataContext} />
+    });
+  }
   const selectedLabel = selection.cameraView?.name ?? selection.light?.name ?? selection.node?.name ?? selection.object?.name ?? selection.nodeId;
   const problemTone = problemToneFromSeverities(inspector.problems.problems);
 
+  const objectPanel = (
+    <>
+      <header className="ek-inspector-summary" data-problem-tone={problemTone}>
+        <div className="ek-inspector-summary__copy">
+          <span>{i18n.t("reactWorkbench.inspector.summary.selection.label")}</span>
+          <strong>
+            {selectedLabel
+              ? i18n.t("reactWorkbench.inspector.summary.selection.named", { label: selectedLabel })
+              : i18n.t("reactWorkbench.inspector.summary.selection.empty")}
+          </strong>
+        </div>
+        <dl className="ek-inspector-summary__meta">
+          <div>
+            <dt>{i18n.t("reactWorkbench.inspector.summary.nodes.label")}</dt>
+            <dd>{selection.count}</dd>
+          </div>
+          <div>
+            <dt>{i18n.t("reactWorkbench.inspector.summary.kind.label")}</dt>
+            <dd>{selection.nodeKind ?? i18n.t("reactWorkbench.inspector.summary.kind.none")}</dd>
+          </div>
+          <div>
+            <dt>{i18n.t("reactWorkbench.inspector.summary.problems.label")}</dt>
+            <dd>{inspector.problems.problems.length}</dd>
+          </div>
+        </dl>
+      </header>
+      <InspectorTabs secondary label={i18n.t("reactWorkbench.inspector.groups.object")} tabs={objectTabs} />
+    </>
+  );
+  const scenePanel = (
+    <InspectorTabs secondary label={i18n.t("reactWorkbench.inspector.groups.scene")} tabs={[
+      { id: "lights", label: lightsLabel, content: (activeGroup !== "object" || !selectedLight) && lightInspector },
+      { id: "cameras", label: camerasLabel, content: (activeGroup !== "object" || !selectedCamera) && cameraInspector },
+      {
+        id: "problems",
+        label: renderSectionTitle(i18n, inspector.problems),
+        content: <ProblemsPanel section={inspector.problems} i18n={i18n} onReplaceAsset={onReplaceAsset} />
+      }
+    ]} />
+  );
+
   return (
     <aside className={className ? `ek-inspector ${className}` : "ek-inspector"} aria-label={i18n.t("reactWorkbench.inspector.scene.label")}>
-      <div className="ek-inspector-tabs" role="tablist" aria-label={i18n.t("reactWorkbench.inspector.groups.label")}>
-        {groups.map((group, index) => (
-          <button
-            key={group}
-            id={`${id}-tab-${group}`}
-            type="button"
-            role="tab"
-            aria-selected={activeGroup === group}
-            aria-controls={`${id}-panel-${group}`}
-            tabIndex={activeGroup === group ? 0 : -1}
-            onClick={() => setActiveGroup(group)}
-            onKeyDown={(event) => {
-              const next = event.key === "ArrowRight" ? (index + 1) % groups.length
-                : event.key === "ArrowLeft" ? (index + groups.length - 1) % groups.length
-                : event.key === "Home" ? 0 : event.key === "End" ? groups.length - 1 : null;
-              if (next === null) return;
-              event.preventDefault();
-              setActiveGroup(groups[next]!);
-              event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role=tab]")[next]?.focus();
-            }}
-          >
-            {i18n.t(`reactWorkbench.inspector.groups.${group}`)}
-          </button>
-        ))}
-      </div>
-      <div role="tabpanel" id={`${id}-panel-object`} aria-labelledby={`${id}-tab-object`} hidden={activeGroup !== "object"}>
-        <header className="ek-inspector-summary" data-problem-tone={problemTone}>
-          <div className="ek-inspector-summary__copy">
-            <span>{i18n.t("reactWorkbench.inspector.summary.selection.label")}</span>
-            <strong>
-              {selectedLabel
-                ? i18n.t("reactWorkbench.inspector.summary.selection.named", { label: selectedLabel })
-                : i18n.t("reactWorkbench.inspector.summary.selection.empty")}
-            </strong>
-          </div>
-          <dl className="ek-inspector-summary__meta">
-            <div>
-              <dt>{i18n.t("reactWorkbench.inspector.summary.nodes.label")}</dt>
-              <dd>{selection.count}</dd>
-            </div>
-            <div>
-              <dt>{i18n.t("reactWorkbench.inspector.summary.kind.label")}</dt>
-              <dd>{selection.nodeKind ?? i18n.t("reactWorkbench.inspector.summary.kind.none")}</dd>
-            </div>
-            <div>
-              <dt>{i18n.t("reactWorkbench.inspector.summary.problems.label")}</dt>
-              <dd>{inspector.problems.problems.length}</dd>
-            </div>
-          </dl>
-        </header>
-        {!selection.light && !selection.cameraView ? <TransformInspector key={`transform:${selection.nodeId}`} editor={editor} snapshot={snapshot} section={inspector.transform} locked={dataContext?.dataState.preview.enabled} i18n={i18n} /> : null}
-        {!selection.light && !selection.cameraView ? <MaterialInspector key={`material:${selection.nodeId}`} editor={editor} snapshot={snapshot} section={inspector.material} locked={dataContext?.dataState.preview.enabled} i18n={i18n} /> : null}
-        {dataContext ? <DataBindingInspector context={dataContext} /> : null}
-        {showSelectedLight ? lightInspector : null}
-        {showSelectedCamera ? cameraInspector : null}
-      </div>
-      <div role="tabpanel" id={`${id}-panel-environment`} aria-labelledby={`${id}-tab-environment`} hidden={activeGroup !== "environment"}>
-        <EnvironmentInspector editor={editor} snapshot={snapshot} section={inspector.environment} i18n={i18n} />
-      </div>
-      <div role="tabpanel" id={`${id}-panel-scene`} aria-labelledby={`${id}-tab-scene`} hidden={activeGroup !== "scene"}>
-        {!showSelectedLight ? lightInspector : null}
-        {!showSelectedCamera ? cameraInspector : null}
-      </div>
-      <ProblemsPanel section={inspector.problems} i18n={i18n} onReplaceAsset={onReplaceAsset} />
+      <InspectorTabs label={i18n.t("reactWorkbench.inspector.groups.label")} value={activeGroup} onChange={setActiveGroup} tabs={[
+        { id: "object", label: i18n.t("reactWorkbench.inspector.groups.object"), content: objectPanel },
+        {
+          id: "environment",
+          label: i18n.t("reactWorkbench.inspector.groups.environment"),
+          content: <EnvironmentInspector editor={editor} snapshot={snapshot} section={inspector.environment} i18n={i18n} />
+        },
+        { id: "scene", label: i18n.t("reactWorkbench.inspector.groups.scene"), content: scenePanel }
+      ]} />
     </aside>
   );
 }

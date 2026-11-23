@@ -141,6 +141,7 @@ describe("React object data preview", () => {
     await waitFor(() => expect(detailValue(card, "Temperature")).toBe("25.1"));
     const callsAfterStart = executor.mock.calls.length;
 
+    fireEvent.click(screen.getByRole("tab", { name: "Device data" }));
     fireEvent.change(screen.getByLabelText("Device ID"), { target: { value: "pump-2" } });
     fireEvent.click(screen.getByRole("button", { name: "Save binding" }));
     await screen.findByText("Binding updated. Undo to revert.");
@@ -477,6 +478,7 @@ describe("React object data preview", () => {
     const card = await screen.findByRole("region", { name: "Device details" });
     await waitFor(() => expect(within(card).getByText("Current")).toBeTruthy());
 
+    fireEvent.click(screen.getByRole("tab", { name: "Device data" }));
     fireEvent.click(screen.getByLabelText("Enabled"));
     fireEvent.click(screen.getByRole("button", { name: "Save binding" }));
     await screen.findByText("Binding updated. Undo to revert.");

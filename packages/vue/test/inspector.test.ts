@@ -28,6 +28,7 @@ describe("Vue InspectorPanel", () => {
     };
     vi.spyOn(editor, "getRuntime").mockReturnValue(runtime as never);
     const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
+    await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Material")!.trigger("click");
     const body = wrapper.findAll(".ek-material-target-option").find((target) => target.text().includes("Body"))!;
     expect(body.get("input").attributes("disabled")).toBeDefined();
     expect(body.text()).toContain("Slot is unresolved and cannot create a new assignment.");
@@ -41,6 +42,7 @@ describe("Vue InspectorPanel", () => {
   it("preserves a manual material slot across groups and discards drafts when targets change", async () => {
     const editor = markRaw(createSlotEditor());
     const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
+    await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Material")!.trigger("click");
     const target = (name: string) => wrapper.findAll(".ek-material-target-option").find((item) => item.text().includes(name))!.get('input[type="radio"]');
     const field = (name: string) => wrapper.findAll("label").find((label) => label.text().startsWith(name))!.get("input");
     await target("Body").setValue(true);
@@ -74,6 +76,7 @@ describe("Vue InspectorPanel", () => {
     const snapshot = editor.getSnapshot();
     editor.restore({ ...snapshot, nodes: Object.fromEntries(Object.entries(snapshot.nodes).map(([id, node]) => [id, node.kind === "imported" ? { ...node, materialSlots: [] } : node])) });
     const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
+    await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Material")!.trigger("click");
     await wrapper.findAll(".ek-material-target-option").find((item) => item.text().includes("Unresolved slot"))!.get("input").setValue(true);
     expect(wrapper.text()).toContain("Existing override values remain editable");
     const opacity = wrapper.findAll("label").find((label) => label.text() === "Opacity")!.get("input");
@@ -183,6 +186,7 @@ describe("Vue InspectorPanel", () => {
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
     editor.dispatch({ type: "select-object", objectId: "object-a" });
     const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
+    await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Material")!.trigger("click");
 
     const colorInputs = wrapper.findAll(".ek-ui-color-trigger");
     await setInspectorColor(colorInputs[0], "#336699");
@@ -199,6 +203,7 @@ describe("Vue InspectorPanel", () => {
     const slotId = getSlotIds(editor)[0]!;
     const dispatchSpy = vi.spyOn(editor, "dispatch");
     const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
+    await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Material")!.trigger("click");
 
     const bodyTarget = wrapper.findAll(".ek-material-target-option").find((option) => option.text().includes("Body"));
     expect(bodyTarget).toBeTruthy();
@@ -218,6 +223,7 @@ describe("Vue InspectorPanel", () => {
     const editor = markRaw(createSlotEditor());
     const dispatchSpy = vi.spyOn(editor, "dispatch");
     const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
+    await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Material")!.trigger("click");
 
     const roughness = wrapper.findAll("label").find((label) => label.text().includes("Roughness"))?.find('input[type="number"]');
     if (!roughness) {
@@ -240,6 +246,7 @@ describe("Vue InspectorPanel", () => {
     const slotId = getSlotIds(editor)[0]!;
     const dispatchSpy = vi.spyOn(editor, "dispatch");
     const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
+    await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Material")!.trigger("click");
 
     const roughness = wrapper.findAll("label").find((label) => label.text().includes("Roughness"))?.find('input[type="number"]');
     if (!roughness) {
@@ -265,6 +272,7 @@ describe("Vue InspectorPanel", () => {
     const slotId = getSlotIds(editor)[0]!;
     const dispatchSpy = vi.spyOn(editor, "dispatch");
     const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
+    await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Material")!.trigger("click");
 
     const bodyTarget = wrapper.findAll(".ek-material-target-option").find((option) => option.text().includes("Body"));
     expect(bodyTarget).toBeTruthy();
@@ -302,6 +310,7 @@ describe("Vue InspectorPanel", () => {
     const editor = markRaw(createSlotEditor());
     const dispatchSpy = vi.spyOn(editor, "dispatch");
     const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
+    await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Material")!.trigger("click");
 
     const opacity = wrapper.findAll("label").find((label) => label.text().includes("Opacity"))?.find('input[type="number"]');
     if (!opacity) {
@@ -519,6 +528,7 @@ describe("Vue InspectorPanel", () => {
     const dispatchSpy = vi.spyOn(editor, "dispatch");
     const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
     await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Scene")!.trigger("click");
+    await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Camera views")!.trigger("click");
 
     const fov = wrapper.findAll("label").find((label) => label.text().includes("FOV"))?.find('input[type="number"]');
     if (!fov) {
@@ -543,6 +553,7 @@ describe("Vue InspectorPanel", () => {
     const dispatchSpy = vi.spyOn(editor, "dispatch");
     const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
     await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Scene")!.trigger("click");
+    await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Camera views")!.trigger("click");
 
     const fov = wrapper.findAll("label").find((label) => label.text().includes("FOV"))?.find('input[type="number"]');
     if (!fov) {
@@ -578,6 +589,7 @@ describe("Vue InspectorPanel", () => {
     });
     const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
     await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Scene")!.trigger("click");
+    await wrapper.findAll('[role="tab"]').find((tab) => tab.text() === "Camera views")!.trigger("click");
 
     await wrapper.findAll("button").find((button) => button.text() === "Capture")?.trigger("click");
     await nextTick();

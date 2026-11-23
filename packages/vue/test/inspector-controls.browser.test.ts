@@ -47,6 +47,15 @@ it("keeps keyboard focus, cancels target-switch drafts and isolates themed porta
     expect(input().value).toBe("0");
     expect(input().getAttribute("aria-invalid")).toBeNull();
 
+    const transform = page.getByRole("tab", { name: "Transform", exact: true });
+    const material = page.getByRole("tab", { name: "Material", exact: true });
+    const snapshot = editor.getSnapshot();
+    await userEvent.click(transform);
+    await userEvent.keyboard("{ArrowRight}");
+    await expect.element(material).toHaveAttribute("aria-selected", "true");
+    expect(document.activeElement).toBe(material.element());
+    expect(input().checkVisibility()).toBe(false);
+    expect(editor.getSnapshot()).toBe(snapshot);
     const side = host.querySelector<HTMLButtonElement>('[aria-label="Side"]')!;
     side.focus();
     await userEvent.keyboard("{ArrowDown}");
@@ -96,6 +105,9 @@ it("keeps keyboard focus, cancels target-switch drafts and isolates themed porta
     await userEvent.keyboard("{Escape}");
     expect(editor.getSnapshot().environment.lighting.source).toEqual({ kind: "hdr", assetId: "outside" });
     await expect.poll(() => document.activeElement).toBe(asset);
+    await userEvent.click(page.getByRole("tab", { name: "Properties", exact: true }));
+    await expect.element(material).toHaveAttribute("aria-selected", "true");
+    expect(side.checkVisibility()).toBe(true);
     expect({ background: outsideStyle.backgroundColor, padding: outsideStyle.padding, border: outsideStyle.borderWidth }).toEqual(originalStyle);
   } finally {
     root.unmount();

@@ -7,6 +7,7 @@ import {
   type SceneSnapshot
 } from "@ek-aiot/3d-editor-core";
 import { useState } from "react";
+import { InspectorTabs } from "./InspectorTabs";
 import { SceneInspectorFields } from "./SceneInspectorFields";
 import { useInspectorProblem } from "../hooks/use-inspector-problem";
 import type { InspectorI18n } from "./inspector-i18n";
@@ -75,16 +76,17 @@ export function EnvironmentInspector({ editor, snapshot, section, i18n = DEFAULT
       {fieldProblem && !fieldProblem.fieldId ? (
         <p className="ek-inspector-warning" role="alert">{renderProblemMessage(i18n, fieldProblem)}</p>
       ) : null}
-      {(["lighting", "background"] as const).map((group) => (
-        <details key={group} className="ek-inspector-fold" open>
-          <summary>{i18n.t(`reactWorkbench.inspector.sceneFields.${group}`)}</summary>
-          <SceneInspectorFields fields={section.fields.filter((field) => group === "lighting" ? !field.id.startsWith("background.") : field.id.startsWith("background."))}
-            problem={fieldProblem} i18n={i18n} onReset={clearField} onCommit={(fieldId, value) => commit(fieldId as EnvironmentFieldId, value)} />
-        </details>
-      ))}
+      <InspectorTabs secondary label={i18n.t("reactWorkbench.inspector.groups.environment")} tabs={environmentTabs.map((group) => ({
+        id: group,
+        label: i18n.t(`reactWorkbench.inspector.sceneFields.${group}`),
+        content: <SceneInspectorFields fields={section.fields.filter((field) => group === "lighting" ? !field.id.startsWith("background.") : field.id.startsWith("background."))}
+          problem={fieldProblem} i18n={i18n} onReset={clearField} onCommit={(fieldId, value) => commit(fieldId as EnvironmentFieldId, value)} />
+      }))} />
     </section>
   );
 }
+
+const environmentTabs = ["lighting", "background"] as const;
 
 type EnvironmentProblemMessageKey =
   | "reactWorkbench.inspector.environment.editFailed.message"

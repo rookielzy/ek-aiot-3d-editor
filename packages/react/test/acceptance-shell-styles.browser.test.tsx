@@ -297,7 +297,7 @@ describe("React workbench shell acceptance", () => {
         const inspectorPanel = inspector(host);
         expect(inspectorPanel.getBoundingClientRect().right).toBeLessThanOrEqual(width + 1);
         expect(horizontalOverflow(inspectorPanel)).toBeLessThanOrEqual(0);
-        const inspectorTabs = [...inspectorPanel.querySelectorAll<HTMLElement>('[role="tab"]')];
+        const inspectorTabs = [...inspectorPanel.querySelectorAll<HTMLElement>('[role="tab"]')].filter((tab) => tab.checkVisibility());
         expect(inspectorTabs.length).toBeGreaterThan(0);
         for (const tab of inspectorTabs) {
           expect(clippedBy(tab)).toBeNull();

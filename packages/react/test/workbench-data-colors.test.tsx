@@ -21,6 +21,7 @@ describe("React data color authoring", () => {
   it("saves ordered color rules and reports material capability", async () => {
     const editor = createSeedEditor();
     const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} loader={fakeLoader} resolver={fakeResolver} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Device data" }));
     await waitFor(() => expect(editor.getRuntime()).toBeTruthy());
     fireEvent.click(screen.getByTitle("Pump object"));
 
@@ -60,6 +61,7 @@ describe("React data color authoring", () => {
     const editor = createSeedEditor(executor);
     importObject(editor, "object-b", "Pump object B");
     const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} loader={fakeLoader} resolver={fakeResolver} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Device data" }));
     await waitFor(() => expect(editor.getRuntime()).toBeTruthy());
     fireEvent.click(screen.getByTitle("Pump object"));
 
@@ -94,6 +96,7 @@ describe("React data color authoring", () => {
     const editor = createSeedEditor(executor);
     saveBasicBinding(editor);
     const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} loader={fakeLoader} resolver={fakeResolver} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Device data" }));
     await waitFor(() => expect(editor.getRuntime()).toBeTruthy());
     fireEvent.click(screen.getByTitle("Pump object"));
     const section = screen.getByRole("group", { name: "Status color" });

@@ -26,6 +26,7 @@ describe("React object binding authoring", () => {
   it("saves one query, device overrides, and ordered details as one undoable binding", async () => {
     const editor = createSeedEditor();
     const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Device data" }));
     fireEvent.click(screen.getByTitle("Pump object"));
 
     expect(screen.getByRole("heading", { name: "Device data" })).toBeTruthy();
@@ -85,6 +86,7 @@ describe("React object binding authoring", () => {
     });
     const editor = createSeedEditor(executor);
     const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Device data" }));
     fireEvent.click(screen.getByTitle("Pump object"));
 
     fireEvent.click(screen.getByLabelText("Override areaId for this object"));
@@ -130,6 +132,7 @@ describe("React object binding authoring", () => {
     });
     const editor = createSeedEditor(executor);
     const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Device data" }));
     fireEvent.click(screen.getByTitle("Pump object"));
 
     fireEvent.click(screen.getByRole("button", { name: "Load devices" }));
@@ -187,6 +190,7 @@ describe("React object binding authoring", () => {
     });
 
     const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    fireEvent.click(screen.getByRole("tab", { name: "设备数据" }));
     fireEvent.click(screen.getByTitle("Pump object"));
     fireEvent.click(screen.getByRole("button", { name: "加载设备" }));
 
@@ -203,6 +207,7 @@ describe("React object binding authoring", () => {
     );
     if (!imported) throw new Error("Expected an imported target.");
     const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Device data" }));
 
     fireEvent.click(screen.getByTitle(imported.name));
     expect(screen.getByText("Imported nodes cannot be bound directly. Bind the owner object instead.")).toBeTruthy();
@@ -237,6 +242,7 @@ describe("React object binding authoring", () => {
   it("returns to the same object draft after creating or cancelling a query", async () => {
     const editor = createConnectionOnlyEditor();
     const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Device data" }));
     fireEvent.click(screen.getByTitle("Pump object"));
 
     expect(screen.getByText("No saved queries yet. Create one for this object.")).toBeTruthy();
@@ -280,6 +286,7 @@ describe("React object binding authoring", () => {
     const editor = createEditor();
     seedObject(editor);
     const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Device data" }));
     fireEvent.click(screen.getByTitle("Pump object"));
     fireEvent.change(screen.getByLabelText("Device ID"), { target: { value: "pump-draft" } });
 
@@ -331,6 +338,7 @@ describe("React object binding authoring", () => {
       };
     });
     const view = render(<EditorWorkbench editor={editor} rendererFactory={fakeRenderer} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Device data" }));
     fireEvent.click(screen.getByTitle("Pump object"));
     fireEvent.click(screen.getByRole("button", { name: "Load devices" }));
     expect(requests).toHaveLength(1);
@@ -395,7 +403,7 @@ describe("React object binding authoring", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Bindings for Pump status" })).toBeNull());
 
     expect(editor.getSnapshot().selection.nodeId).toBe("object-a");
-    // The Inspector shows the durable binding of the located object.
+    fireEvent.click(screen.getByRole("tab", { name: "Device data" }));
     expect(screen.getByRole("heading", { name: "Device data" })).toBeTruthy();
     expect((screen.getByLabelText("Device ID") as HTMLInputElement).value).toBe("pump-77");
     expect(screen.getByText("Selected Pump object in the scene.")).toBeTruthy();

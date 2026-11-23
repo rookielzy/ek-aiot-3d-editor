@@ -63,6 +63,7 @@ it.each(["en", "zh-CN"] as const)("edits the local showcase and restores its com
     root.render(<StrictMode><App locale={locale} rendererFactory={rendererFactory} /></StrictMode>);
     await expect.poll(() => host.textContent).toContain(label("Selection Toy Car", "选择 Toy Car"));
     expect(field("Position X", "位置 X").value).toBe("0.2");
+    await click("Material", "材质");
     await setInspectorColor(field("Base color", "基础色"), "#a8c9b6");
     const assetsTab = [...host.querySelectorAll<HTMLButtonElement>(".ek-workbench__nav-button")]
       .find((button) => button.getAttribute("aria-label")?.startsWith(`${label("Assets", "资源")} `))!;

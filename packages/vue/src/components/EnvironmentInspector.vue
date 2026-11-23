@@ -16,11 +16,12 @@
       </button>
     </div>
     <p v-if="fieldProblem && !fieldProblem.fieldId" class="ek-inspector-warning" role="alert">{{ renderProblemMessage(resolvedI18n, fieldProblem) }}</p>
-    <details v-for="group in ['lighting', 'background'] as const" :key="group" class="ek-inspector-fold" open>
-      <summary>{{ resolvedI18n.t(`reactWorkbench.inspector.sceneFields.${group}`) }}</summary>
-      <SceneInspectorFields @reset-field="(fieldId) => { if (fieldProblem?.fieldId === fieldId) fieldProblem = null; }" :fields="section.fields.filter((field) => group === 'lighting' ? !field.id.startsWith('background.') : field.id.startsWith('background.'))"
-        :problem="fieldProblem" :i18n="resolvedI18n" :on-commit="(fieldId, value) => commit(fieldId as EnvironmentFieldId, value)" />
-    </details>
+    <InspectorTabs secondary :tabs="tabs" :label="resolvedI18n.t('reactWorkbench.inspector.groups.environment')">
+      <template v-for="tab in tabs" :key="tab.id" #[tab.id]>
+        <SceneInspectorFields @reset-field="(fieldId) => { if (fieldProblem?.fieldId === fieldId) fieldProblem = null; }" :fields="section.fields.filter((field) => tab.id === 'lighting' ? !field.id.startsWith('background.') : field.id.startsWith('background.'))"
+          :problem="fieldProblem" :i18n="resolvedI18n" :on-commit="(fieldId, value) => commit(fieldId as EnvironmentFieldId, value)" />
+      </template>
+    </InspectorTabs>
   </section>
 </template>
 
@@ -42,6 +43,7 @@ import {
   type InspectorI18n
 } from "./inspector-i18n";
 
+import InspectorTabs from "./InspectorTabs.vue";
 import SceneInspectorFields from "./SceneInspectorFields.vue";
 
 const props = defineProps<{
@@ -52,6 +54,9 @@ const props = defineProps<{
 }>();
 
 const resolvedI18n = computed(() => props.i18n ?? DEFAULT_INSPECTOR_I18N);
+const tabs = computed(() => (["lighting", "background"] as const).map((id) => ({
+  id, label: resolvedI18n.value.t(`reactWorkbench.inspector.sceneFields.${id}`)
+})));
 const fieldProblem = ref<InspectorCommandProblem | null>(null);
 
 function commit(fieldId: EnvironmentFieldId, value: string): boolean {

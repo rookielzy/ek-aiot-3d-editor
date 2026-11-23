@@ -125,9 +125,11 @@ describe("proof-loop starter demo browser verification", () => {
       expect(editor.getSnapshot().objects[objectId].transform.position[0]).toBe(0);
       await click("Redo", "重做");
       expect(editor.getSnapshot().objects[objectId].transform.position[0]).toBe(2);
+      await openInspectorGroup(host, label("Material", "材质"));
       await userEvent.fill(input("Opacity", "不透明度"), "0.6");
       await userEvent.keyboard("{Enter}{Tab}");
       await openInspectorGroup(host, label("Environment", "环境"));
+      await openInspectorGroup(host, label("Background", "背景"));
       await selectInspectorOption(findFieldInput(host, label("Background source", "背景源"), "select"), "solid");
       const background = findFieldInput(host, label("Background color", "背景颜色"), 'input[type="color"]') as HTMLInputElement;
       await setInspectorColor(background, "#ccddee");
@@ -135,11 +137,13 @@ describe("proof-loop starter demo browser verification", () => {
       await selectInspectorOption(section(host, label("Add light", "添加灯光")), "directional");
       await clickCameraCommand(host, label);
       const inspector = section(host, label("Scene inspector", "场景检查器"));
+      await openInspectorGroup(host, label("Camera views", "相机视图"));
       await userEvent.click([...inspector.querySelectorAll("button")].find((button) => text(button) === label("Capture", "捕获"))!);
       await userEvent.click([...inspector.querySelectorAll("button")].find((button) => text(button) === label("Set default", "设为默认"))!);
       await userEvent.click([...inspector.querySelectorAll("button")].find((button) => text(button) === label("Apply", "应用"))!);
       await clickHierarchyRow(host, "saved-box", label("Hierarchy", "层级"));
       await openInspectorGroup(host, label("Properties", "属性"));
+      await openInspectorGroup(host, label("Transform", "变换"));
       const saved = editor.getSnapshot();
       const history = editor.getHistoryState();
       const positionField = input("Position X", "位置 X");
@@ -757,6 +761,7 @@ describe("proof-loop starter demo browser verification", () => {
       await userEvent.fill(field("Position X"), "2");
       await userEvent.keyboard("{Tab}");
 
+      await openInspectorGroup(host, "Material");
       const radios = () => [...inspector.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
       expect(radios()).toHaveLength(3);
       const slot = () => radios().find((radio) => text(radio.closest("label")!).includes("Body finish"))!;
@@ -785,6 +790,7 @@ describe("proof-loop starter demo browser verification", () => {
         inspector.scrollTop = 0;
         await waitForAnimationFrame();
         assertChildrenInside(inspector, "Material inspector");
+        await openInspectorGroup(host, "Transform");
         const x = field("Position X").getBoundingClientRect();
         const y = field("Position Y").getBoundingClientRect();
         const z = field("Position Z").getBoundingClientRect();
@@ -793,6 +799,7 @@ describe("proof-loop starter demo browser verification", () => {
         expect(x.right).toBeLessThanOrEqual(y.left);
         expect(y.right).toBeLessThanOrEqual(z.left);
         expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+        await openInspectorGroup(host, "Material");
         if (framework === "Vue" && import.meta.env.VITE_CAPTURE_INSPECTOR) await page.screenshot({ path: `__screenshots__/vue-inspector/object-${width}.png` });
       }
       await openInspectorGroup(host, "Environment");
@@ -842,18 +849,16 @@ describe("proof-loop starter demo browser verification", () => {
       const inspector = section(host, "Scene inspector");
       const input = (label: string) => findFieldInput(inspector, label, 'input[type="number"]') as HTMLInputElement;
       await openInspectorGroup(host, "Environment");
-      await selectInspectorOption(findFieldInput(inspector, "Background source", "select"), "solid");
       await userEvent.fill(input("Lighting intensity"), "1.7");
-      await userEvent.keyboard("{Enter}{Tab}");
-      await userEvent.fill(input("Background intensity"), "0.8");
       await userEvent.keyboard("{Enter}{Tab}");
       await userEvent.fill(input("Lighting rotation Y"), "0.7");
       await userEvent.keyboard("{Enter}{Tab}");
-      const lightingFold = [...inspector.querySelectorAll("summary")].find((summary) => summary.textContent === "Lighting")!;
-      await userEvent.click(lightingFold);
+      await openInspectorGroup(host, "Background");
       expect(input("Lighting intensity").checkVisibility()).toBe(false);
-      lightingFold.focus();
-      await userEvent.keyboard("{Enter}");
+      await selectInspectorOption(findFieldInput(inspector, "Background source", "select"), "solid");
+      await userEvent.fill(input("Background intensity"), "0.8");
+      await userEvent.keyboard("{Enter}{Tab}");
+      await openInspectorGroup(host, "Lighting");
       expect(input("Lighting intensity").checkVisibility()).toBe(true);
       for (const [width, height] of [[1440, 900], [1920, 1080], [1100, 800]]) {
         await page.viewport(width, height);
@@ -873,6 +878,7 @@ describe("proof-loop starter demo browser verification", () => {
       await userEvent.click(findFieldInput(inspector, "Cast shadows", 'input[type="checkbox"]') as HTMLInputElement);
       await userEvent.fill(input("Shadow map width"), "1024");
       await userEvent.keyboard("{Enter}{Tab}");
+      await openInspectorGroup(host, "Camera views");
       await userEvent.click([...inspector.querySelectorAll("button")].find((button) => button.textContent === "Capture")!);
       await userEvent.fill(input("FOV"), "38");
       await userEvent.keyboard("{Enter}{Tab}");
@@ -884,7 +890,7 @@ describe("proof-loop starter demo browser verification", () => {
         await waitForAnimationFrame();
         assertChildrenInside(inspector, "Scene fields");
         expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
-        if (width === 1100) expect(inspector.scrollHeight).toBeGreaterThan(inspector.clientHeight);
+        expect(input("FOV").checkVisibility()).toBe(true);
         input("FOV").scrollIntoView({ block: "center" });
         await waitForAnimationFrame();
         expect(input("Position X").getBoundingClientRect().top).toBe(input("Position Z").getBoundingClientRect().top);
@@ -1097,6 +1103,7 @@ async function verifyStarterFlow(host: HTMLElement, options: { assertProfessiona
     expect(viewport).toBeTruthy();
     await findReadyCanvas(viewport!);
 
+    await openInspectorGroup(host, "Material");
     await waitFor(() => {
       expect(findFieldInput(host, "Base color", 'input[type="color"]'), "Expected material inspector Base color input").toBeTruthy();
     });
@@ -1112,12 +1119,14 @@ async function verifyStarterFlow(host: HTMLElement, options: { assertProfessiona
     await clickCameraCommand(host, (en: string) => en, "Capture view");
     await waitFor(() => expect(text(host)).toContain("Camera view 1"));
     await openInspectorGroup(host, "Scene");
+    await openInspectorGroup(host, "Camera views");
     await clickByText(host, "Set default");
     expect(text(host)).toContain("Default");
     await clickCameraCommand(host, (en: string) => en, "Apply view");
     await assertCameraLayout(host);
 
     await openInspectorGroup(host, "Properties");
+    await openInspectorGroup(host, "Transform");
     const positionX = findFieldInput(host, "Position X", 'input[type="number"]') as HTMLInputElement | null;
     expect(positionX, "Expected transform Position X input").toBeTruthy();
     positionX!.focus();
@@ -1208,6 +1217,7 @@ async function verifyChineseWorkbenchLayout(host: HTMLElement, options: { assert
     expect(text(host)).toContain(options.capturedName ?? "Camera view 1");
   });
   await openInspectorGroup(host, "场景");
+  await openInspectorGroup(host, "相机视图");
   await clickByText(host, "设为默认");
   expect(text(host)).toContain("默认");
   await clickCameraCommand(host, (en: string, zh: string) => zh, "应用视图");
@@ -1371,7 +1381,7 @@ function mountInspectorHost(host: HTMLElement, editor: ReturnType<typeof createE
 }
 
 async function openInspectorGroup(host: HTMLElement, label: string): Promise<void> {
-  const tab = [...host.querySelectorAll<HTMLButtonElement>(".ek-inspector [role=tab]")].find((candidate) => text(candidate) === label);
+  const tab = [...host.querySelectorAll<HTMLButtonElement>(".ek-inspector [role=tab]")].find((candidate) => candidate.checkVisibility() && text(candidate) === label);
   expect(tab, `Expected Inspector group ${label}`).toBeTruthy();
   await userEvent.click(tab!);
 }

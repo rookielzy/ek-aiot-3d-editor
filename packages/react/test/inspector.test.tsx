@@ -20,7 +20,8 @@ describe("React InspectorPanel", () => {
     render(<InspectorPanel editor={editor} />);
     const snapshot = editor.getSnapshot();
     const dispatch = vi.spyOn(editor, "dispatch").mockReturnValue({ ok: false, snapshot, error: "Target unavailable" });
-    for (const name of ["Position X", "Opacity"]) {
+    for (const [tab, name] of [["Transform", "Position X"], ["Material", "Opacity"]]) {
+      fireEvent.click(screen.getByRole("tab", { name: tab }));
       const input = screen.getByLabelText(name) as HTMLInputElement;
       fireEvent.change(input, { target: { value: "0.4" } });
       fireEvent.keyDown(input, { key: "Enter" });
@@ -76,6 +77,7 @@ describe("React InspectorPanel", () => {
     editor.dispatch({ type: "import-glb", objectId: "object-a", asset: { id: "asset-a" } });
     editor.dispatch({ type: "select-object", objectId: "object-a" });
     render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Material" }));
     const before = editor.getHistoryState().undoCount;
     fireEvent.click(screen.getByLabelText("Base color"));
     fireEvent.change(screen.getByLabelText("Hex color"), { target: { value: "#336699" } });
@@ -102,7 +104,7 @@ describe("React InspectorPanel", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Environment" }));
     expect(screen.getByLabelText("Lighting asset")).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "Scene" }));
-    expect(screen.getByText("Lights")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Lights" })).toBeTruthy();
     expect(screen.getByLabelText("Add light")).toBeTruthy();
     expect(editor.getSnapshot().selection.nodeId).toBeNull();
   });
@@ -192,6 +194,7 @@ describe("React InspectorPanel", () => {
     editor.dispatch({ type: "select-object", objectId: "object-a" });
 
     render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Material" }));
     fireEvent.change(screen.getByLabelText("Opacity"), { target: { value: "0.5" } });
     fireEvent.blur(screen.getByLabelText("Opacity"));
     selectInspectorOption(screen.getByLabelText("Side"), "double");
@@ -205,6 +208,7 @@ describe("React InspectorPanel", () => {
   it("keeps material edits scoped to their target and preserves them across group navigation and history", () => {
     const editor = createSlotEditor();
     render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Material" }));
     fireEvent.click(screen.getByRole("radio", { name: /Body/ }));
     const roughness = screen.getByLabelText("Roughness");
     roughness.focus();
@@ -217,9 +221,9 @@ describe("React InspectorPanel", () => {
     const properties = screen.getByRole("tab", { name: "Properties" });
     fireEvent.keyDown(properties, { key: "ArrowRight" });
     expect(document.activeElement).toBe(screen.getByRole("tab", { name: "Environment" }));
-    expect(within(screen.getByRole("tabpanel")).getByLabelText("Lighting asset")).toBeTruthy();
+    expect(within(screen.getByRole("tabpanel", { name: "Lighting" })).getByLabelText("Lighting asset")).toBeTruthy();
     fireEvent.keyDown(document.activeElement!, { key: "End" });
-    expect(within(screen.getByRole("tabpanel")).getByLabelText("Add light")).toBeTruthy();
+    expect(within(screen.getByRole("tabpanel", { name: "Lights" })).getByLabelText("Add light")).toBeTruthy();
     fireEvent.keyDown(document.activeElement!, { key: "Home" });
     expect(editor.getSnapshot()).toBe(changed);
     expect((screen.getByRole("radio", { name: /Body/ }) as HTMLInputElement).checked).toBe(true);
@@ -246,6 +250,7 @@ describe("React InspectorPanel", () => {
   it("creates explicitly edited default-valued overrides but does not commit untouched inputs twice", () => {
     const editor = createSlotEditor();
     render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Material" }));
     const before = editor.getHistoryState().undoCount;
     const roughness = screen.getByLabelText("Roughness");
     fireEvent.blur(roughness);
@@ -268,6 +273,7 @@ describe("React InspectorPanel", () => {
     const snapshot = editor.getSnapshot();
     editor.restore({ ...snapshot, nodes: Object.fromEntries(Object.entries(snapshot.nodes).map(([id, node]) => [id, node.kind === "imported" ? { ...node, materialSlots: [] } : node])) });
     render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Material" }));
     fireEvent.click(screen.getByRole("radio", { name: /Unresolved slot/ }));
     expect(screen.getByText(/Existing override values remain editable/)).toBeTruthy();
     expect((screen.getByLabelText("Opacity") as HTMLInputElement).value).toBe("0.5");
@@ -298,6 +304,7 @@ describe("React InspectorPanel", () => {
       return () => {};
     });
     render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Material" }));
     expect((screen.getByRole("radio", { name: /Body/ }) as HTMLInputElement).disabled).toBe(true);
     expect(screen.getByText("Slot is unresolved and cannot create a new assignment.")).toBeTruthy();
     for (const label of ["map", "normal map", "roughness map", "metalness map", "emissive map", "alpha map"]) {
@@ -313,6 +320,7 @@ describe("React InspectorPanel", () => {
     const dispatchSpy = vi.spyOn(editor, "dispatch");
 
     render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Material" }));
     fireEvent.click(screen.getByLabelText(/Body/));
     setInspectorColor(screen.getByLabelText("Base color"), "#336699");
 
@@ -328,6 +336,7 @@ describe("React InspectorPanel", () => {
     const dispatchSpy = vi.spyOn(editor, "dispatch");
 
     render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Material" }));
     fireEvent.change(screen.getByLabelText("Roughness"), { target: { value: "0.42" } });
     fireEvent.blur(screen.getByLabelText("Roughness"));
 
@@ -345,6 +354,7 @@ describe("React InspectorPanel", () => {
     const dispatchSpy = vi.spyOn(editor, "dispatch");
 
     render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Material" }));
     fireEvent.change(screen.getByLabelText("Roughness"), { target: { value: "0.42" } });
     fireEvent.blur(screen.getByLabelText("Roughness"));
     act(() => {
@@ -365,6 +375,7 @@ describe("React InspectorPanel", () => {
     const dispatchSpy = vi.spyOn(editor, "dispatch");
 
     render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Material" }));
     fireEvent.click(screen.getByLabelText(/Body/));
     setInspectorColor(screen.getByLabelText("Base color"), "#336699");
     expect(dispatchSpy).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -395,6 +406,7 @@ describe("React InspectorPanel", () => {
     const dispatchSpy = vi.spyOn(editor, "dispatch");
 
     render(<InspectorPanel editor={editor} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Material" }));
     fireEvent.change(screen.getByLabelText("Opacity"), { target: { value: "1.2" } });
     fireEvent.blur(screen.getByLabelText("Opacity"));
 
@@ -427,6 +439,8 @@ describe("React InspectorPanel", () => {
 
     render(<InspectorPanel editor={editor} />);
 
+    fireEvent.click(screen.getByRole("tab", { name: "Scene" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Problems" }));
     expect(await screen.findByText("Asset missing")).toBeTruthy();
     expect(screen.getByText(/asset-a unavailable/)).toBeTruthy();
   });
@@ -505,6 +519,7 @@ describe("React InspectorPanel", () => {
     expect(editor.getSnapshot().lights.sun.intensity).toBe(1);
     fireEvent.click(screen.getByRole("tab", { name: "Scene" }));
     expect((screen.getByLabelText("Intensity") as HTMLInputElement).value).toBe("1");
+    fireEvent.click(screen.getByRole("tab", { name: "Camera views" }));
     const fov = screen.getByLabelText("FOV");
     fov.focus();
     fireEvent.change(fov, { target: { value: "40" } });
@@ -526,12 +541,15 @@ describe("React InspectorPanel", () => {
     editor.dispatch({ type: "select-node", nodeId: "hero" });
     render(<InspectorPanel editor={editor} />);
     fireEvent.click(screen.getByRole("tab", { name: "Scene" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Camera views" }));
     fireEvent.click(screen.getByRole("button", { name: /Detail/ }));
     expect(editor.getSnapshot().selection.nodeId).toBe("detail");
     expect((screen.getByLabelText("FOV") as HTMLInputElement).value).toBe("35");
     fireEvent.click(screen.getByRole("tab", { name: "Properties" }));
     expect((screen.getByLabelText("FOV") as HTMLInputElement).value).toBe("35");
     expect(screen.getAllByLabelText("Position X")).toHaveLength(1);
+    act(() => { editor.dispatch({ type: "select-nodes", mode: "replace", nodeIds: ["hero", "detail"], primaryNodeId: "detail" }); });
+    expect(screen.queryByRole("tablist", { name: "Properties" })).toBeNull();
   });
 
   it.each(["ambient", "hemisphere", "directional", "point", "spot"])("adds, selects, edits and removes a %s light", (kind) => {
@@ -555,6 +573,7 @@ describe("React InspectorPanel", () => {
     render(<InspectorPanel editor={editor} />);
     fireEvent.click(screen.getByRole("tab", { name: "Environment" }));
     expect(inspectorOptionValues(screen.getByLabelText("Lighting source"))).toEqual(["none", "equirectangular", "hdr", "cubemap"]);
+    fireEvent.click(screen.getByRole("tab", { name: "Background" }));
     expect(inspectorOptionValues(screen.getByLabelText("Background source"))).toEqual(["none", "solid", "flat-image", "equirectangular", "hdr", "cubemap"]);
     act(() => {
       for (const id of ["px", "nx", "py", "ny", "pz", "nz"]) editor.dispatch({ type: "register-asset", asset: { id, kind: "image", label: id } });
@@ -563,11 +582,13 @@ describe("React InspectorPanel", () => {
     selectInspectorOption(screen.getByLabelText("Background asset"), "image");
     selectInspectorOption(screen.getByLabelText("Background source"), "flat-image");
     expect(editor.getSnapshot().environment.lighting.source.kind).toBe("cubemap");
+    fireEvent.click(screen.getByRole("tab", { name: "Lighting" }));
     const faces = screen.getAllByRole("combobox").filter((select) => select.getAttribute("aria-label")?.startsWith("Lighting ") && !["Lighting source", "Lighting asset"].includes(select.getAttribute("aria-label")!));
     expect(faces).toHaveLength(6);
     for (const face of faces) selectInspectorOption(face, "image");
     expect(editor.getSnapshot().environment.lighting.source.kind).toBe("cubemap");
     expect(editor.getSnapshot().environment.background.source).toEqual({ kind: "flat-image", assetId: "image" });
+    fireEvent.click(screen.getByRole("tab", { name: "Background" }));
     fireEvent.change(screen.getByLabelText("Background blur"), { target: { value: "0.4" } });
     fireEvent.keyDown(screen.getByLabelText("Background blur"), { key: "Enter" });
     expect(screen.getByLabelText("Background blur").getAttribute("aria-describedby")).toBeTruthy();
@@ -582,6 +603,7 @@ describe("React InspectorPanel", () => {
     selectInspectorOption(screen.getByLabelText("Lighting asset"), "");
     expect(editor.getSnapshot().environment.lighting.source).toEqual({ kind: "none" });
     expect(editor.getSnapshot().environment.background.source).toEqual({ kind: "hdr", assetId: "hdr" });
+    fireEvent.click(screen.getByRole("tab", { name: "Background" }));
     selectInspectorOption(screen.getByLabelText("Background asset"), "");
     expect(editor.getSnapshot().environment.background.source).toEqual({ kind: "none" });
     act(() => { editor.undo(); });
@@ -706,6 +728,7 @@ describe("React InspectorPanel", () => {
 
     render(<InspectorPanel editor={editor} />);
     fireEvent.click(screen.getByRole("tab", { name: "Scene" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Camera views" }));
     fireEvent.change(screen.getByLabelText("FOV"), { target: { value: "35" } });
     fireEvent.blur(screen.getByLabelText("FOV"));
     fireEvent.click(screen.getByText("Set default"));
@@ -725,6 +748,7 @@ describe("React InspectorPanel", () => {
 
     render(<InspectorPanel editor={editor} />);
     fireEvent.click(screen.getByRole("tab", { name: "Scene" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Camera views" }));
     fireEvent.change(screen.getByLabelText("FOV"), { target: { value: "180" } });
     fireEvent.blur(screen.getByLabelText("FOV"));
 
@@ -755,6 +779,7 @@ describe("React InspectorPanel", () => {
 
     render(<InspectorPanel editor={editor} />);
     fireEvent.click(screen.getByRole("tab", { name: "Scene" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Camera views" }));
     fireEvent.click(screen.getByText("Capture"));
     fireEvent.click(screen.getByText("Apply"));
 

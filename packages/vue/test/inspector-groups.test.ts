@@ -1,11 +1,11 @@
 import { inspectorOptions, selectInspectorOption } from "./support/inspector-controls";
-import { mount, type VueWrapper } from "@vue/test-utils";
+import { mount, type DOMWrapper, type VueWrapper } from "@vue/test-utils";
 import { markRaw, nextTick } from "vue";
 import { describe, expect, it } from "vitest";
 import { createEditor } from "@ek-aiot/3d-editor-core";
 import InspectorPanel from "../src/components/InspectorPanel.vue";
 
-async function openGroup(wrapper: VueWrapper, name: string) {
+async function openGroup(wrapper: VueWrapper | DOMWrapper<Element>, name: string) {
   const tab = wrapper.findAll('[role="tab"]').find((item) => item.text() === name);
   expect(tab, `Inspector group ${name}`).toBeDefined();
   await tab!.trigger("click");
@@ -20,10 +20,14 @@ describe("Vue Inspector groups", () => {
     editor.dispatch({ type: "select-node", nodeId: "hero" });
     const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
     const scene = await openGroup(wrapper, "Scene");
-    await scene.findAll("button").find((button) => button.text().startsWith("Detail"))!.trigger("click");
+    const cameras = await openGroup(scene, "Camera views");
+    await cameras.findAll("button").find((button) => button.text().startsWith("Detail"))!.trigger("click");
     expect(editor.getSnapshot().selection.nodeId).toBe("detail");
     const selected = await openGroup(wrapper, "Properties");
     expect((selected.get('[aria-label="FOV"]').element as HTMLInputElement).value).toBe("35");
+    editor.dispatch({ type: "select-nodes", mode: "replace", nodeIds: ["hero", "detail"], primaryNodeId: "detail" });
+    await nextTick();
+    expect(selected.find('[role="tablist"]').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -56,6 +60,7 @@ describe("Vue Inspector groups", () => {
     await selectInspectorOption(panel.get('[aria-label="Lighting asset"]'), "");
     expect(editor.getSnapshot().environment.lighting.source).toEqual({ kind: "none" });
     expect(editor.getSnapshot().environment.background.source).toEqual({ kind: "hdr", assetId: "hdr" });
+    await openGroup(panel, "Background");
     await selectInspectorOption(panel.get('[aria-label="Background asset"]'), "");
     expect(editor.getSnapshot().environment.background.source).toEqual({ kind: "none" });
     editor.undo();
@@ -71,8 +76,10 @@ describe("Vue Inspector groups", () => {
     const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
     const panel = await openGroup(wrapper, "Environment");
     await panel.findAll("button").find((button) => button.text() === "Use six textures for both")!.trigger("click");
+    await openGroup(panel, "Background");
     await selectInspectorOption(panel.get('[aria-label="Background asset"]'), "image");
     await selectInspectorOption(panel.get('[aria-label="Background source"]'), "flat-image");
+    await openGroup(panel, "Lighting");
     const faces = panel.findAll('[role="combobox"]').filter((select) => select.attributes("aria-label")?.startsWith("Lighting ") && !["Lighting source", "Lighting asset"].includes(select.attributes("aria-label")));
     expect(faces).toHaveLength(6);
     for (const face of faces) {
@@ -82,6 +89,7 @@ describe("Vue Inspector groups", () => {
     }
     expect(editor.getSnapshot().environment.lighting.source).toEqual({ kind: "cubemap", faces: ["positive-x", "negative-x", "positive-y", "negative-y", "positive-z", "negative-z"].map((role) => ({ role, assetId: "image" })) });
     expect(editor.getSnapshot().environment.background.source).toEqual({ kind: "flat-image", assetId: "image" });
+    await openGroup(panel, "Background");
     const blur = panel.get('[aria-label="Background blur"]');
     await blur.setValue("0.4");
     await blur.trigger("keydown", { key: "Enter" });
@@ -94,6 +102,8 @@ describe("Vue Inspector groups", () => {
     editor.dispatch({ type: "import-glb", objectId: "box", asset: { id: "box-asset" } });
     editor.dispatch({ type: "select-node", nodeId: "box" });
     const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
+    const properties = await openGroup(wrapper, "Properties");
+    await openGroup(properties, "Material");
     const opacity = wrapper.findAll("label").find((label) => label.text() === "Opacity")!.get("input");
     (opacity.element as HTMLInputElement).focus();
     await opacity.setValue("1");
@@ -108,6 +118,7 @@ describe("Vue Inspector groups", () => {
     await opacity.trigger("keydown", { key: "Enter" });
     await openGroup(wrapper, "Environment");
     await openGroup(wrapper, "Properties");
+    expect(properties.get('[role="tab"][aria-selected="true"]').text()).toBe("Material");
     expect((opacity.element as HTMLInputElement).value).toBe("0.6");
     await opacity.setValue("");
     await opacity.trigger("keydown", { key: "Enter" });
@@ -134,6 +145,7 @@ describe("Vue Inspector groups", () => {
     await nextTick();
     const scene = await openGroup(wrapper, "Scene");
     expect((scene.get('[aria-label="Intensity"]').element as HTMLInputElement).value).toBe("1");
+    await openGroup(scene, "Camera views");
     const fov = scene.get('[aria-label="FOV"]');
     await fov.setValue("");
     await fov.trigger("keydown", { key: "Enter" });
@@ -176,15 +188,21 @@ describe("Vue Inspector groups", () => {
     const editor = markRaw(createEditor());
     const before = editor.getSnapshot();
     const wrapper = mount(InspectorPanel, { attachTo: document.body, props: { editor } });
-    const tabs = wrapper.findAll('[role="tab"]');
+    const tabs = wrapper.get('[aria-label="Inspector groups"]').findAll('[role="tab"]');
     expect(tabs.map((tab) => tab.text())).toEqual(["Properties", "Environment", "Scene"]);
     expect(tabs[0].attributes("aria-selected")).toBe("true");
-    expect(wrapper.get('[role="tabpanel"]:not([hidden])').text()).toContain("Select a transformable node");
+    expect(wrapper.get('[aria-label="Properties"]').get('[role="tab"][aria-selected="true"]').text()).toBe("Transform");
     await tabs[0].trigger("keydown", { key: "ArrowRight" });
     expect(tabs[1].attributes("aria-selected")).toBe("true");
     expect(document.activeElement).toBe(tabs[1].element);
     await tabs[1].trigger("keydown", { key: "End" });
-    expect(wrapper.get('[role="tabpanel"]:not([hidden])').text()).toContain("Lights");
+    const sceneTabs = wrapper.get('[aria-label="Scene"]');
+    const lights = sceneTabs.get('[role="tab"][aria-selected="true"]');
+    expect(lights.text()).toBe("Lights");
+    await lights.trigger("keydown", { key: "End" });
+    const problems = sceneTabs.get('[role="tab"][aria-selected="true"]');
+    expect(problems.text()).toBe("Problems");
+    expect(document.activeElement).toBe(problems.element);
     await tabs[2].trigger("keydown", { key: "Home" });
     expect(tabs[0].attributes("aria-selected")).toBe("true");
     expect(editor.getSnapshot()).toEqual(before);
