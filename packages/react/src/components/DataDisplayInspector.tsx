@@ -144,22 +144,18 @@ export function DataDisplayInspector({ context, data, active }: {
         return (
           <section key={entry.deviceId} className="ek-data-display-section">
             <div className="ek-data-display-row"><strong>{entry.deviceName}</strong><small>{entry.deviceId}</small></div>
-            {device ? fields.map((field) => {
-              const exists = data.cards.some((item) => item.source.connectionId === connectionId &&
-                item.source.deviceId === entry.deviceId && item.source.fieldKey === field.key);
-              return (
-                <div key={JSON.stringify(field.key)} className="ek-data-display-row">
-                  <span>{field.label} · {formatDeviceRealtimeField(device, field.key) ?? "—"}</span>
-                  <Button disabled={exists} aria-label={t("dataDisplay.addField", { field: field.label })}
-                    onClick={() => commit({
-                      type: "create-data-display",
-                      source: { connectionId, deviceId: entry.deviceId, fieldKey: field.key },
-                      name: `${entry.deviceName} · ${field.label}`,
-                      position: [0, data.cards.length * 0.7, 0]
-                    })}>{exists ? t("dataDisplay.added") : t("dataDisplay.add")}</Button>
-                </div>
-              );
-            }) : <p>{t("dataDisplay.noRealtime")}</p>}
+            {device ? fields.map((field) => (
+              <div key={JSON.stringify(field.key)} className="ek-data-display-row">
+                <span>{field.label} · {formatDeviceRealtimeField(device, field.key) ?? "—"}</span>
+                <Button aria-label={t("dataDisplay.addField", { field: field.label })}
+                  onClick={() => commit({
+                    type: "create-data-display",
+                    source: { connectionId, deviceId: entry.deviceId, fieldKey: field.key },
+                    name: `${entry.deviceName} · ${field.label}`,
+                    position: [0, data.cards.length * 0.7, 0]
+                  })}>{t("dataDisplay.add")}</Button>
+              </div>
+            )) : <p>{t("dataDisplay.noRealtime")}</p>}
           </section>
         );
       }) : null}

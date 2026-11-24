@@ -36,7 +36,7 @@ function canvasRenderer(container: HTMLElement): RendererLike {
   };
 }
 
-it("searches and selects devices, adds a live field, and restores the configured card", async () => {
+it("searches and selects devices, adds the same live field twice, and restores both cards", async () => {
   const requests: string[] = [];
   let temperature = 0;
   const editor = createEditor({
@@ -89,7 +89,8 @@ it("searches and selects devices, adds a live field, and restores the configured
     await userEvent.keyboard("{Escape}");
     await expect.element(page.getByText("2 selected")).toBeVisible();
     await expect.element(page.getByText("Temperature · 0 °C")).toBeVisible();
-    await page.getByRole("button", { name: "Add Temperature to canvas" }).click();
+    const addField = page.getByRole("button", { name: "Add Temperature to canvas" });
+    await addField.click();
     const nodeId = editor.getSnapshot().selection.nodeId!;
     await expect.poll(() => runtime.current?.getNodeTarget(nodeId)?.parent?.type).toBe("Scene");
     const preview = page.getByLabelText("Canvas text");
@@ -128,10 +129,25 @@ it("searches and selects devices, adds a live field, and restores the configured
     expect(editor.undo().snapshot.nodes[nodeId].transform?.position).toEqual([0, 0, 0]);
     temperature = 18.2;
     await expect.poll(() => preview.element().textContent?.trim(), { timeout: 7000 }).toBe("Inlet: 18.2 °C");
+    await expect.element(addField).toBeEnabled();
+    await addField.click();
+    const secondId = editor.getSnapshot().selection.nodeId!;
+    expect(secondId).not.toBe(nodeId);
+    expect(editor.getSnapshot().nodes[secondId]).toMatchObject({
+      source: { connectionId: "plant", deviceId: "pump-1999", fieldKey: "temperature" },
+      transform: { position: [0, 0.7, 0] }
+    });
+    await expect.poll(() => runtime.current?.getNodeTarget(secondId)?.parent?.type).toBe("Scene");
+    await expect.element(preview).toHaveTextContent(/^18.2$/);
+    const cardButtons = page.getByRole("button", { name: "Water pump 1999 · Temperature", exact: true });
+    await expect.poll(() => cardButtons.elements().length).toBe(2);
+    await cardButtons.first().click();
+    await expect.element(preview).toHaveTextContent(/^Inlet: 18.2 °C$/);
     const saved = editor.serialize();
     expect(JSON.stringify(saved)).not.toContain("runningStatusEnum");
     const readsBeforeRestore = requests.filter((path) => path === "/realtime").length;
     editor.restore(saved);
+    await expect.poll(() => cardButtons.elements().length).toBe(2);
     await expect.element(width).toHaveValue(200);
     await expect.element(prefix).toHaveValue("Inlet: ");
     await expect.element(page.getByRole("textbox", { name: "Suffix", exact: true })).toHaveValue(" °C");

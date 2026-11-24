@@ -119,9 +119,7 @@ const deviceFields = computed(() => {
       entry,
       fields: fields.map((field) => ({
         ...field,
-        value: formatDeviceRealtimeField(device, field.key),
-        added: cards.value.some((item) => item.source.connectionId === connectionId.value &&
-          item.source.deviceId === entry.deviceId && item.source.fieldKey === field.key)
+        value: formatDeviceRealtimeField(device, field.key)
       }))
     };
   });
@@ -205,8 +203,8 @@ function setAnchor(nodeId: string | null): boolean {
       <div class="ek-data-display-row"><strong>{{ device.entry.deviceName }}</strong><small>{{ device.entry.deviceId }}</small></div>
       <div v-for="field in device.fields" :key="JSON.stringify(field.key)" class="ek-data-display-row">
         <span>{{ field.label }} · {{ field.value ?? "—" }}</span>
-        <Button :disabled="field.added" :aria-label="t('dataDisplay.addField', { field: field.label })"
-          @click="addCard(device.entry, field)">{{ t(field.added ? "dataDisplay.added" : "dataDisplay.add") }}</Button>
+        <Button :aria-label="t('dataDisplay.addField', { field: field.label })"
+          @click="addCard(device.entry, field)">{{ t("dataDisplay.add") }}</Button>
       </div>
       <p v-if="!device.fields.length">{{ t("dataDisplay.noRealtime") }}</p>
     </section>
