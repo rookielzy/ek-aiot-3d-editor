@@ -62,6 +62,17 @@
   background: var(--ek-workbench-accent-soft);
 }
 
+.ek-data-display-anchor {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.ek-data-display-anchor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
 .ek-data-display-position {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

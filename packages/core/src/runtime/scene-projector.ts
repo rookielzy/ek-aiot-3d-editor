@@ -5,6 +5,7 @@ import { createMissingAssetProblem, type Problem } from "../assets/problems";
 import type { ResolvedAsset } from "../assets/types";
 import type { AssetReference } from "../snapshot/types";
 import type { SceneCameraNode, SceneImportedGlbNode, SceneLightNode, SceneNode, SceneObject, SceneObjectNode, SceneSnapshot } from "../snapshot/types";
+import { isDataDisplayAnchor } from "../snapshot/nodes";
 import { cloneTransform } from "../snapshot/transforms";
 import { RuntimeDataDisplayCard } from "./data-display-card";
 import { EnvironmentProjector } from "./environment-projector";
@@ -57,6 +58,7 @@ export class SceneProjector {
   #disposed = false;
   #rendererShadowMapAvailable = true;
   #dataDisplayValues: ReadonlyMap<string, string> = new Map();
+  #dataDisplayCards = new Map<string, RuntimeDataDisplayCard>();
   #dataDisplayPixelScale = 1;
 
   constructor(options: SceneProjectorOptions = {}) {
@@ -91,16 +93,15 @@ export class SceneProjector {
 
   setDataDisplayValues(values: ReadonlyMap<string, string>): void {
     this.#dataDisplayValues = values;
-    for (const [id, object] of this.objects.nodeEntries()) {
-      if (object instanceof RuntimeDataDisplayCard) object.setValue(values.get(id));
+    for (const [id, card] of this.#dataDisplayCards) {
+      card.setValue(values.get(id));
     }
   }
 
   resizeDataDisplays(pixelScale: number): void {
-    if (pixelScale === this.#dataDisplayPixelScale) return;
     this.#dataDisplayPixelScale = pixelScale;
-    for (const [, object] of this.objects.nodeEntries()) {
-      if (object instanceof RuntimeDataDisplayCard) object.resize(pixelScale);
+    for (const card of this.#dataDisplayCards.values()) {
+      card.resize(pixelScale);
     }
   }
 
@@ -125,6 +126,7 @@ export class SceneProjector {
         return;
       }
     }
+    this.#syncDataDisplayAnchors(snapshot);
     this.#lights.release(activeLightIds);
     this.#syncMeshShadowParticipation(this.#lights.shadowSummary.enabled);
 
@@ -147,6 +149,35 @@ export class SceneProjector {
 
   getLight(lightId: string): Object3D | undefined {
     return this.#lights.get(lightId);
+  }
+
+  #syncDataDisplayAnchors(snapshot: SceneSnapshot): void {
+    for (const [id, card] of this.#dataDisplayCards) {
+      const node = snapshot.nodes[id];
+      if (node?.kind !== "data-display") continue;
+      const anchor = node.anchorNodeId && isDataDisplayAnchor(snapshot.nodes[node.anchorNodeId])
+        ? this.objects.get(node.anchorNodeId) : undefined;
+      card.setAnchor(this.scene, anchor);
+      card.resize(this.#dataDisplayPixelScale);
+      this.objects.set(id, card, {
+        kind: node.kind,
+        pickable: card.visible,
+        transformable: card.visible,
+        selected: snapshot.selection.nodeIds.includes(id),
+        primarySelected: snapshot.selection.nodeId === id
+      });
+      if (node.anchorNodeId && !anchor) {
+        this.#addProblem({
+          id: `data-display-anchor-unresolved:${id}`,
+          code: "data-display-anchor-unresolved",
+          severity: "warning",
+          source: "runtime",
+          target: { kind: "scene", sceneId: snapshot.scene.id },
+          recoverability: "user-action",
+          message: `The model attachment for ${node.name} is unavailable.`
+        });
+      }
+    }
   }
 
   getLightTarget(lightId: string): Object3D | undefined {
@@ -197,17 +228,15 @@ export class SceneProjector {
         runtimeObject = this.#projectGroupNode(node, snapshot);
         break;
       case "data-display": {
-        const previous = this.objects.get(node.id);
-        const card = previous instanceof RuntimeDataDisplayCard ? previous : new RuntimeDataDisplayCard();
+        const previous = this.#dataDisplayCards.get(node.id);
+        const card = previous ?? new RuntimeDataDisplayCard();
+        if (!previous) {
+          this.#dataDisplayCards.set(node.id, card);
+          this.objects.set(node.id, card, { kind: node.kind, pickable: false, transformable: false });
+        }
         card.name = node.name;
         card.position.fromArray(node.transform.position);
         card.sync(node, this.#dataDisplayValues.get(node.id));
-        card.resize(this.#dataDisplayPixelScale);
-        this.objects.set(node.id, card, {
-          kind: node.kind,
-          selected: snapshot.selection.nodeIds.includes(node.id),
-          primarySelected: snapshot.selection.nodeId === node.id
-        });
         runtimeObject = card;
         break;
       }
@@ -238,7 +267,7 @@ export class SceneProjector {
       }
       return null;
     }
-    if (node.kind !== "imported" && runtimeObject.parent !== parent) {
+    if (node.kind !== "imported" && node.kind !== "data-display" && runtimeObject.parent !== parent) {
       parent.add(runtimeObject);
     }
 
@@ -532,6 +561,7 @@ export class SceneProjector {
       disposeObjectTree(object);
     }
     this.objects.clear();
+    this.#dataDisplayCards.clear();
     this.#environment.dispose();
     this.#lights.dispose();
     this.#problems = [];
@@ -812,6 +842,7 @@ export class SceneProjector {
     }
 
     for (const nodeId of removedNodeIds) {
+      this.#dataDisplayCards.delete(nodeId);
       const target = this.objects.getTarget(nodeId);
       if (target?.kind === "imported") {
         this.#releaseImportedTarget(nodeId);

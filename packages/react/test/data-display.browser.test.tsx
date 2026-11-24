@@ -1,8 +1,8 @@
 import { createRoot } from "react-dom/client";
-import { BoxGeometry, Mesh, MeshBasicMaterial, Sprite, WebGLRenderer } from "three";
+import { BoxGeometry, Mesh, MeshBasicMaterial, Sprite, Vector3, WebGLRenderer } from "three";
 import { expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { createEditor, type EditorRuntime, type RendererLike } from "@ek-aiot/3d-editor-core";
+import { AssetResolverBridge, createEditor, type EditorRuntime, type RendererLike } from "@ek-aiot/3d-editor-core";
 import { EditorWorkbench } from "../src/components/EditorWorkbench";
 
 function canvasRenderer(container: HTMLElement): RendererLike {
@@ -164,7 +164,59 @@ it("picks a card in the viewport and drags its X translation handle", async () =
   }
 });
 
-it("renders the same pixel width across camera distances and respects model depth", async () => {
+it("picks a model behind the card and preserves the world position on detach", async () => {
+  const editor = createEditor();
+  editor.dispatch({ type: "create-data-connection", connection: {
+    id: "plant", name: "Plant", baseUrl: "https://example.test", auth: { kind: "none" }, headers: {}, timeoutMs: 5000
+  } });
+  editor.dispatch({ type: "import-glb", objectId: "pump", name: "Pump", asset: { id: "pump-model" } });
+  editor.dispatch({
+    type: "create-data-display", nodeId: "temperature", name: "Temperature", position: [0, 0, 2],
+    source: { connectionId: "plant", deviceId: "pump", fieldKey: "temperature" }
+  });
+  const host = document.body.appendChild(document.createElement("div"));
+  host.style.height = "700px";
+  const root = createRoot(host);
+  const resolver = new AssetResolverBridge(() => ({ uri: "/pump.glb" }));
+  const loader = { load: async () => new Mesh(new BoxGeometry(), new MeshBasicMaterial()) };
+  try {
+    root.render(<EditorWorkbench editor={editor} locale="en" rendererFactory={canvasRenderer} resolver={resolver} loader={loader}
+      onRuntimeReady={(runtime) => runtime?.applyCameraView({
+        id: "front", name: "Front", projection: { kind: "perspective", fov: 50 },
+        position: [0, 0, 6], target: [0, 0, 0], near: 0.1, far: 1000
+      })} />);
+    await expect.poll(() => editor.getRuntime()?.getNodeTarget("temperature")?.parent?.type).toBe("Scene");
+    const pick = page.getByRole("button", { name: "Pick a model in the viewport" });
+    await pick.click();
+    await userEvent.keyboard("{Escape}");
+    await expect.element(pick).toBeVisible();
+    expect(editor.getSnapshot().selection.nodeId).toBe("temperature");
+    await pick.click();
+    await page.getByTestId("data-display-canvas").click();
+    await expect.element(page.getByText("Position relative to model")).toBeVisible();
+    const x = page.getByRole("spinbutton", { name: "X", exact: true });
+    await expect.element(x).toHaveValue(0);
+    await x.fill("2");
+    await userEvent.keyboard("{Enter}");
+    editor.dispatch({
+      type: "set-node-transform", nodeId: "pump",
+      transform: { position: [3, 1, 0], rotation: [0, 0, Math.PI / 2], scale: [2, 3, 1] }
+    });
+    await expect.poll(() => editor.getRuntime()?.getNodeTarget("temperature")?.getWorldPosition(new Vector3()).y).toBeCloseTo(5);
+    await page.getByRole("button", { name: "Detach from model" }).click();
+    await expect.element(page.getByText("World position")).toBeVisible();
+    const position = editor.getSnapshot().nodes.temperature.transform!.position;
+    expect(position[0]).toBeCloseTo(3);
+    expect(position[1]).toBeCloseTo(5);
+    expect(position[2]).toBe(0);
+  } finally {
+    root.unmount();
+    editor.dispose();
+    host.remove();
+  }
+});
+
+it("renders the same pixel width across camera distances and respects model depth when attached to a scaled node", async () => {
   const editor = createEditor();
   editor.dispatch({ type: "create-data-connection", connection: {
     id: "plant", name: "Plant", baseUrl: "https://example.test", auth: { kind: "none" }, headers: {}, timeoutMs: 5000
@@ -176,6 +228,8 @@ it("renders the same pixel width across camera distances and respects model dept
   editor.dispatch({ type: "update-data-display-style", nodeId: "temperature", style: {
     width: 120, height: 40, backgroundColor: "#ff0000", borderColor: "#ff0000"
   } });
+  editor.dispatch({ type: "create-group", nodeId: "scaled-model", transform: { scale: [3, 2, 1] } });
+  editor.dispatch({ type: "set-data-display-anchor", nodeId: "temperature", anchorNodeId: "scaled-model" });
   editor.dispatch({ type: "select-node", nodeId: null });
   const host = document.body.appendChild(document.createElement("div"));
   host.style.height = "700px";
@@ -209,7 +263,7 @@ it("renders the same pixel width across camera distances and respects model dept
   try {
     root.render(<EditorWorkbench editor={editor} locale="en" rendererFactory={rendererFactory}
       interactions={{ resize: true }} />);
-    await expect.poll(() => editor.getRuntime()?.getNodeTarget("temperature")?.parent?.type).toBe("Scene");
+    await expect.poll(() => editor.getRuntime()?.getNodeTarget("temperature")?.parent?.type).toBe("Group");
     const runtime = editor.getRuntime()!;
     for (const distance of [6, 20]) {
       runtime.applyCameraView({

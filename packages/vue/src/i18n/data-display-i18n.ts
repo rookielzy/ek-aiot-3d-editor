@@ -41,6 +41,14 @@ const EN_MESSAGES = {
   "dataDisplay.borderColor": "Border",
   "dataDisplay.textColor": "Text color",
   "dataDisplay.position": "World position",
+  "dataDisplay.localPosition": "Position relative to model",
+  "dataDisplay.anchor": "Model attachment",
+  "dataDisplay.unattached": "Unattached",
+  "dataDisplay.anchorMissing": "Attachment target unavailable",
+  "dataDisplay.pickAnchor": "Pick a model in the viewport",
+  "dataDisplay.cancelAnchorPick": "Cancel picking",
+  "dataDisplay.anchorPickHint": "Click a model in the viewport. Press Esc to cancel.",
+  "dataDisplay.detachAnchor": "Detach from model",
 };
 
 const ZH_CN_MESSAGES = {
@@ -84,6 +92,14 @@ const ZH_CN_MESSAGES = {
   "dataDisplay.borderColor": "边框色",
   "dataDisplay.textColor": "字体颜色",
   "dataDisplay.position": "世界坐标",
+  "dataDisplay.localPosition": "模型相对坐标",
+  "dataDisplay.anchor": "吸附到模型",
+  "dataDisplay.unattached": "未吸附",
+  "dataDisplay.anchorMissing": "吸附目标不可用",
+  "dataDisplay.pickAnchor": "从画布选取模型",
+  "dataDisplay.cancelAnchorPick": "取消选取",
+  "dataDisplay.anchorPickHint": "点击画布中的模型。按 Esc 可取消。",
+  "dataDisplay.detachAnchor": "解除吸附",
 } satisfies Record<keyof typeof EN_MESSAGES, string>;
 
 export function resolveDataDisplayMessage(

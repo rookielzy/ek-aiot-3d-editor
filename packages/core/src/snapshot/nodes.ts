@@ -1,6 +1,10 @@
 import { createObjectNode } from "./defaults";
 import type { SceneNode, SceneSnapshot } from "./types";
 
+export function isDataDisplayAnchor(node: SceneNode | undefined): boolean {
+  return node?.kind === "object" || node?.kind === "imported" || node?.kind === "group";
+}
+
 export function createLightNodeId(lightId: string, nodes: Record<string, SceneNode>): string {
   if (!nodes[lightId]) {
     return lightId;

@@ -113,6 +113,7 @@ export interface DataDisplayStyle {
 
 export interface SceneDataDisplayNode extends BaseSceneNode {
   kind: "data-display";
+  anchorNodeId?: NodeId;
   transform: Transform;
   source: DataDisplaySource;
   style: DataDisplayStyle;

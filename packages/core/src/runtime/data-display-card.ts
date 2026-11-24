@@ -1,4 +1,4 @@
-import { CanvasTexture, Group, Sprite, SpriteMaterial, SRGBColorSpace } from "three";
+import { CanvasTexture, Group, Sprite, SpriteMaterial, SRGBColorSpace, type Object3D, type Scene } from "three";
 import { formatDataDisplayText } from "../data-sources/device-response";
 import type { SceneDataDisplayNode } from "../snapshot/types";
 
@@ -8,9 +8,13 @@ export class RuntimeDataDisplayCard extends Group {
   readonly #context: CanvasRenderingContext2D | null;
   #node: SceneDataDisplayNode | undefined;
   #content: string | undefined;
+  #anchor: Object3D | undefined;
+  readonly #anchorFrame = new Group();
 
   constructor() {
     super();
+    this.#anchorFrame.matrixAutoUpdate = false;
+    this.#anchorFrame.matrixWorldAutoUpdate = false;
     this.#canvas = typeof document === "undefined" ? undefined : document.createElement("canvas");
     this.#context = this.#canvas?.getContext("2d") ?? null;
     this.#sprite.geometry = this.#sprite.geometry.clone();
@@ -58,7 +62,37 @@ export class RuntimeDataDisplayCard extends Group {
 
   resize(pixelScale: number): void {
     const style = this.#node?.style;
-    if (style) this.#sprite.scale.set(style.width * pixelScale, style.height * pixelScale, 1);
+    if (!style) return;
+    if (!this.#anchor) {
+      this.#sprite.scale.set(style.width * pixelScale, style.height * pixelScale, 1);
+      return;
+    }
+    this.#anchor.updateWorldMatrix(true, false);
+    this.#anchorFrame.matrixWorld.copy(this.#anchor.matrixWorld);
+    this.#anchorFrame.updateMatrixWorld(true);
+    // The anchor transforms the offset, while the billboard keeps its authored pixel size.
+    const matrix = this.#anchorFrame.matrixWorld.elements;
+    const scaleX = Math.hypot(matrix[0], matrix[1], matrix[2]);
+    const scaleY = Math.hypot(matrix[4], matrix[5], matrix[6]);
+    this.#sprite.scale.set(style.width * pixelScale / (scaleX || 1), style.height * pixelScale / (scaleY || 1), 1);
+  }
+
+  setAnchor(scene: Scene, anchor: Object3D | undefined): void {
+    this.#anchor = anchor;
+    this.visible = !this.#node?.anchorNodeId || Boolean(anchor);
+    if (!anchor) {
+      if (this.parent !== scene) scene.add(this);
+      return;
+    }
+    if (this.#anchorFrame.parent !== scene) scene.add(this.#anchorFrame);
+    if (this.parent !== this.#anchorFrame) this.#anchorFrame.add(this);
+  }
+
+  override removeFromParent(): this {
+    const anchored = this.parent === this.#anchorFrame;
+    super.removeFromParent();
+    if (anchored) this.#anchorFrame.removeFromParent();
+    return this;
   }
 
   get pixelSize(): { width: number; height: number } | undefined {

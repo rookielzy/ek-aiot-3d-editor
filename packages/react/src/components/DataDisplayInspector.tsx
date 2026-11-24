@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  buildSetDataDisplayAnchorCommand,
   formatDataDisplayText,
   formatDeviceRealtimeField,
+  getDataDisplayAnchorOptions,
   type DataDeviceListItem,
   type Transform
 } from "@ek-aiot/3d-editor-core";
@@ -11,6 +13,7 @@ import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
 import type { DataDisplayRealtimeContext } from "../hooks/use-data-display-realtime";
 import { InspectorColorInput } from "./InspectorColorInput";
 import { InspectorNumberInput } from "./InspectorNumberInput";
+import { InspectorSelect } from "./InspectorSelect";
 import { InspectorTextInput } from "./InspectorTextInput";
 import { Button } from "./ui/Button";
 import { DeviceMultiSelect } from "./ui/DeviceMultiSelect";
@@ -35,6 +38,7 @@ export function DataDisplayInspector({ context, data, active }: {
   const [selections, setSelections] = useState<ReadonlyMap<string, DataDeviceListItem[]>>(() => new Map());
   const [listRefresh, setListRefresh] = useState(0);
   const [commandError, setCommandError] = useState<string>();
+  const [pickingCardId, setPickingCardId] = useState<string | null>(null);
   const connection = connections.find((candidate) => candidate.id === preferredConnection) ?? connections[0];
   const connectionId = connection?.id ?? "";
   const selectionsForConnection = selections.get(connectionId) ?? [];
@@ -46,6 +50,28 @@ export function DataDisplayInspector({ context, data, active }: {
     return () => data.browse(null);
   }, [data.browse, browsingConnection]);
   const card = data.cards.find((item) => item.id === snapshot.selection.nodeId);
+  const cardId = card?.id;
+  const anchorId = card?.anchorNodeId ?? "";
+  const anchorOptions = useMemo(() => getDataDisplayAnchorOptions(snapshot), [snapshot]);
+  const pickingAnchor = pickingCardId !== null && cardId === pickingCardId;
+  const runtime = context.runtime;
+  useEffect(() => {
+    if (!pickingCardId) return;
+    if (!active || cardId !== pickingCardId) {
+      setPickingCardId(null);
+      return;
+    }
+    const cancel = runtime?.startDataDisplayAnchorPick?.((nodeId) => {
+      setPickingCardId(null);
+      const current = editor.getSnapshot().nodes[pickingCardId];
+      if (nodeId && current?.kind === "data-display") {
+        const result = editor.dispatch(buildSetDataDisplayAnchorCommand(editor, current, nodeId));
+        setCommandError(result.ok ? undefined : result.error);
+      }
+    });
+    if (!cancel) setPickingCardId(null);
+    return cancel ?? undefined;
+  }, [active, cardId, editor, pickingCardId, runtime]);
   const cardConnection = card ? snapshot.dataSources.connections[card.source.connectionId] : undefined;
   const cardRealtime = card ? data.getResult(card.source.connectionId) : undefined;
   const cardDevices = useDeviceEndpoint(data.service,
@@ -208,7 +234,34 @@ export function DataDisplayInspector({ context, data, active }: {
                 })} />
             </div>
           ))}
-          <strong>{t("dataDisplay.position")}</strong>
+          <div className="ek-data-display-anchor">
+            <strong>{t("dataDisplay.anchor")}</strong>
+            <InspectorSelect searchable aria-label={t("dataDisplay.anchor")} value={anchorId} i18n={i18n}
+              disabled={!anchorOptions.length}
+              options={[
+                { value: "", label: t("dataDisplay.unattached"), disabled: true },
+                ...(anchorId && !anchorOptions.some((item) => item.value === anchorId)
+                  ? [{ value: anchorId, label: t("dataDisplay.anchorMissing"), disabled: true }] : []),
+                ...anchorOptions
+              ]}
+              onCommit={(value) => {
+                setPickingCardId(null);
+                return commit(buildSetDataDisplayAnchorCommand(editor, card, value));
+              }} />
+            <div className="ek-data-display-anchor-actions">
+              {runtime?.startDataDisplayAnchorPick && anchorOptions.length > 0 ? (
+                <Button aria-pressed={pickingAnchor} onClick={() => setPickingCardId(pickingAnchor ? null : card.id)}>
+                  {t(pickingAnchor ? "dataDisplay.cancelAnchorPick" : "dataDisplay.pickAnchor")}
+                </Button>
+              ) : null}
+              {anchorId ? <Button onClick={() => {
+                setPickingCardId(null);
+                commit(buildSetDataDisplayAnchorCommand(editor, card, null));
+              }}>{t("dataDisplay.detachAnchor")}</Button> : null}
+            </div>
+            {pickingAnchor ? <p role="status">{t("dataDisplay.anchorPickHint")}</p> : null}
+          </div>
+          <strong>{t(anchorId ? "dataDisplay.localPosition" : "dataDisplay.position")}</strong>
           <div className="ek-data-display-position">
             {axes.map((axis, index) => (
               <label key={axis}>

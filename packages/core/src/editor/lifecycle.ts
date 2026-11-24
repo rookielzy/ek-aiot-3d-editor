@@ -694,6 +694,7 @@ const DATA_PREVIEW_COMMANDS = new Set<Command["type"]>([
   "duplicate-data-connection",
   "delete-data-connection",
   "create-data-display",
+  "set-data-display-anchor",
   "update-data-display-style",
   "create-data-query",
   "update-data-query",

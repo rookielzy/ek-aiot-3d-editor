@@ -48,6 +48,7 @@ export interface TransformControlsAdapterOptions {
   controller: TransformController;
   cameraControls?: ViewportCameraControls | null;
   mode?: TransformMode;
+  space?: "world" | "local";
   snap?: SnapSettings;
   onChange?: () => void;
   onSnapFeedback?: (feedback: ViewportSnapFeedbackState) => void;
@@ -63,6 +64,8 @@ export class TransformControlsAdapter {
   #onSnapFeedback: (feedback: ViewportSnapFeedbackState) => void;
   #mode: TransformMode;
   #positionOnly = false;
+  #localAxes = false;
+  #space: "world" | "local";
   #snap: SnapSettings;
   #helper: Object3D;
   #attachedNodeId: string | null = null;
@@ -94,6 +97,7 @@ export class TransformControlsAdapter {
     this.#onChange = options.onChange ?? (() => {});
     this.#onSnapFeedback = options.onSnapFeedback ?? (() => {});
     this.#mode = options.mode ?? "translate";
+    this.#space = options.space ?? "world";
     this.#snap = options.snap ?? {};
     this.#helper = this.#controls.getHelper();
     this.#helper.userData = {
@@ -129,6 +133,13 @@ export class TransformControlsAdapter {
     if (!nodeId || !object) {
       this.#detach();
       return;
+    }
+
+    const node = snapshot.nodes[nodeId];
+    const localAxes = node?.kind === "data-display" && Boolean(node.anchorNodeId);
+    if (this.#localAxes !== localAxes) {
+      this.#localAxes = localAxes;
+      this.#controls.setSpace?.(localAxes ? "local" : this.#space);
     }
 
     if (this.#attachedNodeId !== nodeId) {

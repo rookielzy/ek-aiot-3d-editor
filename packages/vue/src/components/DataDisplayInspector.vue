@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, ref, shallowReactive, watch } from "vue";
 import {
-  formatDataDisplayText, formatDeviceRealtimeField,
+  buildSetDataDisplayAnchorCommand, formatDataDisplayText, formatDeviceRealtimeField, getDataDisplayAnchorOptions,
   type Command, type DataDeviceListItem, type DataDisplayStyle, type Transform
 } from "@ek-aiot/3d-editor-core";
 import type { DataDisplayRealtimeContext } from "../composables/use-data-display-realtime";
@@ -51,6 +51,31 @@ watch(() => props.context.editor, () => {
 });
 
 const card = computed(() => cards.value.find((item) => item.id === props.context.snapshot.selection.nodeId));
+const anchorId = computed(() => card.value?.anchorNodeId ?? "");
+const anchorOptions = computed(() => getDataDisplayAnchorOptions(props.context.snapshot));
+const anchorChoices = computed(() => [
+  { value: "", label: t("dataDisplay.unattached"), disabled: true },
+  ...(anchorId.value && !anchorOptions.value.some((item) => item.value === anchorId.value)
+    ? [{ value: anchorId.value, label: t("dataDisplay.anchorMissing"), disabled: true }] : []),
+  ...anchorOptions.value
+]);
+const pickingCardId = ref<string | null>(null);
+const pickingAnchor = computed(() => pickingCardId.value !== null && card.value?.id === pickingCardId.value);
+watch([() => props.active, () => card.value?.id, () => props.context.runtime, pickingCardId], ([active, cardId, runtime, pickingId], _, cleanup) => {
+  if (!pickingId) return;
+  if (!active || pickingId !== cardId) {
+    pickingCardId.value = null;
+    return;
+  }
+  const editor = props.context.editor;
+  const cancel = runtime?.startDataDisplayAnchorPick?.((nodeId) => {
+    pickingCardId.value = null;
+    const current = editor.getSnapshot().nodes[pickingId];
+    if (nodeId && current?.kind === "data-display") commit(buildSetDataDisplayAnchorCommand(editor, current, nodeId));
+  });
+  if (cancel) cleanup(cancel);
+  if (!cancel) pickingCardId.value = null;
+});
 const cardConnection = computed(() => card.value && props.context.snapshot.dataSources.connections[card.value.source.connectionId]);
 const cardRealtime = computed(() => card.value && props.data.getResult(card.value.source.connectionId));
 const cardDevices = useDeviceEndpoint(props.data,
@@ -142,6 +167,11 @@ function updatePosition(index: number, raw: string): boolean {
   next[index] = Number(raw);
   return commit({ type: "set-node-transform", nodeId: card.value.id, transform: { position: next } });
 }
+
+function setAnchor(nodeId: string | null): boolean {
+  pickingCardId.value = null;
+  return !!card.value && commit(buildSetDataDisplayAnchorCommand(props.context.editor, card.value, nodeId));
+}
 </script>
 
 <template>
@@ -219,7 +249,20 @@ function updatePosition(index: number, raw: string): boolean {
         <InspectorColorInput :aria-label="t(`dataDisplay.${field}`)" :value="card.style[field]" :i18n="context.i18n"
           :on-commit="(value) => updateStyle({ [field]: value })" />
       </div>
-      <strong>{{ t("dataDisplay.position") }}</strong>
+      <div class="ek-data-display-anchor">
+        <strong>{{ t("dataDisplay.anchor") }}</strong>
+        <InspectorSelect searchable :aria-label="t('dataDisplay.anchor')" :value="anchorId"
+          :options="anchorChoices" :disabled="!anchorOptions.length" :i18n="context.i18n" :on-commit="setAnchor" />
+        <div class="ek-data-display-anchor-actions">
+          <Button v-if="context.runtime?.startDataDisplayAnchorPick && anchorOptions.length" :aria-pressed="pickingAnchor"
+            @click="pickingCardId = pickingAnchor ? null : card.id">
+            {{ t(pickingAnchor ? "dataDisplay.cancelAnchorPick" : "dataDisplay.pickAnchor") }}
+          </Button>
+          <Button v-if="anchorId" @click="setAnchor(null)">{{ t("dataDisplay.detachAnchor") }}</Button>
+        </div>
+        <p v-if="pickingAnchor" role="status">{{ t("dataDisplay.anchorPickHint") }}</p>
+      </div>
+      <strong>{{ t(anchorId ? "dataDisplay.localPosition" : "dataDisplay.position") }}</strong>
       <div class="ek-data-display-position">
         <label v-for="(axis, index) in axes" :key="axis">
           {{ axis }}

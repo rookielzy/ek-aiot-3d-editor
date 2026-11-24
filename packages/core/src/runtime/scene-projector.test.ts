@@ -1,4 +1,4 @@
-import { AmbientLight, BoxGeometry, Group, Mesh, MeshStandardMaterial, PointLight, Texture } from "three";
+import { AmbientLight, BoxGeometry, Group, Mesh, MeshStandardMaterial, PointLight, Texture, Vector3 } from "three";
 import { describe, expect, it, vi } from "vitest";
 import { attachGlbImportManifestMetadata, createGlbImportDiagnosticsFromError, createGlbImportManifest } from "../assets/import-pipeline";
 import { AssetResolverBridge } from "../assets/resolver";
@@ -774,6 +774,15 @@ describe("scene projector", () => {
       expandImportedTargets: true
     });
     const importedNodeId = findImportedNodeIdByKey(store.getSnapshot(), "glb:object-a/node:nodes/0")!;
+    dispatcher.dispatch({ type: "create-data-connection", connection: {
+      id: "plant", name: "Plant", baseUrl: "https://example.test", auth: { kind: "none" }, headers: {}, timeoutMs: 5000
+    } });
+    dispatcher.dispatch({
+      type: "create-data-display", nodeId: "temperature", name: "Temperature",
+      source: { connectionId: "plant", deviceId: "pump", fieldKey: "temperature" }
+    });
+    expect(dispatcher.dispatch({ type: "set-data-display-anchor", nodeId: "temperature", anchorNodeId: importedNodeId }).ok).toBe(true);
+    dispatcher.dispatch({ type: "set-node-transform", nodeId: "temperature", transform: { position: [0, 1, 0] } });
     dispatcher.dispatch({
       type: "set-node-transform",
       nodeId: importedNodeId,
@@ -805,6 +814,9 @@ describe("scene projector", () => {
 
     await projector.project(store.getSnapshot());
     expect(loadedPivot.position.toArray()).toEqual([4, 5, 6]);
+    const card = projector.objects.get("temperature")!;
+    expect(card.position.toArray()).toEqual([0, 1, 0]);
+    expect(card.getWorldPosition(new Vector3()).toArray()).toEqual([4, 6, 6]);
 
     const snapshotWithoutOverride = {
       ...store.getSnapshot(),
@@ -816,6 +828,14 @@ describe("scene projector", () => {
     await projector.project(snapshotWithoutOverride);
 
     expect(loadedPivot.position.toArray()).toEqual([1, 2, 3]);
+    expect(card.getWorldPosition(new Vector3()).toArray()).toEqual([1, 3, 3]);
+    expect(dispatcher.dispatch({ type: "delete-nodes", nodeIds: [importedNodeId] }).ok).toBe(true);
+    await projector.project(store.getSnapshot());
+    expect(card.visible).toBe(false);
+    expect(projector.problems).toContainEqual(expect.objectContaining({ code: "data-display-anchor-unresolved" }));
+    await projector.project(dispatcher.undo().snapshot);
+    expect(card.visible).toBe(true);
+    projector.dispose();
   });
 
   it("releases stale imported runtime targets and restores loaded base transforms", async () => {

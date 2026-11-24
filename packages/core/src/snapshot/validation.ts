@@ -365,6 +365,9 @@ function validateNode(id: string, node: unknown, objects: unknown, lights: unkno
       if (node.parentId !== null || !Array.isArray(node.children) || node.children.length || !isTransform(node.transform)) {
         errors.push(`Data display ${id} must be a root node with a valid transform and no children.`);
       }
+      if (node.anchorNodeId !== undefined && !isId(node.anchorNodeId)) {
+        errors.push(`Data display ${id} anchorNodeId must be a non-empty node ID.`);
+      }
       if (!isPlainRecord(source) || !isId(source.connectionId) || !isId(source.deviceId) ||
         (source.fieldKey !== null && !isId(source.fieldKey))) {
         errors.push(`Data display ${id} must reference a connection, device and field.`);

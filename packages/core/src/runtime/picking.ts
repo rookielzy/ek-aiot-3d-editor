@@ -2,7 +2,7 @@ import { Raycaster, Vector2, type Camera, type Object3D } from "three";
 import type { CommandDispatcher } from "../commands/dispatcher";
 import type { CommandResult } from "../commands/types";
 import type { SelectionMode } from "../selection/selection";
-import type { ThreeObjectMap } from "./three-object-map";
+import type { RuntimeNodeTarget, ThreeObjectMap } from "./three-object-map";
 
 export class ObjectPicker {
   #raycaster = new Raycaster();
@@ -50,9 +50,10 @@ export class ObjectPicker {
     container: HTMLElement,
     clientX: number,
     clientY: number,
-    candidates: Object3D[]
+    candidates: Object3D[],
+    accepts?: (target: RuntimeNodeTarget) => boolean
   ): string | null {
-    return this.#hitNodeId(container, clientX, clientY, candidates);
+    return this.#hitNodeId(container, clientX, clientY, candidates, accepts);
   }
 
   pickFromClientPoint(
@@ -74,7 +75,8 @@ export class ObjectPicker {
     container: HTMLElement,
     clientX: number,
     clientY: number,
-    candidates: Object3D[]
+    candidates: Object3D[],
+    accepts?: (target: RuntimeNodeTarget) => boolean
   ): string | null {
     const rect = container.getBoundingClientRect();
     const width = rect.width || container.clientWidth || 1;
@@ -91,7 +93,7 @@ export class ObjectPicker {
     const hits = this.#raycaster.intersectObjects(candidates, true);
     for (const hit of hits) {
       const target = this.objects.getTargetForObject(hit.object);
-      if (target) {
+      if (target && (!accepts || accepts(target))) {
         return target.nodeId;
       }
     }

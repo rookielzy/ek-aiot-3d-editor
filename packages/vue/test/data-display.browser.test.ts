@@ -152,6 +152,7 @@ it("picks a card in the viewport and drags its X translation handle", async () =
     type: "create-data-display", nodeId: "temperature", name: "Temperature",
     source: { connectionId: "plant", deviceId: "pump", fieldKey: "temperature" }
   });
+  editor.dispatch({ type: "create-group", nodeId: "pump-frame", name: "Pump assembly" });
   editor.dispatch({ type: "select-node", nodeId: null });
   await editor.getDataService()?.startPreview();
   editor.transformMode.set("rotate");
@@ -173,6 +174,11 @@ it("picks a card in the viewport and drags its X translation handle", async () =
     await canvas.click();
     await expect.element(page.getByRole("tab", { name: "Data display" })).toHaveAttribute("aria-selected", "true");
     expect(editor.getSnapshot().selection.nodeId).toBe("temperature");
+    await page.getByRole("combobox", { name: "Model attachment" }).click();
+    await page.getByRole("option", { name: "Pump assembly" }).click();
+    await expect.element(page.getByText("Position relative to model")).toBeVisible();
+    expect(editor.getSnapshot().nodes.temperature).toMatchObject({ anchorNodeId: "pump-frame" });
+    await expect.poll(() => editor.getRuntime()?.getNodeTarget("temperature")?.parent?.type).toBe("Group");
     const element = canvas.element() as HTMLCanvasElement;
     await expect.poll(() => Number(element.dataset.transformX)).toBeGreaterThan(0);
     const bounds = element.getBoundingClientRect();
@@ -186,7 +192,9 @@ it("picks a card in the viewport and drags its X translation handle", async () =
     expect(position.slice(1)).toEqual([0, 0]);
     const positionX = page.getByRole("spinbutton", { name: "X", exact: true });
     await expect.poll(() => Number((positionX.element() as HTMLInputElement).value)).toBeCloseTo(position[0]);
-    expect(editor.undo().snapshot.nodes.temperature.transform?.position).toEqual([0, 0, 0]);
+    expect(editor.undo().snapshot.nodes.temperature).toMatchObject({
+      anchorNodeId: "pump-frame", transform: { position: [0, 0, 0] }
+    });
   } finally {
     app.unmount();
     editor.dispose();

@@ -676,5 +676,6 @@ export {
 } from "./public-api";
 export { formatDataDisplayText, formatDeviceRealtimeField, type DataDeviceListItem, type DataDeviceRealtimeItem, type DataDeviceRealtimeField } from "./data-sources/device-response";
 export type { DataDeviceReadResult } from "./data-sources/service";
-export type { CreateDataDisplayCommand, UpdateDataDisplayStyleCommand } from "./commands/types";
+export { buildSetDataDisplayAnchorCommand, getDataDisplayAnchorOptions } from "./commands/data-display";
+export type { CreateDataDisplayCommand, SetDataDisplayAnchorCommand, UpdateDataDisplayStyleCommand } from "./commands/types";
 export type { SceneDataDisplayNode, DataDisplaySource, DataDisplayStyle } from "./snapshot/types";

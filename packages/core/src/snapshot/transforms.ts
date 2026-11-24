@@ -70,7 +70,7 @@ function getWorldMatrix(snapshot: SceneSnapshot, objectId: string): Matrix4 {
   return getWorldMatrix(snapshot, object.parentId).multiply(localMatrix);
 }
 
-function getWorldNodeMatrix(snapshot: SceneSnapshot, nodeId: string): Matrix4 {
+export function getWorldNodeMatrix(snapshot: SceneSnapshot, nodeId: string): Matrix4 {
   const node = snapshot.nodes[nodeId];
   if (!node) {
     throw new Error(`Node ${nodeId} does not exist.`);

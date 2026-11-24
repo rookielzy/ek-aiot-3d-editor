@@ -9,7 +9,7 @@ import { applyCreateCameraView, applyDeleteCameraView, applySetDefaultCameraView
 import { applyCreateGroup } from "./create-group";
 import { applyCreateImportedGlbTargets } from "./create-imported-glb-targets";
 import { applyCreateDataConnection, applyDeleteDataConnection, applyDuplicateDataConnection, applyUpdateDataConnection } from "./data-connection-commands";
-import { applyCreateDataDisplay, applyUpdateDataDisplayStyle } from "./data-display";
+import { applyCreateDataDisplay, applySetDataDisplayAnchor, applyUpdateDataDisplayStyle } from "./data-display";
 import { applyDeleteDataObjectBinding, applySetDataObjectBinding } from "./data-object-binding-commands";
 import { applyCreateDataQuery, applyDeleteDataQuery, applyDuplicateDataQuery, applyUpdateDataQuery } from "./data-query-commands";
 import { applyDeleteNodes } from "./delete-nodes";
@@ -143,6 +143,8 @@ export class CommandDispatcher {
         return applyCreateGroup(snapshot, command);
       case "create-data-display":
         return applyCreateDataDisplay(snapshot, command);
+      case "set-data-display-anchor":
+        return applySetDataDisplayAnchor(snapshot, command);
       case "update-data-display-style":
         return applyUpdateDataDisplayStyle(snapshot, command);
       case "delete-nodes":

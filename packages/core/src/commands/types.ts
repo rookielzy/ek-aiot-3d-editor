@@ -29,6 +29,7 @@ export type SingleCommand =
   | SelectNodesCommand
   | CreateGroupCommand
   | CreateDataDisplayCommand
+  | SetDataDisplayAnchorCommand
   | UpdateDataDisplayStyleCommand
   | DeleteNodesCommand
   | GroupNodesCommand
@@ -118,6 +119,14 @@ export interface UpdateDataDisplayStyleCommand {
   type: "update-data-display-style";
   nodeId: NodeId;
   style: Partial<DataDisplayStyle>;
+}
+
+export interface SetDataDisplayAnchorCommand {
+  type: "set-data-display-anchor";
+  nodeId: NodeId;
+  anchorNodeId: NodeId | null;
+  /** World position when detaching from a projected model. */
+  worldPosition?: Transform["position"];
 }
 
 export interface CreateGroupCommand {

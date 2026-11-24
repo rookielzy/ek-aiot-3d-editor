@@ -216,6 +216,7 @@ type SceneNode =
   | {
       id: NodeId;
       kind: "data-display";
+      anchorNodeId?: NodeId;
       name: string;
       parentId: null;
       children: [];
@@ -251,7 +252,7 @@ type SceneNode =
 
 `SceneNode` 保存共同 authoring target 字段：稳定 ID、展示名称、类型、父子关系、可选 metadata，以及有意义时的 transform。object node 引用 `objects` payload，light node 引用 `lights` payload，group node 没有额外 payload，imported node 表示 GLB object 内部的 durable authoring target。
 
-数据卡片（`data-display`）是可平移的根节点。`transform.position` 使用世界坐标，`width`、`height` 和 `fontSize` 使用整数屏幕像素，颜色使用 `#rrggbb`。卡片面向镜头并参与场景深度测试。`source.fieldKey` 为 `null` 表示设备运行状态，否则指向设备实时属性的稳定 key。请求结果和渲染纹理只存在于运行态。
+数据卡片（`data-display`）是可平移的根节点。`anchorNodeId` 可引用模型、导入目标或分组节点。吸附后 `transform.position` 使用目标的局部坐标，未吸附时使用世界坐标。目标不可用时，卡片保留吸附配置，待目标恢复后再次显示。`width`、`height` 和 `fontSize` 使用整数屏幕像素，颜色使用 `#rrggbb`。卡片面向镜头并参与场景深度测试。`source.fieldKey` 为 `null` 表示设备运行状态，否则指向设备实时属性的稳定 key。请求结果和渲染纹理只存在于运行态。
 
 卡片默认只显示实时值。`style.prefix` 和 `style.suffix` 保存值两侧的可选文本，缺省时按空字符串处理。
 

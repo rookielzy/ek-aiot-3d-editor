@@ -6,6 +6,7 @@ import type { CommandResult } from "../commands/types";
 import type { SelectionMode } from "../selection/selection";
 import type { EditorStore } from "../editor/store";
 import type { SceneSnapshot } from "../snapshot/types";
+import { isDataDisplayAnchor } from "../snapshot/nodes";
 import type { AuthoredCameraView, AuthoredCameraViewInput } from "../cameras/types";
 import type { GltfLoaderAdapter } from "./gltf-loader-adapter";
 import type { RuntimePmremAdapter } from "./pmrem-adapter";
@@ -105,6 +106,7 @@ export interface EditorRuntime {
   applyCameraView(view: AuthoredCameraView): void;
   setDataColors?(assignments: readonly DataColorAssignment[]): readonly DataColorObjectCapability[];
   setDataDisplayValues?(values: ReadonlyMap<string, string>, problems?: readonly Problem[]): void;
+  startDataDisplayAnchorPick?(onComplete: (nodeId: string | null) => void): (() => void) | null;
   subscribeProjection?(subscriber: RuntimeProjectionSubscriber): Unsubscribe;
   setTransformEnabled?(enabled: boolean, allowDataDisplays?: boolean): void;
   dispose(): void;
@@ -142,6 +144,15 @@ export class ThreeEditorRuntime implements EditorRuntime {
   #interactions = normalizeRuntimeInteractionOptions(false);
   #controls: ViewportCameraControls | null = null;
   #transformControls: TransformControlsAdapter | null = null;
+  #transformEnabled = true;
+  #allowDataDisplays = false;
+  #anchorPick: ((nodeId: string | null) => void) | null = null;
+  #cancelAnchorPickOnEscape = (event: KeyboardEvent) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.#finishAnchorPick(null);
+  };
   #transformController: TransformController;
   #selectionVisuals: RuntimeSelectionVisuals | null = null;
   #marqueeSelectionState: EditorMarqueeSelectionState | null = null;
@@ -177,7 +188,7 @@ export class ThreeEditorRuntime implements EditorRuntime {
     this.invalidateRender();
   };
   #handlePointerDown = (event: PointerEvent) => {
-    if (this.#interactions.marqueeSelection && event.button === this.#interactions.marqueeSelection.button && !this.#transformControls?.dragging) {
+    if (!this.#anchorPick && this.#interactions.marqueeSelection && event.button === this.#interactions.marqueeSelection.button && !this.#transformControls?.dragging) {
       const viewport = this.#viewportMetrics();
       const point = this.#clientPointToContainerPoint(event.clientX, event.clientY, viewport);
       this.#marqueeStart = {
@@ -336,8 +347,31 @@ export class ThreeEditorRuntime implements EditorRuntime {
     if (this.#disposed) {
       return;
     }
-    this.#transformControls?.setEnabled(enabled, allowDataDisplays);
+    this.#transformEnabled = enabled;
+    this.#allowDataDisplays = allowDataDisplays;
+    this.#transformControls?.setEnabled(!this.#anchorPick && enabled, !this.#anchorPick && allowDataDisplays);
     this.#transformControls?.sync(this.#store.getSnapshot());
+  }
+
+  startDataDisplayAnchorPick(onComplete: (nodeId: string | null) => void): (() => void) | null {
+    if (this.#disposed || !this.#interactions.pointerSelection) return null;
+    this.#finishAnchorPick(null);
+    this.#cancelMarquee();
+    this.#anchorPick = onComplete;
+    this.#container.ownerDocument.addEventListener("keydown", this.#cancelAnchorPickOnEscape, true);
+    this.setTransformEnabled(this.#transformEnabled, this.#allowDataDisplays);
+    return () => {
+      if (this.#anchorPick === onComplete) this.#finishAnchorPick(null, false);
+    };
+  }
+
+  #finishAnchorPick(nodeId: string | null, notify = true): void {
+    const onComplete = this.#anchorPick;
+    if (!onComplete) return;
+    this.#anchorPick = null;
+    this.#container.ownerDocument.removeEventListener("keydown", this.#cancelAnchorPickOnEscape, true);
+    this.setTransformEnabled(this.#transformEnabled, this.#allowDataDisplays);
+    if (notify) onComplete(nodeId);
   }
 
   pickNode(nodeId: string | null, mode: SelectionMode = "replace"): CommandResult {
@@ -352,6 +386,11 @@ export class ThreeEditorRuntime implements EditorRuntime {
 
   selectFromPointer(input: RuntimePointerSelectionInput): CommandResult {
     this.#assertActive();
+    if (this.#anchorPick) {
+      const nodeId = this.#hitNodeFromPointer(input.clientX, input.clientY);
+      if (nodeId) this.#finishAnchorPick(nodeId);
+      return { ok: true, snapshot: this.#store.getSnapshot() };
+    }
     const pointerSelection = this.#interactions.pointerSelection;
     const defaultMode = pointerSelection ? pointerSelection.defaultMode : undefined;
     const mode = input.mode ?? resolvePointerSelectionMode(input.modifiers, defaultMode);
@@ -482,6 +521,7 @@ export class ThreeEditorRuntime implements EditorRuntime {
     }
 
     this.#disposed = true;
+    this.#finishAnchorPick(null);
     this.#projectGeneration += 1;
     if (this.#pendingFrame !== null) {
       this.#cancelFrame(this.#pendingFrame);
@@ -591,6 +631,7 @@ export class ThreeEditorRuntime implements EditorRuntime {
         controller: this.#transformController,
         cameraControls: this.#controls,
         mode: options.transformMode?.get(),
+        space: this.#interactions.transform.space,
         snap: options.snap?.get(),
         onChange: this.#handleControlsChange,
         onSnapFeedback: (feedback) => {
@@ -668,7 +709,8 @@ export class ThreeEditorRuntime implements EditorRuntime {
     const candidates = [...this.projector.objects.targetEntries()]
       .filter(([, target]) => target.pickable && !target.object.userData.problem)
       .map(([, target]) => target.object);
-    return this.picker.hitNodeFromClientPoint(this.#container, clientX, clientY, candidates);
+    return this.picker.hitNodeFromClientPoint(this.#container, clientX, clientY, candidates,
+      this.#anchorPick ? (target) => isDataDisplayAnchor(this.#store.getSnapshot().nodes[target.nodeId]) : undefined);
   }
 
   #updateMarquee(event: PointerEvent): void {
