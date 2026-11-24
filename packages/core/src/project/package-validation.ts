@@ -1,7 +1,7 @@
 import { collectAssetReferenceLocations } from "../assets/workspace";
 import { createDisplayMessageDescriptor } from "../i18n/display-messages";
 import { isSupportedAssetKind } from "../snapshot/primitives";
-import { SNAPSHOT_VERSION, type AssetReference, type SceneSnapshot } from "../snapshot/types";
+import { SNAPSHOT_VERSION, V9_SNAPSHOT_VERSION, type AssetReference, type SceneSnapshot } from "../snapshot/types";
 import { isJsonCompatible, validateSceneSnapshot } from "../snapshot/validation";
 import { migrateSerializedSnapshot } from "../snapshot/migrations";
 import { decodeArchiveJson, type ArchiveAdapter, type ArchiveEntry } from "./archive-adapter";
@@ -281,10 +281,10 @@ function isDanglingReferenceMessage(message: string, danglingMessages: Set<strin
  * versions cannot be inspected without migrating first.
  */
 function collectDanglingDataReferenceMessages(value: unknown): Set<string> {
-  if (!isPlainRecord(value) || value.version !== SNAPSHOT_VERSION) {
+  if (!isPlainRecord(value) || (value.version !== SNAPSHOT_VERSION && value.version !== V9_SNAPSHOT_VERSION)) {
     return new Set();
   }
-  return new Set(validateSceneSnapshot(value).danglingDataReferences.map((issue) => issue.message));
+  return new Set(validateSceneSnapshot({ ...value, version: SNAPSHOT_VERSION }).danglingDataReferences.map((issue) => issue.message));
 }
 
 function validateManifestRecord(assetId: string, value: unknown, problems: ProjectProblem[]): void {

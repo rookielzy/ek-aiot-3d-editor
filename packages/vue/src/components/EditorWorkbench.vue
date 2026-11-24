@@ -92,6 +92,8 @@
         :camera="context.camera"
         :data-context="context"
         :data-displays="dataDisplays"
+        :runtime="currentRuntime"
+        :visible="!rightCollapsed"
         :i18n="context.i18n"
         :class="inspectorClassName"
         @update:active-light-id="workbench.setActiveLightId"
@@ -231,6 +233,7 @@ function runActionWithNotice(action: EditorAction): ReturnType<typeof workbench.
 }
 const currentSnapshot = computed(() => workbench.snapshot.value);
 const currentInspector = computed(() => workbench.inspector.value);
+const currentRuntime = computed(() => workbench.runtime.value);
 const rootClassName = computed(() => props.class ? `ek-workbench ${props.class}` : "ek-workbench");
 const interactions = computed(() => !hasProp("interactions") || props.interactions === undefined ? DEFAULT_WORKBENCH_INTERACTIONS : props.interactions);
 const marqueeSelectionEnabled = ref(false);

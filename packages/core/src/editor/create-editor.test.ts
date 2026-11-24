@@ -71,7 +71,7 @@ describe("createEditor", () => {
     const restored = createEditor({ snapshot: editor.serialize() });
     await runtime.project();
 
-    expect(editor.getSnapshot().version).toBe(9);
+    expect(editor.getSnapshot().version).toBe(10);
     expect(editor.getSnapshot().dataSources).toEqual({ connections: {}, queries: {}, bindings: {} });
     expect(editor.getSnapshot().materials).toEqual({ definitions: {}, assignments: {} });
     expect(editor.getSnapshot().objects["object-a"].transform.position).toEqual([9, 0, 0]);

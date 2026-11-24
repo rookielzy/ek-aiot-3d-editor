@@ -13,7 +13,7 @@ export function InspectorPanel({ editor, className }: InspectorPanelProps) {
   const { inspector, snapshot, setActiveLightId, setActiveCameraViewId } = useInspector({ editor });
   const camera = createInspectorCameraContext(editor);
 
-  return <InspectorView editor={editor} snapshot={snapshot} inspector={inspector} setActiveLightId={setActiveLightId} setActiveCameraViewId={setActiveCameraViewId} camera={camera} className={className} />;
+  return <InspectorView editor={editor} snapshot={snapshot} inspector={inspector} setActiveLightId={setActiveLightId} setActiveCameraViewId={setActiveCameraViewId} camera={camera} runtime={editor.getRuntime()} className={className} />;
 }
 
 function createInspectorCameraContext(editor: Editor): WorkbenchCameraContext {

@@ -38,7 +38,7 @@ describe("data source connections", () => {
     const editor = createEditor();
     const restored = createEditor({ snapshot: editor.serialize() });
 
-    expect(editor.getSnapshot().version).toBe(9);
+    expect(editor.getSnapshot().version).toBe(10);
     expect(editor.getSnapshot().dataSources).toEqual({ connections: {}, queries: {}, bindings: {} });
     expect(restored.getSnapshot().dataSources).toEqual({ connections: {}, queries: {}, bindings: {} });
     expect(globalThis.fetch).not.toHaveBeenCalled();
@@ -503,7 +503,7 @@ describe("data source connections", () => {
     const { dataSources: _dataSources, ...v8 } = createEmptySnapshot("scene-a");
     const editor = createEditor({ snapshot: { ...v8, version: 8 } });
 
-    expect(editor.getSnapshot().version).toBe(9);
+    expect(editor.getSnapshot().version).toBe(10);
     expect(editor.getSnapshot().dataSources).toEqual({ connections: {}, queries: {}, bindings: {} });
     editor.dispose();
   });

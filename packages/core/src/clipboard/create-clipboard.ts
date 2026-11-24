@@ -27,6 +27,10 @@ export function createClipboardPayload(snapshot: SceneSnapshot, objectIds = getS
 
   const objects: EditorObjectClipboardPayload["objects"] = {};
   const assetIds = new Set<string>();
+  const motions = new Map(Object.values(snapshot.nodes).flatMap((node) =>
+    node.kind === "object" && node.motion && copiedObjectIds.has(node.objectId)
+      ? [[node.objectId, node.motion] as const] : []
+  ));
 
   for (const objectId of copiedObjectIds) {
     const object = snapshot.objects[objectId];
@@ -34,6 +38,10 @@ export function createClipboardPayload(snapshot: SceneSnapshot, objectIds = getS
     objects[objectId] = cloneClipboardObject(object, object.parentId && copiedObjectIds.has(object.parentId)
       ? object.parentId
       : null, object.children.filter((childId) => copiedObjectIds.has(childId)));
+    const motion = motions.get(objectId);
+    if (motion) {
+      objects[objectId].motion = { ...motion };
+    }
   }
 
   const materials = collectMaterialClipboardState(snapshot, copiedObjectIds, { includeImportedSlots: false });
@@ -148,6 +156,7 @@ function cloneClipboardNode(
         parentId,
         children: [...children],
         transform: cloneTransform(node.transform),
+        ...(node.motion ? { motion: { ...node.motion } } : {}),
         ...(node.metadata ? { metadata: { ...node.metadata } } : {})
       };
     case "group":

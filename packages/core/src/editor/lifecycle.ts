@@ -30,7 +30,7 @@ import { ThreeEditorRuntime, type EditorRuntime } from "../runtime/editor-runtim
 import { disposeObjectTree } from "../runtime/disposal";
 import { GlbImportError, ThreeGltfLoaderAdapter } from "../runtime/gltf-loader-adapter";
 import { EditorTransformModeState, type TransformModeSubscriber } from "../runtime/transform/transform-mode";
-import type { SceneImportedGlbNode, SceneSnapshot, SerializedSceneSnapshot } from "../snapshot/types";
+import type { SceneImportedGlbNode, SceneNode, SceneSnapshot, SerializedSceneSnapshot } from "../snapshot/types";
 import { EditorMarqueeSelectionState, type MarqueeSelectionSubscriber } from "./marquee-selection-state";
 import { createAdvancedEditorOperations, createMemoryClipboard, type AdvancedEditorOperations, type EditorClipboard } from "./operations";
 import { EditorSnapState, type SnapSubscriber } from "./snap-state";
@@ -65,7 +65,15 @@ export class CoreEditor implements EditorWithGlbImport {
   constructor(options: EditorOptions = {}) {
     this.store = new EditorStore(options.snapshot ? restoreSnapshot(options.snapshot) : undefined);
     this.dispatcher = new CommandDispatcher(this.store, this.history, this.assets, {
-      guard: (command) => this.#dataEditGuard(command)
+      guard: (command) => {
+        const snapshot = this.store.getSnapshot();
+        const nodeId = snapshot.selection.nodeId;
+        if (nodeId && this.getRuntime()?.getNodeMotionPreviewState?.(nodeId) === "playing" &&
+          isCommandLockedByNodeMotion(command, snapshot.nodes[nodeId])) {
+          return "motion-preview-locked: Stop motion preview before editing the target.";
+        }
+        return this.#dataEditGuard(command);
+      }
     });
     this.operations = createAdvancedEditorOperations(this, this.clipboard);
     this.#dataCredentials = Object.freeze([...(options.credentials ?? [])]);
@@ -689,6 +697,7 @@ const DATA_PREVIEW_COMMANDS = new Set<Command["type"]>([
   "select-nodes",
   "select-object",
   "select-objects",
+  "set-node-motion",
   "create-data-connection",
   "update-data-connection",
   "duplicate-data-connection",
@@ -703,6 +712,24 @@ const DATA_PREVIEW_COMMANDS = new Set<Command["type"]>([
   "set-data-object-binding",
   "delete-data-object-binding"
 ]);
+
+function isCommandLockedByNodeMotion(command: Command, node: SceneNode): boolean {
+  switch (command.type) {
+    case "batch":
+      return command.commands.some((entry) => isCommandLockedByNodeMotion(entry, node));
+    case "set-node-transform":
+    case "set-node-motion":
+      return command.nodeId === node.id;
+    case "reparent-node":
+      return command.nodeId === node.id && Boolean(command.transform || command.preserveWorldTransform);
+    case "set-transform":
+      return node.kind === "object" && node.objectId === command.objectId;
+    case "reparent-object":
+      return node.kind === "object" && node.objectId === command.objectId && Boolean(command.transform);
+    default:
+      return false;
+  }
+}
 
 function isCommandAllowedDuringPreview(command: Command, snapshot: SceneSnapshot): boolean {
   if (command.type === "batch") {

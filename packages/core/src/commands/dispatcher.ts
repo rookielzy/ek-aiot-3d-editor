@@ -29,6 +29,7 @@ import { applySelectObject, applySelectObjects } from "./select-object";
 import { applySetEnvironment } from "./set-environment";
 import { applySetMaterial } from "./set-material";
 import { applySetNodeTransform } from "./set-node-transform";
+import { applySetNodeMotion } from "./set-node-motion";
 import { applySetTransform } from "./set-transform";
 import { applyUngroupNodes } from "./ungroup-nodes";
 import { applyUngroupObjects } from "./ungroup-objects";
@@ -157,6 +158,8 @@ export class CommandDispatcher {
         return applyReparentNode(snapshot, command);
       case "set-node-transform":
         return applySetNodeTransform(snapshot, command);
+      case "set-node-motion":
+        return applySetNodeMotion(snapshot, command);
       case "select-object":
         return applySelectObject(snapshot, command);
       case "select-objects":

@@ -13,6 +13,7 @@ import type {
 import type { LightDefinition, LightKind } from "../lights/types";
 import type { MaterialAssignmentTarget, MaterialPatch } from "../materials/types";
 import type { EditorClipboardPayload } from "../clipboard/types";
+import type { NodeMotion } from "../snapshot/node-motion";
 import type { DataDisplaySource, DataDisplayStyle, JsonValue, NodeId, SceneSnapshot, Transform } from "../snapshot/types";
 import type { DataConnectionDraft, DataConnectionId, DataConnectionInput, DataObjectBinding, DataQueryDefinition, DataQueryId, DataQueryInput } from "../data-sources/types";
 
@@ -36,6 +37,7 @@ export type SingleCommand =
   | UngroupNodesCommand
   | ReparentNodeCommand
   | SetNodeTransformCommand
+  | SetNodeMotionCommand
   | SelectObjectCommand
   | SelectObjectsCommand
   | DeleteObjectsCommand
@@ -92,6 +94,12 @@ export interface CreateImportedGlbTargetsCommand {
 export interface SelectObjectCommand {
   type: "select-object";
   objectId: string | null;
+}
+
+export interface SetNodeMotionCommand {
+  type: "set-node-motion";
+  nodeId: NodeId;
+  motion: NodeMotion | null;
 }
 
 export interface SelectNodeCommand {

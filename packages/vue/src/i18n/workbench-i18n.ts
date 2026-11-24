@@ -1,4 +1,4 @@
-import { BUILTIN_LOCALES, type MessageDescriptor, type MessageDescriptorValues, type MessageKey, type SupportedLocale } from "@ek-aiot/3d-editor-core";
+import { BUILTIN_LOCALES, NODE_MOTION_INSPECTOR_MESSAGES, type MessageDescriptor, type MessageDescriptorValues, type MessageKey, type SupportedLocale } from "@ek-aiot/3d-editor-core";
 
 export type WorkbenchLocale = SupportedLocale;
 export type WorkbenchMessageValues = MessageDescriptorValues;
@@ -12,6 +12,7 @@ export const WORKBENCH_LOCALE_LABELS: Readonly<Record<WorkbenchLocale, string>> 
 });
 
 const EN_WORKBENCH_MESSAGES = {
+  ...NODE_MOTION_INSPECTOR_MESSAGES.en,
   "problem.project.project.archive.invalid.title": "Project Archive Invalid",
   "problem.project.project.archive.too.large.title": "Project Archive Too Large",
   "problem.project.project.asset.checksum.invalid.title": "Project Asset Checksum Invalid",
@@ -1347,6 +1348,7 @@ export interface WorkbenchI18n {
 type WorkbenchDictionary = Readonly<Record<WorkbenchMessageKey, string>>;
 
 const ZH_CN_WORKBENCH_MESSAGES = {
+  ...NODE_MOTION_INSPECTOR_MESSAGES["zh-CN"],
   "problem.project.project.archive.invalid.title": "项目包无效",
   "problem.project.project.archive.too.large.title": "项目包过大",
   "problem.project.project.asset.checksum.invalid.title": "资源校验和无效",

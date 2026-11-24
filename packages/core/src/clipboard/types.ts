@@ -1,10 +1,12 @@
 import type { MaterialAssignment, MaterialDefinition } from "../materials/types";
 import type { LightDefinition } from "../lights/types";
 import type { SceneNode, SceneObject } from "../snapshot/types";
+import type { NodeMotion } from "../snapshot/node-motion";
 import type { SceneDataSources } from "../data-sources/types";
 
 export interface ClipboardSceneObject extends SceneObject {
   originalId: string;
+  motion?: NodeMotion;
 }
 
 export type ClipboardSceneNode = SceneNode & {

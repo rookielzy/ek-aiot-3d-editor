@@ -6,9 +6,11 @@ import type { LegacyLightDefinition, LightDefinition } from "../lights/types";
 import type { MaterialState } from "../materials/types";
 import type { AuthoredProblemState } from "../problems/types";
 import type { JsonPrimitive, JsonValue } from "./json";
+import type { NodeMotion } from "./node-motion";
 import type { ASSET_KINDS } from "./primitives";
 
-export const SNAPSHOT_VERSION = 9;
+export const SNAPSHOT_VERSION = 10;
+export const V9_SNAPSHOT_VERSION = 9;
 export const V8_SNAPSHOT_VERSION = 8;
 export const V7_SNAPSHOT_VERSION = 7;
 export const V6_SNAPSHOT_VERSION = 6;
@@ -74,6 +76,7 @@ export interface SceneObjectNode extends BaseSceneNode {
   kind: "object";
   objectId: string;
   transform: Transform;
+  motion?: NodeMotion;
 }
 
 export interface SceneGroupNode extends BaseSceneNode {
@@ -125,6 +128,7 @@ export interface SceneImportedGlbNode extends BaseSceneNode {
   importKey: string;
   source: ImportedGlbSourceDescriptor;
   transform?: Transform;
+  motion?: NodeMotion;
   materialSlots?: ImportedGlbMaterialSlotDescriptor[];
   remap?: ImportedGlbRemapMetadata;
 }
@@ -166,7 +170,11 @@ export interface SceneSnapshot {
   metadata?: Record<string, JsonValue>;
 }
 
-export interface V8SceneSnapshot extends Omit<SceneSnapshot, "version" | "dataSources"> {
+export interface V9SceneSnapshot extends Omit<SceneSnapshot, "version"> {
+  version: typeof V9_SNAPSHOT_VERSION;
+}
+
+export interface V8SceneSnapshot extends Omit<V9SceneSnapshot, "version" | "dataSources"> {
   version: typeof V8_SNAPSHOT_VERSION;
 }
 
@@ -265,6 +273,7 @@ export interface LegacySceneSnapshot {
 
 export type SerializedSceneSnapshot =
   | SceneSnapshot
+  | V9SceneSnapshot
   | V8SceneSnapshot
   | V7SceneSnapshot
   | V6SceneSnapshot

@@ -8,7 +8,7 @@ Use `createEditor()` to create a framework-neutral editor, dispatch commands, su
 
 ## Snapshot Contract
 
-Snapshots are portable JSON-compatible records. The current v9 schema stores a canonical `SceneNode` / `NodeId` graph, authored camera views, source-based environment lighting/background state, and a `dataSources` domain for HTTP connections, saved query definitions, device property mappings, and object bindings (query, device, parameter overrides, enabled state, ordered detail fields). Version 1/2/3/4/5/6/7/8 snapshots restore through the migration path and are normalized into the current schema.
+Snapshots are portable JSON-compatible records. The current v10 schema stores a canonical `SceneNode` / `NodeId` graph, optional continuous spin on model nodes and imported GLB targets, authored camera views, source-based environment lighting/background state, and a `dataSources` domain for HTTP connections, saved query definitions, device property mappings, and object bindings (query, device, parameter overrides, enabled state, ordered detail fields). Snapshots from versions 1 through 9 restore through the migration path with no motion configured.
 
 Runtime values are never saved. Hosts may register GLB, texture, HDR, or image assets with runtime `source` values, but snapshots only keep stable asset references.
 

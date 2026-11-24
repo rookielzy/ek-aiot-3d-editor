@@ -266,6 +266,7 @@ function createMatchedImportedNode(
 ): SceneImportedGlbNode {
   const node: SceneImportedGlbNode = {
     ...nextNode,
+    ...(current.motion ? { motion: { ...current.motion } } : {}),
     ...(current.transform ? { transform: cloneTransform(current.transform) } : {})
   };
   if (remap.kind === "exact") {

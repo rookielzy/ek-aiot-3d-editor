@@ -28,12 +28,17 @@
             </div>
           </dl>
         </header>
-        <InspectorTabs secondary :tabs="objectTabs" :label="resolvedI18n.t('reactWorkbench.inspector.groups.object')">
+        <InspectorTabs v-model="objectTab" secondary :tabs="objectTabs" :label="resolvedI18n.t('reactWorkbench.inspector.groups.object')">
           <template #transform>
-            <TransformInspector :editor="rawEditor" :snapshot="snapshot" :section="inspector.transform" :i18n="resolvedI18n" :locked="previewLocked" />
+            <TransformInspector :editor="rawEditor" :snapshot="snapshot" :section="inspector.transform" :i18n="resolvedI18n" :locked="previewLocked || motionState === 'playing'" />
           </template>
           <template #material>
             <MaterialInspector :key="inspector.selection.nodeId ?? 'none'" :editor="rawEditor" :snapshot="snapshot" :section="inspector.material" :i18n="resolvedI18n" :locked="previewLocked" />
+          </template>
+          <template #motion>
+            <NodeMotionInspector v-if="visible && activeGroup === 'object' && objectTab === 'motion' && motionNode"
+              :key="motionNode.id" :editor="rawEditor" :runtime="runtime ?? null" :node-id="motionNode.id"
+              :motion="motionNode.motion" :state="motionState" :i18n="resolvedI18n" />
           </template>
           <template #data>
             <DataBindingInspector v-if="dataContext" :context="dataContext" :snapshot="snapshot" :selection="inspector.selection" :i18n="resolvedI18n" />
@@ -75,8 +80,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRaw, watch } from "vue";
-import type { Editor, InspectorModel, SceneSnapshot } from "@ek-aiot/3d-editor-core";
+import { computed, ref, toRaw, watch, watchEffect } from "vue";
+import { getSelectedNodeForMotion, type Editor, type EditorRuntime, type InspectorModel, type NodeMotionPreviewState, type SceneSnapshot } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext, WorkbenchCameraContext } from "../composables/use-workbench";
 import type { DataDisplayRealtimeContext } from "../composables/use-data-display-realtime";
 import { resolveDataDisplayMessage } from "../i18n/data-display-i18n";
@@ -85,6 +90,7 @@ import { problemToneFromSeverities } from "./workbench-model-helpers";
 import "./inspector.css";
 import TransformInspector from "./TransformInspector.vue";
 import MaterialInspector from "./MaterialInspector.vue";
+import NodeMotionInspector from "./NodeMotionInspector.vue";
 import EnvironmentInspector from "./EnvironmentInspector.vue";
 import LightInspector from "./LightInspector.vue";
 import CameraInspector from "./CameraInspector.vue";
@@ -93,15 +99,17 @@ import DataDisplayInspector from "./DataDisplayInspector.vue";
 import ProblemsPanel from "./ProblemsPanel.vue";
 import InspectorTabs from "./InspectorTabs.vue";
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   editor: Editor;
   snapshot: SceneSnapshot;
   inspector: InspectorModel;
   camera?: WorkbenchCameraContext;
   dataContext?: ResolvedWorkbenchContext;
   dataDisplays?: DataDisplayRealtimeContext;
+  runtime?: EditorRuntime | null;
+  visible?: boolean;
   i18n?: InspectorI18n;
-}>();
+}>(), { visible: true });
 
 const emit = defineEmits<{
   "update:activeLightId": [value: string | null];
@@ -112,6 +120,19 @@ const emit = defineEmits<{
 const rawEditor = toRaw(props.editor);
 const resolvedI18n = computed(() => props.i18n ?? DEFAULT_INSPECTOR_I18N);
 const activeGroup = ref("object");
+const objectTab = ref("transform");
+const motionNode = computed(() => getSelectedNodeForMotion(props.snapshot));
+const motionState = ref<NodeMotionPreviewState>("unavailable");
+watchEffect((onCleanup) => {
+  const runtime = props.runtime;
+  const nodeId = motionNode.value?.id;
+  function sync() {
+    motionState.value = (nodeId && runtime?.getNodeMotionPreviewState?.(nodeId)) || "unavailable";
+  }
+  sync();
+  const unsubscribe = runtime?.subscribeNodeMotionPreview?.(sync);
+  if (unsubscribe) onCleanup(unsubscribe);
+});
 const groups = computed(() => [
   ...(["object", "environment", "scene"] as const).map((id) => ({
     id, label: resolvedI18n.value.t(`reactWorkbench.inspector.groups.${id}`)
@@ -129,8 +150,12 @@ const objectTabs = computed(() => {
     : selectedCamera.value ? [props.inspector.cameras]
     : props.inspector.selection.light || props.inspector.selection.cameraView ? []
     : [props.inspector.transform, props.inspector.material];
-  const tabs = sections.map((section) => ({ id: section.id, label: renderSectionTitle(resolvedI18n.value, section) }));
-  return props.dataContext ? [...tabs, { id: "data", label: resolvedI18n.value.t("dataBinding.section.label") }] : tabs;
+  return [
+    ...sections.map((section) => ({ id: section.id, label: renderSectionTitle(resolvedI18n.value, section) })),
+    ...(motionNode.value && (motionNode.value.motion || motionState.value !== "target-not-transformable")
+      ? [{ id: "motion", label: resolvedI18n.value.t("inspector.motion.tab") }] : []),
+    ...(props.dataContext ? [{ id: "data", label: resolvedI18n.value.t("dataBinding.section.label") }] : [])
+  ];
 });
 const sceneTabs = computed(() => [props.inspector.lights, props.inspector.cameras, props.inspector.problems]
   .map((section) => ({ id: section.id, label: renderSectionTitle(resolvedI18n.value, section) })));

@@ -7,8 +7,10 @@ import { createEmptyMaterialState } from "../materials/defaults";
 import { createEmptyAuthoredProblemState } from "../problems/defaults";
 import { createLightNode, createObjectNode } from "./defaults";
 import { immutableClone } from "./immutability";
+import { isPlainRecord } from "./json";
 import {
   SNAPSHOT_VERSION,
+  V9_SNAPSHOT_VERSION,
   type V6SceneSnapshot,
   type V7SceneSnapshot,
   type V8SceneSnapshot,
@@ -31,6 +33,14 @@ export function migrateSerializedSnapshot(
   serialized: SerializedSceneSnapshot,
   options: SnapshotMigrationOptions = {}
 ): SceneSnapshot {
+  if (serialized.version === V9_SNAPSHOT_VERSION) {
+    return migrateSerializedSnapshot({
+      ...serialized,
+      version: SNAPSHOT_VERSION,
+      nodes: stripLegacyNodeMotion(serialized.nodes)
+    }, options);
+  }
+
   if (serialized.version === SNAPSHOT_VERSION) {
     const normalized = normalizeDataObjectBindingColors(
       normalizeDataQueryRequests(normalizeDataQueryPolicies(serialized))
@@ -230,8 +240,20 @@ export function migrateV8Snapshot(serialized: V8SceneSnapshot): SceneSnapshot {
   return {
     ...serialized,
     version: SNAPSHOT_VERSION,
+    nodes: stripLegacyNodeMotion(serialized.nodes),
     dataSources: createEmptyDataSources()
   };
+}
+
+// Previous versions allowed additional node properties without interpreting them.
+function stripLegacyNodeMotion(nodes: SceneSnapshot["nodes"]): SceneSnapshot["nodes"] {
+  if (!isPlainRecord(nodes)) return nodes;
+  return Object.fromEntries(Object.entries(nodes).map(([id, node]) => {
+    if (!isPlainRecord(node) || !("motion" in node)) return [id, node];
+    const next = { ...node };
+    delete next.motion;
+    return [id, next];
+  }));
 }
 
 export function migrateV7Snapshot(serialized: V7SceneSnapshot): SceneSnapshot {

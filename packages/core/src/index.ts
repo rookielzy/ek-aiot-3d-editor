@@ -421,6 +421,11 @@ export type {
   SetEnvironmentCommand,
   SetMaterialCommand,
   SetNodeTransformCommand,
+  SetNodeMotionCommand,
+  NodeMotion,
+  NodeMotionAxis,
+  NodeMotionFieldId,
+  NodeMotionPreviewState,
   SetTransformCommand,
   SnapshotSubscriber,
   RegisteredAsset,
@@ -474,6 +479,7 @@ export type {
   WorkbenchNodeCapability,
   WorkbenchToolbarModel,
   V8SceneSnapshot,
+  V9SceneSnapshot,
   V7SceneSnapshot,
   V6SceneSnapshot,
   V5SceneNode,
@@ -481,6 +487,8 @@ export type {
   V4SceneSnapshot,
   V3SceneSnapshot
 } from "./public-api";
+
+export { buildNodeMotionFields, DEFAULT_NODE_MOTION, getSelectedNodeForMotion, NODE_MOTION_INSPECTOR_MESSAGES, updateNodeMotionField } from "./public-api";
 
 export {
   AssetResolverBridge,

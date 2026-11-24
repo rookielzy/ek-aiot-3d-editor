@@ -399,6 +399,8 @@ export function EditorWorkbench({
             camera={workbench.camera}
             dataContext={workbench}
             dataDisplays={dataDisplays}
+            runtime={workbench.runtime}
+            visible={!rightCollapsed}
             i18n={workbench.i18n}
             onReplaceAsset={(assetId, file) => {
               void workbench.replaceAsset({ assetId, source: file, label: file.name, mimeType: file.type });

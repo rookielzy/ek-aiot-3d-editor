@@ -57,7 +57,7 @@ describe("data configuration project round-trip", () => {
       version: number;
       dataSources: unknown;
     };
-    expect(scene.version).toBe(9);
+    expect(scene.version).toBe(10);
     expect(scene.dataSources).toEqual(source.serialize().dataSources);
     source.dispose();
   });
@@ -149,7 +149,7 @@ describe("data configuration migration", () => {
   it("migrates a v1 scene without data sources and keeps the old scene", () => {
     const migrated = createEditor({ snapshot: createLegacyProofLoopSnapshot() }).getSnapshot();
 
-    expect(migrated.version).toBe(9);
+    expect(migrated.version).toBe(10);
     expect(migrated.dataSources).toEqual({ connections: {}, queries: {}, bindings: {} });
     expect(migrated.objects["object-a"]).toMatchObject({ asset: { id: "asset-a" } });
     expect(migrated.nodes["object-a"].transform.position).toEqual([4, 5, 6]);

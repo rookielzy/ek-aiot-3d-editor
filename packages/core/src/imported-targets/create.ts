@@ -69,6 +69,7 @@ export function cloneImportedGlbNode(node: SceneImportedGlbNode): SceneImportedG
     },
     children: [...node.children],
     ...(node.transform ? { transform: cloneTransform(node.transform) } : {}),
+    ...(node.motion ? { motion: { ...node.motion } } : {}),
     ...(node.materialSlots ? {
       materialSlots: node.materialSlots.map((slot) => ({
         ...slot,

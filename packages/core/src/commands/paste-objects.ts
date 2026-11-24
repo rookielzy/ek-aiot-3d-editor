@@ -60,6 +60,7 @@ function applyPasteObjectClipboard(snapshot: SceneSnapshot, command: PasteObject
       parentId,
       children,
       transform: cloneTransform(sourceObject.transform),
+      ...(sourceObject.motion ? { motion: { ...sourceObject.motion } } : {}),
       ...(sourceObject.metadata ? { metadata: { ...sourceObject.metadata } } : {})
     };
   }
@@ -378,6 +379,7 @@ function cloneNodePayload(
         parentId,
         children,
         transform: cloneTransform(sourceNode.transform),
+        ...(sourceNode.motion ? { motion: { ...sourceNode.motion } } : {}),
         ...(sourceNode.metadata ? { metadata: { ...sourceNode.metadata } } : {})
       };
     case "group":
@@ -419,6 +421,7 @@ function cloneNodePayload(
           ...(sourceNode.source.metadata ? { metadata: { ...sourceNode.source.metadata } } : {})
         },
         ...(sourceNode.transform ? { transform: cloneTransform(sourceNode.transform) } : {}),
+        ...(sourceNode.motion ? { motion: { ...sourceNode.motion } } : {}),
         ...(sourceNode.materialSlots ? {
           materialSlots: sourceNode.materialSlots.map((slot) => ({
             ...slot,

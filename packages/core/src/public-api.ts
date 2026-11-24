@@ -91,6 +91,7 @@ export type {
   SetEnvironmentCommand,
   SetMaterialCommand,
   SetNodeTransformCommand,
+  SetNodeMotionCommand,
   SetTransformCommand,
   UngroupNodesCommand,
   UngroupObjectsCommand,
@@ -522,6 +523,7 @@ export type {
 export type {
   EditorRuntime,
   EditorRuntimeOptions,
+  NodeMotionPreviewState,
   RendererLike,
   RuntimeProblemSnapshot,
   RuntimeProblemSubscriber
@@ -567,6 +569,7 @@ export type {
   SerializedSceneSnapshot,
   Transform,
   V8SceneSnapshot,
+  V9SceneSnapshot,
   V7SceneSnapshot,
   V6SceneSnapshot,
   V5SceneNode,
@@ -793,6 +796,10 @@ export {
   buildTransformSection
 } from "./inspector/transform";
 export { createEmptySnapshot, createTransform } from "./snapshot/defaults";
+export type { NodeMotion, NodeMotionAxis } from "./snapshot/node-motion";
+export { DEFAULT_NODE_MOTION } from "./snapshot/node-motion";
+export type { NodeMotionFieldId } from "./inspector/node-motion";
+export { buildNodeMotionFields, getSelectedNodeForMotion, NODE_MOTION_INSPECTOR_MESSAGES, updateNodeMotionField } from "./inspector/node-motion";
 export { getSelectedNodeIds, getSelectedObjectIds, getTopLevelSelectedObjectIds, normalizeNodeSelection, normalizeSelection } from "./selection/selection";
 export { collectNodeSubtreeIds, getTopLevelNodeIds, isNodeAncestorOf } from "./snapshot/hierarchy";
 export { migrateSerializedSnapshot, validateSerializedSceneSnapshot } from "./snapshot/migrations";

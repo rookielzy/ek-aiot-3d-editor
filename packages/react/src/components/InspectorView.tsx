@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import type { Editor, InspectorModel, SceneSnapshot } from "@ek-aiot/3d-editor-core";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { getSelectedNodeForMotion, type Editor, type EditorRuntime, type InspectorModel, type NodeMotionPreviewState, type SceneSnapshot } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext, WorkbenchCameraContext } from "../hooks/use-workbench";
 import { resolveDataDisplayMessage } from "../i18n/data-display-i18n";
 import { CameraInspector } from "./CameraInspector";
@@ -10,6 +10,7 @@ import { EnvironmentInspector } from "./EnvironmentInspector";
 import { InspectorTabs } from "./InspectorTabs";
 import { LightInspector } from "./LightInspector";
 import { MaterialInspector } from "./MaterialInspector";
+import { NodeMotionInspector } from "./NodeMotionInspector";
 import { ProblemsPanel } from "./ProblemsPanel";
 import { TransformInspector } from "./TransformInspector";
 import { DEFAULT_INSPECTOR_I18N, renderSectionTitle, type InspectorI18n } from "./inspector-i18n";
@@ -25,14 +26,23 @@ export interface InspectorViewProps {
   camera?: WorkbenchCameraContext;
   dataContext?: ResolvedWorkbenchContext;
   dataDisplays?: DataDisplayRealtimeContext;
+  runtime?: EditorRuntime | null;
+  visible?: boolean;
   i18n?: InspectorI18n;
   onReplaceAsset?(assetId: string, file: File): void | Promise<void>;
   className?: string;
 }
 
-export function InspectorView({ editor, snapshot, inspector, setActiveLightId, setActiveCameraViewId, camera, dataContext, dataDisplays, i18n = DEFAULT_INSPECTOR_I18N, onReplaceAsset, className }: InspectorViewProps) {
+export function InspectorView({ editor, snapshot, inspector, setActiveLightId, setActiveCameraViewId, camera, dataContext, dataDisplays, runtime = null, visible = true, i18n = DEFAULT_INSPECTOR_I18N, onReplaceAsset, className }: InspectorViewProps) {
   const [activeGroup, setActiveGroup] = useState("object");
+  const [objectTab, setObjectTab] = useState("transform");
   const selection = inspector.selection;
+  const motionNode = getSelectedNodeForMotion(snapshot);
+  const motionState = useSyncExternalStore<NodeMotionPreviewState>(
+    (subscribe) => runtime?.subscribeNodeMotionPreview?.(subscribe) ?? (() => {}),
+    () => (motionNode && runtime?.getNodeMotionPreviewState?.(motionNode.id)) || "unavailable",
+    () => "unavailable"
+  );
   const selectedCardId = selection.node?.kind === "data-display" ? selection.node.id : null;
   const hasDataDisplays = Boolean(dataDisplays);
   useEffect(() => {
@@ -60,7 +70,7 @@ export function InspectorView({ editor, snapshot, inspector, setActiveLightId, s
       {
         id: "transform",
         label: renderSectionTitle(i18n, inspector.transform),
-        content: <TransformInspector key={selection.nodeId} editor={editor} snapshot={snapshot} section={inspector.transform} locked={dataContext?.dataState.preview.enabled} i18n={i18n} />
+        content: <TransformInspector key={selection.nodeId} editor={editor} snapshot={snapshot} section={inspector.transform} locked={dataContext?.dataState.preview.enabled || motionState === "playing"} i18n={i18n} />
       },
       {
         id: "material",
@@ -68,6 +78,15 @@ export function InspectorView({ editor, snapshot, inspector, setActiveLightId, s
         content: <MaterialInspector key={selection.nodeId} editor={editor} snapshot={snapshot} section={inspector.material} locked={dataContext?.dataState.preview.enabled} i18n={i18n} />
       }
     ];
+  if (motionNode && (motionNode.motion || motionState !== "target-not-transformable")) {
+    objectTabs.push({
+      id: "motion",
+      label: i18n.t("inspector.motion.tab"),
+      content: visible && activeGroup === "object" && objectTab === "motion" &&
+        <NodeMotionInspector key={motionNode.id} editor={editor} runtime={runtime} nodeId={motionNode.id}
+          motion={motionNode.motion} state={motionState} i18n={i18n} />
+    });
+  }
   if (dataContext) {
     objectTabs.push({
       id: "data",
@@ -104,7 +123,7 @@ export function InspectorView({ editor, snapshot, inspector, setActiveLightId, s
           </div>
         </dl>
       </header>
-      <InspectorTabs secondary label={i18n.t("reactWorkbench.inspector.groups.object")} tabs={objectTabs} />
+      <InspectorTabs secondary label={i18n.t("reactWorkbench.inspector.groups.object")} tabs={objectTabs} value={objectTab} onChange={setObjectTab} />
     </>
   );
   const scenePanel = (

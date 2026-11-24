@@ -116,6 +116,7 @@ export class PlaceholderGltfLoaderAdapter implements GltfLoaderAdapter {
   async load(): Promise<Object3D> {
     const group = new Group();
     group.name = "GLB placeholder";
+    group.userData.runtimePlaceholder = true;
     return group;
   }
 }

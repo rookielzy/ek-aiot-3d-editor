@@ -32,7 +32,7 @@ describe("useEditor", () => {
   it("initializes legacy serialized snapshots through core migration", () => {
     const { snapshot, dispose } = useEditor({ snapshot: createLegacyProofLoopSnapshot() });
 
-    expect(snapshot.value.version).toBe(9);
+    expect(snapshot.value.version).toBe(10);
     expect(snapshot.value.dataSources).toEqual({ connections: {}, queries: {}, bindings: {} });
     expect(snapshot.value.nodes["object-a"]).toMatchObject({ kind: "object", objectId: "object-a" });
     expect(snapshot.value.objects["object-a"].asset.id).toBe("asset-a");
@@ -93,7 +93,7 @@ describe("useEditor", () => {
 
     const { editor, snapshot, dispose } = useEditor({ snapshot: serialized });
 
-    expect(snapshot.value.version).toBe(9);
+    expect(snapshot.value.version).toBe(10);
     expect(snapshot.value.dataSources.queries).toEqual({});
     expect(snapshot.value.dataSources.bindings).toEqual({});
     expect(snapshot.value.dataSources.connections["connection-a"]).toMatchObject({

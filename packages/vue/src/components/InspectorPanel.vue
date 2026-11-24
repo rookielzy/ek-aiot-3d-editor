@@ -4,6 +4,7 @@
     :snapshot="currentSnapshot"
     :inspector="inspector"
     :camera="camera"
+    :runtime="rawEditor.getRuntime()"
     @update:active-light-id="activeLightId = $event"
     @update:active-camera-view-id="activeCameraViewId = $event"
   />

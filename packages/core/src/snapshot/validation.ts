@@ -7,6 +7,7 @@ import { validateLights } from "../lights/validation";
 import { validateMaterialState } from "../materials/validation";
 import { validateAuthoredProblemState } from "../problems/validation";
 import { isJsonCompatible as isJsonValueCompatible, isPlainRecord, type JsonValue } from "./json";
+import { isNodeMotion, supportsNodeMotion } from "./node-motion";
 import { isSupportedAssetKind, isVector } from "./primitives";
 import { SNAPSHOT_VERSION, type AssetReference, type SceneImportedGlbNode, type SceneNode, type SceneObject, type SceneSnapshot } from "./types";
 
@@ -314,6 +315,9 @@ function validateNode(id: string, node: unknown, objects: unknown, lights: unkno
   }
   if ("metadata" in node && !isJsonCompatible(node.metadata)) {
     errors.push(`Node ${id} metadata must be JSON-compatible.`);
+  }
+  if ("motion" in node && (!supportsNodeMotion(sceneNode as SceneNode) || !isNodeMotion(node.motion))) {
+    errors.push(`Node ${id} motion must target a supported node and use a local axis with a finite, nonzero speed.`);
   }
 
   switch (sceneNode.kind) {

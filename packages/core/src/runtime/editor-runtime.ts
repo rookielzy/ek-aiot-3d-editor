@@ -1,4 +1,4 @@
-import { PerspectiveCamera, Scene, WebGLRenderer, type Object3D, type WebGLRenderer as ThreeWebGLRenderer } from "three";
+import { PerspectiveCamera, Scene, Vector3, WebGLRenderer, type Object3D, type Quaternion, type WebGLRenderer as ThreeWebGLRenderer } from "three";
 import { AssetResolverBridge } from "../assets/resolver";
 import type { Problem } from "../assets/problems";
 import type { CommandDispatcher } from "../commands/dispatcher";
@@ -7,6 +7,7 @@ import type { SelectionMode } from "../selection/selection";
 import type { EditorStore } from "../editor/store";
 import type { SceneSnapshot } from "../snapshot/types";
 import { isDataDisplayAnchor } from "../snapshot/nodes";
+import { supportsNodeMotion } from "../snapshot/node-motion";
 import type { AuthoredCameraView, AuthoredCameraViewInput } from "../cameras/types";
 import type { GltfLoaderAdapter } from "./gltf-loader-adapter";
 import type { RuntimePmremAdapter } from "./pmrem-adapter";
@@ -71,6 +72,8 @@ export interface EditorRuntimeOptions {
   loader?: GltfLoaderAdapter;
   rendererFactory?: RendererFactory;
   interactions?: boolean | RuntimeInteractionOptions;
+  scheduleFrame?: RuntimeAnimationFrameScheduler;
+  cancelFrame?: RuntimeAnimationFrameCancel;
 }
 
 interface ThreeEditorRuntimeOptions extends EditorRuntimeOptions {
@@ -84,8 +87,6 @@ interface ThreeEditorRuntimeOptions extends EditorRuntimeOptions {
   viewportHelpers?: EditorViewportHelperState;
   transformMode?: EditorTransformModeState;
   resizeObserverFactory?: ResizeObserverFactory;
-  scheduleFrame?: RuntimeAnimationFrameScheduler;
-  cancelFrame?: RuntimeAnimationFrameCancel;
 }
 
 export interface EditorRuntime {
@@ -108,12 +109,20 @@ export interface EditorRuntime {
   setDataDisplayValues?(values: ReadonlyMap<string, string>, problems?: readonly Problem[]): void;
   startDataDisplayAnchorPick?(onComplete: (nodeId: string | null) => void): (() => void) | null;
   subscribeProjection?(subscriber: RuntimeProjectionSubscriber): Unsubscribe;
+  getNodeMotionPreviewState?(nodeId: string): NodeMotionPreviewState;
+  subscribeNodeMotionPreview?(subscriber: RuntimeProjectionSubscriber): Unsubscribe;
+  startNodeMotionPreview?(nodeId: string): boolean;
+  stopNodeMotionPreview?(): void;
   setTransformEnabled?(enabled: boolean, allowDataDisplays?: boolean): void;
   dispose(): void;
   readonly disposed: boolean;
 }
 
 export type RuntimeProjectionSubscriber = () => void;
+export type NodeMotionPreviewState = "unavailable" | "loading" | "asset-unavailable" |
+  "target-unresolved" | "target-not-transformable" | "ready" | "playing";
+
+const SPIN_AXES = { x: new Vector3(1, 0, 0), y: new Vector3(0, 1, 0), z: new Vector3(0, 0, 1) };
 
 export interface RuntimeProblemSnapshot {
   version: number;
@@ -164,6 +173,16 @@ export class ThreeEditorRuntime implements EditorRuntime {
   #scheduleFrame: RuntimeAnimationFrameScheduler;
   #cancelFrame: RuntimeAnimationFrameCancel;
   #pendingFrame: number | null = null;
+  #motionPreview: {
+    nodeId: string;
+    object: Object3D;
+    base: Quaternion;
+    axis: Vector3;
+    degreesPerSecond: number;
+    firstFrame: number | null;
+  } | null = null;
+  #motionPreviewSubscribers = new Set<RuntimeProjectionSubscriber>();
+  #projectedSnapshot: SceneSnapshot | null = null;
   #unsubscribe: (() => void) | null = null;
   #unsubscribeSnap: (() => void) | null = null;
   #unsubscribeViewportHelpers: (() => void) | null = null;
@@ -306,6 +325,9 @@ export class ThreeEditorRuntime implements EditorRuntime {
   async project(snapshot: SceneSnapshot = this.#store.getSnapshot()): Promise<void> {
     this.#assertActive();
     const generation = this.#beginProject();
+    this.#projectedSnapshot = null;
+    if (this.#motionPreview) this.stopNodeMotionPreview();
+    else this.#notifyMotionPreview();
     this.#cancelMarquee();
     this.#pointerStart = null;
     // Authored materials must be clean before the material projector reads them;
@@ -325,6 +347,8 @@ export class ThreeEditorRuntime implements EditorRuntime {
     this.#transformControls?.sync(snapshot);
     this.invalidateRender();
     this.#publishProblems();
+    this.#projectedSnapshot = snapshot;
+    this.#notifyMotionPreview();
     this.#notifyProjection();
   }
 
@@ -343,13 +367,65 @@ export class ThreeEditorRuntime implements EditorRuntime {
     };
   }
 
+  getNodeMotionPreviewState(nodeId: string): NodeMotionPreviewState {
+    if (this.#disposed) return "unavailable";
+    if (this.#motionPreview?.nodeId === nodeId) return "playing";
+    if (!this.#projectedSnapshot) return "loading";
+    const node = this.#projectedSnapshot.nodes[nodeId];
+    if (!supportsNodeMotion(node)) return "unavailable";
+    const target = this.projector.objects.getTarget(nodeId);
+    const owner = node.kind === "object" ? target?.object : this.projector.objects.getObject(node.ownerObjectId);
+    if (!owner || owner.userData.problem || owner.userData.runtimePlaceholder) return "asset-unavailable";
+    if (!target || (node.kind === "imported" && node.remap?.status === "unresolved")) return "target-unresolved";
+    return target.transformable ? "ready" : "target-not-transformable";
+  }
+
+  subscribeNodeMotionPreview(subscriber: RuntimeProjectionSubscriber): Unsubscribe {
+    this.#motionPreviewSubscribers.add(subscriber);
+    return () => { this.#motionPreviewSubscribers.delete(subscriber); };
+  }
+
+  startNodeMotionPreview(nodeId: string): boolean {
+    const snapshot = this.#store.getSnapshot();
+    if (snapshot.selection.nodeId !== nodeId || snapshot.selection.nodeIds.length !== 1 ||
+      this.#transformControls?.dragging || this.getNodeMotionPreviewState(nodeId) !== "ready") return false;
+    const node = snapshot.nodes[nodeId];
+    const object = this.getNodeTarget(nodeId);
+    if (!supportsNodeMotion(node) || !node.motion || !object) return false;
+    this.#motionPreview = {
+      nodeId, object, base: object.quaternion.clone(), axis: SPIN_AXES[node.motion.axis],
+      degreesPerSecond: node.motion.degreesPerSecond, firstFrame: null
+    };
+    this.setTransformEnabled(this.#transformEnabled, this.#allowDataDisplays);
+    this.invalidateRender();
+    this.#notifyMotionPreview();
+    return true;
+  }
+
+  stopNodeMotionPreview(): void {
+    const preview = this.#motionPreview;
+    if (!preview) return;
+    this.#motionPreview = null;
+    preview.object.quaternion.copy(preview.base);
+    preview.object.updateMatrix();
+    this.#syncSelectionVisuals();
+    this.#syncRendererShadowMap();
+    this.setTransformEnabled(this.#transformEnabled, this.#allowDataDisplays);
+    this.invalidateRender();
+    this.#notifyMotionPreview();
+  }
+
+  #notifyMotionPreview(): void {
+    for (const subscriber of this.#motionPreviewSubscribers) subscriber();
+  }
+
   setTransformEnabled(enabled: boolean, allowDataDisplays = false): void {
     if (this.#disposed) {
       return;
     }
     this.#transformEnabled = enabled;
     this.#allowDataDisplays = allowDataDisplays;
-    this.#transformControls?.setEnabled(!this.#anchorPick && enabled, !this.#anchorPick && allowDataDisplays);
+    this.#transformControls?.setEnabled(!this.#anchorPick && !this.#motionPreview && enabled, !this.#anchorPick && allowDataDisplays);
     this.#transformControls?.sync(this.#store.getSnapshot());
   }
 
@@ -453,15 +529,28 @@ export class ThreeEditorRuntime implements EditorRuntime {
       return;
     }
 
-    this.#pendingFrame = this.#scheduleFrame(() => {
+    this.#pendingFrame = this.#scheduleFrame((time) => {
       this.#pendingFrame = null;
       if (this.#disposed) {
         return;
       }
       this.#controls?.update();
+      const preview = this.#motionPreview;
+      if (preview) {
+        preview.firstFrame ??= time;
+        const period = 360_000 / Math.abs(preview.degreesPerSecond);
+        const elapsed = (time - preview.firstFrame) % period;
+        const radians = elapsed * (preview.degreesPerSecond / 1000) * (Math.PI / 180);
+        preview.object.quaternion.copy(preview.base);
+        preview.object.rotateOnAxis(preview.axis, radians);
+        preview.object.updateMatrix();
+        this.#syncSelectionVisuals();
+        this.#syncRendererShadowMap();
+      }
       // A non-attenuated perspective sprite is sized in view-space at unit depth.
       this.projector.resizeDataDisplays(2 / ((this.#container.clientHeight || 1) * this.camera.projectionMatrix.elements[5]));
       this.#renderer.render(this.scene, this.camera);
+      if (this.#motionPreview) this.invalidateRender();
     });
   }
 
@@ -521,6 +610,9 @@ export class ThreeEditorRuntime implements EditorRuntime {
     }
 
     this.#disposed = true;
+    this.stopNodeMotionPreview();
+    this.#motionPreviewSubscribers.clear();
+    this.#projectedSnapshot = null;
     this.#finishAnchorPick(null);
     this.#projectGeneration += 1;
     if (this.#pendingFrame !== null) {
