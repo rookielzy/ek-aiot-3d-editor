@@ -91,6 +91,7 @@
         :inspector="currentInspector"
         :camera="context.camera"
         :data-context="context"
+        :data-displays="dataDisplays"
         :i18n="context.i18n"
         :class="inspectorClassName"
         @update:active-light-id="workbench.setActiveLightId"
@@ -110,6 +111,7 @@
 import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, toRef, useId } from "vue";
 import { buildWorkbenchModel, resolveEditorShortcut, type EditorAction, type EditorRuntimeOptions, type Problem } from "@ek-aiot/3d-editor-core";
 import { useWorkbench, type ResolvedWorkbenchContext } from "../composables/use-workbench";
+import { useDataDisplayRealtime } from "../composables/use-data-display-realtime";
 import type { DataProblemTarget } from "./workbench-problem-target";
 import type { PanelLocateRequest, ProblemLocateRequest } from "./problem-locate";
 import type { EditorWorkbenchEmitDefinitions, EditorWorkbenchProps, EditorWorkbenchSlots } from "./EditorWorkbench.types";
@@ -153,12 +155,14 @@ const workbench = useWorkbench({
   snapshot: props.snapshot,
   credentials: props.credentials,
   executor: props.executor,
+  maxResponseBytes: props.maxResponseBytes,
   loader: toRef(props, "loader"),
   locale: toRef(props, "locale"),
   defaultLocale: props.defaultLocale,
   translate: toRef(props, "translate"),
   onLocaleChange: (locale) => emit("update:locale", locale)
 });
+const dataDisplays = useDataDisplayRealtime(workbench);
 
 const projectFeedback = ref<{ editor: typeof workbench.editor; problems: Problem[] } | null>(null);
 const projectProblems = computed(() => projectFeedback.value?.editor === workbench.editor

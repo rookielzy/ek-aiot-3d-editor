@@ -51,7 +51,9 @@ export function useDataDisplayRealtime(editor: Editor, snapshot: SceneSnapshot) 
     for (const card of cards) {
       const source = card.source;
       const result = getResult(source.connectionId);
-      const value = formatDeviceRealtimeField(result?.ok ? result.devices.get(source.deviceId) : undefined, source.fieldKey);
+      const value = formatDeviceRealtimeField(
+        result?.ok ? result.devices.get(source.deviceId) : undefined, source.fieldKey, { includeUnit: false }
+      );
       if (value !== null) values.set(card.id, value);
       const message = result?.ok === false ? result.message
         : connectionMap[source.connectionId] ? undefined : "The card's data source is unavailable.";

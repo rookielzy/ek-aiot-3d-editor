@@ -35,8 +35,18 @@
   overflow-wrap: anywhere;
 }
 
-.ek-data-display-row > input {
+.ek-data-display-row > input[type="number"] {
   max-width: 7rem;
+}
+
+.ek-data-display-affix {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.ek-data-display-text-preview {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .ek-data-display-card-select {

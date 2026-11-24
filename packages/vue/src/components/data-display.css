@@ -1,0 +1,117 @@
+.ek-inspector > .ek-inspector-tabs:has(~ [role="tabpanel"] .ek-data-display) {
+  column-gap: 0.65rem;
+}
+
+.ek-data-display,
+.ek-data-display-section {
+  display: grid;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.ek-data-display {
+  padding: 0.75rem 0;
+}
+
+.ek-data-display-section {
+  padding: 0.65rem 0;
+  border-top: 1px solid var(--ek-panel-border);
+}
+
+.ek-data-display p {
+  margin: 0;
+}
+
+.ek-data-display-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, max-content);
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.ek-data-display-row span,
+.ek-data-display-row strong,
+.ek-data-display-row small {
+  overflow-wrap: anywhere;
+}
+
+.ek-data-display-row > input[type="number"] {
+  max-width: 7rem;
+}
+
+.ek-data-display-affix {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.ek-data-display-text-preview {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ek-data-display-card-select {
+  width: 100%;
+  min-width: 0;
+  white-space: normal;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.ek-data-display-card-select[aria-pressed="true"] {
+  border-color: var(--ek-panel-accent);
+  background: var(--ek-workbench-accent-soft);
+}
+
+.ek-data-display-position {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.ek-device-select-popup {
+  box-sizing: border-box;
+  width: var(--reka-combobox-trigger-width);
+  max-width: var(--reka-combobox-content-available-width);
+  padding: 0.2rem;
+}
+
+.ek-device-select-scroll {
+  max-height: min(16rem, calc(var(--reka-combobox-content-available-height) - 0.5rem));
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.ek-device-select-option {
+  position: absolute;
+  top: 0;
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr) minmax(0, 35%);
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  height: 34px;
+  box-sizing: border-box;
+  padding: 0 0.35rem;
+  border-radius: var(--ek-workbench-radius-sm);
+  cursor: pointer;
+}
+
+.ek-device-select-option[data-highlighted] {
+  background: var(--ek-workbench-accent-soft);
+}
+
+.ek-device-select-name,
+.ek-device-select-id {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ek-device-select-id,
+.ek-device-select-empty {
+  color: var(--ek-workbench-muted);
+}
+
+.ek-device-select-empty:not(:empty) {
+  padding: 0.45rem;
+}

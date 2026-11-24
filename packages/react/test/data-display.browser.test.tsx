@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import { BoxGeometry, Mesh, MeshBasicMaterial, WebGLRenderer } from "three";
+import { BoxGeometry, Mesh, MeshBasicMaterial, Sprite, WebGLRenderer } from "three";
 import { expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { createEditor, type EditorRuntime, type RendererLike } from "@ek-aiot/3d-editor-core";
@@ -73,6 +73,29 @@ it("searches and selects devices, adds a live field, and restores the configured
     await page.getByRole("button", { name: "Add Temperature to canvas" }).click();
     const nodeId = editor.getSnapshot().selection.nodeId!;
     await expect.poll(() => runtime.current?.getNodeTarget(nodeId)?.parent?.type).toBe("Scene");
+    const preview = page.getByLabelText("Canvas text");
+    await expect.element(preview).toHaveTextContent(/^0$/);
+    function hasTextBeyondSingleDigit() {
+      const sprite = runtime.current?.getNodeTarget(nodeId)?.children.find((child) => child instanceof Sprite);
+      const texture = sprite?.material.map?.image;
+      if (!(texture instanceof HTMLCanvasElement)) return undefined;
+      const pixels = texture.getContext("2d")?.getImageData(24, 2, texture.width - 26, texture.height - 4).data;
+      return pixels?.some((value, index) => index % 4 === 0 && value > 128);
+    }
+    await expect.poll(hasTextBeyondSingleDigit).toBe(false);
+    const prefix = page.getByRole("textbox", { name: "Prefix", exact: true });
+    const fillPrefix = page.getByRole("combobox", { name: "Quick fill prefix" });
+    await fillPrefix.click();
+    await page.getByRole("option", { name: "Device name", exact: true }).click();
+    await fillPrefix.click();
+    await page.getByRole("option", { name: "Parameter name", exact: true }).click();
+    await expect.element(prefix).toHaveValue("Water pump 1999 Temperature ");
+    await prefix.fill("Inlet: ");
+    await userEvent.keyboard("{Enter}");
+    await page.getByRole("combobox", { name: "Quick fill suffix" }).click();
+    await page.getByRole("option", { name: "Unit", exact: true }).click();
+    await expect.element(preview).toHaveTextContent(/^Inlet: 0 °C$/);
+    await expect.poll(hasTextBeyondSingleDigit).toBe(true);
     const width = page.getByRole("spinbutton", { name: "Width (px)" });
     await width.fill("200");
     await userEvent.keyboard("{Enter}");
@@ -81,7 +104,7 @@ it("searches and selects devices, adds a live field, and restores the configured
     await userEvent.keyboard("{Enter}");
     expect(editor.getSnapshot().nodes[nodeId]).toMatchObject({
       kind: "data-display", source: { connectionId: "plant", deviceId: "pump-1999", fieldKey: "temperature" },
-      style: { width: 200 }, transform: { position: [3, 0, 0] }
+      style: { width: 200, prefix: "Inlet: ", suffix: " °C" }, transform: { position: [3, 0, 0] }
     });
     expect(editor.undo().snapshot.nodes[nodeId].transform?.position).toEqual([0, 0, 0]);
     const saved = editor.serialize();
@@ -89,6 +112,8 @@ it("searches and selects devices, adds a live field, and restores the configured
     const readsBeforeRestore = requests.filter((path) => path === "/realtime").length;
     editor.restore(saved);
     await expect.element(width).toHaveValue(200);
+    await expect.element(prefix).toHaveValue("Inlet: ");
+    await expect.element(page.getByRole("textbox", { name: "Suffix", exact: true })).toHaveValue(" °C");
     await expect.poll(() => requests.filter((path) => path === "/realtime").length).toBeGreaterThan(readsBeforeRestore);
   } finally {
     root.unmount();

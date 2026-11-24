@@ -370,7 +370,9 @@ function validateNode(id: string, node: unknown, objects: unknown, lights: unkno
         errors.push(`Data display ${id} must reference a connection, device and field.`);
       }
       if (!isPlainRecord(style) || !isPixelSize(style.width) || !isPixelSize(style.height) || !isPixelSize(style.fontSize) ||
-        !isColor(style.backgroundColor) || !isColor(style.borderColor) || !isColor(style.textColor)) {
+        !isColor(style.backgroundColor) || !isColor(style.borderColor) || !isColor(style.textColor) ||
+        (style.prefix !== undefined && typeof style.prefix !== "string") ||
+        (style.suffix !== undefined && typeof style.suffix !== "string")) {
         errors.push(`Data display ${id} has an invalid style.`);
       }
       break;

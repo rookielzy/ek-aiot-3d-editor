@@ -101,6 +101,8 @@ export interface DataDisplaySource {
 }
 
 export interface DataDisplayStyle {
+  prefix?: string;
+  suffix?: string;
   width: number;
   height: number;
   backgroundColor: string;

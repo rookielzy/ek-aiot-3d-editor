@@ -1,4 +1,5 @@
 import { CanvasTexture, Group, Sprite, SpriteMaterial, SRGBColorSpace } from "three";
+import { formatDataDisplayText } from "../data-sources/device-response";
 import type { SceneDataDisplayNode } from "../snapshot/types";
 
 export class RuntimeDataDisplayCard extends Group {
@@ -34,7 +35,7 @@ export class RuntimeDataDisplayCard extends Group {
     const texture = this.#sprite.material.map;
     if (!node || !canvas || !context || !texture) return;
     const style = node.style;
-    const content = JSON.stringify([node.name, style, value]);
+    const content = JSON.stringify([style, value]);
     if (this.#content === content) return;
     this.#content = content;
     if (canvas.width !== style.width) canvas.width = style.width;
@@ -50,9 +51,7 @@ export class RuntimeDataDisplayCard extends Group {
     context.fillStyle = style.textColor;
     context.font = `${style.fontSize}px system-ui, sans-serif`;
     context.textBaseline = "middle";
-    const twoLines = style.height >= style.fontSize * 2 + 6;
-    if (twoLines) context.fillText(node.name, 8, style.height / 2 - style.fontSize * 0.6);
-    context.fillText(value ?? "—", 8, style.height / 2 + (twoLines ? style.fontSize * 0.6 : 0));
+    context.fillText(formatDataDisplayText(style, value), 8, style.height / 2);
     context.restore();
     texture.needsUpdate = true;
   }

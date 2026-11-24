@@ -9,6 +9,7 @@ export interface EditorWorkbenchProps {
   snapshot?: EditorOptions["snapshot"];
   credentials?: EditorOptions["credentials"];
   executor?: EditorOptions["executor"];
+  maxResponseBytes?: EditorOptions["maxResponseBytes"];
   resolver?: AssetResolverBridge;
   loader?: EditorRuntimeOptions["loader"];
   rendererFactory?: EditorRuntimeOptions["rendererFactory"];

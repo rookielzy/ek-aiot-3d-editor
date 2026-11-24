@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  formatDataDisplayText,
   formatDeviceRealtimeField,
   type DataDeviceListItem,
   type Transform
@@ -10,6 +11,7 @@ import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
 import type { DataDisplayRealtimeContext } from "../hooks/use-data-display-realtime";
 import { InspectorColorInput } from "./InspectorColorInput";
 import { InspectorNumberInput } from "./InspectorNumberInput";
+import { InspectorTextInput } from "./InspectorTextInput";
 import { Button } from "./ui/Button";
 import { DeviceMultiSelect } from "./ui/DeviceMultiSelect";
 import { WorkbenchSelect } from "./ui/WorkbenchSelect";
@@ -17,6 +19,7 @@ import "./data-display.css";
 
 const numericStyleFields = ["width", "height", "fontSize"] as const;
 const colorStyleFields = ["backgroundColor", "borderColor", "textColor"] as const;
+const affixFields = ["prefix", "suffix"] as const;
 const axes = ["X", "Y", "Z"] as const;
 
 export function DataDisplayInspector({ context, data, active }: {
@@ -45,9 +48,24 @@ export function DataDisplayInspector({ context, data, active }: {
   const card = data.cards.find((item) => item.id === snapshot.selection.nodeId);
   const cardConnection = card ? snapshot.dataSources.connections[card.source.connectionId] : undefined;
   const cardRealtime = card ? data.getResult(card.source.connectionId) : undefined;
-  const cardValue = card && cardRealtime?.ok
-    ? formatDeviceRealtimeField(cardRealtime.devices.get(card.source.deviceId), card.source.fieldKey)
+  const cardDevices = useDeviceEndpoint(data.service,
+    active && cardConnection?.id !== connectionId ? cardConnection : undefined, "deviceList");
+  const deviceList = cardConnection?.id === connectionId ? list : cardDevices;
+  const cardDevice = card && cardRealtime?.ok ? cardRealtime.devices.get(card.source.deviceId) : undefined;
+  const deviceName = card && deviceList?.ok
+    ? deviceList.records.find((entry) => entry.deviceId === card.source.deviceId)?.deviceName
+    : undefined;
+  const cardField = cardDevice?.data.find((field) => field.key === card?.source.fieldKey);
+  const cardValue = card
+    ? formatDeviceRealtimeField(cardDevice, card.source.fieldKey, { includeUnit: false })
     : null;
+  const quickFillEntries = [
+    { key: "deviceName", text: deviceName },
+    { key: "fieldName", text: card?.source.fieldKey === null ? t("dataDisplay.runningStatus") : cardField?.desc },
+    { key: "unit", text: cardField?.unit },
+    { key: "deviceId", text: card?.source.deviceId },
+    { key: "fieldKey", text: card?.source.fieldKey }
+  ] as const;
   const feedback = context.viewportHelpers.state.snapFeedback;
   const position = card && feedback.nodeId === card.id && feedback.mode === "translate"
     ? feedback.snapped ?? feedback.preview ?? card.transform.position : card?.transform.position;
@@ -139,7 +157,38 @@ export function DataDisplayInspector({ context, data, active }: {
           </div>
           {cardRealtime && !cardRealtime.ok
             ? <p role="alert">{t("dataDisplay.loadFailed", { detail: cardRealtime.message })}</p>
-            : <p>{cardConnection ? cardValue ?? "—" : t("dataDisplay.sourceUnavailable")}</p>}
+            : <p aria-label={t("dataDisplay.preview")} className="ek-data-display-text-preview">
+                {cardConnection ? formatDataDisplayText(card.style, cardValue) : t("dataDisplay.sourceUnavailable")}
+              </p>}
+          {affixFields.map((field) => {
+            const label = t(`dataDisplay.${field}`);
+            const current = card.style[field] ?? "";
+            const quickFill = t(`dataDisplay.fill.${field}`);
+            return (
+              <div key={field} className="ek-data-display-affix">
+                <span>{label}</span>
+                <div className="ek-data-display-row">
+                  <InspectorTextInput aria-label={label} value={current} onCommit={(value) => commit({
+                    type: "update-data-display-style", nodeId: card.id, style: { [field]: value }
+                  })} />
+                  <WorkbenchSelect aria-label={quickFill} value=""
+                    options={[
+                      { value: "", label: t("dataDisplay.quickFill"), disabled: true },
+                      ...quickFillEntries.map((entry) => ({
+                        value: entry.key, label: t(`dataDisplay.fill.${entry.key}`), disabled: !entry.text
+                      }))
+                    ]}
+                    onChange={(key) => {
+                      const text = quickFillEntries.find((entry) => entry.key === key)?.text;
+                      if (!text) return;
+                      const separator = current && !/\s$/.test(current) ? " " : "";
+                      const value = field === "prefix" ? `${current}${separator}${text} ` : `${current || " "}${separator}${text}`;
+                      commit({ type: "update-data-display-style", nodeId: card.id, style: { [field]: value } });
+                    }} />
+                </div>
+              </div>
+            );
+          })}
           {numericStyleFields.map((field) => (
             <label key={field} className="ek-data-display-row">
               <span>{t(`dataDisplay.${field}`)}</span>

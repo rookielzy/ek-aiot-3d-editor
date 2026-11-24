@@ -1,4 +1,5 @@
 import { isPlainRecord, type JsonValue } from "../snapshot/json";
+import type { DataDisplayStyle } from "../snapshot/types";
 import { parseDataIsoDateTime } from "./response";
 import type { DataDeviceEndpointKind, DataParameterValue } from "./types";
 
@@ -29,13 +30,21 @@ export interface DataDeviceEndpointRecords {
   deviceRealtime: readonly DataDeviceRealtimeItem[];
 }
 
-export function formatDeviceRealtimeField(device: DataDeviceRealtimeItem | undefined, fieldKey: string | null): string | null {
+export function formatDeviceRealtimeField(
+  device: DataDeviceRealtimeItem | undefined,
+  fieldKey: string | null,
+  options: { includeUnit?: boolean } = {}
+): string | null {
   if (!device) return null;
   if (fieldKey === null) return device.runningStatusEnum.find((entry) => entry.value === device.runningStatus)?.desc ?? null;
   const field = device.data.find((entry) => entry.key === fieldKey);
   if (!field || field.value === null) return null;
   const label = field.valueEnum?.find((entry) => entry.value === field.value)?.desc;
-  return label ?? (field.unit ? `${field.value} ${field.unit}` : String(field.value));
+  return label ?? (field.unit && options.includeUnit !== false ? `${field.value} ${field.unit}` : String(field.value));
+}
+
+export function formatDataDisplayText(style: Pick<DataDisplayStyle, "prefix" | "suffix">, value: string | null | undefined): string {
+  return `${style.prefix ?? ""}${value ?? "—"}${style.suffix ?? ""}`;
 }
 
 export function validateDeviceEndpointResponse(kind: DataDeviceEndpointKind, json: JsonValue | undefined):

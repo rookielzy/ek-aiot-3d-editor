@@ -66,14 +66,20 @@
           </template>
         </InspectorTabs>
       </template>
+      <template #dataDisplay>
+        <DataDisplayInspector v-if="dataContext && dataDisplays" :context="dataContext" :data="dataDisplays"
+          :active="activeGroup === 'dataDisplay'" />
+      </template>
     </InspectorTabs>
   </aside>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRaw } from "vue";
+import { computed, ref, toRaw, watch } from "vue";
 import type { Editor, InspectorModel, SceneSnapshot } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext, WorkbenchCameraContext } from "../composables/use-workbench";
+import type { DataDisplayRealtimeContext } from "../composables/use-data-display-realtime";
+import { resolveDataDisplayMessage } from "../i18n/data-display-i18n";
 import { DEFAULT_INSPECTOR_I18N, renderSectionTitle, type InspectorI18n } from "./inspector-i18n";
 import { problemToneFromSeverities } from "./workbench-model-helpers";
 import "./inspector.css";
@@ -83,6 +89,7 @@ import EnvironmentInspector from "./EnvironmentInspector.vue";
 import LightInspector from "./LightInspector.vue";
 import CameraInspector from "./CameraInspector.vue";
 import DataBindingInspector from "./DataBindingInspector.vue";
+import DataDisplayInspector from "./DataDisplayInspector.vue";
 import ProblemsPanel from "./ProblemsPanel.vue";
 import InspectorTabs from "./InspectorTabs.vue";
 
@@ -92,6 +99,7 @@ const props = defineProps<{
   inspector: InspectorModel;
   camera?: WorkbenchCameraContext;
   dataContext?: ResolvedWorkbenchContext;
+  dataDisplays?: DataDisplayRealtimeContext;
   i18n?: InspectorI18n;
 }>();
 
@@ -104,9 +112,16 @@ const emit = defineEmits<{
 const rawEditor = toRaw(props.editor);
 const resolvedI18n = computed(() => props.i18n ?? DEFAULT_INSPECTOR_I18N);
 const activeGroup = ref("object");
-const groups = computed(() => (["object", "environment", "scene"] as const).map((id) => ({
-  id, label: resolvedI18n.value.t(`reactWorkbench.inspector.groups.${id}`)
-})));
+const groups = computed(() => [
+  ...(["object", "environment", "scene"] as const).map((id) => ({
+    id, label: resolvedI18n.value.t(`reactWorkbench.inspector.groups.${id}`)
+  })),
+  ...(props.dataContext && props.dataDisplays
+    ? [{ id: "dataDisplay", label: resolveDataDisplayMessage(resolvedI18n.value, "dataDisplay.section") }] : [])
+]);
+watch(() => props.inspector.selection.node?.kind === "data-display" ? props.inspector.selection.nodeId : null, (id) => {
+  if (id && props.dataDisplays) activeGroup.value = "dataDisplay";
+}, { immediate: true });
 const selectedLight = computed(() => props.inspector.selection.count === 1 && !!props.inspector.selection.light);
 const selectedCamera = computed(() => props.inspector.selection.count === 1 && !!props.inspector.selection.cameraView);
 const objectTabs = computed(() => {
