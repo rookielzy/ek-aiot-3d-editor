@@ -1,6 +1,7 @@
 import { Box3, Vector3, type Camera, type Object3D } from "three";
 import type { MarqueeSelectionRect } from "../editor/marquee-selection-state";
-import type { RuntimeNodeTarget, ThreeObjectMap } from "./three-object-map";
+import { RuntimeDataDisplayCard } from "./data-display-card";
+import { getRuntimeNodePickPriority, type RuntimeNodeTarget, type ThreeObjectMap } from "./three-object-map";
 
 export interface RuntimeMarqueeSelectionOptions {
   camera: Camera;
@@ -88,7 +89,7 @@ export class RuntimeMarqueeSelection {
     return {
       nodeId: target.nodeId,
       rect: targetRect,
-      pickPriority: target.pickPriority ?? defaultMarqueePickPriority(target),
+      pickPriority: getRuntimeNodePickPriority(target),
       target
     };
   }
@@ -100,6 +101,19 @@ function projectTargetRect(
   viewport: { width: number; height: number }
 ): MarqueeSelectionRect | null {
   target.object.updateWorldMatrix(true, true);
+  if (target.object instanceof RuntimeDataDisplayCard && target.object.pixelSize) {
+    const size = target.object.pixelSize;
+    const center = projectWorldPoints([target.object.getWorldPosition(new Vector3())], camera, viewport);
+    if (!center) return null;
+    return normalizeSelectionRect({
+      left: center.left - size.width / 2,
+      right: center.right + size.width / 2,
+      top: center.top - size.height / 2,
+      bottom: center.bottom + size.height / 2,
+      width: size.width,
+      height: size.height
+    });
+  }
   const bounds = new Box3().setFromObject(target.object);
   if (bounds.isEmpty()) {
     const worldPosition = new Vector3();
@@ -255,18 +269,4 @@ function emptyMarqueeSelectionResult(): RuntimeMarqueeSelectionResult {
     primaryNodeId: null,
     candidates: []
   };
-}
-
-function defaultMarqueePickPriority(target: RuntimeNodeTarget): number {
-  switch (target.kind) {
-    case "imported":
-      return 20;
-    case "light":
-    case "camera":
-      return 15;
-    case "object":
-      return 10;
-    case "group":
-      return 5;
-  }
 }

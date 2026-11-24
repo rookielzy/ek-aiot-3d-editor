@@ -215,6 +215,24 @@ type SceneNode =
     }
   | {
       id: NodeId;
+      kind: "data-display";
+      name: string;
+      parentId: null;
+      children: [];
+      transform: Transform;
+      source: { connectionId: string; deviceId: string; fieldKey: string | null };
+      style: {
+        width: number;
+        height: number;
+        fontSize: number;
+        backgroundColor: string;
+        borderColor: string;
+        textColor: string;
+      };
+      metadata?: Record<string, JsonValue>;
+    }
+  | {
+      id: NodeId;
       kind: "imported";
       name: string;
       ownerObjectId: string;
@@ -230,6 +248,8 @@ type SceneNode =
 ```
 
 `SceneNode` 保存共同 authoring target 字段：稳定 ID、展示名称、类型、父子关系、可选 metadata，以及有意义时的 transform。object node 引用 `objects` payload，light node 引用 `lights` payload，group node 没有额外 payload，imported node 表示 GLB object 内部的 durable authoring target。
+
+数据卡片（`data-display`）是可平移的根节点。`transform.position` 使用世界坐标，`width`、`height` 和 `fontSize` 使用整数屏幕像素，颜色使用 `#rrggbb`。卡片面向镜头并参与场景深度测试。`source.fieldKey` 为 `null` 表示设备运行状态，否则指向设备实时属性的稳定 key。请求结果和渲染纹理只存在于运行态。
 
 迁移规则：
 

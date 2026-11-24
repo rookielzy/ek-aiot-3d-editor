@@ -80,6 +80,12 @@ export function reparentNode(
   if (node.kind === "camera" && nextParentId !== null) {
     throw new Error("Camera nodes must remain root nodes.");
   }
+  if (node.kind === "data-display" && nextParentId !== null) {
+    throw new Error("Data display nodes must remain root nodes.");
+  }
+  if (nextParentId && nodes[nextParentId]?.kind === "data-display") {
+    throw new Error("Data display nodes cannot contain child nodes.");
+  }
   if (nextParentId && nodes[nextParentId]?.kind === "camera") {
     throw new Error("Camera nodes cannot contain child nodes.");
   }

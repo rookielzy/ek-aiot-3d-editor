@@ -57,7 +57,7 @@ export class CoreEditor implements EditorWithGlbImport {
   #assetWorkspaceVersion = 0;
   #resolver = new AssetResolverBridge(undefined, this.projectAssets);
   #dataCredentials: readonly DataCredentialDescriptor[] = [];
-  #dataService: EditorDataService;
+  #dataService: CoreDataService;
   #dataColorService: CoreDataColorService;
   #unsubscribePreviewLock: (() => void) | null = null;
   #disposed = false;
@@ -83,7 +83,7 @@ export class CoreEditor implements EditorWithGlbImport {
       dataService: this.#dataService
     });
     this.#unsubscribePreviewLock = this.#dataService.subscribeObjectData((state) => {
-      this.#runtime?.setTransformEnabled?.(!state.preview.enabled);
+      this.#runtime?.setTransformEnabled?.(!state.preview.enabled, true);
     });
   }
 
@@ -169,6 +169,7 @@ export class CoreEditor implements EditorWithGlbImport {
     this.viewportHelpers.reset();
     this.transformMode.reset();
     const nextSnapshot = this.store.replaceSnapshot(restored);
+    this.#dataService.resetDeviceReads();
     this.#notifyAssetWorkspaceSubscribers();
     return nextSnapshot;
   }
@@ -238,6 +239,7 @@ export class CoreEditor implements EditorWithGlbImport {
     this.viewportHelpers.setHover(null);
     this.viewportHelpers.setSnapFeedback(IDLE_VIEWPORT_SNAP_FEEDBACK);
     const snapshot = this.store.replaceSnapshot(result.snapshot, { allowDanglingDataReferences: true });
+    this.#dataService.resetDeviceReads();
     this.#notifyAssetWorkspaceSubscribers();
     void this.#runtime?.project(snapshot);
     return {
@@ -559,7 +561,7 @@ export class CoreEditor implements EditorWithGlbImport {
       setDataColors: (assignments) => runtime.setDataColors?.(assignments) ?? [],
       subscribeProjection: (subscriber) => runtime.subscribeProjection?.(subscriber) ?? (() => {})
     });
-    runtime.setTransformEnabled?.(!this.#dataService.getObjectDataState().preview.enabled);
+    runtime.setTransformEnabled?.(!this.#dataService.getObjectDataState().preview.enabled, true);
     this.#notifyRuntimeSubscribers();
     return this.#runtime;
   }
@@ -630,7 +632,7 @@ export class CoreEditor implements EditorWithGlbImport {
       this.#stopDataRuntime();
       return null;
     }
-    return isCommandAllowedDuringPreview(command)
+    return isCommandAllowedDuringPreview(command, this.store.getSnapshot())
       ? null
       : "data-preview-locked: Stop data preview before changing scene transforms or materials.";
   }
@@ -691,6 +693,8 @@ const DATA_PREVIEW_COMMANDS = new Set<Command["type"]>([
   "update-data-connection",
   "duplicate-data-connection",
   "delete-data-connection",
+  "create-data-display",
+  "update-data-display-style",
   "create-data-query",
   "update-data-query",
   "duplicate-data-query",
@@ -699,9 +703,13 @@ const DATA_PREVIEW_COMMANDS = new Set<Command["type"]>([
   "delete-data-object-binding"
 ]);
 
-function isCommandAllowedDuringPreview(command: Command): boolean {
+function isCommandAllowedDuringPreview(command: Command, snapshot: SceneSnapshot): boolean {
   if (command.type === "batch") {
-    return command.commands.every(isCommandAllowedDuringPreview);
+    return command.commands.every((entry) => isCommandAllowedDuringPreview(entry, snapshot));
+  }
+  if (command.type === "set-node-transform") return snapshot.nodes[command.nodeId]?.kind === "data-display";
+  if (command.type === "delete-nodes") {
+    return (command.nodeIds ?? snapshot.selection.nodeIds).every((id) => snapshot.nodes[id]?.kind === "data-display");
   }
   return DATA_PREVIEW_COMMANDS.has(command.type);
 }

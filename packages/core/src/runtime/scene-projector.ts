@@ -6,6 +6,7 @@ import type { ResolvedAsset } from "../assets/types";
 import type { AssetReference } from "../snapshot/types";
 import type { SceneCameraNode, SceneImportedGlbNode, SceneLightNode, SceneNode, SceneObject, SceneObjectNode, SceneSnapshot } from "../snapshot/types";
 import { cloneTransform } from "../snapshot/transforms";
+import { RuntimeDataDisplayCard } from "./data-display-card";
 import { EnvironmentProjector } from "./environment-projector";
 import type { GltfLoaderAdapter } from "./gltf-loader-adapter";
 import { GlbImportError, PlaceholderGltfLoaderAdapter } from "./gltf-loader-adapter";
@@ -55,6 +56,8 @@ export class SceneProjector {
   #projectionGeneration = 0;
   #disposed = false;
   #rendererShadowMapAvailable = true;
+  #dataDisplayValues: ReadonlyMap<string, string> = new Map();
+  #dataDisplayPixelScale = 1;
 
   constructor(options: SceneProjectorOptions = {}) {
     this.scene = options.scene ?? new Scene();
@@ -84,6 +87,21 @@ export class SceneProjector {
 
   setRendererShadowMapAvailable(available: boolean): void {
     this.#rendererShadowMapAvailable = available;
+  }
+
+  setDataDisplayValues(values: ReadonlyMap<string, string>): void {
+    this.#dataDisplayValues = values;
+    for (const [id, object] of this.objects.nodeEntries()) {
+      if (object instanceof RuntimeDataDisplayCard) object.setValue(values.get(id));
+    }
+  }
+
+  resizeDataDisplays(pixelScale: number): void {
+    if (pixelScale === this.#dataDisplayPixelScale) return;
+    this.#dataDisplayPixelScale = pixelScale;
+    for (const [, object] of this.objects.nodeEntries()) {
+      if (object instanceof RuntimeDataDisplayCard) object.resize(pixelScale);
+    }
   }
 
   async project(snapshot: SceneSnapshot): Promise<void> {
@@ -178,6 +196,21 @@ export class SceneProjector {
       case "group":
         runtimeObject = this.#projectGroupNode(node, snapshot);
         break;
+      case "data-display": {
+        const previous = this.objects.get(node.id);
+        const card = previous instanceof RuntimeDataDisplayCard ? previous : new RuntimeDataDisplayCard();
+        card.name = node.name;
+        card.position.fromArray(node.transform.position);
+        card.sync(node, this.#dataDisplayValues.get(node.id));
+        card.resize(this.#dataDisplayPixelScale);
+        this.objects.set(node.id, card, {
+          kind: node.kind,
+          selected: snapshot.selection.nodeIds.includes(node.id),
+          primarySelected: snapshot.selection.nodeId === node.id
+        });
+        runtimeObject = card;
+        break;
+      }
       case "light":
         runtimeObject = this.#projectLightNode(node, snapshot, parent, activeLightIds);
         break;
@@ -823,6 +856,7 @@ export class SceneProjector {
       case "object":
         return target.objectId === node.objectId && Boolean(snapshot.objects[node.objectId]);
       case "group":
+      case "data-display":
         return true;
       case "light":
         return target.lightId === node.lightId && Boolean(snapshot.lights[node.lightId]);

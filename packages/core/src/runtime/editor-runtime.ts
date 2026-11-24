@@ -104,8 +104,9 @@ export interface EditorRuntime {
   captureCameraView(input?: Pick<AuthoredCameraViewInput, "id" | "name" | "metadata">): RuntimeCameraViewCaptureResult;
   applyCameraView(view: AuthoredCameraView): void;
   setDataColors?(assignments: readonly DataColorAssignment[]): readonly DataColorObjectCapability[];
+  setDataDisplayValues?(values: ReadonlyMap<string, string>, problems?: readonly Problem[]): void;
   subscribeProjection?(subscriber: RuntimeProjectionSubscriber): Unsubscribe;
-  setTransformEnabled?(enabled: boolean): void;
+  setTransformEnabled?(enabled: boolean, allowDataDisplays?: boolean): void;
   dispose(): void;
   readonly disposed: boolean;
 }
@@ -128,6 +129,7 @@ interface RuntimeViewportMetrics {
 }
 
 export class ThreeEditorRuntime implements EditorRuntime {
+  #dataDisplayProblems: readonly Problem[] = [];
   readonly scene = new Scene();
   readonly camera = new PerspectiveCamera(50, 1, 0.1, 1000);
   readonly projector: SceneProjector;
@@ -330,14 +332,12 @@ export class ThreeEditorRuntime implements EditorRuntime {
     };
   }
 
-  setTransformEnabled(enabled: boolean): void {
+  setTransformEnabled(enabled: boolean, allowDataDisplays = false): void {
     if (this.#disposed) {
       return;
     }
-    this.#transformControls?.setEnabled(enabled);
-    if (enabled) {
-      this.#transformControls?.sync(this.#store.getSnapshot());
-    }
+    this.#transformControls?.setEnabled(enabled, allowDataDisplays);
+    this.#transformControls?.sync(this.#store.getSnapshot());
   }
 
   pickNode(nodeId: string | null, mode: SelectionMode = "replace"): CommandResult {
@@ -370,7 +370,7 @@ export class ThreeEditorRuntime implements EditorRuntime {
   }
 
   getProblems(): Problem[] {
-    return this.projector.problems;
+    return [...this.projector.problems, ...this.#dataDisplayProblems];
   }
 
   subscribeProblems(subscriber: RuntimeProblemSubscriber): Unsubscribe {
@@ -386,6 +386,16 @@ export class ThreeEditorRuntime implements EditorRuntime {
   resize(): void {
     this.#assertActive();
     this.#resizeToContainer(true);
+  }
+
+  setDataDisplayValues(values: ReadonlyMap<string, string>, problems: readonly Problem[] = []): void {
+    if (this.#disposed) return;
+    this.projector.setDataDisplayValues(values);
+    if (JSON.stringify(problems) !== JSON.stringify(this.#dataDisplayProblems)) {
+      this.#dataDisplayProblems = problems;
+      this.#publishProblems();
+    }
+    this.invalidateRender();
   }
 
   #resizeToContainer(invalidate: boolean): void {
@@ -410,6 +420,8 @@ export class ThreeEditorRuntime implements EditorRuntime {
         return;
       }
       this.#controls?.update();
+      // A non-attenuated perspective sprite is sized in view-space at unit depth.
+      this.projector.resizeDataDisplays(2 / ((this.#container.clientHeight || 1) * this.camera.projectionMatrix.elements[5]));
       this.#renderer.render(this.scene, this.camera);
     });
   }

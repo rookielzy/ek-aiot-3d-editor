@@ -1,6 +1,42 @@
 import { isPlainRecord, type JsonValue } from "../snapshot/json";
 import { parseDataIsoDateTime } from "./response";
-import type { DataDeviceEndpointKind } from "./types";
+import type { DataDeviceEndpointKind, DataParameterValue } from "./types";
+
+export interface DataDeviceListItem {
+  deviceId: string;
+  deviceName: string;
+}
+
+export interface DataDeviceRealtimeField {
+  key: string;
+  desc: string;
+  valueType: "number" | "string" | "boolean";
+  value: DataParameterValue | null;
+  unit?: string;
+  valueEnum?: readonly { value: DataParameterValue; desc: string }[];
+}
+
+export interface DataDeviceRealtimeItem {
+  deviceId: string;
+  runningStatus: number;
+  runningStatusEnum: readonly { value: number; desc: string }[];
+  data: readonly DataDeviceRealtimeField[];
+  observedAt?: string;
+}
+
+export interface DataDeviceEndpointRecords {
+  deviceList: readonly DataDeviceListItem[];
+  deviceRealtime: readonly DataDeviceRealtimeItem[];
+}
+
+export function formatDeviceRealtimeField(device: DataDeviceRealtimeItem | undefined, fieldKey: string | null): string | null {
+  if (!device) return null;
+  if (fieldKey === null) return device.runningStatusEnum.find((entry) => entry.value === device.runningStatus)?.desc ?? null;
+  const field = device.data.find((entry) => entry.key === fieldKey);
+  if (!field || field.value === null) return null;
+  const label = field.valueEnum?.find((entry) => entry.value === field.value)?.desc;
+  return label ?? (field.unit ? `${field.value} ${field.unit}` : String(field.value));
+}
 
 export function validateDeviceEndpointResponse(kind: DataDeviceEndpointKind, json: JsonValue | undefined):
   { ok: true; count: number } | { ok: false; path: string } {

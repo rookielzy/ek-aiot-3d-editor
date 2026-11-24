@@ -149,7 +149,7 @@ export class ThreeObjectMap {
           if (!target?.pickable) {
             continue;
           }
-          const score = (1000 - depth * 100) + (target.pickPriority ?? defaultPickPriority(target));
+          const score = (1000 - depth * 100) + getRuntimeNodePickPriority(target);
           if (!best || score > best.score || (score === best.score && target.nodeId < best.target.nodeId)) {
             best = { target, score };
           }
@@ -256,7 +256,8 @@ function hasPickableTarget(ids: ReadonlySet<string> | undefined, targets: Readon
   return false;
 }
 
-function defaultPickPriority(target: RuntimeNodeTarget): number {
+export function getRuntimeNodePickPriority(target: RuntimeNodeTarget): number {
+  if (target.pickPriority !== undefined) return target.pickPriority;
   switch (target.kind) {
     case "imported":
       return 20;
@@ -265,6 +266,7 @@ function defaultPickPriority(target: RuntimeNodeTarget): number {
     case "camera":
       return 15;
     case "object":
+    case "data-display":
       return 10;
     case "group":
       return 5;

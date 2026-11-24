@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Editor, InspectorModel, SceneSnapshot } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext, WorkbenchCameraContext } from "../hooks/use-workbench";
 import { CameraInspector } from "./CameraInspector";
 import { DataBindingInspector } from "./DataBindingInspector";
+import { DataDisplayInspector } from "./DataDisplayInspector";
+import type { DataDisplayRealtimeContext } from "../hooks/use-data-display-realtime";
 import { EnvironmentInspector } from "./EnvironmentInspector";
 import { InspectorTabs } from "./InspectorTabs";
 import { LightInspector } from "./LightInspector";
@@ -21,14 +23,20 @@ export interface InspectorViewProps {
   setActiveCameraViewId?(value: string | null): void;
   camera?: WorkbenchCameraContext;
   dataContext?: ResolvedWorkbenchContext;
+  dataDisplays?: DataDisplayRealtimeContext;
   i18n?: InspectorI18n;
   onReplaceAsset?(assetId: string, file: File): void | Promise<void>;
   className?: string;
 }
 
-export function InspectorView({ editor, snapshot, inspector, setActiveLightId, setActiveCameraViewId, camera, dataContext, i18n = DEFAULT_INSPECTOR_I18N, onReplaceAsset, className }: InspectorViewProps) {
+export function InspectorView({ editor, snapshot, inspector, setActiveLightId, setActiveCameraViewId, camera, dataContext, dataDisplays, i18n = DEFAULT_INSPECTOR_I18N, onReplaceAsset, className }: InspectorViewProps) {
   const [activeGroup, setActiveGroup] = useState("object");
   const selection = inspector.selection;
+  const selectedCardId = selection.node?.kind === "data-display" ? selection.node.id : null;
+  const hasDataDisplays = Boolean(dataDisplays);
+  useEffect(() => {
+    if (selectedCardId && hasDataDisplays) setActiveGroup("dataDisplay");
+  }, [selectedCardId, hasDataDisplays]);
   const selectedLight = selection.count === 1 && !!selection.light;
   const selectedCamera = selection.count === 1 && !!selection.cameraView;
   const lightsLabel = renderSectionTitle(i18n, inspector.lights);
@@ -119,7 +127,12 @@ export function InspectorView({ editor, snapshot, inspector, setActiveLightId, s
           label: i18n.t("reactWorkbench.inspector.groups.environment"),
           content: <EnvironmentInspector editor={editor} snapshot={snapshot} section={inspector.environment} i18n={i18n} />
         },
-        { id: "scene", label: i18n.t("reactWorkbench.inspector.groups.scene"), content: scenePanel }
+        { id: "scene", label: i18n.t("reactWorkbench.inspector.groups.scene"), content: scenePanel },
+        ...(dataContext && dataDisplays ? [{
+          id: "dataDisplay",
+          label: i18n.t("dataDisplay.section"),
+          content: <DataDisplayInspector context={dataContext} data={dataDisplays} active={activeGroup === "dataDisplay"} />
+        }] : [])
       ]} />
     </aside>
   );

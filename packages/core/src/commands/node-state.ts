@@ -3,7 +3,7 @@ import { cloneTransform, normalizeTransform } from "../snapshot/transforms";
 import type { SceneNode, SceneSnapshot, Transform } from "../snapshot/types";
 
 export function nodeSupportsTransform(snapshot: SceneSnapshot, node: SceneNode): boolean {
-  if (node.kind === "object" || node.kind === "group" || node.kind === "imported" || node.kind === "camera") {
+  if (node.kind === "object" || node.kind === "group" || node.kind === "imported" || node.kind === "camera" || node.kind === "data-display") {
     return true;
   }
 
@@ -34,6 +34,9 @@ export function setNodeTransformInSnapshot(
 }
 
 export function normalizeNodeTransformPatch(node: SceneNode, transform: Partial<Transform>): Transform {
+  if (node.kind === "data-display" && (transform.rotation !== undefined || transform.scale !== undefined)) {
+    throw new Error("Data display nodes only support position changes.");
+  }
   if (node.kind === "camera" && (transform.rotation !== undefined || transform.scale !== undefined)) {
     throw new Error("Camera node transforms only support position. Edit the camera target to change view direction.");
   }
@@ -230,6 +233,7 @@ function withTransform(node: SceneNode, transform: Transform): SceneNode {
   switch (node.kind) {
     case "object":
     case "group":
+    case "data-display":
     case "imported":
       return {
         ...node,

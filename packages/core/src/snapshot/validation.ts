@@ -298,7 +298,7 @@ function validateNode(id: string, node: unknown, objects: unknown, lights: unkno
   if (sceneNode.id !== id) {
     errors.push(`Node ${id} must use a matching id field.`);
   }
-  if (sceneNode.kind !== "object" && sceneNode.kind !== "group" && sceneNode.kind !== "light" && sceneNode.kind !== "camera" && sceneNode.kind !== "imported") {
+  if (sceneNode.kind !== "object" && sceneNode.kind !== "group" && sceneNode.kind !== "light" && sceneNode.kind !== "camera" && sceneNode.kind !== "imported" && sceneNode.kind !== "data-display") {
     errors.push(`Node ${id} kind is unsupported.`);
   }
   if (typeof sceneNode.name !== "string") {
@@ -356,6 +356,25 @@ function validateNode(id: string, node: unknown, objects: unknown, lights: unkno
         errors.push(`Camera node ${id} transform must include position, rotation, and scale vectors.`);
       }
       break;
+    case "data-display": {
+      const source = node.source;
+      const style = node.style;
+      const isId = (value: unknown) => typeof value === "string" && value.trim().length > 0;
+      const isColor = (value: unknown) => typeof value === "string" && /^#[\da-f]{6}$/i.test(value);
+      const isPixelSize = (value: unknown) => typeof value === "number" && Number.isInteger(value) && value > 0 && value <= 2048;
+      if (node.parentId !== null || !Array.isArray(node.children) || node.children.length || !isTransform(node.transform)) {
+        errors.push(`Data display ${id} must be a root node with a valid transform and no children.`);
+      }
+      if (!isPlainRecord(source) || !isId(source.connectionId) || !isId(source.deviceId) ||
+        (source.fieldKey !== null && !isId(source.fieldKey))) {
+        errors.push(`Data display ${id} must reference a connection, device and field.`);
+      }
+      if (!isPlainRecord(style) || !isPixelSize(style.width) || !isPixelSize(style.height) || !isPixelSize(style.fontSize) ||
+        !isColor(style.backgroundColor) || !isColor(style.borderColor) || !isColor(style.textColor)) {
+        errors.push(`Data display ${id} has an invalid style.`);
+      }
+      break;
+    }
     case "imported":
       validateImportedNode(id, sceneNode, errors);
       break;

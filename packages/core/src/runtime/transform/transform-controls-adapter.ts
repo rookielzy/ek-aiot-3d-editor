@@ -62,12 +62,14 @@ export class TransformControlsAdapter {
   #onChange: () => void;
   #onSnapFeedback: (feedback: ViewportSnapFeedbackState) => void;
   #mode: TransformMode;
+  #positionOnly = false;
   #snap: SnapSettings;
   #helper: Object3D;
   #attachedNodeId: string | null = null;
   #dragNodeId: string | null = null;
   #cameraEnabledBeforeDrag: boolean | null = null;
   #enabled = true;
+  #allowDataDisplays = false;
   #disposed = false;
 
   #handleChange = () => {
@@ -112,13 +114,12 @@ export class TransformControlsAdapter {
     if (this.#disposed) {
       return;
     }
-    if (!this.#enabled) {
+    const nodeId = snapshot.selection.nodeId;
+    const target = nodeId ? this.#objects.getTarget(nodeId) : undefined;
+    if (!this.#enabled && !(this.#allowDataDisplays && target?.kind === "data-display")) {
       this.#detach();
       return;
     }
-
-    const nodeId = snapshot.selection.nodeId;
-    const target = nodeId ? this.#objects.getTarget(nodeId) : undefined;
     const object = target?.transformable ? target.object : undefined;
 
     if (this.#dragNodeId && this.#dragNodeId !== nodeId) {
@@ -131,18 +132,21 @@ export class TransformControlsAdapter {
     }
 
     if (this.#attachedNodeId !== nodeId) {
+      this.#positionOnly = target?.kind === "data-display";
+      this.#applyMode();
       this.#controls.attach(object);
       this.#attachedNodeId = nodeId;
       this.#onChange();
     }
   }
 
-  setEnabled(enabled: boolean): void {
-    if (this.#disposed || this.#enabled === enabled) {
+  setEnabled(enabled: boolean, allowDataDisplays = false): void {
+    if (this.#disposed || (this.#enabled === enabled && this.#allowDataDisplays === allowDataDisplays)) {
       return;
     }
     this.#enabled = enabled;
-    if (!enabled) {
+    this.#allowDataDisplays = allowDataDisplays;
+    if (!enabled && !(allowDataDisplays && this.#positionOnly)) {
       this.#detach();
     }
   }
@@ -223,7 +227,7 @@ export class TransformControlsAdapter {
     }
 
     try {
-      this.#controller.start(this.#attachedNodeId, this.#mode, { snap: this.#snap });
+      this.#controller.start(this.#attachedNodeId, this.#effectiveMode, { snap: this.#snap });
     } catch {
       this.#detach();
       return;
@@ -248,7 +252,7 @@ export class TransformControlsAdapter {
     }
 
     const preview = readTransform(object);
-    this.#controller.preview(patchForMode(this.#mode, preview));
+    this.#controller.preview(patchForMode(this.#effectiveMode, preview));
     this.#publishPreviewFeedback(preview);
     this.#onChange();
   }
@@ -287,7 +291,11 @@ export class TransformControlsAdapter {
   }
 
   #applyMode(): void {
-    this.#controls.setMode(this.#mode);
+    this.#controls.setMode(this.#effectiveMode);
+  }
+
+  get #effectiveMode(): TransformMode {
+    return this.#positionOnly ? "translate" : this.#mode;
   }
 
   #applySnap(): void {
@@ -308,15 +316,16 @@ export class TransformControlsAdapter {
       return;
     }
     const current = previewTransform ?? readTransform(object);
-    const before = vectorForMode(this.#mode, transaction.before);
-    const preview = vectorForMode(this.#mode, current);
-    const increment = this.#snap[this.#mode];
+    const mode = this.#effectiveMode;
+    const before = vectorForMode(mode, transaction.before);
+    const preview = vectorForMode(mode, current);
+    const increment = this.#snap[mode];
     const normalizedIncrement = normalizeSnapIncrement(increment);
     if (increment !== undefined && increment !== null && normalizedIncrement === null) {
       this.#onSnapFeedback({
         status: "invalid",
         nodeId: this.#dragNodeId,
-        mode: this.#mode,
+        mode,
         increment: null,
         channelSnapped: false,
         before,
@@ -329,7 +338,7 @@ export class TransformControlsAdapter {
       this.#onSnapFeedback({
         status: "dragging-unsnapped",
         nodeId: this.#dragNodeId,
-        mode: this.#mode,
+        mode,
         increment: null,
         channelSnapped: false,
         before,
@@ -338,11 +347,11 @@ export class TransformControlsAdapter {
       });
       return;
     }
-    const snapped = vectorForMode(this.#mode, snapTransform(current, this.#snap));
+    const snapped = vectorForMode(mode, snapTransform(current, this.#snap));
     this.#onSnapFeedback({
       status: "dragging-snapped",
       nodeId: this.#dragNodeId,
-      mode: this.#mode,
+      mode,
       increment: normalizedIncrement,
       channelSnapped: !sameVector(preview, snapped),
       before,

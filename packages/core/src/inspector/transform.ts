@@ -42,6 +42,9 @@ export function buildSetTransformCommand(snapshot: SceneSnapshot, fieldId: Trans
   if (target.node.kind === "camera" && vector !== "position") {
     return problem(fieldId, "Camera node transforms only support position. Edit the camera target to change view direction.");
   }
+  if (target.node.kind === "data-display" && vector !== "position") {
+    return problem(fieldId, "Data display nodes only support position changes.");
+  }
   const parsed = parseFiniteNumber(value, fieldId);
   if (!parsed.ok) {
     return problem(fieldId, parsed.message);
@@ -62,7 +65,7 @@ export function buildSetTransformCommand(snapshot: SceneSnapshot, fieldId: Trans
 }
 
 function getTransformVectors(kind: SceneNode["kind"] | undefined): readonly TransformVectorName[] {
-  return kind === "camera" ? ["position"] : VECTORS;
+  return kind === "camera" || kind === "data-display" ? ["position"] : VECTORS;
 }
 
 function defaultTransformValue(vector: TransformVectorName): number {

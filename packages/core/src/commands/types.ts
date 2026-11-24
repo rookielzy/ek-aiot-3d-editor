@@ -13,7 +13,7 @@ import type {
 import type { LightDefinition, LightKind } from "../lights/types";
 import type { MaterialAssignmentTarget, MaterialPatch } from "../materials/types";
 import type { EditorClipboardPayload } from "../clipboard/types";
-import type { JsonValue, NodeId, SceneSnapshot, Transform } from "../snapshot/types";
+import type { DataDisplaySource, DataDisplayStyle, JsonValue, NodeId, SceneSnapshot, Transform } from "../snapshot/types";
 import type { DataConnectionDraft, DataConnectionId, DataConnectionInput, DataObjectBinding, DataQueryDefinition, DataQueryId, DataQueryInput } from "../data-sources/types";
 
 export type Command =
@@ -28,6 +28,8 @@ export type SingleCommand =
   | SelectNodeCommand
   | SelectNodesCommand
   | CreateGroupCommand
+  | CreateDataDisplayCommand
+  | UpdateDataDisplayStyleCommand
   | DeleteNodesCommand
   | GroupNodesCommand
   | UngroupNodesCommand
@@ -102,6 +104,20 @@ export interface SelectNodesCommand {
   nodeId?: NodeId | null;
   nodeIds?: NodeId[];
   primaryNodeId?: NodeId | null;
+}
+
+export interface CreateDataDisplayCommand {
+  type: "create-data-display";
+  nodeId?: NodeId;
+  name: string;
+  source: DataDisplaySource;
+  position?: Transform["position"];
+}
+
+export interface UpdateDataDisplayStyleCommand {
+  type: "update-data-display-style";
+  nodeId: NodeId;
+  style: Partial<DataDisplayStyle>;
 }
 
 export interface CreateGroupCommand {

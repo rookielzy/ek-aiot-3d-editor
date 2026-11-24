@@ -403,6 +403,8 @@ function cloneNodePayload(
       };
     case "camera":
       throw new Error("Camera nodes cannot be pasted from clipboard.");
+    case "data-display":
+      throw new Error("Data display nodes cannot be pasted from clipboard.");
     case "imported":
       return remapImportedNodeOwnerKeys({
         id,

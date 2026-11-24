@@ -506,15 +506,17 @@ function buildWorkbenchToolbar(
   const selectionCount = inspector.selection.count;
   const primaryNode = snapshot.selection.nodeId ? snapshot.nodes[snapshot.selection.nodeId] : undefined;
   const selectionIncludesCamera = inspector.selection.nodeIds.some((nodeId) => nodeSubtreeIncludesKind(snapshot, nodeId, "camera"));
+  const selectionIncludesDataDisplay = inspector.selection.nodeIds.some((nodeId) => snapshot.nodes[nodeId]?.kind === "data-display");
+  const canCopySelection = selectionCount > 0 && !selectionIncludesCamera && !selectionIncludesDataDisplay;
 
   const toolbar: WorkbenchToolbarModel = {
     canUndo: options.history.undoCount > 0,
     canRedo: options.history.redoCount > 0,
-    canCopy: selectionCount > 0 && !selectionIncludesCamera,
+    canCopy: canCopySelection,
     canPaste: options.canPaste ?? true,
-    canDuplicate: selectionCount > 0 && !selectionIncludesCamera,
+    canDuplicate: canCopySelection,
     canDelete: selectionCount > 0,
-    canGroup: selectionCount > 1 && !selectionIncludesCamera,
+    canGroup: selectionCount > 1 && canCopySelection,
     canUngroup: primaryNode?.kind === "group" || (primaryNode?.kind === "object" && snapshot.objects[primaryNode.objectId].children.length > 0),
     canSelectAll: Object.keys(snapshot.nodes).length > 0,
     canClearSelection: selectionCount > 0,
@@ -545,16 +547,18 @@ function buildWorkbenchToolbar(
   });
   const selectNode = reason("selectNode", "Select a node first.");
   const cameraSelection = reason("cameraSelection", "Camera nodes cannot be copied or grouped.");
+  const dataDisplaySelection = reason("dataDisplaySelection", "Data display cards cannot be copied or grouped.");
+  const restrictedSelection = selectionIncludesDataDisplay ? dataDisplaySelection : selectionIncludesCamera ? cameraSelection : null;
   const runtime = reason("runtime", "Wait for the viewport to be ready.");
   const emptyScene = reason("emptyScene", "Add a scene node first.");
   const reasons: NonNullable<WorkbenchToolbarModel["disabledReasons"]> = {
     canUndo: reason("undo", "No edits to undo."),
     canRedo: reason("redo", "No edits to redo."),
-    canCopy: selectionIncludesCamera ? cameraSelection : selectNode,
+    canCopy: restrictedSelection ?? selectNode,
     canPaste: reason("clipboard", "Copy a node before pasting."),
-    canDuplicate: selectionIncludesCamera ? cameraSelection : selectNode,
+    canDuplicate: restrictedSelection ?? selectNode,
     canDelete: selectNode,
-    canGroup: selectionIncludesCamera ? cameraSelection : reason("group", "Select at least two nodes to group."),
+    canGroup: restrictedSelection ?? reason("group", "Select at least two nodes to group."),
     canUngroup: reason("ungroup", "Select a group or an object with children."),
     canSelectAll: emptyScene,
     canClearSelection: selectNode,
@@ -639,21 +643,24 @@ export function buildWorkbenchNodeCapability(snapshot: SceneSnapshot, nodeId: st
   // actions. A light is copied on its own, whether or not the scene parks a camera under it.
   const copyUnit = node?.kind === "object" || node?.kind === "imported" ? nodeId : null;
   const includesCamera = node?.kind === "camera" || (copyUnit !== null && nodeSubtreeIncludesKind(snapshot, copyUnit, "camera"));
+  const restrictedSelection = node?.kind === "data-display"
+    ? reason("dataDisplaySelection", "Data display cards cannot be copied or grouped.")
+    : includesCamera ? cameraSelection : null;
   const canUngroup = node?.kind === "group"
     || (node?.kind === "object" && snapshot.objects[node.objectId].children.length > 0);
 
   const capability: WorkbenchNodeCapability = {
     // A light is copied through its own node, and an object through its object, so only a camera
     // in the subtree — or the node itself — blocks these.
-    canCopy: Boolean(node) && !includesCamera,
-    canDuplicate: Boolean(node) && !includesCamera,
+    canCopy: Boolean(node) && !restrictedSelection,
+    canDuplicate: Boolean(node) && !restrictedSelection,
     canDelete: isObject,
     canGroup: false,
     canUngroup,
     reasons: {}
   };
-  if (!capability.canCopy) capability.reasons.copy = includesCamera ? cameraSelection : selectNode;
-  if (!capability.canDuplicate) capability.reasons.duplicate = includesCamera ? cameraSelection : selectNode;
+  if (!capability.canCopy) capability.reasons.copy = restrictedSelection ?? selectNode;
+  if (!capability.canDuplicate) capability.reasons.duplicate = restrictedSelection ?? selectNode;
   if (!capability.canDelete) {
     capability.reasons.delete = node?.kind === "light"
       ? reason("deleteLight", "Remove lights from the inspector.")

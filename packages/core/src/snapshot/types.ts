@@ -53,6 +53,7 @@ export type SceneNode =
   | SceneGroupNode
   | SceneLightNode
   | SceneCameraNode
+  | SceneDataDisplayNode
   | SceneImportedGlbNode;
 
 export type V5SceneNode =
@@ -90,6 +91,29 @@ export interface SceneCameraNode extends BaseSceneNode {
   kind: "camera";
   cameraId: string;
   transform: Transform;
+}
+
+export interface DataDisplaySource {
+  connectionId: string;
+  deviceId: string;
+  /** Null refers to the device's running status. */
+  fieldKey: string | null;
+}
+
+export interface DataDisplayStyle {
+  width: number;
+  height: number;
+  backgroundColor: string;
+  borderColor: string;
+  fontSize: number;
+  textColor: string;
+}
+
+export interface SceneDataDisplayNode extends BaseSceneNode {
+  kind: "data-display";
+  transform: Transform;
+  source: DataDisplaySource;
+  style: DataDisplayStyle;
 }
 
 export interface SceneImportedGlbNode extends BaseSceneNode {

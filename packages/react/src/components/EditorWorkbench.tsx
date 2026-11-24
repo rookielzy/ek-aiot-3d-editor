@@ -3,6 +3,7 @@ import { buildWorkbenchModel, resolveEditorShortcut, type EditorAction, type Pro
 import { useWorkbench, type ResolvedWorkbenchContext, type UseWorkbenchOptions } from "../hooks/use-workbench";
 import { EditorViewport } from "./EditorViewport";
 import { DataDetailCard } from "./DataDetailCard";
+import { useDataDisplayRealtime } from "../hooks/use-data-display-realtime";
 import { DataPreviewControls } from "./DataPreviewControls";
 import { InspectorView } from "./InspectorView";
 import { WorkbenchLeftPanel, type WorkbenchPanelView } from "./WorkbenchLeftPanel";
@@ -59,6 +60,7 @@ export function EditorWorkbench({
   snapshot,
   credentials,
   executor,
+  maxResponseBytes,
   locale,
   defaultLocale,
   onLocaleChange,
@@ -87,6 +89,7 @@ export function EditorWorkbench({
     snapshot,
     credentials,
     executor,
+    maxResponseBytes,
     loader,
     locale,
     defaultLocale,
@@ -116,6 +119,7 @@ export function EditorWorkbench({
   const workbench = { ...session, model, problems: {
     ...session.problems, items: model.problems.items, totalCount: model.problems.totalCount
   } };
+  const dataDisplays = useDataDisplayRealtime(workbench.editor, workbench.snapshot);
   const pendingDisposeRef = useRef<{ dispose(): void; timer: ReturnType<typeof setTimeout> } | null>(null);
   const rootRef = useRef<HTMLElement | null>(null);
   const panelId = useId();
@@ -384,6 +388,7 @@ export function EditorWorkbench({
         />
       ) : null}
       <aside id={`${panelId}-right`} hidden={rightCollapsed} className="ek-workbench__right-panel" aria-label={t("reactWorkbench.shell.inspectorPanel.label")}>
+        {dataDisplays.readers}
         {rightPanel ? rightPanel(actionContext) : (
           <InspectorView
             editor={workbench.editor}
@@ -393,6 +398,7 @@ export function EditorWorkbench({
             setActiveCameraViewId={workbench.setActiveCameraViewId}
             camera={workbench.camera}
             dataContext={workbench}
+            dataDisplays={dataDisplays}
             i18n={workbench.i18n}
             onReplaceAsset={(assetId, file) => {
               void workbench.replaceAsset({ assetId, source: file, label: file.name, mimeType: file.type });

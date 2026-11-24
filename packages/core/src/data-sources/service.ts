@@ -1,7 +1,7 @@
 import type { JsonValue } from "../snapshot/json";
 import type { SceneSnapshot } from "../snapshot/types";
 import { DEFAULT_DATA_MAX_RESPONSE_BYTES, MAX_DATA_QUERY_RETRY_BACKOFF_MS } from "./defaults";
-import { validateDeviceEndpointResponse } from "./device-response";
+import { validateDeviceEndpointResponse, type DataDeviceEndpointRecords } from "./device-response";
 import { mapDataQueryBody, type DataMappedEntity, type DataMappingProblem } from "./mapping";
 import {
   buildDataQueryRequest,
@@ -100,6 +100,10 @@ export interface DataQueryDraftExecutionOptions {
   deviceEndpoint?: DataDeviceEndpointKind;
 }
 
+export type DataDeviceReadResult<Kind extends DataDeviceEndpointKind> =
+  | { ok: true; records: DataDeviceEndpointRecords[Kind] }
+  | { ok: false; message: string };
+
 export interface DataServiceState {
   executorAvailable: boolean;
   configRevision: number;
@@ -119,6 +123,10 @@ export interface EditorDataService {
   getState(): DataServiceState;
   subscribe(subscriber: DataServiceSubscriber): () => void;
   executeQueryDraft(draft: DataQueryDraft, options?: DataQueryDraftExecutionOptions): DataQueryRunHandle;
+  readDeviceEndpoint?<Kind extends DataDeviceEndpointKind>(
+    connectionId: string, kind: Kind, signal: AbortSignal
+  ): Promise<DataDeviceReadResult<Kind>>;
+  getDeviceReadRevision?(): number;
   cancelQueryRun(runId: string): boolean;
   invalidateQueryRuns(): void;
   getObjectDataState(): DataObjectDataState;
@@ -152,6 +160,7 @@ interface ActiveRun {
   settled: boolean;
   state: DataQueryRunState;
   resolve(result: DataQueryRunResult): void;
+  receiveDeviceRecords?(json: JsonValue): void;
 }
 
 interface RunOutcome {
@@ -215,6 +224,7 @@ export class CoreDataService implements EditorDataService {
   readonly #contextQueue: string[] = [];
   readonly #activeContexts = new Set<string>();
   readonly #refreshWaiters: Array<() => void> = [];
+  readonly #deviceRuns = new Map<ActiveRun, string>();
   #executor: DataRequestExecutor | null;
   #credentials: readonly DataCredentialDescriptor[];
   #hostRevision: number;
@@ -225,6 +235,7 @@ export class CoreDataService implements EditorDataService {
   #dataSourcesKey: string;
   #runConfigKey: string | undefined;
   #configRevision = 0;
+  #deviceReadRevision = 0;
   #current: ActiveRun | null = null;
   #nextRunId = 0;
   #previewEnabled = false;
@@ -274,6 +285,17 @@ export class CoreDataService implements EditorDataService {
     return this.#hostRevision;
   }
 
+  getDeviceReadRevision(): number {
+    return this.#deviceReadRevision;
+  }
+
+  resetDeviceReads(): void {
+    if (this.#disposed) return;
+    this.#cancelDeviceRuns();
+    this.#deviceReadRevision += 1;
+    this.#publish(this.#state);
+  }
+
   setHostCapabilities(capabilities: DataHostCapabilities): void {
     if (this.#disposed) {
       return;
@@ -307,6 +329,7 @@ export class CoreDataService implements EditorDataService {
     }
     this.#hostRevision = nextRevision;
 
+    this.#cancelDeviceRuns();
     this.#invalidateActive();
     this.#cancelAllContexts();
     this.#objectStates = {};
@@ -330,6 +353,46 @@ export class CoreDataService implements EditorDataService {
     }
 
     this.#invalidateActive();
+    const run = this.#createRun(runId, draft.connectionId);
+    this.#current = run.active;
+    this.#runConfigKey = dataSourcesRunKey(this.#getSnapshot(), draft.connectionId);
+    this.#publish({ ...this.#state, run: run.active.state });
+    void this.#execute(run.active, draft, options);
+
+    return {
+      id: runId,
+      configRevision: run.active.configRevision,
+      result: run.result,
+      cancel: () => {
+        this.cancelQueryRun(runId);
+      }
+    };
+  }
+
+  async readDeviceEndpoint<Kind extends DataDeviceEndpointKind>(
+    connectionId: string, kind: Kind, signal: AbortSignal
+  ): Promise<DataDeviceReadResult<Kind>> {
+    if (this.#disposed || signal.aborted) return { ok: false, message: "The request was cancelled." };
+    const snapshot = this.#getSnapshot();
+    const endpoint = snapshot.dataSources.connections[connectionId]?.deviceEndpoints?.[kind];
+    if (!endpoint) return { ok: false, message: "This device endpoint is not configured." };
+    const run = this.#createRun(`data-device-run-${++this.#nextRunId}`, connectionId);
+    const cancel = () => this.#cancelDeviceRun(run.active);
+    let records: DataDeviceEndpointRecords[Kind] | undefined;
+    run.active.receiveDeviceRecords = (json) => {
+      // The endpoint-specific response validator has checked every record.
+      records = json as unknown as DataDeviceEndpointRecords[Kind];
+    };
+    this.#deviceRuns.set(run.active, stableJson(snapshot.dataSources.connections[connectionId]));
+    signal.addEventListener("abort", cancel, { once: true });
+    void this.#execute(run.active, { ...endpoint, connectionId }, { deviceEndpoint: kind });
+    const result = await run.result;
+    signal.removeEventListener("abort", cancel);
+    if (result.status === "success" && records) return { ok: true, records };
+    return { ok: false, message: result.problems[0]?.message ?? "The request was cancelled." };
+  }
+
+  #createRun(runId: string, connectionId: string) {
     const controller = new AbortController();
     const startedAt = Date.now();
     let resolve!: (result: DataQueryRunResult) => void;
@@ -338,7 +401,7 @@ export class CoreDataService implements EditorDataService {
     });
     const active: ActiveRun = {
       id: runId,
-      connectionId: draft.connectionId,
+      connectionId,
       configRevision: this.#configRevision,
       startedAt,
       controller,
@@ -346,7 +409,7 @@ export class CoreDataService implements EditorDataService {
       settled: false,
       state: {
         id: runId,
-        connectionId: draft.connectionId,
+        connectionId,
         status: "running",
         configRevision: this.#configRevision,
         startedAt,
@@ -358,19 +421,16 @@ export class CoreDataService implements EditorDataService {
       },
       resolve
     };
-    this.#current = active;
-    this.#runConfigKey = dataSourcesRunKey(this.#getSnapshot(), draft.connectionId);
-    this.#publish({ ...this.#state, run: active.state });
-    void this.#execute(active, draft, options);
+    return { active, result };
+  }
 
-    return {
-      id: runId,
-      configRevision: active.configRevision,
-      result,
-      cancel: () => {
-        this.cancelQueryRun(runId);
-      }
-    };
+  #cancelDeviceRun(active: ActiveRun): void {
+    active.controller.abort();
+    this.#finish(active, { status: "cancelled" });
+  }
+
+  #cancelDeviceRuns(): void {
+    for (const active of this.#deviceRuns.keys()) this.#cancelDeviceRun(active);
   }
 
   cancelQueryRun(runId: string): boolean {
@@ -454,6 +514,7 @@ export class CoreDataService implements EditorDataService {
     this.#objectState = freezeObjectDataState(false, false, null, {}, {});
     this.#resolveRefreshWaiters();
     this.#unsubscribeSnapshot?.();
+    this.#cancelDeviceRuns();
     this.#invalidateActive();
     this.#subscribers.clear();
     this.#objectSubscribers.clear();
@@ -1287,6 +1348,7 @@ export class CoreDataService implements EditorDataService {
       });
       return;
     }
+    if (validation?.ok && evaluation.kind === "success") active.receiveDeviceRecords?.(evaluation.json);
     this.#finish(active, {
       status: "success",
       request: requestSummary,
@@ -1318,6 +1380,7 @@ export class CoreDataService implements EditorDataService {
       return;
     }
     active.settled = true;
+    this.#deviceRuns.delete(active);
     if (active.timer !== null) {
       clearTimeout(active.timer);
       active.timer = null;
@@ -1375,6 +1438,9 @@ export class CoreDataService implements EditorDataService {
     }
     this.#dataSourcesKey = nextKey;
     this.#configRevision += 1;
+    for (const [active, key] of this.#deviceRuns) {
+      if (stableJson(snapshot.dataSources.connections[active.connectionId] ?? null) !== key) this.#cancelDeviceRun(active);
+    }
     const runConnectionId = this.#current?.connectionId ?? this.#state.run?.connectionId;
     const invalidated = runConnectionId !== undefined &&
       dataSourcesRunKey(snapshot, runConnectionId) !== this.#runConfigKey;

@@ -57,7 +57,7 @@ export function createNodeClipboardPayload(snapshot: SceneSnapshot, nodeIds = ge
 
   for (const nodeId of topLevelNodeIds) {
     for (const subtreeNodeId of collectNodeSubtreeIds(snapshot, nodeId)) {
-      if (snapshot.nodes[subtreeNodeId]?.kind !== "camera") {
+      if (snapshot.nodes[subtreeNodeId]?.kind !== "camera" && snapshot.nodes[subtreeNodeId]?.kind !== "data-display") {
         copiedNodeIds.add(subtreeNodeId);
       }
     }
@@ -168,6 +168,7 @@ function cloneClipboardNode(
         ...(node.transform ? { transform: cloneTransform(node.transform) } : {}),
         ...(node.metadata ? { metadata: { ...node.metadata } } : {})
       };
+    case "data-display":
     case "camera":
       throw new Error("Camera nodes cannot be copied to clipboard.");
     case "imported":

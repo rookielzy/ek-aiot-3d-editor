@@ -24,6 +24,8 @@ export class RuntimeSelectionVisuals {
     const activeIds = new Set<string>();
     for (const [nodeId, target] of this.#objects.targetEntries()) {
       const object = target.object;
+      // The card is a camera-facing sprite, so a world-aligned bounds box would not match it.
+      if (target.kind === "data-display") continue;
       if (!target.selected && !target.primarySelected) {
         continue;
       }

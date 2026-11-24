@@ -674,3 +674,7 @@ export {
   validateSceneSnapshot,
   applyAuthoredCameraViewToRuntime
 } from "./public-api";
+export { formatDeviceRealtimeField, type DataDeviceListItem, type DataDeviceRealtimeItem, type DataDeviceRealtimeField } from "./data-sources/device-response";
+export type { DataDeviceReadResult } from "./data-sources/service";
+export type { CreateDataDisplayCommand, UpdateDataDisplayStyleCommand } from "./commands/types";
+export type { SceneDataDisplayNode, DataDisplaySource, DataDisplayStyle } from "./snapshot/types";
