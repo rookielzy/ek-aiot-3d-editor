@@ -1483,7 +1483,7 @@ describe("Vue EditorWorkbench", () => {
     await wrapper.get('.ek-workbench__locale-switcher select').setValue("zh-CN");
     expect(wrapper.emitted("update:locale")?.at(-1)).toEqual(["zh-CN"]);
     await wrapper.setProps({ locale: "zh-CN" });
-    expect(wrapper.get('[role="tablist"][aria-label="属性分组"]').findAll('[role="tab"]').map((tab) => tab.text())).toEqual(["属性", "环境", "场景"]);
+    expect(wrapper.get('[role="tablist"][aria-label="属性分组"]').findAll('[role="tab"]').map((tab) => tab.text())).toEqual(["属性", "环境", "场景", "数据展示配置"]);
     expect(wrapper.get('[role="tablist"][aria-label="属性"]').get('[role="tab"][aria-selected="true"]').text()).toBe("材质");
     expect((wrapper.findAll(".ek-material-target-option").find((option) => option.text().includes("Screen"))!.get("input").element as HTMLInputElement).checked).toBe(true);
     expect(editor.getSnapshot()).toEqual(snapshot);
