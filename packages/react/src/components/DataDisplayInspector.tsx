@@ -5,6 +5,7 @@ import {
   type Transform
 } from "@ek-aiot/3d-editor-core";
 import { useDeviceEndpoint } from "../hooks/use-device-endpoint";
+import { resolveDataDisplayMessage } from "../i18n/data-display-i18n";
 import type { ResolvedWorkbenchContext } from "../hooks/use-workbench";
 import type { DataDisplayRealtimeContext } from "../hooks/use-data-display-realtime";
 import { InspectorColorInput } from "./InspectorColorInput";
@@ -24,7 +25,7 @@ export function DataDisplayInspector({ context, data, active }: {
   active: boolean;
 }) {
   const { editor, snapshot, i18n } = context;
-  const t = i18n.t;
+  const t = resolveDataDisplayMessage.bind(null, i18n);
   const connections = Object.values(snapshot.dataSources.connections).filter((connection) =>
     connection.deviceEndpoints?.deviceList && connection.deviceEndpoints.deviceRealtime);
   const [preferredConnection, setPreferredConnection] = useState("");

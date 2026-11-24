@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Editor, InspectorModel, SceneSnapshot } from "@ek-aiot/3d-editor-core";
 import type { ResolvedWorkbenchContext, WorkbenchCameraContext } from "../hooks/use-workbench";
+import { resolveDataDisplayMessage } from "../i18n/data-display-i18n";
 import { CameraInspector } from "./CameraInspector";
 import { DataBindingInspector } from "./DataBindingInspector";
 import { DataDisplayInspector } from "./DataDisplayInspector";
@@ -130,7 +131,7 @@ export function InspectorView({ editor, snapshot, inspector, setActiveLightId, s
         { id: "scene", label: i18n.t("reactWorkbench.inspector.groups.scene"), content: scenePanel },
         ...(dataContext && dataDisplays ? [{
           id: "dataDisplay",
-          label: i18n.t("dataDisplay.section"),
+          label: resolveDataDisplayMessage(i18n, "dataDisplay.section"),
           content: <DataDisplayInspector context={dataContext} data={dataDisplays} active={activeGroup === "dataDisplay"} />
         }] : [])
       ]} />
