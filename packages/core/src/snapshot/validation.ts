@@ -317,7 +317,7 @@ function validateNode(id: string, node: unknown, objects: unknown, lights: unkno
     errors.push(`Node ${id} metadata must be JSON-compatible.`);
   }
   if ("motion" in node && (!supportsNodeMotion(sceneNode as SceneNode) || !isNodeMotion(node.motion))) {
-    errors.push(`Node ${id} motion must target a supported node and use a local axis with a finite, nonzero speed.`);
+    errors.push(`Node ${id} motion must target a supported node and use valid motion parameters.`);
   }
 
   switch (sceneNode.kind) {

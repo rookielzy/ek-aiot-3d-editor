@@ -422,8 +422,11 @@ export type {
   SetMaterialCommand,
   SetNodeTransformCommand,
   SetNodeMotionCommand,
+  ContinuousSpinMotion,
   NodeMotion,
   NodeMotionAxis,
+  NodeMotionKind,
+  PingPongTranslationMotion,
   NodeMotionFieldId,
   NodeMotionPreviewState,
   SetTransformCommand,
@@ -488,7 +491,18 @@ export type {
   V3SceneSnapshot
 } from "./public-api";
 
-export { buildNodeMotionFields, DEFAULT_NODE_MOTION, getSelectedNodeForMotion, NODE_MOTION_INSPECTOR_MESSAGES, updateNodeMotionField } from "./public-api";
+export {
+  buildNodeMotionFields,
+  createDefaultNodeMotion,
+  DEFAULT_NODE_MOTION,
+  getNodeMotionFieldProblemKey,
+  getNodeMotionTitleKey,
+  getSelectedNodeForMotion,
+  NODE_MOTION_INSPECTOR_MESSAGES,
+  NODE_MOTION_KIND_ACTIONS,
+  NODE_MOTION_KINDS,
+  updateNodeMotionField
+} from "./public-api";
 
 export {
   AssetResolverBridge,

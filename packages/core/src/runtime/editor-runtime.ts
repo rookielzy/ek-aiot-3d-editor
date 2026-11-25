@@ -7,7 +7,7 @@ import type { SelectionMode } from "../selection/selection";
 import type { EditorStore } from "../editor/store";
 import type { SceneSnapshot } from "../snapshot/types";
 import { isDataDisplayAnchor } from "../snapshot/nodes";
-import { supportsNodeMotion } from "../snapshot/node-motion";
+import { supportsNodeMotion, type NodeMotion } from "../snapshot/node-motion";
 import type { AuthoredCameraView, AuthoredCameraViewInput } from "../cameras/types";
 import type { GltfLoaderAdapter } from "./gltf-loader-adapter";
 import type { RuntimePmremAdapter } from "./pmrem-adapter";
@@ -122,7 +122,16 @@ export type RuntimeProjectionSubscriber = () => void;
 export type NodeMotionPreviewState = "unavailable" | "loading" | "asset-unavailable" |
   "target-unresolved" | "target-not-transformable" | "ready" | "playing";
 
-const SPIN_AXES = { x: new Vector3(1, 0, 0), y: new Vector3(0, 1, 0), z: new Vector3(0, 0, 1) };
+const MOTION_AXES = { x: new Vector3(1, 0, 0), y: new Vector3(0, 1, 0), z: new Vector3(0, 0, 1) };
+
+interface ActiveNodeMotionPreview {
+  nodeId: string;
+  object: Object3D;
+  motion: NodeMotion;
+  basePosition: Vector3;
+  baseQuaternion: Quaternion;
+  firstFrame: number | null;
+}
 
 export interface RuntimeProblemSnapshot {
   version: number;
@@ -173,14 +182,7 @@ export class ThreeEditorRuntime implements EditorRuntime {
   #scheduleFrame: RuntimeAnimationFrameScheduler;
   #cancelFrame: RuntimeAnimationFrameCancel;
   #pendingFrame: number | null = null;
-  #motionPreview: {
-    nodeId: string;
-    object: Object3D;
-    base: Quaternion;
-    axis: Vector3;
-    degreesPerSecond: number;
-    firstFrame: number | null;
-  } | null = null;
+  #motionPreview: ActiveNodeMotionPreview | null = null;
   #motionPreviewSubscribers = new Set<RuntimeProjectionSubscriber>();
   #projectedSnapshot: SceneSnapshot | null = null;
   #unsubscribe: (() => void) | null = null;
@@ -393,8 +395,12 @@ export class ThreeEditorRuntime implements EditorRuntime {
     const object = this.getNodeTarget(nodeId);
     if (!supportsNodeMotion(node) || !node.motion || !object) return false;
     this.#motionPreview = {
-      nodeId, object, base: object.quaternion.clone(), axis: SPIN_AXES[node.motion.axis],
-      degreesPerSecond: node.motion.degreesPerSecond, firstFrame: null
+      nodeId,
+      object,
+      motion: { ...node.motion },
+      basePosition: object.position.clone(),
+      baseQuaternion: object.quaternion.clone(),
+      firstFrame: null
     };
     this.setTransformEnabled(this.#transformEnabled, this.#allowDataDisplays);
     this.invalidateRender();
@@ -406,8 +412,10 @@ export class ThreeEditorRuntime implements EditorRuntime {
     const preview = this.#motionPreview;
     if (!preview) return;
     this.#motionPreview = null;
-    preview.object.quaternion.copy(preview.base);
+    preview.object.position.copy(preview.basePosition);
+    preview.object.quaternion.copy(preview.baseQuaternion);
     preview.object.updateMatrix();
+    preview.object.updateWorldMatrix(true, true);
     this.#syncSelectionVisuals();
     this.#syncRendererShadowMap();
     this.setTransformEnabled(this.#transformEnabled, this.#allowDataDisplays);
@@ -538,12 +546,9 @@ export class ThreeEditorRuntime implements EditorRuntime {
       const preview = this.#motionPreview;
       if (preview) {
         preview.firstFrame ??= time;
-        const period = 360_000 / Math.abs(preview.degreesPerSecond);
-        const elapsed = (time - preview.firstFrame) % period;
-        const radians = elapsed * (preview.degreesPerSecond / 1000) * (Math.PI / 180);
-        preview.object.quaternion.copy(preview.base);
-        preview.object.rotateOnAxis(preview.axis, radians);
+        applyNodeMotionPreviewFrame(preview, time);
         preview.object.updateMatrix();
+        preview.object.updateWorldMatrix(true, true);
         this.#syncSelectionVisuals();
         this.#syncRendererShadowMap();
       }
@@ -1055,4 +1060,23 @@ function uniqueObjects(objects: Object3D[]): Object3D[] {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+function applyNodeMotionPreviewFrame(preview: ActiveNodeMotionPreview, time: number): void {
+  const start = preview.firstFrame ?? time;
+  if (preview.motion.kind === "continuous-spin") {
+    const period = 360_000 / Math.abs(preview.motion.degreesPerSecond);
+    const elapsed = Math.max(0, time - start) % period;
+    const radians = elapsed * (preview.motion.degreesPerSecond / 1000) * (Math.PI / 180);
+    preview.object.quaternion.copy(preview.baseQuaternion);
+    preview.object.rotateOnAxis(MOTION_AXES[preview.motion.axis], radians);
+    return;
+  }
+  const legMs = preview.motion.durationSeconds * 1000;
+  const elapsed = Math.max(0, time - start) % (legMs * 2);
+  const progress = (1 - Math.cos((Math.PI * elapsed) / legMs)) / 2;
+  preview.object.position.copy(preview.basePosition).addScaledVector(
+    MOTION_AXES[preview.motion.axis],
+    preview.motion.distance * progress
+  );
 }

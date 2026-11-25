@@ -1,14 +1,18 @@
 <template>
   <section class="ek-inspector-section">
     <template v-if="motion">
-      <header class="ek-inspector-section__header"><h2>{{ i18n.t("inspector.motion.spin") }}</h2></header>
+      <header className="ek-inspector-section__header">
+        <h2>{{ i18n.t(getNodeMotionTitleKey(motion.kind)) }}</h2>
+      </header>
       <div class="ek-inspector-grid ek-scene-fields">
         <label v-for="field in fields" :key="field.id" class="ek-inspector-field">
           <span>{{ renderFieldLabel(i18n, field) }}</span>
           <InspectorFieldControl :field="field" :i18n="i18n" :invalid="invalidField === field.id"
             :description-id="invalidField === field.id ? problemId : undefined"
             :on-commit="(value) => commit(field.id, value)" @cancel="invalidField = null" />
-          <small v-if="invalidField === field.id" :id="problemId" class="ek-inspector-field-problem" role="alert">{{ i18n.t("inspector.motion.invalidSpeed") }}</small>
+          <small v-if="invalidField === field.id" :id="problemId" class="ek-inspector-field-problem" role="alert">
+            {{ i18n.t(getNodeMotionFieldProblemKey(field.id)) }}
+          </small>
         </label>
       </div>
       <div class="ek-inspector-button-row">
@@ -21,7 +25,8 @@
       <p v-if="state !== 'ready'" class="ek-inspector-warning" role="status">{{ i18n.t(`inspector.motion.${state}`) }}</p>
     </template>
     <div v-else class="ek-inspector-button-row">
-      <button type="button" @click="save(DEFAULT_NODE_MOTION)">{{ i18n.t("inspector.motion.add") }}</button>
+      <button v-for="action in NODE_MOTION_KIND_ACTIONS" :key="action.kind" type="button"
+        @click="save(createDefaultNodeMotion(action.kind))">{{ i18n.t(action.addKey) }}</button>
     </div>
     <p v-if="editFailed" class="ek-inspector-field-problem" role="alert">{{ i18n.t("inspector.motion.editFailed") }}</p>
   </section>
@@ -30,7 +35,7 @@
 <script setup lang="ts">
 import { computed, ref, useId, watch } from "vue";
 import {
-  buildNodeMotionFields, DEFAULT_NODE_MOTION, updateNodeMotionField,
+  buildNodeMotionFields, createDefaultNodeMotion, getNodeMotionFieldProblemKey, getNodeMotionTitleKey, NODE_MOTION_KIND_ACTIONS, updateNodeMotionField,
   type Editor, type EditorRuntime, type NodeMotion, type NodeMotionFieldId, type NodeMotionPreviewState
 } from "@ek-aiot/3d-editor-core";
 import InspectorFieldControl from "./InspectorFieldControl.vue";

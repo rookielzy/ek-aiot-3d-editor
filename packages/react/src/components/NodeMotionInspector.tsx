@@ -1,6 +1,6 @@
 import { useId, useLayoutEffect, useState } from "react";
 import {
-  buildNodeMotionFields, DEFAULT_NODE_MOTION, updateNodeMotionField,
+  buildNodeMotionFields, createDefaultNodeMotion, getNodeMotionFieldProblemKey, getNodeMotionTitleKey, NODE_MOTION_KIND_ACTIONS, updateNodeMotionField,
   type Editor, type EditorRuntime, type NodeMotion, type NodeMotionFieldId, type NodeMotionPreviewState
 } from "@ek-aiot/3d-editor-core";
 import { InspectorFieldControl } from "./InspectorFieldControl";
@@ -41,7 +41,9 @@ export function NodeMotionInspector({ editor, runtime, nodeId, motion, state, i1
     <section className="ek-inspector-section">
       {motion ? (
         <>
-          <header className="ek-inspector-section__header"><h2>{i18n.t("inspector.motion.spin")}</h2></header>
+          <header className="ek-inspector-section__header">
+            <h2>{i18n.t(getNodeMotionTitleKey(motion.kind))}</h2>
+          </header>
           <div className="ek-inspector-grid ek-scene-fields">
             {buildNodeMotionFields(motion, state).map((field) => (
               <label key={field.id} className="ek-inspector-field">
@@ -49,7 +51,11 @@ export function NodeMotionInspector({ editor, runtime, nodeId, motion, state, i1
                 <InspectorFieldControl field={field} i18n={i18n} invalid={invalidField === field.id}
                   descriptionId={invalidField === field.id ? problemId : undefined}
                   onCommit={(value) => commit(field.id, value)} onReset={() => setInvalidField(null)} />
-                {invalidField === field.id ? <small className="ek-inspector-field-problem" id={problemId} role="alert">{i18n.t("inspector.motion.invalidSpeed")}</small> : null}
+                {invalidField === field.id ? (
+                  <small className="ek-inspector-field-problem" id={problemId} role="alert">
+                    {i18n.t(getNodeMotionFieldProblemKey(field.id))}
+                  </small>
+                ) : null}
               </label>
             ))}
           </div>
@@ -64,7 +70,9 @@ export function NodeMotionInspector({ editor, runtime, nodeId, motion, state, i1
         </>
       ) : (
         <div className="ek-inspector-button-row">
-          <button type="button" onClick={() => save(DEFAULT_NODE_MOTION)}>{i18n.t("inspector.motion.add")}</button>
+          {NODE_MOTION_KIND_ACTIONS.map(({ kind, addKey }) => (
+            <button key={kind} type="button" onClick={() => save(createDefaultNodeMotion(kind))}>{i18n.t(addKey)}</button>
+          ))}
         </div>
       )}
       {editFailed ? <p className="ek-inspector-field-problem" role="alert">{i18n.t("inspector.motion.editFailed")}</p> : null}

@@ -1,4 +1,4 @@
-import { supportsNodeMotion } from "../snapshot/node-motion";
+import { areNodeMotionsEqual, supportsNodeMotion } from "../snapshot/node-motion";
 import type { SceneSnapshot } from "../snapshot/types";
 import type { SetNodeMotionCommand } from "./types";
 
@@ -13,9 +13,8 @@ export function applySetNodeMotion(snapshot: SceneSnapshot, command: SetNodeMoti
     delete next.motion;
     return { ...snapshot, nodes: { ...snapshot.nodes, [node.id]: next } };
   }
-  if (node.motion && node.motion.kind === command.motion.kind && node.motion.axis === command.motion.axis &&
-    node.motion.degreesPerSecond === command.motion.degreesPerSecond) {
+  if (areNodeMotionsEqual(node.motion, command.motion)) {
     return snapshot;
   }
-  return { ...snapshot, nodes: { ...snapshot.nodes, [node.id]: { ...node, motion: command.motion } } };
+  return { ...snapshot, nodes: { ...snapshot.nodes, [node.id]: { ...node, motion: { ...command.motion } } } };
 }
